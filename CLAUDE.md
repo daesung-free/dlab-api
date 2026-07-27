@@ -144,6 +144,7 @@ com.dlab
 - **공통 API 응답 형식**: 모든 컨트롤러는 `ApiResponse<T>`로 감싼다 (`{ success, data, error }`). 도메인 오류는 `throw new BusinessException(ErrorCode.XXX)` → `GlobalExceptionHandler`가 공통 실패 응답으로 변환. 에러코드는 `common/exception/ErrorCode`에 추가 (예: `BRANCH_NOT_FOUND`, `APPROVAL_ALREADY_PROCESSED`).
 - **JWT role 체크 필수**: 학생/학부모/관리자 role 구분 없이 엔드포인트를 열지 않는다.
 - **지점 필터링 필수**: 전체 지점 조회 엔드포인트는 상위 관리자 권한 체크 없이 노출하지 않는다.
+- **브랜치 전략**: `main`은 배포 전용 브랜치, 절대 여기서 직접 작업하지 않는다. 새 작업(기능 개발, 버그 수정 등)은 항상 `develop`에서 브랜치를 따서 진행하고, `develop`으로 merge한다. `main`으로의 merge는 배포 시점에만, 별도 승인 후 진행.
 - 언어: 커밋 메시지·주석·산출물은 한국어 우선.
 
 ## 8. 보안 / 비밀정보
