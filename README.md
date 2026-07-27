@@ -34,17 +34,19 @@ git checkout develop
 
 ### 2. 환경변수 설정
 
-`src/main/resources/application-local.yml` 파일을 만들고 (git에 안 올라감, `.gitignore` 처리됨) DB 연결정보를 채운다:
-
-```yaml
-spring:
-  datasource:
-    url: jdbc:postgresql://<RDS 엔드포인트>:5432/<DB명>
-    username: <계정>
-    password: <비밀번호>
+```bash
+cp application-local.yml.example src/main/resources/application-local.yml
 ```
 
-> RDS 인스턴스는 아직 준비 전 — 만들어지면 이 값들 공유 예정.
+지금은 **로컬 PostgreSQL**로 개발한다 (RDS는 나중에 준비 예정). 로컬 DB가 없으면:
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+createdb dlab_local
+```
+
+그 다음 `application-local.yml`을 열어서 본인 로컬 계정/비밀번호만 채운다. (`application-local.yml.example`이 템플릿, 실제 값은 git에 안 올라감)
 
 ### 3. 빌드 및 실행
 

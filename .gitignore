@@ -43,4 +43,9 @@ application-local.yml
 
 # 기획서 원본은 git 밖에서 관리
 *.docx
-*.dotx
+*.dotx.claude/settings.local.json
+CLAUDE.local.md
+
+# 개인 로컬 전용 (git 안 올림)
+CLAUDE.local.md
+.claude/settings.local.json
