@@ -14,8 +14,16 @@ D.Lab(대성학원)이 대성전산 소유의 레거시 DSA(웹 관리프로그�
 
 - 스택: Spring Boot (Java) · **AWS RDS for PostgreSQL** · JPA (§2 결정로그 — 원래 Supabase였으나 전환)
 - 진입점/패키지 구조: §5 참고
-- 현재까지 구현: (착수 전 — 여기에 마일스톤마다 기록)
-- 앱 기동 가능 여부: (DataSource 설정 여부 기록)
+- 현재까지 구현 (Phase 0, 커밋 `e321e1e`):
+    - 공통 계층: `ApiResponse` / `ErrorCode` / `BusinessException` / `GlobalExceptionHandler`, `BaseTimeEntity`(JPA Auditing), `Clock` 빈(`TimeConfig`)
+    - Flyway V1~V4: 지점·반·계정 / 방화벽 승인 / 알림 / 출결
+    - `domain/firewall`: 타임아웃 10분 3케이스 판별 + 조건부 UPDATE 동시성 처리
+    - `domain/notification`: 이벤트-채널 매핑, 학생명 변수 필수 검증, dedupKey 중복발송 방지. **문구 미확정이라 실제 발송은 보류(SKIPPED)**
+    - `domain/attendance`: 미등원 감지 스케줄러(지점 등원시각 기준, 사전 사유 제출자 제외)
+    - 아직 없음: 컨트롤러(`api/**`), 인증(JWT/Security), DSA 호환 구획(`api/kiosk`), 실제 발송 연동체
+- ⚠️ **위 V1~V4는 재작성 대상이다.** 2026-07-31 결정(키오스크 DSA 호환·학생 2단 구조·출결 7종·`approval`/`penalty` 분리)과 §7 공통컬럼 규칙이 반영돼 있지 않다. §10 참고.
+- 앱 기동 가능 여부: **기동 확인됨.** `docker compose up -d` 후 `--spring.profiles.active=local`로 기동 시 Flyway 적용 + JPA `validate` 통과.
+- 테스트: `./gradlew test` (로컬 PostgreSQL 필요). 최초 1회 `CREATE DATABASE dlab_test OWNER dlab;` — 설정은 `src/test/resources/application.yml`.
 
 📌 **결정 로그** *(기획서에 명시 안 됐지만 Claude Code 세션 중 추가/합의된 사항을 여기 기록)*
 - 예: springdoc-openapi 도입 → API 스펙 자동화 목적
@@ -217,6 +225,10 @@ com.dlab
 
 ## 7. 컨벤션
 
+- **전 테이블 공통 컬럼 필수** (실행가이드 Phase 0 첫 지시): `id`, `year`, `branch_id`, `created_at`, `updated_at`, **`created_by`**, **`is_deleted`**.
+  `created_by`(감사로그)와 `is_deleted`(soft delete)를 빠뜨리기 쉬운데, 실행가이드가 경고하듯 **"뒤늦게 추가하면 과거 데이터의 이력이 소실된다."** 지금은 컬럼 추가지만 운영 데이터가 쌓인 뒤엔 그 기간을 영영 복구할 수 없다. 감사로그는 보안심사 직결 항목이다.
+  `year`는 "전년도 복사"(YearlySnapshotService)의 기준이라 마스터성 테이블엔 반드시 있어야 한다. **복사 의존순서는 `department → course_type → class_group → curriculum → penalty_item → tuition`이고, 단순 `INSERT SELECT` 금지**(FK가 깨진다).
+- **개인정보 처리 규칙** (실행가이드 3.2): 전화·주소·생년월일이 포함된 응답은 **상위 관리자만** 조회 가능. **엑셀 다운로드는 마스킹 기본 ON**(`010-****-1234`) — 교무업무 명단·학생 관리 Export 전반 공통. 발주처가 개인정보 유출 조사·벌금 사례로 민감도가 높은 상태이므로 임의로 완화하지 말 것.
 - **공통 API 응답 형식**: `/api/v1/**` 컨트롤러는 `ApiResponse<T>`로 감싼다 (`{ success, data, error }`). 도메인 오류는 `throw new BusinessException(ErrorCode.XXX)` → `GlobalExceptionHandler`가 공통 실패 응답으로 변환. 에러코드는 `common/exception/ErrorCode`에 추가 (예: `BRANCH_NOT_FOUND`, `APPROVAL_ALREADY_PROCESSED`).
 - **★ DSA 호환 구획(`/auth/**`, `/kiosk/**`)은 위 규칙의 예외다.** 응답이 `{ code, message, data, … }`이고 **성공 판정이 `code == 0`**(HTTP 상태코드 아님)이며, `total_inwon`·`study_tm` 같은 **부가 필드가 최상위에 흩뿌려진다**. `ApiResponse` 래퍼와 `GlobalExceptionHandler`를 이 구획에 적용하면 **키오스크가 응답을 못 읽는다** — 전용 응답 객체와 전용 예외 핸들러를 쓰고, `BusinessException` → DSA code 매핑 테이블을 둔다.
 - **★ DSA 호환 응답을 "정리"하지 말 것.** `data`가 `[[{...}]]` 이중 배열로 오는 것, `study_tm`이 `"N시간 M분"` 문자열인 것, `meal_gb`가 요청은 `L`/`D`인데 응답은 `"점심"`/`"저녁"`인 것 — 전부 **의도적으로 그대로 유지**해야 한다. 하나라도 고치면 키오스크 파싱이 깨진다. 전체 목록은 `docs/dsa-compat.md` §2.
@@ -244,4 +256,7 @@ com.dlab
 - **대성전산 레거시 스키마 27개 수령**(원생 마스터 포함). 학생이 "사람 + 등록 건" 2단 구조이고 학번·RFID가 등록 건에 붙는다는 것 확인 → §3 반영. **미확보 4종(출결·좌석/구역·지점·사유신청)**은 추가 제공 협의 난항 중이나, API 계약에서 역산 설계하기로 함(§4).
 - **가이드 문서 3종 작성**: `docs/dsa-compat.md`(키오스크 API 계약·함정), `docs/schema-guide.md`(테이블 설계 근거·마이그레이션 순서), `docs/domain-map.md`(도메인↔F번호↔오픈이슈, 착수 가능 여부). ※ `docs/domain-map.md` 등은 이번 CLAUDE.md 정정 이전에 쓴 것이라 일부 서술(승인 모델 미확정 등)이 낡음 — 다음 세션에 동기화 필요.
 - **다음 작업**: Flyway V1(지점·학생 2단·학부모·좌석/구역·교시 마스터) → V2(출결 원장+일자집계·사유신청) → DSA 호환 계층 골격(`/auth/token` + 응답 껍데기 + code 매핑) → `setAttendStd`.
-- 다음: 로컬 PostgreSQL/Redis 붙여서 앱 기동 확인 → Flyway V1 마이그레이션 → `domain/user` 엔티티 설계(회원가입 승인 흐름, 다자녀 연결 구조, 반-담임 매핑 반영) 착수 예정.
+- **Phase 0 도메인 1차 구현 완료** (`e321e1e`, 브랜치 `feature/phase0-approval-notification-attendance`) — firewall 승인 3케이스·notification·미등원 배치. 앱 기동·Flyway 적용·테스트 15건 통과 확인. 상세는 §2. **단 위 키오스크/학생 2단 구조 정정 이전 설계라 V1~V4는 재작성 대상이다.**
+- **요구사항정의서·실행가이드 시트 2종 전수 대조** (링크는 `md/개발문서.md`). 시트에만 있고 CLAUDE.md에 없던 것을 §7에 반영: **전 테이블 공통컬럼(`year`/`created_by`/`is_deleted`)**, 전년도 복사 의존순서, 개인정보 마스킹 규칙. 시트가 구버전인 항목(Supabase 전제, 출결 5종, 승인 타임아웃 미확약, QR 순찰)은 이 파일이 우선.
+- **미해결로 남은 대조 결과**: 요구사항정의서는 RBAC를 `SUPER_ADMIN/BRANCH_ADMIN/TEACHER/STAFF/READONLY` **5단계 권한등급**으로 두는데 이 파일은 담당선생님/행정선생님 **2종 직무구분**이다. 서로를 포함하지 못하므로 두 축을 어떻게 합칠지 정리 필요. 그리고 **신상기록부(F-4.11-9)는 회원가입 강제 단계이고 미작성 시 등록 미완**이라, §3의 "학생 가입은 PENDING→ACTIVE 이분법, 중간 상태 없음"과 충돌한다.
+- **다음 작업**: 위 "다음 작업"의 V1·V2 재작성 시 §7 공통컬럼 규칙을 반드시 함께 반영할 것. `docs/entity-design.md`(전 도메인 엔티티 설계서)도 키오스크 정정 이전 문서라 동기화 필요.
