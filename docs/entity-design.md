@@ -1,7 +1,41 @@
 # D.Lab 전체 도메인 엔티티 설계
 
 **정본 우선순위**: D.Lab 통합기획서(PRD) > CLAUDE.md(요약) > 이 문서(설계 초안). 이 문서는 CLAUDE.md 기준으로 재작성함.
-**패키지**: `domain/{user, attendance, schedule, payment, meal, grade, notice, firewall, chat, notification}`
+**패키지**: `domain/{user, attendance, penalty, approval, schedule, payment, meal, grade, notice, firewall, chat, notification, ...}`
+※ `approval`과 `penalty`는 각각 `firewall`·`attendance` 안에 두지 않는다 — 이유는 E·A5 참고.
+
+---
+
+## 0. 전 테이블 공통 규칙 (설계 시작 전 반드시 적용)
+
+### 0-1. 공통 컬럼 — 예외 없이 모든 테이블
+
+| 컬럼 | 타입 | 왜 필요한가 |
+| --- | --- | --- |
+| id | bigserial, PK | |
+| academy_id | bigint | **다지점.** 신규 테이블 만들 때 가장 자주 빠뜨린다 |
+| year | smallint | **1년 단위 코호트**(독학재수)라 거의 모든 데이터가 연도에 종속. "전년도 복사"의 기준 |
+| created_at / updated_at | timestamptz | |
+| **created_by** | bigint (account_id) | **감사로그. 보안심사 직결 항목** |
+| **is_deleted** | boolean DEFAULT false | soft delete |
+
+> ⚠️ `created_by`·`is_deleted`를 나중에 붙이면 **그 이전 기간의 이력은 영영 복구할 수 없다.** 지금은 컬럼 추가지만 운영 데이터가 쌓인 뒤엔 손쓸 방법이 없다.
+>
+> 의도적 예외는 사유를 반드시 명시한다 — `parent_guardian`(지점 종속이 아니라 자녀를 따라감), `track_master`·`role`(지점 무관 고정 참조값).
+
+### 0-2. 전년도 복사 (YearlySnapshotService)
+
+```
+department → course_type → class_group → curriculum → penalty_item → tuition
+```
+
+**이 순서를 지켜야 하고, 단순 `INSERT SELECT` 금지** — FK가 깨진다.
+
+### 0-3. 개인정보
+
+- 전화·주소·생년월일 포함 응답은 **상위 관리자만** 조회
+- **엑셀 Export 마스킹 기본 ON** (`010-****-1234`)
+- 발주처가 개인정보 유출 조사·벌금 사례로 민감도가 높다 — 임의 완화 금지
 
 ---
 
@@ -23,27 +57,53 @@
 > Refresh Token/Access Token 블랙리스트/로그인 rate limiting은 **Redis**에서 처리 (Postgres 테이블 아님).
 >
 
-### A1. student — 학생 마스터
+### A1. ★ 학생 = "사람 + 등록 건" 2단 구조
+
+> **한 테이블로 만들면 안 된다.** 레거시 실측(`TB_STUDENT_MST` / `TB_PDTL_RLS`)에서 확인된 구조이고, 이게 여러 문제를 한 번에 푼다:
+>
+> - **학번과 RFID 카드번호는 사람이 아니라 "등록 건"에 붙는다.** 그래서 학번 매년 초기화가 구조적으로 보장되고, 카드가 다음 기수에 재사용돼도 과거 기수 출결이 섞이지 않는다
+> - 여기는 **독학재수라 1년 단위 코호트**다. 기수가 통째로 갈리므로 **연도를 넘는 학생 연속성을 가정하지 말 것**
+> - 대신 **삼수로 재등록하면 같은 사람에 등록 행만 추가**되므로 동일인 추적이 공짜로 된다 (시안의 "상담 이력은 입학예약 상담부터 연속 기록"이 이걸로 성립)
+
+#### A1-1. student — 사람 (영구, 연도 무관)
+
+| 컬럼 | 타입 | 비고 |
+| --- | --- | --- |
+| id | bigserial, PK | 내부 영구 식별자 |
+| unique_code | varchar(20) UNIQUE NOT NULL | **학생 고유ID** — 마이페이지 상시 노출, 학부모 가입 시 이 값+전화번호로 검증 없이 즉시 연결(리스크는 클라이언트 인지·감수, 추가 검증 로직 만들지 않음). **사람에 붙으므로 재등록해도 안 바뀐다** |
+| name | varchar(20) |  |
+| phone | varchar(20) |  |
+| birth_date | date | ⚠️ 암호화 여부는 미정 — 동명이인 구분 조회조건으로 쓰이면 인덱스를 못 탄다. **조회에 쓰는지 확인 후 결정** |
+| gender | varchar(1) CHECK IN ('M','F') |  |
+| school_name | varchar(64) | 출신고 — 사람 속성 |
+| search_name_normalized | varchar(20), 인덱스 | 검색·정렬 대응 |
+| created_at / updated_at / created_by / is_deleted | | §0-1 |
+
+> `academy_id`·`year` 없음 — 지점과 연도는 등록 건의 속성이다(의도된 예외).
+
+#### A1-2. student_enrollment — 등록 건 (기수별, 1인 N행)
 
 | 컬럼 | 타입 | 비고 |
 | --- | --- | --- |
 | id | bigserial, PK |  |
-| academy_id | bigint | 지점 |
-| unique_code | varchar(20) UNIQUE NOT NULL | **학생 고유ID** — 마이페이지 상시 노출, 학부모 가입 시 이 값+전화번호로 검증 없이 즉시 연결(리스크는 클라이언트 인지·감수, 추가 검증 로직 만들지 않음). `student_no`와 달리 영구 고정 |
-| rfid_no | varchar(10) UNIQUE, 인덱스 | **최우선 반영** — 25개 엔드포인트 중 13개가 이 값을 조회키로 사용. 키오스크 카드 태깅 매칭 키 |
-| student_no | varchar(20) | 학번 — 매년 초기화. PK/외부연동 키로 사용 금지. `student_no + reg_year` 유니크 |
-| reg_year | smallint |  |
-| name | varchar(20) |  |
-| phone | varchar(20) |  |
-| birth_date | date, **암호화 대상** |  |
-| gender | varchar(1) CHECK IN ('M','F') |  |
-| grade | varchar(10) CHECK IN ('HIGH2','HIGH3','N_SU') | 고2/고3/N수생 3분류로 확정 (PRD "성인" = N수생) |
+| student_id | bigint, FK → student | |
+| academy_id | bigint | 지점. 기수마다 다를 수 있다 |
+| year | smallint | 기수(등록년도) |
+| student_no | varchar(20) | 학번 — **매년 초기화. PK/외부연동 키로 사용 금지.** `UNIQUE(academy_id, year, student_no)` |
+| rfid_no | varchar(10), 인덱스 | 키오스크 카드 태깅 매칭 키. **DSA 호환 엔드포인트 25개 중 13개가 이 값을 조회키로 사용 — 최우선 반영** |
+| is_current | boolean DEFAULT true | **현재 유효한 등록 건 플래그** (레거시 `STAT_GB='T'` 대응) |
+| grade | varchar(10) CHECK IN ('HIGH2','HIGH3','N_SU') | 고2/고3/N수생 3분류 (PRD "성인" = N수생) |
 | track | varchar(10) CHECK IN ('HUMANITIES','SCIENCE','ART','COMMON') |  |
-| enrollment_status | varchar(20) NOT NULL DEFAULT 'ENROLLED' CHECK IN ('ENROLLED','ON_LEAVE','WITHDRAWN','GRADUATED') | 재원 상태 — `account.status`(가입승인 상태)와 별개 |
+| enrollment_status | varchar(20) NOT NULL DEFAULT 'ENROLLED' CHECK IN ('ENROLLED','ON_LEAVE','WITHDRAWN','GRADUATED') | 재원 상태 — `account.status`(가입승인 상태)와 **별개** |
 | admission_date / withdrawal_date | date |  |
-| school_name | varchar(64) |  |
-| search_name_normalized | varchar(20), 인덱스 | 검색·정렬 대응 |
-| created_at/updated_at | timestamptz |  |
+| created_at / updated_at / created_by / is_deleted | | §0-1 |
+
+> ### ⚠️ `rfid_no`는 UNIQUE가 아니다
+>
+> 등록 건마다 쌓이는 **이력**이기 때문이다. 그래서 카드번호로 학생을 찾을 때는 **반드시 `is_current = true`로 걸러야 한다.**
+> 이걸 빠뜨리면 **퇴원생 카드로 태깅이 통과한다.** 키오스크 조회 쿼리 전부에 해당된다.
+
+> 이후 이 문서에서 `student_id(FK)`라고 적힌 것은, **연도에 종속되는 데이터라면 실제로는 `enrollment_id`를 참조해야 한다** (출결·상벌점·반배정·청구 등 대부분이 여기 해당). 사람 단위로 이어져야 하는 것(상담 이력, 신상기록부)만 `student_id`를 쓴다.
 
 ### A2. parent_guardian — 학부모
 
@@ -82,12 +142,9 @@
 | assigned_at | timestamptz |  |
 | is_active | boolean DEFAULT true |  |
 
-### A5. merit_demerit_policy / merit_demerit_point — 상벌점
+### A5. (이동) 상벌점 → `domain/penalty` 로 분리
 
-| 테이블 | 컬럼 | 비고 |
-| --- | --- | --- |
-| merit_demerit_policy | id, academy_id, reg_year, item_name, point_value, category(MERIT/DEMERIT) | 전년도 복사 대상 |
-| merit_demerit_point | id, academy_id, student_id(FK), policy_id(FK), points, reason, source(KIOSK/MANUAL), occurred_at, created_by |  |
+**`attendance`나 `user` 하위에 두지 말 것.** 상벌점 규칙엔진은 **출결과 데일리루틴 양쪽에서 트리거**된다(요구사항정의서 I-5). `attendance` 하위에 두면 `daily_routine → attendance` 순환 참조가 난다. → **V 섹션 참고.**
 
 ### A6. admission_waitlist / admission_reservation — 대기자·입학예약
 
@@ -189,11 +246,29 @@
 | 테이블 | 핵심 컬럼 | 비고 |
 | --- | --- | --- |
 | kiosk_device | id, academy_id, location, device_type(ATTENDANCE/MEAL) |  |
-| attendance_tagging_log | id, academy_id, student_id(FK), event_type CHECK IN ('CHECK_IN','CHECK_OUT','LATE','EARLY_LEAVE','REASON_OUTING','GENERAL_OUTING','RETURN'), source(KIOSK_NFC/APP_QR), kiosk_device_id(FK, nullable), period_id(FK → period_master, nullable), recorded_at | **7종 이벤트** — 복귀(RETURN) 추가, 외출을 사유외출/일반외출로 구분. `ABSENT` 없음(아래 참고) |
+| attendance_tagging_log | id, academy_id, enrollment_id(FK), event_type(7종, 아래 표), source(KIOSK_NFC/APP_QR), kiosk_device_id(FK, nullable), period_id(FK → period_master, nullable), recorded_at | 실제로 발생한 태깅만. `ABSENT` 없음(아래 참고) |
 | attendance_daily_status | id, academy_id, student_id(FK), attendance_date, final_status CHECK IN ('PRESENT','LATE','ABSENT','EARLY_LEAVE'), calculated_at | 배치가 `attendance_tagging_log`+`period_master`(등원시각 기준) 대조해서 확정하는 **파생 일자 상태**. `ABSENT`는 오직 여기에만 존재 |
-| absence_reason | id, academy_id, student_id(FK), attendance_date, reason_type(ABSENCE/LATE/EARLY_LEAVE/OUTING), reason_text, submitted_at, deadline_at(당일 자정), approval_status(PENDING/APPROVED/REJECTED), **approved_by(employee_id)**, approved_at | 승인 주체는 **관리자**(§5-1: "사유 승인/수정"은 관리자 웹 담당, 학부모 아님) |
+| absence_reason | id, academy_id, enrollment_id(FK), attendance_date, reason_type(ABSENCE/LATE/EARLY_LEAVE/OUTING), reason_text, submitted_at, deadline_at(당일 자정), **approval_request_id**(FK → approval_request) | 승인 주체는 **관리자**(§5-1: "사유 승인/수정"은 관리자 웹 담당, 학부모 아님). 승인 상태는 자체 컬럼이 아니라 `approval_request`(E2)에서 읽는다. ⚠️ "벌점 확정 후 사유 승인 불가"의 확정 기준 미정(I-10) |
 | seat_leave_record | id, academy_id, student_id(FK), seat_id(FK → seat_master, nullable), trigger_source(KIOSK_CARD/APP_REQUEST), status(LEFT/RETURNED), left_at, returned_at, kiosk_device_id(FK, nullable) | "좌석이탈 신청"과 동일 개념(F-4.11-8) — `trigger_source='APP_REQUEST'`가 신청에 해당. ⚠️ 두 트리거 경로 충돌 규칙 미정(§4 블로커) **+ 0723 회의에서 개발팀이 실시간 좌석표 UI를 공수·리스크 이유로 2차 개발 이관을 제안한 상태** — 클라이언트 확정 전까지 Phase/스코프 자체가 불확실. 키오스크 스펙(D-2)에도 종속. 확정 전 API 설계 금지 |
-| (미등원 알림) | 별도 테이블 아님 | 등원시간(지점 공통) 정각에 스케줄러 실행 → `attendance_tagging_log`에 CHECK_IN 없는 학생 필터링(사전 결석사유 제출자 제외) → 카카오 알림톡. 결과는 `notification_log`(K)에 기록 |
+| (미등원 알림) | 별도 테이블 아님 | 등원시간(지점 공통) 정각에 스케줄러 실행 → `attendance_tagging_log`에 등원 없는 학생 필터링(사전 결석사유 제출자 제외) → 카카오 알림톡. 결과는 `notification_log`(K)에 기록 |
+
+#### C-1. ★ 출결 이벤트 7종 — DSA 원본 코드를 그대로 저장한다
+
+키오스크는 DSA와 동일한 응답을 기대하므로 **저장 값이 곧 응답 값**이다. 우리 식으로 예쁘게 바꾸면 호환 구획에서 매번 역매핑해야 하고, 하나만 틀려도 키오스크 파싱이 깨진다.
+
+| `att_gn` | 의미 | 비고 |
+| --- | --- | --- |
+| `S` | 등원 | |
+| `T` | 하원 | **순공시간 계산의 필수 짝** — 이게 없으면 공부시간을 못 낸다 |
+| `A` | 지각 | |
+| `D` | 외출 | 일반 외출 |
+| `N` | 사유 외출 | 사유 제출된 외출 — `D`와 구분해야 벌점 판정이 갈린다 |
+| `C` | 조퇴 | |
+| `R` | 복귀 | 외출/조퇴 후 돌아옴 |
+
+> ⚠️ **요구사항정의서 2시트의 5종(`ON_TIME/LATE/ABSENT/OUT/EXCUSED`)은 틀렸다.** 하원(`T`)과 복귀(`R`)가 빠져 있고, 하원 없이는 순공시간 계산이 불가능하다.
+>
+> ⚠️ **`ABSENT`(결석)를 이 enum에 넣지 말 것.** 결석은 "안 찍은 것"이라 태깅 로그에 남을 수 없다. 배치가 일자 단위로 확정하는 **파생 상태값**이고, 오직 `attendance_daily_status`에만 존재한다. 둘을 같은 enum에 섞는 순간 "결석 이벤트를 INSERT"하는 코드가 생긴다.
 
 ---
 
@@ -204,37 +279,86 @@
 | 테이블 | 핵심 컬럼 | 비고 |
 | --- | --- | --- |
 | regular_schedule | id, academy_id, student_id(FK), apply_month, schedule_type(현강/과외), day_of_week, start_time, end_time, location_note, registered_at | 매월 1일 등록 |
-| schedule_approval | id, regular_schedule_id(FK), guardian_id(FK), status, approved_at | 승인자는 학부모만 — 에스컬레이션 없음 |
+| ~~schedule_approval~~ | **별도 테이블 두지 말 것** | `approval_request`(E2)에 위임. `approval_item`에서 `approver_type='PARENT'` + `escalation_approver_type=NULL`로 두면 "학부모만, 에스컬레이션 없음"이 그대로 표현된다 |
 | schedule_variance_log | id, regular_schedule_id(FK), actual_check_in_at, variance_minutes, is_recognized | 30분차 판정 |
 
 ---
 
-## E. domain/firewall — 와이파이 방화벽 (타임아웃 에스컬레이션 모델)
+## E. domain/approval — ★ 공통 승인 라우팅
 
-> **단순 "먼저 승인한 쪽이 이김" 레이스가 아니다.** 신청 시 학부모+담당선생님(사감)에게 **동시 발송**. 담당선생님은 학생의 `class_assignment → class_master.homeroom_teacher_id`로 **자동 결정** — 승인자 사전지정 UI 불필요. 타임아웃 **10분 확정**. 시점에 따라 3케이스로 갈리고, 문구가 케이스마다 달라야 함(2번·3번 절대 같은 문구 금지). 실제 상태전이(승인 확정)는 **원자적 처리** 필요 — 조건부 UPDATE(동시성 처리) 이미 구현됨(§2).
->
+> **`firewall` 안에 두지 말 것.** 요구사항정의서 F-4.11-5는 **사유신청·정기일정·방화벽을 하나의 라우팅 엔진**에 태운다. `firewall` 안에 두면 사유신청에서 같은 로직을 또 짜게 된다.
+
+### E1. approval_item — 승인 항목 마스터
 
 | 컬럼 | 타입 | 비고 |
 | --- | --- | --- |
-| id | bigserial, PK |  |
-| academy_id | bigint |  |
-| student_id | bigint, FK → student |  |
-| requested_minutes | smallint CHECK (≤300) | 최대 5시간 |
-| reason | text |  |
-| requested_at | timestamptz |  |
-| timeout_minutes | smallint NOT NULL DEFAULT 10 | 확정값 |
-| escalation_target_employee_id | bigint, FK → employee | 신청 시점의 담당선생님 스냅샷(반배정에서 자동 도출, 이후 담임 변경돼도 이 요청 건은 스냅샷 유지) |
-| status | varchar(20) CHECK IN ('PENDING','APPROVED','REJECTED') |  |
-| approved_by_type | varchar(10) CHECK IN ('GUARDIAN','TEACHER'), nullable | 실제 승인자가 학부모인지 담당선생님인지 |
-| approved_by_id | bigint, nullable | `approved_by_type`에 따라 guardian_id 또는 employee_id |
-| approval_case | smallint CHECK IN (1,2,3), nullable | 1=타임아웃 전 학부모 승인 / 2=타임아웃 경과 후 담당선생님 에스컬레이션 승인 / 3=타임아웃 전인데 담당선생님이 먼저 승인 — **2·3은 학부모에게 다른 문구 필요**, 승인시각-신청시각 비교로 판별 |
-| approved_at | timestamptz |  |
-| unlock_start_at / unlock_end_at | timestamptz |  |
-| zyxel_site_id | varchar(32) | Nebula API 호출 대상 |
-| version | integer DEFAULT 0 | 낙관적 락 — 학부모·담당선생님 승인이 동시에 들어올 때 조건부 UPDATE로 원자성 보장 |
+| id | bigserial, PK | |
+| academy_id / year | | §0-1 |
+| request_type | varchar(30) CHECK IN ('FIREWALL_UNLOCK','ABSENCE_REASON','REGULAR_SCHEDULE') | 확장 시 여기 추가 |
+| approver_type | varchar(10) CHECK IN ('PARENT','TEACHER','AUTO') | 1차 승인 주체 |
+| timeout_minutes | smallint, nullable | NULL이면 에스컬레이션 없음 |
+| escalation_approver_type | varchar(10), nullable | 타임아웃 후 승인 주체. NULL이면 에스컬레이션 없음 |
 
-| firewall_violation | id, academy_id, student_id(FK), unlock_request_id(FK, nullable), occurred_at, merit_demerit_point_id(FK) | |
-| firewall_restriction | id, academy_id, student_id(FK), restricted_from, restricted_until, violation_count | 2회 적발 시 2주 제한 |
+> **항목마다 정책이 다르다**: 방화벽은 `PARENT` → 10분 → `TEACHER`. 정기일정은 `PARENT`만(에스컬레이션 없음). 사유신청은 `TEACHER`(관리자 승인).
+
+### E2. approval_request — 승인 요청 건
+
+| 컬럼 | 타입 | 비고 |
+| --- | --- | --- |
+| id | bigserial, PK | |
+| academy_id / year | | §0-1 |
+| approval_item_id | bigint, FK → approval_item | |
+| enrollment_id | bigint, FK → student_enrollment | 신청 학생 |
+| status | varchar(20) CHECK IN ('PENDING','APPROVED','REJECTED','CANCELED') | **상태는 이 3+1종뿐.** 아래 `resolution_case`와 층위가 다르다 |
+| requested_at | timestamptz | |
+| **timeout_minutes** | smallint NOT NULL | 신청 시점 스냅샷. 정책이 바뀌어도 처리된 건은 흔들리면 안 된다 |
+| **escalation_at** | timestamptz NOT NULL | `requested_at + timeout_minutes`. 케이스 판별 기준 |
+| **escalation_target_employee_id** | bigint, FK → employee, nullable | 신청 시점 담당선생님 **스냅샷**. `class_assignment → class_master.homeroom_teacher_id`로 자동 도출 — **승인자 사전지정 UI 불필요** |
+| resolved_at | timestamptz, nullable | |
+| resolver_type | varchar(10) CHECK IN ('PARENT','TEACHER'), nullable | |
+| resolver_id | bigint, nullable | `resolver_type`에 따라 guardian_id 또는 employee_id |
+| **resolution_case** | varchar(30) CHECK IN ('PARENT_IN_TIME','STAFF_AFTER_TIMEOUT','STAFF_BEFORE_TIMEOUT'), nullable | 아래 참고 |
+| reject_reason | varchar(500), nullable | |
+
+> ### 승인 3케이스 — 단순 레이스가 아니다
+>
+> 신청 시 학부모와 담당선생님에게 **동시 발송**되지만, 승인 시점에 따라 셋으로 갈린다. 판별은 **승인시각 vs `escalation_at`** 비교다.
+>
+> | `resolution_case` | 상황 | 학부모에게 나갈 문구 |
+> | --- | --- | --- |
+> | `PARENT_IN_TIME` | 타임아웃 전 학부모 승인 | 정상 승인 |
+> | `STAFF_AFTER_TIMEOUT` | 무응답으로 타임아웃 경과 후 담당선생님 승인 | "승인 시간이 지나 담임이 승인했습니다" |
+> | `STAFF_BEFORE_TIMEOUT` | 타임아웃 전인데 담당선생님이 먼저 승인 | "승인 시간이 남았지만 담임이 먼저 승인 처리했습니다" |
+>
+> **뒤 두 개를 같은 문구로 합치지 말 것.** 학부모 입장에서 전혀 다른 상황이고, 합치면 "왜 시간 남았는데 담임이 승인했지" 하는 혼란이 생긴다.
+>
+> **숫자코드(1/2/3) 금지** — 레거시 `BE_GB` 같은 해독 불가 코드의 재발이다.
+>
+> **상태 전이는 원자적으로.** 학부모와 담당선생님 승인이 같은 순간 들어올 수 있다. 조회 후 저장이 아니라 **조건부 UPDATE**(`WHERE status='PENDING'`, 갱신행 0이면 이미 처리됨)로 처리한다. 낙관적 락(`version` 컬럼)은 쓰지 않는다 — 두 방식을 섞으면 어느 쪽이 실제로 동시성을 막는지 불분명해진다.
+>
+> `status`에 `TIMEOUT_ESCALATED` 같은 값을 넣지 말 것 — "타임아웃 후 승인됐다"는 결과 속성이라 `resolution_case`가 담당한다. 섞으면 "에스컬레이션됐지만 거절"을 표현할 수 없다.
+
+---
+
+## E'. domain/firewall — 와이파이 방화벽 해제
+
+**승인 로직은 갖지 않는다** — `approval_request`에 위임하고, 여기는 해제 자체의 고유 정보만 담는다.
+
+| 컬럼 | 타입 | 비고 |
+| --- | --- | --- |
+| id | bigserial, PK | |
+| academy_id / year | | §0-1 |
+| enrollment_id | bigint, FK → student_enrollment | |
+| **approval_request_id** | bigint, FK → approval_request | 승인 상태는 전부 여기서 읽는다 |
+| requested_minutes | smallint CHECK (≤300) | 최대 5시간 |
+| reason | text | |
+| unlock_start_at / unlock_end_at | timestamptz | 실제 해제 구간 |
+| zyxel_site_id | varchar(32) | Nebula API 호출 대상 (⚠️ 크레덴셜·제어 단위는 E-1 미해결) |
+
+| 테이블 | 핵심 컬럼 | 비고 |
+| --- | --- | --- |
+| firewall_violation | id, academy_id, enrollment_id(FK), firewall_request_id(FK, nullable), occurred_at, penalty_point_id(FK) | 적발 이력 |
+| firewall_restriction | id, academy_id, enrollment_id(FK), restricted_from, restricted_until, violation_count | 2회 적발 시 2주 제한. ⚠️ **적발 횟수의 누적 기준 기간(연간/학기/영구) 미확인** |
 
 ---
 
@@ -363,6 +487,26 @@ QR 순찰 결과 항목은 제외(C 섹션 참고 — 자리이탈로 대체). �
 
 ---
 
+## V. domain/penalty — ★ 상벌점 + 규칙엔진
+
+> **`attendance` 하위에 두지 말 것.** 규칙엔진은 **출결과 데일리루틴 양쪽에서 트리거**된다(요구사항정의서 I-5). `attendance` 아래 두면 `daily_routine → attendance` 순환 참조가 난다. 그래서 둘 다에서 참조 가능한 독립 도메인으로 둔다.
+
+| 테이블 | 핵심 컬럼 | 비고 |
+| --- | --- | --- |
+| penalty_item | id, academy_id, year, item_name, point_value, category CHECK IN ('MERIT','DEMERIT') | 항목 마스터. **전년도 복사 대상**(§0-2 순서에 포함) |
+| penalty_rule | id, academy_id, year, trigger_type CHECK IN ('ATTENDANCE','DAILY_ROUTINE'), trigger_condition, penalty_item_id(FK) | 트리거 → 항목 매핑. ⚠️ **매핑 규칙 자체가 미확정(I-5)** — 스키마만 두고 규칙은 비워둔다 |
+| penalty_point | id, academy_id, year, enrollment_id(FK), penalty_item_id(FK), points, reason, source CHECK IN ('KIOSK','ROUTINE','MANUAL'), occurred_at, **idempotency_key** UNIQUE, created_by | 실제 부여 이력 |
+
+> ### ⚠️ 자동 부여는 멱등해야 한다
+>
+> 출결·루틴 이벤트가 중복 트리거되면 **점수가 두 번 부여된다**(실행가이드 3.3이 명시한 리스크). 키오스크 재태깅·배치 재실행·다중 인스턴스 전부 현실적인 경로다.
+>
+> `idempotency_key`(예: `ATTENDANCE:{enrollment_id}:{date}:{rule_id}`)에 유니크 제약을 걸어 **DB에서 막는다.** 애플리케이션 레벨 체크만으로는 동시 실행을 못 막는다.
+
+> I-5(규칙 매핑)가 미확정이라 **수기 부여(`source='MANUAL'`)만 먼저 열고**, 규칙엔진은 인터페이스만 잡아둔다. 실행가이드도 같은 우회를 권한다.
+
+---
+
 ## Q. study_plan — 학습계획 (Phase 3, 0723 회의 결정 반영)
 
 > **이행 표시 방식 확정(0723)**: 항목별(일일) 이행은 **○/△/✗ 3단계**(드래그/% 방식 기각 — 모바일 오조작·자기평가 신뢰도 문제), 과목 종합(담임 상담)은 **별점** 또는 항목 자동집계 %.
@@ -423,26 +567,41 @@ QR 순찰 결과 항목은 제외(C 섹션 참고 — 자리이탈로 대체). �
 ```
 account (A0) ── student_id/guardian_id/employee_id (다형 FK, 정확히 하나만)
 
-student (A1)
+★ 학생은 2단이다. 연도 종속 데이터는 전부 enrollment에 붙는다.
+
+student (사람, 영구)                      ← unique_code, 상담이력·신상기록부만 여기
  ├─ student_guardian_link → parent_guardian (A2,A3)
- ├─ class_assignment → class_master(homeroom_teacher_id) (A4, M)
- ├─ merit_demerit_point → merit_demerit_policy (A5)
- ├─ billing → payment_receipt / refund / virtual_account (B)
- ├─ attendance_record, absence_reason(승인=employee), seat_leave_record (C)
- ├─ regular_schedule → schedule_approval(승인=guardian만) (D)
- ├─ firewall_unlock_request(승인=guardian 또는 employee, 3케이스) → firewall_violation → firewall_restriction (E)
- ├─ meal_application(→billing) → meal_application_day (F)
- ├─ mock_exam_score, internal_grade_record(블로커), self_grading_response, grade_report_upload (G)
- ├─ qna_post, survey_response (H)
- ├─ study_time_log, daily_report (J)
- ├─ special_lecture_application, special_lecture_attendance (L)
- ├─ admission_result (O)
- └─ counseling_log (P)
+ ├─ personal_record_card (S)              ← 사람 단위
+ ├─ counseling_log (P)                    ← 사람 단위(입학예약 상담부터 연속)
+ └─ student_enrollment (등록 건, 기수별 1인 N행)   ← student_no, rfid_no, is_current
+      ├─ class_assignment → class_master(homeroom_teacher_id) (A4, M)
+      ├─ penalty_point → penalty_item ← penalty_rule (V)
+      ├─ billing → payment_receipt / refund / virtual_account (B)
+      ├─ attendance_tagging_log(7종) ─배치─> attendance_daily_status(ABSENT는 여기만) (C)
+      ├─ absence_reason ─┐
+      ├─ regular_schedule ┼─> approval_request → approval_item (E)   ★ 승인은 전부 여기로
+      ├─ firewall_request ┘        └─ firewall_violation → firewall_restriction (E')
+      ├─ seat_leave_record → seat_master (C, M)
+      ├─ meal_application(→billing) → meal_application_day (F)
+      ├─ mock_exam_score, internal_grade_record(블로커), self_grading_response (G)
+      ├─ qna_post, survey_response (H)
+      ├─ study_plan_item → period_master (Q, M)
+      ├─ daily_routine_log (R) ──┐
+      │                          └─> penalty_rule 트리거 (V)  ★ 출결과 함께 penalty를 탄다
+      ├─ study_time_log, daily_report (J)
+      ├─ special_lecture_application, special_lecture_attendance (L)
+      └─ admission_result (O)
 
 admission_reservation → admission_waitlist → student(전환) (A6)
 employee ── employee_role ── role ── permission (N)
 notification_template ── notification_log (K)
+annual_event (T) ──> study_plan_item 자동 반영 (Q)
 ```
+
+**이 그림에서 읽어야 할 세 가지**
+1. **승인이 한 곳(E)으로 모인다** — 사유신청·정기일정·방화벽이 각자 승인 컬럼을 갖지 않는다
+2. **penalty(V)가 출결과 데일리루틴 양쪽에서 참조된다** — 그래서 `attendance` 하위에 두면 순환 참조가 난다
+3. **사람 단위 vs 등록 건 단위가 갈린다** — 상담·신상기록부만 사람에 붙고 나머지는 전부 등록 건
 
 ---
 
@@ -458,7 +617,11 @@ notification_template ── notification_log (K)
 | PK 없는 테이블 | 반영 안 함 | 전부 `bigserial id` 기본 |
 | 청구/수납/환불 3단 구조 | 채택 | 실무 검증된 구조 |
 | 가상계좌 발급 개념 | 채택 | 실제 요구사항 |
-| 대성전산 API(daesung) | **수납 조회 용도 아님으로 정정** | 남은 용도(학생데이터 등) 재확인 필요, §4는 아니지만 미확인 |
+| 대성전산 API(daesung) | **호출하지 않음 — 대체한다** | DSA를 프록시하는 게 아니라 우리 DB에서 직접 서빙. `integration/daesung`은 용도 소멸 |
+| `TB_STUDENT_MST` / `TB_PDTL_RLS` 2단 구조 | **채택** | 학번·RFID를 등록 건에 붙이는 근거. A1 참고 |
+| `RFID_NO` 비유니크 + 현재-플래그(`STAT_GB`) | **채택** | 이력이 쌓이므로. 안 거르면 퇴원생 카드가 통과 |
+| `att_gn` 7종 코드(`S/T/A/D/N/C/R`) | **원본 그대로 채택** | 키오스크 응답값이 곧 저장값. 바꾸면 호환 구획이 깨짐 |
+| `RES_GB`에 `E:식대` 존재 | **근거로 채택** | 레거시도 급식을 같은 청구 체계로 다뤘음 — 공용 결제 도메인의 방증 |
 
 ---
 
@@ -466,14 +629,25 @@ notification_template ── notification_log (K)
 
 | 항목 | 상태 |
 | --- | --- |
-| 채팅 SDK 최종 선택 | 미정 (SDK 사용 자체는 확정) — I 섹션 |
-| 결제 법적요건(전자금융거래법 등) | 미검토 — B 섹션 전체 |
-| 내신 성적 입력 양식 | 미정 — G. internal_grade_record |
-| 명단 구분 항목 (PRD 4.9) | 운영팀 재정의 필요, 미반영 |
-| 알림 템플릿 문구 | 미정 — K.notification_template.content_confirmed |
-| 자리이탈 두 채널 충돌 규칙 | 미정 — C. seat_leave_record |
-| 기존 재원생 데이터 이관 자료 | 대성전산 회신 대기(2026-07-22 요청) — **신규 스키마 설계 자체를 막는 블로커 아님**, 컷오버 직전에만 필요 |
+| **신상기록부 4종 양식** (I-17, 최우선) | 미정 — S 섹션. **회원가입 온보딩 착수 전 필수**. 강제 단계라 `account.status` 이분법과 충돌하는 문제도 같이 정리 필요 |
+| **레거시 스키마 4종 미확보** | 출결·좌석/구역·지점·사유신청. **출결이 가장 급함**(DSA 호환 엔드포인트 10개가 여기 걸림). 단 API 계약에서 역산 설계 가능하므로 착수 블로커는 아님 |
+| 명단 구분 항목 (PRD 4.9, I-1) | 운영팀 재정의 필요. **유일하게 우회 불가** 항목 |
+| 알림 템플릿 문구 (I-4) | 미정 — K.`content_confirmed=false`로 발송 보류. **알림톡 사전심사(E-5, 최우선)가 여기 직렬로 물려 있어 가장 급하다** |
+| 상벌점 자동부여 규칙 매핑 (I-5) | 미정 — V.`penalty_rule`. 수기 부여만 먼저 열고 엔진은 인터페이스만 |
+| 자리이탈 두 채널 충돌 규칙 (I-16) | 미정 — C.`seat_leave_record`. **실시간 좌석표 UI는 2차 개발 이관 제안 상태**라 스코프 자체가 불확실 |
+| 내신 성적 입력 양식 (I-11) | 미정 — G.`internal_grade_record` |
+| 채팅 SDK 최종 선택 (E-6) | 미정 (SDK 사용 자체는 확정) — I 섹션. **벤더명을 패키지에 미리 박지 말 것** |
+| 결제 법적요건 (전자금융거래법 등) | 미검토 — B 섹션 전체 |
+| Zyxel 크레덴셜·제어 단위 (E-1) | 미정 — E'.`zyxel_site_id` |
+| 민감정보 암호화 방식 | `birth_date`·`account_no`. ⚠️ 생년월일은 동명이인 구분 조회조건으로 쓰이면 인덱스를 못 탄다 — **조회에 쓰는지부터 확인** |
+| 방화벽 적발 누적 기준 기간 | 미확인 — E'.`firewall_restriction`(연간/학기/영구?) |
+| RBAC 축 정리 | 요구사항정의서는 5단계 권한등급, CLAUDE.md는 담당/행정선생님 2종 직무구분 — 서로를 포함 못 함 |
+| 기존 재원생 데이터 이관 | **설계를 막는 블로커 아님**. 컷오버 직전에만 필요 |
 
 ## 해소된 블로커 (참고)
 
-방화벽 담당교사 매핑, 승인 타임아웃(10분), 사전지정 UI 여부, 상담양식, 급식 PG 확인 — 전부 CLAUDE.md §2 결정로그에 반영 완료.
+- **키오스크 payload·RFID 매핑 (D-2, 최우선)** → DSA 호환 API 제공으로 해소. 엔드포인트 25개 계약 확보 → 출결 Phase 1 착수 가능
+- 방화벽 담당교사 매핑 → 반배정 자동연동 / 승인 타임아웃 → 10분 / 사전지정 UI → 불필요
+- 급식 PG → 급식업체 기존 PG가 곧 대성 PG, 신규 선정 아님
+- 상담 양식 → 목업 존재
+- 학습계획 이행 표시(I-19) → ○/△/✗ 3단계, 교시 20분 편집은 반대로 확정
