@@ -65,7 +65,7 @@ department → course_type → class_group → curriculum → penalty_item → t
 > - 여기는 **독학재수라 1년 단위 코호트**다. 기수가 통째로 갈리므로 **연도를 넘는 학생 연속성을 가정하지 말 것**
 > - 대신 **삼수로 재등록하면 같은 사람에 등록 행만 추가**되므로 동일인 추적이 공짜로 된다 (시안의 "상담 이력은 입학예약 상담부터 연속 기록"이 이걸로 성립)
 
-#### A1-1. student — 사람 (영구, 연도 무관)
+### A1-1. student — 사람 (영구, 연도 무관)
 
 | 컬럼 | 타입 | 비고 |
 | --- | --- | --- |
@@ -81,7 +81,7 @@ department → course_type → class_group → curriculum → penalty_item → t
 
 > `academy_id`·`year` 없음 — 지점과 연도는 등록 건의 속성이다(의도된 예외).
 
-#### A1-2. student_enrollment — 등록 건 (기수별, 1인 N행)
+### A1-2. student_enrollment — 등록 건 (기수별, 1인 N행)
 
 | 컬럼 | 타입 | 비고 |
 | --- | --- | --- |
@@ -98,10 +98,7 @@ department → course_type → class_group → curriculum → penalty_item → t
 | admission_date / withdrawal_date | date |  |
 | created_at / updated_at / created_by / is_deleted | | §0-1 |
 
-> ### ⚠️ `rfid_no`는 UNIQUE가 아니다
->
-> 등록 건마다 쌓이는 **이력**이기 때문이다. 그래서 카드번호로 학생을 찾을 때는 **반드시 `is_current = true`로 걸러야 한다.**
-> 이걸 빠뜨리면 **퇴원생 카드로 태깅이 통과한다.** 키오스크 조회 쿼리 전부에 해당된다.
+> **⚠️ `rfid_no`는 UNIQUE가 아니다.** 등록 건마다 쌓이는 **이력**이기 때문이다. 그래서 카드번호로 학생을 찾을 때는 **반드시 `is_current = true`로 걸러야 한다.** 이걸 빠뜨리면 **퇴원생 카드로 태깅이 통과한다.** 키오스크 조회 쿼리 전부에 해당된다.
 
 > 이후 이 문서에서 `student_id(FK)`라고 적힌 것은, **연도에 종속되는 데이터라면 실제로는 `enrollment_id`를 참조해야 한다** (출결·상벌점·반배정·청구 등 대부분이 여기 해당). 사람 단위로 이어져야 하는 것(상담 이력, 신상기록부)만 `student_id`를 쓴다.
 
@@ -252,7 +249,7 @@ department → course_type → class_group → curriculum → penalty_item → t
 | seat_leave_record | id, academy_id, student_id(FK), seat_id(FK → seat_master, nullable), trigger_source(KIOSK_CARD/APP_REQUEST), status(LEFT/RETURNED), left_at, returned_at, kiosk_device_id(FK, nullable) | "좌석이탈 신청"과 동일 개념(F-4.11-8) — `trigger_source='APP_REQUEST'`가 신청에 해당. ⚠️ 두 트리거 경로 충돌 규칙 미정(§4 블로커) **+ 0723 회의에서 개발팀이 실시간 좌석표 UI를 공수·리스크 이유로 2차 개발 이관을 제안한 상태** — 클라이언트 확정 전까지 Phase/스코프 자체가 불확실. 키오스크 스펙(D-2)에도 종속. 확정 전 API 설계 금지 |
 | (미등원 알림) | 별도 테이블 아님 | 등원시간(지점 공통) 정각에 스케줄러 실행 → `attendance_tagging_log`에 등원 없는 학생 필터링(사전 결석사유 제출자 제외) → 카카오 알림톡. 결과는 `notification_log`(K)에 기록 |
 
-#### C-1. ★ 출결 이벤트 7종 — DSA 원본 코드를 그대로 저장한다
+### C-1. ★ 출결 이벤트 7종 — DSA 원본 코드를 그대로 저장한다
 
 키오스크는 DSA와 동일한 응답을 기대하므로 **저장 값이 곧 응답 값**이다. 우리 식으로 예쁘게 바꾸면 호환 구획에서 매번 역매핑해야 하고, 하나만 틀려도 키오스크 파싱이 깨진다.
 
@@ -320,22 +317,22 @@ department → course_type → class_group → curriculum → penalty_item → t
 | **resolution_case** | varchar(30) CHECK IN ('PARENT_IN_TIME','STAFF_AFTER_TIMEOUT','STAFF_BEFORE_TIMEOUT'), nullable | 아래 참고 |
 | reject_reason | varchar(500), nullable | |
 
-> ### 승인 3케이스 — 단순 레이스가 아니다
->
-> 신청 시 학부모와 담당선생님에게 **동시 발송**되지만, 승인 시점에 따라 셋으로 갈린다. 판별은 **승인시각 vs `escalation_at`** 비교다.
->
-> | `resolution_case` | 상황 | 학부모에게 나갈 문구 |
-> | --- | --- | --- |
-> | `PARENT_IN_TIME` | 타임아웃 전 학부모 승인 | 정상 승인 |
-> | `STAFF_AFTER_TIMEOUT` | 무응답으로 타임아웃 경과 후 담당선생님 승인 | "승인 시간이 지나 담임이 승인했습니다" |
-> | `STAFF_BEFORE_TIMEOUT` | 타임아웃 전인데 담당선생님이 먼저 승인 | "승인 시간이 남았지만 담임이 먼저 승인 처리했습니다" |
->
+### E2-1. ★ 승인 3케이스 — 단순 레이스가 아니다
+
+신청 시 학부모와 담당선생님에게 **동시 발송**되지만, 승인 시점에 따라 셋으로 갈린다. 판별은 **승인시각 vs `escalation_at`** 비교다.
+
+| `resolution_case` | 상황 | 학부모에게 나갈 문구 |
+| --- | --- | --- |
+| `PARENT_IN_TIME` | 타임아웃 전 학부모 승인 | 정상 승인 |
+| `STAFF_AFTER_TIMEOUT` | 무응답으로 타임아웃 경과 후 담당선생님 승인 | "승인 시간이 지나 담임이 승인했습니다" |
+| `STAFF_BEFORE_TIMEOUT` | 타임아웃 전인데 담당선생님이 먼저 승인 | "승인 시간이 남았지만 담임이 먼저 승인 처리했습니다" |
+
 > **뒤 두 개를 같은 문구로 합치지 말 것.** 학부모 입장에서 전혀 다른 상황이고, 합치면 "왜 시간 남았는데 담임이 승인했지" 하는 혼란이 생긴다.
->
+
 > **숫자코드(1/2/3) 금지** — 레거시 `BE_GB` 같은 해독 불가 코드의 재발이다.
->
+
 > **상태 전이는 원자적으로.** 학부모와 담당선생님 승인이 같은 순간 들어올 수 있다. 조회 후 저장이 아니라 **조건부 UPDATE**(`WHERE status='PENDING'`, 갱신행 0이면 이미 처리됨)로 처리한다. 낙관적 락(`version` 컬럼)은 쓰지 않는다 — 두 방식을 섞으면 어느 쪽이 실제로 동시성을 막는지 불분명해진다.
->
+
 > `status`에 `TIMEOUT_ESCALATED` 같은 값을 넣지 말 것 — "타임아웃 후 승인됐다"는 결과 속성이라 `resolution_case`가 담당한다. 섞으면 "에스컬레이션됐지만 거절"을 표현할 수 없다.
 
 ---
@@ -497,11 +494,7 @@ QR 순찰 결과 항목은 제외(C 섹션 참고 — 자리이탈로 대체). �
 | penalty_rule | id, academy_id, year, trigger_type CHECK IN ('ATTENDANCE','DAILY_ROUTINE'), trigger_condition, penalty_item_id(FK) | 트리거 → 항목 매핑. ⚠️ **매핑 규칙 자체가 미확정(I-5)** — 스키마만 두고 규칙은 비워둔다 |
 | penalty_point | id, academy_id, year, enrollment_id(FK), penalty_item_id(FK), points, reason, source CHECK IN ('KIOSK','ROUTINE','MANUAL'), occurred_at, **idempotency_key** UNIQUE, created_by | 실제 부여 이력 |
 
-> ### ⚠️ 자동 부여는 멱등해야 한다
->
-> 출결·루틴 이벤트가 중복 트리거되면 **점수가 두 번 부여된다**(실행가이드 3.3이 명시한 리스크). 키오스크 재태깅·배치 재실행·다중 인스턴스 전부 현실적인 경로다.
->
-> `idempotency_key`(예: `ATTENDANCE:{enrollment_id}:{date}:{rule_id}`)에 유니크 제약을 걸어 **DB에서 막는다.** 애플리케이션 레벨 체크만으로는 동시 실행을 못 막는다.
+> **⚠️ 자동 부여는 멱등해야 한다.** 출결·루틴 이벤트가 중복 트리거되면 **점수가 두 번 부여된다**(실행가이드 3.3이 명시한 리스크). 키오스크 재태깅·배치 재실행·다중 인스턴스 전부 현실적인 경로다. `idempotency_key`(예: `ATTENDANCE:{enrollment_id}:{date}:{rule_id}`)에 유니크 제약을 걸어 **DB에서 막는다.** 애플리케이션 레벨 체크만으로는 동시 실행을 못 막는다.
 
 > I-5(규칙 매핑)가 미확정이라 **수기 부여(`source='MANUAL'`)만 먼저 열고**, 규칙엔진은 인터페이스만 잡아둔다. 실행가이드도 같은 우회를 권한다.
 
