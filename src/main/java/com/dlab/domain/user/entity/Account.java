@@ -102,6 +102,10 @@ public class Account extends BaseEntity {
         return status == AccountStatus.ACTIVE;
     }
 
+    public void recordLogin(Instant at) {
+        this.lastLoginAt = at;
+    }
+
     /** 학생 회원가입 승인 (PENDING → ACTIVE). 승인 주체는 행정(Employee)이다. */
     public void approve() {
         this.status = AccountStatus.ACTIVE;

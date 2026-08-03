@@ -26,9 +26,12 @@ spring:
 
 # --- 아래는 나중에 실제 연동 붙일 때 채울 것들 (지금은 비워둬도 앱 실행엔 지장 없음) ---
 
-# jwt:
-#   secret: <로컬 테스트용 임의 문자열, 운영값과 다르게>
-#   expiration: 3600000
+# JWT — secret은 절대 커밋하지 않는다(CLAUDE.md §8). 운영은 환경변수로만 공급.
+jwt:
+  # ★ 최소 32바이트(HS256 요구). 짧으면 기동 시 실패한다.
+  secret: local-only-dev-secret-please-change-me-32b
+  access-token-ttl: 30m
+  refresh-token-ttl: 14d
 
 # zyxel:
 #   api-key: <나중에>

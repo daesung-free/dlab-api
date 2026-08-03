@@ -1,0 +1,49 @@
+package com.dlab.api.admin.auth;
+
+import com.dlab.common.response.ApiResponse;
+import com.dlab.common.security.AuthPrincipal;
+import com.dlab.api.app.auth.AuthRequests;
+import com.dlab.api.app.auth.AuthResponse;
+import com.dlab.domain.user.service.AuthService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * 관리자 웹 인증.
+ *
+ * <p>앱과 로직은 같지만 경로를 나눈다 — 클라이언트별로 인증 정책이 갈릴 수 있고
+ * (예: 앱만 기기 등록 요구), 로그도 분리해서 봐야 한다.
+ */
+@RestController
+@RequestMapping("/api/v1/admin/auth")
+@RequiredArgsConstructor
+public class AdminAuthController {
+
+    private final AuthService authService;
+
+    @PostMapping("/login")
+    public ApiResponse<AuthResponse> login(@Valid @RequestBody AuthRequests.Login request) {
+        return ApiResponse.success(AuthResponse.from(
+                authService.login(request.loginId(), request.password())));
+    }
+
+    @PostMapping("/refresh")
+    public ApiResponse<AuthResponse> refresh(@Valid @RequestBody AuthRequests.Refresh request) {
+        return ApiResponse.success(AuthResponse.from(
+                authService.refresh(request.refreshToken())));
+    }
+
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(@AuthenticationPrincipal AuthPrincipal principal,
+                                    @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String header) {
+        authService.logout(principal.accountId(), stripBearer(header));
+        return ApiResponse.empty();
+    }
+
+    private String stripBearer(String header) {
+        return header != null && header.startsWith("Bearer ") ? header.substring(7) : null;
+    }
+}
