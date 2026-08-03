@@ -1,5 +1,6 @@
 package com.dlab.api.kiosk.dto;
 
+import com.dlab.api.kiosk.DsaCode;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
@@ -19,6 +20,7 @@ public record DsaTokenResponse(
 ) {
 
     public static DsaTokenResponse of(String token, String refreshToken) {
-        return new DsaTokenResponse(0, "정상 처리되었습니다.", token, refreshToken);
+        return new DsaTokenResponse(
+                DsaCode.SUCCESS.value(), DsaCode.SUCCESS.defaultMessage(), token, refreshToken);
     }
 }

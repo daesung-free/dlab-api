@@ -26,7 +26,7 @@ public class DsaAuthController {
 
     @PostMapping("/token")
     public DsaTokenResponse issue(@RequestBody DsaTokenRequest request) {
-        var issued = dsaTokenService.issue(request.clientId(), request.secretId());
+        var issued = dsaTokenService.issue(request.acadCd(), request.clientId(), request.secretId());
         return DsaTokenResponse.of(issued.token(), issued.refreshToken());
     }
 

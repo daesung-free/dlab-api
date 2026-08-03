@@ -11,6 +11,8 @@ import com.dlab.api.kiosk.DsaApiException;
 import com.dlab.api.kiosk.DsaCode;
 import com.dlab.domain.kiosk.entity.BranchConfig;
 import com.dlab.domain.kiosk.repository.BranchConfigRepository;
+import com.dlab.domain.user.entity.Academy;
+import com.dlab.domain.user.repository.AcademyRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
@@ -37,10 +39,12 @@ class DsaTokenServiceTest {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final String CLIENT_ID = "client1_1";
+    private static final String ACAD_CD = "31";
     private static final String SECRET = "test-secret";
     private static final Long ACADEMY_ID = 7L;
 
     private BranchConfigRepository repository;
+    private AcademyRepository academyRepository;
     private Map<String, String> store;
     private DsaTokenService service;
     private Clock clock;
@@ -67,7 +71,11 @@ class DsaTokenServiceTest {
         given(repository.findByKioskClientIdAndDeletedFalse("unknown"))
                 .willReturn(Optional.empty());
 
-        service = new DsaTokenService(repository, redis, clock);
+        academyRepository = mock(AcademyRepository.class);
+        Academy academy = new Academy(ACAD_CD, "분당", java.time.LocalTime.of(9, 0));
+        given(academyRepository.findById(ACADEMY_ID)).willReturn(Optional.of(academy));
+
+        service = new DsaTokenService(repository, academyRepository, redis, clock);
     }
 
     private String secretIdFor(LocalDate date) {
@@ -83,7 +91,7 @@ class DsaTokenServiceTest {
     @Test
     @DisplayName("오늘 날짜로 계산한 secret_id로 토큰이 발급된다")
     void issueWithToday() {
-        var issued = service.issue(CLIENT_ID, secretIdFor(LocalDate.now(clock)));
+        var issued = service.issue(ACAD_CD, CLIENT_ID, secretIdFor(LocalDate.now(clock)));
 
         assertThat(issued.token()).isNotBlank();
         assertThat(issued.refreshToken()).isNotBlank();
@@ -95,29 +103,43 @@ class DsaTokenServiceTest {
     void midnightBoundaryTolerated() {
         LocalDate today = LocalDate.now(clock);
 
-        assertThat(service.issue(CLIENT_ID, secretIdFor(today.minusDays(1))).token()).isNotBlank();
-        assertThat(service.issue(CLIENT_ID, secretIdFor(today.plusDays(1))).token()).isNotBlank();
+        assertThat(service.issue(ACAD_CD, CLIENT_ID, secretIdFor(today.minusDays(1))).token()).isNotBlank();
+        assertThat(service.issue(ACAD_CD, CLIENT_ID, secretIdFor(today.plusDays(1))).token()).isNotBlank();
     }
 
     @Test
     @DisplayName("이틀 전 secret_id는 거부한다")
     void tooOldRejected() {
-        assertThatThrownBy(() -> service.issue(CLIENT_ID, secretIdFor(LocalDate.now(clock).minusDays(2))))
+        assertThatThrownBy(() -> service.issue(ACAD_CD, CLIENT_ID, secretIdFor(LocalDate.now(clock).minusDays(2))))
                 .isInstanceOf(DsaApiException.class);
     }
 
     @Test
     @DisplayName("알 수 없는 client_id는 거부한다")
     void unknownClientRejected() {
-        assertThatThrownBy(() -> service.issue("unknown", secretIdFor(LocalDate.now(clock))))
+        assertThatThrownBy(() -> service.issue(ACAD_CD, "unknown", secretIdFor(LocalDate.now(clock))))
                 .isInstanceOf(DsaApiException.class);
     }
 
     @Test
     @DisplayName("잘못된 secret_id는 거부한다")
     void wrongSecretRejected() {
-        assertThatThrownBy(() -> service.issue(CLIENT_ID, "deadbeef"))
+        assertThatThrownBy(() -> service.issue(ACAD_CD, CLIENT_ID, "deadbeef"))
                 .isInstanceOf(DsaApiException.class);
+    }
+
+    @Test
+    @DisplayName("★ acad_cd와 client_id가 다른 지점을 가리키면 거부한다")
+    void acadCdMismatchRejected() {
+        assertThatThrownBy(() -> service.issue("46", CLIENT_ID, secretIdFor(LocalDate.now(clock))))
+                .isInstanceOf(DsaApiException.class);
+    }
+
+    @Test
+    @DisplayName("acad_cd를 안 보내면 client_id만으로 통과한다 — 기존 동작을 깨지 않는다")
+    void acadCdOptional() {
+        assertThat(service.issue(null, CLIENT_ID, secretIdFor(LocalDate.now(clock))).token())
+                .isNotBlank();
     }
 
     @Test
@@ -135,7 +157,7 @@ class DsaTokenServiceTest {
     @Test
     @DisplayName("refresh로 access만 재발급되고 refresh는 유지된다")
     void refreshKeepsRefreshToken() {
-        var issued = service.issue(CLIENT_ID, secretIdFor(LocalDate.now(clock)));
+        var issued = service.issue(ACAD_CD, CLIENT_ID, secretIdFor(LocalDate.now(clock)));
 
         var refreshed = service.refresh(CLIENT_ID, issued.refreshToken());
 
@@ -147,7 +169,7 @@ class DsaTokenServiceTest {
     @Test
     @DisplayName("★ 다른 지점 client_id로는 남의 refresh를 못 쓴다")
     void refreshIsScopedToAcademy() {
-        var issued = service.issue(CLIENT_ID, secretIdFor(LocalDate.now(clock)));
+        var issued = service.issue(ACAD_CD, CLIENT_ID, secretIdFor(LocalDate.now(clock)));
 
         BranchConfig other = new BranchConfig(99L);
         other.issueKioskCredential("client9_1", "other-secret");

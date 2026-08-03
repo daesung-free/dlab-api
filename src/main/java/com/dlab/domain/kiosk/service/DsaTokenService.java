@@ -4,6 +4,7 @@ import com.dlab.api.kiosk.DsaApiException;
 import com.dlab.api.kiosk.DsaCode;
 import com.dlab.domain.kiosk.entity.BranchConfig;
 import com.dlab.domain.kiosk.repository.BranchConfigRepository;
+import com.dlab.domain.user.repository.AcademyRepository;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -36,23 +37,30 @@ public class DsaTokenService {
 
     private static final DateTimeFormatter SECRET_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
 
-    /** 키오스크 백엔드가 토큰을 9일 보관하므로 그보다 짧으면 매일 재발급이 터진다. */
-    private static final Duration ACCESS_TTL = Duration.ofDays(9);
-    private static final Duration REFRESH_TTL = Duration.ofDays(99);
+    /**
+     * 키오스크 백엔드가 토큰을 Redis에 <b>9일</b> 캐싱하고, 만료 여부를 따지지 않고 그냥 쓴다.
+     * 우리도 9일로 두면 경계에서 어긋나 죽은 토큰이 한 번 날아오고(code 910 → refresh) 매번
+     * 헛 왕복이 생긴다. 우리 쪽을 하루 길게 잡아 <b>키오스크 캐시가 먼저 만료되게</b> 한다.
+     */
+    private static final Duration ACCESS_TTL = Duration.ofDays(10);
+    /** refresh는 키오스크가 99일 보관한다. 같은 이유로 하루 여유를 둔다. */
+    private static final Duration REFRESH_TTL = Duration.ofDays(100);
 
     private static final String ACCESS_PREFIX = "dsa:token:";
     private static final String REFRESH_PREFIX = "dsa:refresh:";
 
     private final BranchConfigRepository branchConfigRepository;
+    private final AcademyRepository academyRepository;
     private final StringRedisTemplate redis;
     private final Clock clock;
 
     /**
      * {@code POST /auth/token} — client_id + secret_id 검증 후 토큰 발급.
      *
+     * @param acadCd   키오스크가 함께 보내는 지점코드. client_id와 같은 지점인지 교차 확인한다
      * @param secretId 키오스크가 계산해 보낸 {@code MD5(yyyyMMdd + secret)}
      */
-    public IssuedToken issue(String clientId, String secretId) {
+    public IssuedToken issue(String acadCd, String clientId, String secretId) {
         BranchConfig config = branchConfigRepository
                 .findByKioskClientIdAndDeletedFalse(clientId)
                 .filter(BranchConfig::hasKioskCredential)
@@ -64,6 +72,19 @@ public class DsaTokenService {
         if (!matchesSecret(secretId, config.getKioskSecret())) {
             log.warn("키오스크 시크릿 불일치. academyId={}", config.getAcademyId());
             throw new DsaApiException(DsaCode.TOKEN_EXPIRED, "인증에 실패했습니다.");
+        }
+
+        // 키오스크는 acad_cd와 client_id를 같이 보낸다. 둘이 가리키는 지점이 다르면
+        // 설정 오류이거나 남의 자격증명을 붙인 것이므로 통과시키지 않는다.
+        // acad_cd를 안 보내는 호출은 기존 동작을 깨지 않게 통과시킨다.
+        if (acadCd != null && !acadCd.isBlank()) {
+            boolean matched = academyRepository.findById(config.getAcademyId())
+                    .map(a -> acadCd.equals(a.getAcadCd()))
+                    .orElse(false);
+            if (!matched) {
+                log.warn("acad_cd 불일치 - 요청 {} vs client_id의 지점 {}", acadCd, config.getAcademyId());
+                throw new DsaApiException(DsaCode.TOKEN_EXPIRED, "인증에 실패했습니다.");
+            }
         }
 
         String token = newToken();
