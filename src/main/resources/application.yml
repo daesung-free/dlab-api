@@ -1,3 +1,11 @@
 spring:
   application:
     name: dlab-api
+
+jwt:
+  # 운영 값은 환경변수로 주입한다. 커밋 금지(CLAUDE.md §8).
+  # HS256이 최소 256비트를 요구하므로 32바이트 이상이어야 하고, 짧으면 기동 시점에 막힌다.
+  secret: ${JWT_SECRET:local-only-dev-secret-do-not-use-in-production-32b}
+  # 앱 요구사항 A-1 기준
+  access-ttl: PT1H
+  refresh-ttl: P7D
