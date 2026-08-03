@@ -1,8 +1,9 @@
 package com.dlab.domain.notification.service;
 
 import com.dlab.domain.notification.entity.NotificationEvent;
+import com.dlab.domain.user.entity.Academy;
+import com.dlab.domain.user.entity.Account;
 import com.dlab.domain.user.entity.Student;
-import com.dlab.domain.user.entity.UserAccount;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -14,8 +15,10 @@ import java.util.Map;
  */
 public record NotificationCommand(
         NotificationEvent event,
-        UserAccount recipient,
+        Account recipient,
         Student student,
+        Academy academy,
+        Short year,
         Map<String, String> variables,
         String dedupKey
 ) {
@@ -26,16 +29,16 @@ public record NotificationCommand(
 
     /**
      * 학생명 변수를 자동으로 채워 넣은 커맨드를 만든다.
-     * 모든 학생 관련 알림에 학생명이 필수이므로(CLAUDE.md §3) 호출부가 빠뜨리지 않게 여기서 넣는다.
+     * 모든 학생 관련 알림에 학생명이 필수이므로 호출부가 빠뜨리지 않게 여기서 넣는다.
      */
-    public static NotificationCommand forStudent(NotificationEvent event, UserAccount recipient,
-                                                 Student student, Map<String, String> variables,
-                                                 String dedupKey) {
+    public static NotificationCommand forStudent(NotificationEvent event, Account recipient,
+                                                 Student student, Academy academy, Short year,
+                                                 Map<String, String> variables, String dedupKey) {
         Map<String, String> merged = new LinkedHashMap<>();
         merged.put("studentName", student.getName());
         if (variables != null) {
             merged.putAll(variables);
         }
-        return new NotificationCommand(event, recipient, student, merged, dedupKey);
+        return new NotificationCommand(event, recipient, student, academy, year, merged, dedupKey);
     }
 }

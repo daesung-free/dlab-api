@@ -1,8 +1,8 @@
 package com.dlab.domain.notification.entity;
 
-import com.dlab.domain.user.entity.Branch;
+import com.dlab.domain.user.entity.Academy;
+import com.dlab.domain.user.entity.Account;
 import com.dlab.domain.user.entity.Student;
-import com.dlab.domain.user.entity.UserAccount;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -25,8 +25,11 @@ public class NotificationLog {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "branch_id")
-    private Branch branch;
+    @JoinColumn(name = "academy_id")
+    private Academy academy;
+
+    @Column(name = "year")
+    private Short year;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "event_code", nullable = false, length = 60)
@@ -38,9 +41,9 @@ public class NotificationLog {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "recipient_account_id", nullable = false)
-    private UserAccount recipient;
+    private Account recipient;
 
-    /** 어떤 학생에 대한 알림인지. 다자녀 학부모 구분에 필요. */
+    /** 사람(student)을 가리킨다 — 알림은 "누구 얘기인지"가 중요하지 기수가 중요하지 않다. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id")
     private Student student;
@@ -65,20 +68,18 @@ public class NotificationLog {
     @Column(name = "sent_at")
     private Instant sentAt;
 
-    /**
-     * 중복 발송 방지 키(부분 유니크 인덱스). 예: 미등원 알림은 학생·날짜당 1건.
-     * 배치가 여러 번 돌아도 같은 알림이 두 번 나가지 않는다.
-     */
+    /** 중복 발송 방지 키(부분 유니크 인덱스). 배치 재실행·다중 인스턴스에도 안전하다. */
     @Column(name = "dedup_key", length = 200)
     private String dedupKey;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
-    public NotificationLog(Branch branch, NotificationEvent eventCode, NotificationChannel channel,
-                           UserAccount recipient, Student student, String title, String body,
-                           Map<String, String> variables, String dedupKey) {
-        this.branch = branch;
+    public NotificationLog(Academy academy, Short year, NotificationEvent eventCode,
+                           NotificationChannel channel, Account recipient, Student student,
+                           String title, String body, Map<String, String> variables, String dedupKey) {
+        this.academy = academy;
+        this.year = year;
         this.eventCode = eventCode;
         this.channel = channel;
         this.recipient = recipient;

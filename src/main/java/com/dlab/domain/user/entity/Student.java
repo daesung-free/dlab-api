@@ -1,72 +1,63 @@
 package com.dlab.domain.user.entity;
 
-import com.dlab.common.entity.BaseTimeEntity;
+import com.dlab.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
+
+/**
+ * 학생 — <b>사람</b> 쪽 (영구, 연도 무관).
+ *
+ * <p>학번·RFID는 여기 없다. 그것들은 {@link StudentEnrollment}(등록 건)에 붙는다.
+ * 독학재수라 1년 단위 코호트이므로 <b>연도를 넘는 학생 연속성을 가정하지 말 것</b>.
+ * 대신 삼수로 재등록하면 같은 사람에 등록 행만 추가되므로 동일인 추적이 공짜로 된다.
+ *
+ * <p>{@code academyId}·{@code year}가 없는 것은 의도된 예외다 — 지점과 연도는 등록 건의 속성이다.
+ */
 @Getter
 @Entity
 @Table(name = "student")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Student extends BaseTimeEntity {
+public class Student extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_account_id", nullable = false, unique = true)
-    private UserAccount userAccount;
-
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "branch_id", nullable = false)
-    private Branch branch;
-
-    /** 미배정 상태가 있을 수 있다. 배정되면 담당선생님(담임)이 자동으로 따라온다. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "class_id")
-    private SchoolClass schoolClass;
-
-    /** 학부모 자녀연결용 고유ID. 마이페이지에 상시 노출된다. */
-    @Column(name = "public_code", nullable = false, unique = true, length = 20)
-    private String publicCode;
-
-    /** 학번. 매년 초기화되므로 식별키로 쓰지 말 것(CLAUDE.md §3). */
-    @Column(name = "student_no", length = 20)
-    private String studentNo;
-
-    @Column(name = "school_year", nullable = false)
-    private int schoolYear;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "grade_type", nullable = false, length = 20)
-    private GradeType gradeType;
-
-    public Student(UserAccount userAccount, Branch branch, String publicCode,
-                   int schoolYear, GradeType gradeType) {
-        this.userAccount = userAccount;
-        this.branch = branch;
-        this.publicCode = publicCode;
-        this.schoolYear = schoolYear;
-        this.gradeType = gradeType;
-    }
-
-    public String getName() {
-        return userAccount.getName();
-    }
-
-    /** 반 배정. 이 시점부터 방화벽 에스컬레이션 승인자가 결정된다. */
-    public void assignClass(SchoolClass schoolClass) {
-        this.schoolClass = schoolClass;
-    }
-
     /**
-     * 담당선생님(사감). 반 배정에서 자동으로 도출되며, 미배정이거나 담임 미지정이면 null이다.
-     * 방화벽 신청 시 이 값을 스냅샷으로 신청건에 박는다.
+     * 학부모 자녀연결용 고유ID. 마이페이지에 상시 노출된다.
+     * 사람에 붙으므로 재등록해도 바뀌지 않는다.
+     * 이 값을 아는 사람이면 본인확인 없이 연결 가능하다 — 클라이언트가 감수한 부분이라
+     * 추가 검증 로직을 임의로 만들지 말 것.
      */
-    public Staff getHomeroomStaff() {
-        return schoolClass == null ? null : schoolClass.getHomeroomStaff();
+    @Column(name = "unique_code", nullable = false, unique = true, length = 20)
+    private String uniqueCode;
+
+    @Column(nullable = false, length = 20)
+    private String name;
+
+    @Column(length = 20)
+    private String phone;
+
+    /** 암호화 여부 미정 — 동명이인 구분 조회조건으로 쓰이면 인덱스를 못 탄다. */
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
+
+    @Column(length = 1)
+    private String gender;
+
+    @Column(name = "school_name", length = 64)
+    private String schoolName;
+
+    @Column(name = "search_name_normalized", length = 20)
+    private String searchNameNormalized;
+
+    public Student(String uniqueCode, String name, String phone) {
+        this.uniqueCode = uniqueCode;
+        this.name = name;
+        this.phone = phone;
     }
 }

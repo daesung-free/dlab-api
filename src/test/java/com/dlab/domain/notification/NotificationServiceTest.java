@@ -8,7 +8,7 @@ import com.dlab.domain.notification.repository.NotificationTemplateRepository;
 import com.dlab.domain.notification.service.NotificationCommand;
 import com.dlab.domain.notification.service.NotificationSender;
 import com.dlab.domain.notification.service.NotificationService;
-import com.dlab.domain.user.entity.UserAccount;
+import com.dlab.domain.user.entity.Account;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -70,8 +70,8 @@ class NotificationServiceTest {
         return t;
     }
 
-    private UserAccount recipient() {
-        return mock(UserAccount.class);
+    private Account recipient() {
+        return mock(Account.class);
     }
 
     @Test
@@ -81,7 +81,7 @@ class NotificationServiceTest {
                 .thenReturn(Optional.of(template("미등원", "{studentName} 학생 미등원", "studentName", true)));
 
         NotificationCommand command = new NotificationCommand(
-                NotificationEvent.MISSING_ATTENDANCE, recipient(), null, Map.of(), null);
+                NotificationEvent.MISSING_ATTENDANCE, recipient(), null, null, null, Map.of(), null);
 
         assertThatThrownBy(() -> service.send(command))
                 .isInstanceOf(BusinessException.class)
@@ -99,7 +99,7 @@ class NotificationServiceTest {
                         template("미등원", "{attendanceDate}", "studentName,attendanceDate", true)));
 
         NotificationCommand command = new NotificationCommand(
-                NotificationEvent.MISSING_ATTENDANCE, recipient(), null,
+                NotificationEvent.MISSING_ATTENDANCE, recipient(), null, null, null,
                 Map.of("studentName", "홍길동"), null);
 
         assertThatThrownBy(() -> service.send(command))
@@ -116,7 +116,7 @@ class NotificationServiceTest {
                         "studentName,attendanceDate", true)));
 
         NotificationLog log = service.send(new NotificationCommand(
-                NotificationEvent.MISSING_ATTENDANCE, recipient(), null,
+                NotificationEvent.MISSING_ATTENDANCE, recipient(), null, null, null,
                 Map.of("studentName", "홍길동", "attendanceDate", "7월 31일"), null));
 
         assertThat(log.getStatus()).isEqualTo(NotificationStatus.SENT);
@@ -132,7 +132,7 @@ class NotificationServiceTest {
                 .thenReturn(Optional.of(template("", "", "studentName", false)));
 
         NotificationLog log = service.send(new NotificationCommand(
-                NotificationEvent.MISSING_ATTENDANCE, recipient(), null,
+                NotificationEvent.MISSING_ATTENDANCE, recipient(), null, null, null,
                 Map.of("studentName", "홍길동"), null));
 
         assertThat(log.getStatus()).isEqualTo(NotificationStatus.SKIPPED);
@@ -145,7 +145,7 @@ class NotificationServiceTest {
         when(logRepository.existsByDedupKey("MISSING_ATTENDANCE:1:2026-07-31:2")).thenReturn(true);
 
         NotificationLog log = service.send(new NotificationCommand(
-                NotificationEvent.MISSING_ATTENDANCE, recipient(), null,
+                NotificationEvent.MISSING_ATTENDANCE, recipient(), null, null, null,
                 Map.of("studentName", "홍길동"), "MISSING_ATTENDANCE:1:2026-07-31:2"));
 
         assertThat(log).isNull();

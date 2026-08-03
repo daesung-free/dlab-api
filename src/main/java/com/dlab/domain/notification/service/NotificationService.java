@@ -19,8 +19,8 @@ import java.util.stream.Collectors;
  * 알림 발송 진입점.
  *
  * <p>이벤트 → 채널 매핑과 문구는 전부 {@link NotificationTemplate}(DB)에서 온다. 도메인 코드에
- * 문구를 하드코딩하지 않는다 — 문구는 아직 운영팀과 확정 전인 블로커이기 때문이다(CLAUDE.md §4).
- * 문구가 미확정({@code contentConfirmed = false})인 템플릿은 이력만 남기고 실제 발송은 건너뛴다.
+ * 문구를 하드코딩하지 않는다 — 문구는 아직 운영팀과 확정 전인 블로커(I-4)이기 때문이다.
+ * 문구가 미확정인 템플릿은 이력만 남기고 실제 발송은 건너뛴다.
  */
 @Slf4j
 @Service
@@ -56,7 +56,8 @@ public class NotificationService {
         validateVariables(template, command.variables());
 
         NotificationLog notificationLog = new NotificationLog(
-                command.student() == null ? null : command.student().getBranch(),
+                command.academy(),
+                command.year(),
                 command.event(),
                 template.getChannel(),
                 command.recipient(),
@@ -84,10 +85,9 @@ public class NotificationService {
             return;
         }
         if (!template.isContentConfirmed()) {
-            // 문구 미확정 블로커(CLAUDE.md §4). 확정 전에 임시 문구가 실제로 나가면 안 된다.
+            // 문구 미확정 블로커(I-4). 확정 전에 임시 문구가 실제로 나가면 안 된다.
             notificationLog.markSkipped("문구 미확정 템플릿");
-            log.info("문구 미확정으로 발송 보류: event={}, recipient={}",
-                    notificationLog.getEventCode(), notificationLog.getRecipient().getId());
+            log.info("문구 미확정으로 발송 보류: event={}", notificationLog.getEventCode());
             return;
         }
 
@@ -108,7 +108,8 @@ public class NotificationService {
 
     /**
      * 템플릿이 요구하는 변수가 모두 채워졌는지 확인한다.
-     * 학생명은 항상 필수라서 누락되면 발송 자체를 막는다(CLAUDE.md §3).
+     * 학생명은 항상 필수라서 누락되면 발송 자체를 막는다 — 다자녀 학부모가
+     * "이거 누구 얘기지" 헷갈리는 알림이 나가면 안 되기 때문.
      */
     private void validateVariables(NotificationTemplate template, Map<String, String> variables) {
         Set<String> required = template.requiredVariableSet();

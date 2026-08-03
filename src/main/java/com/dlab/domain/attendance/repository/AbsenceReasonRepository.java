@@ -8,7 +8,7 @@ import java.util.List;
 
 public interface AbsenceReasonRepository extends JpaRepository<AbsenceReason, Long> {
 
-    List<AbsenceReason> findByStudentIdAndTargetDate(Long studentId, LocalDate targetDate);
+    List<AbsenceReason> findByEnrollmentIdAndTargetDate(Long enrollmentId, LocalDate targetDate);
 
-    List<AbsenceReason> findByBranchIdAndTargetDate(Long branchId, LocalDate targetDate);
+    List<AbsenceReason> findByAcademyIdAndTargetDate(Long academyId, LocalDate targetDate);
 }
