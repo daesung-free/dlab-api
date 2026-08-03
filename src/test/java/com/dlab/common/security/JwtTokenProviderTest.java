@@ -93,6 +93,19 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    @DisplayName("★ 같은 시각에 두 번 발급해도 서로 다른 토큰이다")
+    void tokensIssuedAtSameInstantDiffer() {
+        // 고정 시계라 iat/exp가 동일하다. jti가 없으면 바이트 단위로 같은 토큰이 나오고,
+        // 그러면 Refresh 회전(재발급 시 이전 토큰 무효화)이 성립하지 않는다.
+        JwtTokenProvider provider = provider();
+
+        assertThat(provider.createRefreshToken(1L))
+                .isNotEqualTo(provider.createRefreshToken(1L));
+        assertThat(provider.createAccessToken(principal()))
+                .isNotEqualTo(provider.createAccessToken(principal()));
+    }
+
+    @Test
     @DisplayName("망가진 토큰은 예외 대신 null을 준다")
     void malformedTokenReturnsNull() {
         assertThat(provider().parseAccessToken("not-a-jwt")).isNull();

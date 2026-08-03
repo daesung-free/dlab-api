@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.UUID;
 import java.util.Set;
 
 /**
@@ -57,10 +58,17 @@ public class JwtTokenProvider {
         return create(principal, TokenType.ACCESS, properties.accessTokenTtl());
     }
 
-    /** Refresh Token에는 역할·지점을 싣지 않는다 — 재발급 때 DB에서 다시 읽어 최신 권한을 반영한다. */
+    /**
+     * Refresh Token에는 역할·지점을 싣지 않는다 — 재발급 때 DB에서 다시 읽어 최신 권한을 반영한다.
+     *
+     * <p><b>{@code jti}(고유 ID)를 넣는 이유</b>: 없으면 같은 초 안에 두 번 발급했을 때
+     * 클레임이 전부 같아 <b>바이트 단위로 동일한 토큰</b>이 나온다. 그러면 회전(재발급 시
+     * 이전 토큰 무효화)이 성립하지 않는다 — 새 토큰이 옛 토큰과 같으니 무효화할 대상이 없다.
+     */
     public String createRefreshToken(Long accountId) {
         Instant now = Instant.now(clock);
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(accountId))
                 .claim(CLAIM_TOKEN_TYPE, TokenType.REFRESH.name())
                 .issuedAt(Date.from(now))
@@ -72,6 +80,8 @@ public class JwtTokenProvider {
     private String create(AuthPrincipal principal, TokenType type, Duration ttl) {
         Instant now = Instant.now(clock);
         return Jwts.builder()
+                // 같은 초에 두 번 발급해도 서로 다른 토큰이 되도록
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(principal.accountId()))
                 .claim(CLAIM_TOKEN_TYPE, type.name())
                 .claim(CLAIM_ACCOUNT_TYPE, principal.accountType().name())
