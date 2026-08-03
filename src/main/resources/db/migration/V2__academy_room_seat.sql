@@ -193,3 +193,56 @@ CREATE UNIQUE INDEX uq_seat_assignment_active_enrollment
     ON seat_assignment (enrollment_id) WHERE released_at IS NULL AND NOT is_deleted;
 
 CREATE INDEX idx_seat_assignment_enrollment ON seat_assignment (enrollment_id);
+
+
+-- ==========================================================================
+-- 7. 전년도 복사 추적  (copied_from_id)
+-- ==========================================================================
+
+-- YearlySnapshotService가 만든 행이 어느 원본에서 나왔는지 가리킨다.
+-- 검수 시나리오 S-4가 "학과→전형→반→커리큘럼→상벌점→교습비 순서 생성, 참조관계 유지"를
+-- 확인하는데, 이 컬럼이 없으면 복사본과 신규 생성분을 구분할 방법이 없다.
+--
+-- ★ 나중에 붙이면 그 이전 복사 이력이 영영 복구되지 않는다 —
+--   V1이 created_by·is_deleted에 대해 남긴 경고와 같은 성격이라 지금 넣는다.
+-- ★ 대상은 year 스코프를 가진 마스터뿐이다. year가 없는 테이블(track_master·locker_master
+--   ·scholarship·notification_template)은 연도 복사 대상이 아니라 제외한다.
+ALTER TABLE department_master    ADD COLUMN copied_from_id BIGINT REFERENCES department_master (id);
+ALTER TABLE class_master         ADD COLUMN copied_from_id BIGINT REFERENCES class_master (id);
+ALTER TABLE period_master        ADD COLUMN copied_from_id BIGINT REFERENCES period_master (id);
+ALTER TABLE penalty_item         ADD COLUMN copied_from_id BIGINT REFERENCES penalty_item (id);
+ALTER TABLE penalty_rule         ADD COLUMN copied_from_id BIGINT REFERENCES penalty_rule (id);
+ALTER TABLE approval_item        ADD COLUMN copied_from_id BIGINT REFERENCES approval_item (id);
+
+COMMENT ON COLUMN department_master.copied_from_id IS '전년도 복사 원본. NULL이면 신규 생성분';
+COMMENT ON COLUMN class_master.copied_from_id     IS '전년도 복사 원본. NULL이면 신규 생성분';
+COMMENT ON COLUMN period_master.copied_from_id    IS '전년도 복사 원본. NULL이면 신규 생성분';
+COMMENT ON COLUMN penalty_item.copied_from_id     IS '전년도 복사 원본. NULL이면 신규 생성분';
+COMMENT ON COLUMN penalty_rule.copied_from_id     IS '전년도 복사 원본. NULL이면 신규 생성분';
+COMMENT ON COLUMN approval_item.copied_from_id    IS '전년도 복사 원본. NULL이면 신규 생성분';
+
+
+-- ==========================================================================
+-- 8. 사유 승인 여부  (attendance_daily_status.is_excused)
+-- ==========================================================================
+
+-- 무단결석과 "사유가 승인된 결석"을 일자 상태만으로 구분할 수 있게 한다.
+-- 지금은 둘 다 final_status='ABSENT'라, 매번 absence_reason을 조인해야 판정된다.
+--
+-- ★ 상태값에 EXCUSED를 끼워넣지 않고 별도 축으로 둔 이유:
+--   사유는 결석뿐 아니라 지각·조퇴·외출에도 붙는다(absence_reason.reason_type 4종).
+--   상태값 하나로 합치면 "지각인데 사유 승인됨"을 표현할 방법이 없다.
+--
+-- 이 값이 필요한 곳:
+--   · 상벌점 자동부여 — 무단결석만 벌점, 승인분은 제외
+--   · 미등원 알림 배치 — 사전 사유 제출자 제외(CLAUDE.md §3)
+ALTER TABLE attendance_daily_status
+    ADD COLUMN is_excused BOOLEAN NOT NULL DEFAULT FALSE;
+
+COMMENT ON COLUMN attendance_daily_status.is_excused IS
+    '사유 승인 여부. final_status와 직교하는 축 — 지각·조퇴·외출에도 붙는다';
+
+-- 무단 건만 뽑는 조회(벌점 부여·미등원 알림)가 잦다
+CREATE INDEX idx_daily_status_unexcused
+    ON attendance_daily_status (academy_id, attendance_date)
+    WHERE NOT is_excused AND NOT is_deleted;
