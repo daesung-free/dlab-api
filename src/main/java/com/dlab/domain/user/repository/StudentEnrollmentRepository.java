@@ -23,6 +23,18 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
     Optional<StudentEnrollment> findCurrentByRfidNo(String rfidNo);
 
     /**
+     * 학생(사람)의 현재 유효한 등록 건.
+     * 신청·조회는 전부 "올해 등록 건" 기준이라 앱 요청마다 이걸로 변환한다.
+     */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            JOIN FETCH e.academy
+            WHERE e.student.id = :studentId AND e.current = true AND e.deleted = false
+            """)
+    Optional<StudentEnrollment> findCurrentByStudentId(Long studentId);
+
+    /**
      * 해당 날짜에 무단 미등원인 등록 건.
      * - 그날 등원 태깅(S/A)이 없고
      * - 사전 제출된 사유도 없는 학생만 (사유를 낸 학생은 무단결석이 아니다)

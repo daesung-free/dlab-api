@@ -18,6 +18,40 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
     List<ApprovalRequest> findByAcademyIdAndStatusOrderByRequestedAtAsc(Long academyId, ApprovalStatus status);
 
     /**
+     * 이 학부모 계정이 승인해야 할 대기 건.
+     * 연결된 자녀(사람) 기준이라 등록 건이 바뀌어도 계속 보인다.
+     */
+    @Query("""
+            SELECT r FROM ApprovalRequest r
+            JOIN FETCH r.enrollment e
+            JOIN FETCH e.student s
+            JOIN FETCH r.approvalItem
+            WHERE r.status = com.dlab.domain.approval.entity.ApprovalStatus.PENDING
+              AND r.deleted = false
+              AND EXISTS (
+                    SELECT 1 FROM StudentGuardianLink l, Account a
+                    WHERE l.student = s AND a.guardian = l.guardian AND a.id = :accountId)
+            ORDER BY r.requestedAt ASC
+            """)
+    List<ApprovalRequest> findPendingForGuardianAccount(Long accountId);
+
+    /**
+     * 이 선생님이 에스컬레이션 대상인 대기 건.
+     * 담당선생님은 반배정에서 자동 결정되므로 신청 시점 스냅샷을 그대로 조건에 쓴다.
+     */
+    @Query("""
+            SELECT r FROM ApprovalRequest r
+            JOIN FETCH r.enrollment e
+            JOIN FETCH e.student
+            JOIN FETCH r.approvalItem
+            WHERE r.status = com.dlab.domain.approval.entity.ApprovalStatus.PENDING
+              AND r.deleted = false
+              AND r.escalationTeacher.id = :teacherId
+            ORDER BY r.requestedAt ASC
+            """)
+    List<ApprovalRequest> findPendingForTeacher(Long teacherId);
+
+    /**
      * 대기중일 때만 상태를 전이시키는 <b>원자적</b> 갱신.
      *
      * <p>학부모 승인과 담당선생님 승인이 정확히 같은 순간 들어올 수 있으므로, 조회 후 저장이
