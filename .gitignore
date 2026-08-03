@@ -43,13 +43,12 @@ application-local.yml
 
 # 기획서 원본은 git 밖에서 관리
 *.docx
-*.dotx.claude/settings.local.json
-CLAUDE.local.md
+*.dotx
 
 # 개인 로컬 전용 (git 안 올림)
 CLAUDE.local.md
 .claude/settings.local.json
-
+md/
 
 #레거시 데이터
 doc
@@ -59,3 +58,4 @@ doc
 docs/*
 # 공유용 문서만 예외로 추적
 !docs/roadmap.md
+!docs/entity-design.md
