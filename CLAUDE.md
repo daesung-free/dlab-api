@@ -274,7 +274,19 @@ com.dlab
   `created_by`(감사로그)와 `is_deleted`(soft delete)를 빠뜨리기 쉬운데, 실행가이드가 경고하듯 **"뒤늦게 추가하면 과거 데이터의 이력이 소실된다."** 지금은 컬럼 추가지만 운영 데이터가 쌓인 뒤엔 그 기간을 영영 복구할 수 없다. 감사로그는 보안심사 직결 항목이다.
   `year`는 "전년도 복사"(YearlySnapshotService)의 기준이라 마스터성 테이블엔 반드시 있어야 한다. **복사 의존순서는 `department → course_type → class_group → curriculum → penalty_item → tuition`이고, 단순 `INSERT SELECT` 금지**(FK가 깨진다).
 - **개인정보 처리 규칙** (실행가이드 3.2): 전화·주소·생년월일이 포함된 응답은 **상위 관리자만** 조회 가능. **엑셀 다운로드는 마스킹 기본 ON**(`010-****-1234`) — 교무업무 명단·학생 관리 Export 전반 공통. 발주처가 개인정보 유출 조사·벌금 사례로 민감도가 높은 상태이므로 임의로 완화하지 말 것.
-- **공통 API 응답 형식**: `/api/v1/**` 컨트롤러는 `ApiResponse<T>`로 감싼다 (`{ success, data, error }`). 도메인 오류는 `throw new BusinessException(ErrorCode.XXX)` → `GlobalExceptionHandler`가 공통 실패 응답으로 변환. 에러코드는 `common/exception/ErrorCode`에 추가 (예: `BRANCH_NOT_FOUND`, `APPROVAL_ALREADY_PROCESSED`).
+- **★ 목록 조회는 `common/search` 모듈을 쓴다. 조건 조합을 직접 짜지 말 것.**
+    - `SearchPredicates` — 값이 없으면 `null`을 돌려주고 QueryDSL이 그 조건을 무시한다. 그래서 `where(a, b, c)`에 **나열만 하면** 들어온 조건만 자동 적용된다. `if`로 감싸거나 `.and()`로 이어 붙이지 말 것 — 앞 조건이 null이면 NPE고, 학생 검색처럼 조건이 12개면 감당이 안 된다.
+    - `SearchScope` — **지점·연도 범위. 목록 조회는 예외 없이 이걸 먼저 건다.** `SearchScope.of(principal, year)`로만 만들고, **`academyId`를 요청 파라미터로 받지 말 것** — 클라이언트가 값을 바꿔 보내는 것만으로 다른 지점 데이터가 새어나간다. 전 지점 권한자면 지점 조건이 자동으로 빠진다.
+    - `SearchSupport` — 페이징·정렬. `page()`는 마지막 페이지일 때 **count 쿼리를 아예 안 돌린다**. `toOrders()`는 **허용 목록에 없는 정렬 필드를 무시**한다(임의 컬럼 정렬로 인덱스를 못 타는 것 방지).
+    - 사용 예:
+      ```java
+      queryFactory.selectFrom(enrollment)
+          .where(SearchPredicates.scope(enrollment.academy.id, enrollment.year, scope),
+                 SearchPredicates.contains(enrollment.studentNo, keyword),
+                 SearchPredicates.eq(enrollment.grade, grade))
+      ```
+    - `year`는 전 테이블이 `SMALLINT`라 `Short`다. `academy`는 연관관계라 경로가 `엔티티.academy.id`.
+- **공통 API 응답 형식**: `/api/v1/**` 컨트롤러는 `ApiResponse<T>`로 감싼다 (`{ success, data, meta, error }` — 목록은 `meta`에 페이징 정보). 도메인 오류는 `throw new BusinessException(ErrorCode.XXX)` → `GlobalExceptionHandler`가 공통 실패 응답으로 변환. 에러코드는 `common/exception/ErrorCode`에 추가 (예: `BRANCH_NOT_FOUND`, `APPROVAL_ALREADY_PROCESSED`).
 - **★ DSA 호환 구획(`/auth/**`, `/kiosk/**`)은 위 규칙의 예외다.** 응답이 `{ code, message, data, … }`이고 **성공 판정이 `code == 0`**(HTTP 상태코드 아님)이며, `total_inwon`·`study_tm` 같은 **부가 필드가 최상위에 흩뿌려진다**. `ApiResponse` 래퍼와 `GlobalExceptionHandler`를 이 구획에 적용하면 **키오스크가 응답을 못 읽는다** — 전용 응답 객체와 전용 예외 핸들러를 쓰고, `BusinessException` → DSA code 매핑 테이블을 둔다.
 - **★ DSA 호환 응답을 "정리"하지 말 것.** `data`가 `[[{...}]]` 이중 배열로 오는 것, `study_tm`이 `"N시간 M분"` 문자열인 것, `meal_gb`가 요청은 `L`/`D`인데 응답은 `"점심"`/`"저녁"`인 것 — 전부 **의도적으로 그대로 유지**해야 한다. 하나라도 고치면 키오스크 파싱이 깨진다. 전체 목록은 `docs/dsa-compat.md` §2.
 - **JWT role 체크 필수**: 학생/학부모/관리자 role 구분 없이 엔드포인트를 열지 않는다.
