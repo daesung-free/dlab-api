@@ -49,3 +49,13 @@ application-local.yml
 CLAUDE.local.md
 .claude/settings.local.json
 md/
+
+#레거시 데이터
+doc
+
+# 내부 가이드 문서 (git 안 올림) — CLAUDE.md가 참조하는 상세 문서들
+# ※ 디렉터리를 통째로 제외하면 하위 파일 재포함(!)이 안 되므로 docs/* 로 둘 것
+docs/*
+# 공유용 문서만 예외로 추적
+!docs/roadmap.md
+!docs/entity-design.md
