@@ -26,9 +26,6 @@ public class ClassAssignment extends BaseEntity {
     @JoinColumn(name = "academy_id", nullable = false)
     private Academy academy;
 
-    @Column(name = "year", nullable = false)
-    private short year;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "enrollment_id", nullable = false)
     private StudentEnrollment enrollment;
@@ -47,10 +44,9 @@ public class ClassAssignment extends BaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active = true;
 
-    public ClassAssignment(Academy academy, short year, StudentEnrollment enrollment,
+    public ClassAssignment(Academy academy, StudentEnrollment enrollment,
                            ClassMaster classMaster, ClassType classType) {
         this.academy = academy;
-        this.year = year;
         this.enrollment = enrollment;
         this.classMaster = classMaster;
         this.classType = classType;
@@ -61,7 +57,7 @@ public class ClassAssignment extends BaseEntity {
     }
 
     /** 담당선생님(사감). 반 담임에서 자동 도출되며 미지정이면 null이다. */
-    public Employee getHomeroomEmployee() {
-        return classMaster.getHomeroomEmployee();
+    public Teacher getHomeroomTeacher() {
+        return classMaster.getHomeroomTeacher();
     }
 }

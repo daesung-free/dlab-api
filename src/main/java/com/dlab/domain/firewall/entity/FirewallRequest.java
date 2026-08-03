@@ -35,9 +35,6 @@ public class FirewallRequest extends BaseEntity {
     @JoinColumn(name = "academy_id", nullable = false)
     private Academy academy;
 
-    @Column(name = "year", nullable = false)
-    private short year;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "enrollment_id", nullable = false)
     private StudentEnrollment enrollment;
@@ -63,10 +60,9 @@ public class FirewallRequest extends BaseEntity {
     @Column(name = "zyxel_site_id", length = 32)
     private String zyxelSiteId;
 
-    public FirewallRequest(Academy academy, short year, StudentEnrollment enrollment,
+    public FirewallRequest(Academy academy, StudentEnrollment enrollment,
                            ApprovalRequest approvalRequest, short requestedMinutes, String reason) {
         this.academy = academy;
-        this.year = year;
         this.enrollment = enrollment;
         this.approvalRequest = approvalRequest;
         this.requestedMinutes = requestedMinutes;

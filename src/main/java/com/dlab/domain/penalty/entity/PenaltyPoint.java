@@ -32,9 +32,6 @@ public class PenaltyPoint extends BaseEntity {
     @JoinColumn(name = "academy_id", nullable = false)
     private Academy academy;
 
-    @Column(name = "year", nullable = false)
-    private short year;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "enrollment_id", nullable = false)
     private StudentEnrollment enrollment;
@@ -60,11 +57,10 @@ public class PenaltyPoint extends BaseEntity {
     @Column(name = "idempotency_key", length = 200)
     private String idempotencyKey;
 
-    public PenaltyPoint(Academy academy, short year, StudentEnrollment enrollment,
+    public PenaltyPoint(Academy academy, StudentEnrollment enrollment,
                         PenaltyItem penaltyItem, int points, String reason,
                         PenaltySource source, String idempotencyKey) {
         this.academy = academy;
-        this.year = year;
         this.enrollment = enrollment;
         this.penaltyItem = penaltyItem;
         this.points = points;

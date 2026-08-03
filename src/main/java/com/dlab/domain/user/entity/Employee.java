@@ -8,7 +8,14 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 
-/** 직원(선생님·관리자). */
+/**
+ * 직원 — 행정 조직. <b>행정선생님이 여기 들어온다</b>(담당선생님은 {@link Teacher}).
+ *
+ * <p>공지 작성 권한이 두 테이블에 걸친다 — 전체공지는 행정선생님, 반공지는 담당선생님이다.
+ *
+ * <p>겸직 케이스가 확인되지 않아 단일 지점을 유지한다. 겸직이 필요해지면
+ * {@code Teacher}와 동일 패턴(배정 테이블)으로 전환할 것.
+ */
 @Getter
 @Entity
 @Table(name = "employee")
@@ -25,10 +32,6 @@ public class Employee extends BaseEntity {
 
     @Column(nullable = false, length = 20)
     private String name;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "employee_type", nullable = false, length = 20)
-    private EmployeeType employeeType;
 
     @Column(name = "dept_name", length = 64)
     private String deptName;
@@ -48,9 +51,8 @@ public class Employee extends BaseEntity {
     @Column(name = "resigned_date")
     private LocalDate resignedDate;
 
-    public Employee(Academy academy, String name, EmployeeType employeeType) {
+    public Employee(Academy academy, String name) {
         this.academy = academy;
         this.name = name;
-        this.employeeType = employeeType;
     }
 }

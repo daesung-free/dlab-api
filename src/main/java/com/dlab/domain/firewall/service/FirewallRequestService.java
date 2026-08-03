@@ -40,7 +40,6 @@ public class FirewallRequestService {
         ApprovalRequest approval = approvalService.create(enrollment, RequestType.FIREWALL_UNLOCK);
 
         return firewallRequestRepository.save(new FirewallRequest(
-                enrollment.getAcademy(), enrollment.getYear(), enrollment,
-                approval, (short) requestedMinutes, reason));
+                enrollment.getAcademy(), enrollment, approval, (short) requestedMinutes, reason));
     }
 }

@@ -73,14 +73,14 @@ public class ApprovalService {
                     throw new BusinessException(ErrorCode.INVALID_REQUEST, "이미 처리 대기중인 신청이 있습니다.");
                 });
 
-        Employee escalationTarget = resolveEscalationTarget(enrollment);
+        Teacher escalationTarget = resolveEscalationTarget(enrollment);
         if (item.hasEscalation() && escalationTarget == null) {
             log.warn("담당선생님이 없는 학생의 승인 신청: enrollmentId={}. 1차 승인자만 처리 가능하다.",
                     enrollment.getId());
         }
 
         ApprovalRequest request = approvalRequestRepository.save(
-                new ApprovalRequest(academy, year, item, enrollment, escalationTarget, Instant.now(clock)));
+                new ApprovalRequest(academy, item, enrollment, escalationTarget, Instant.now(clock)));
 
         notifyRequestCreated(request, escalationTarget);
         return request;
@@ -131,9 +131,9 @@ public class ApprovalService {
     }
 
     /** 담당선생님은 반 배정 → 반 담임으로 자동 결정된다. 미배정이거나 담임 미지정이면 null. */
-    private Employee resolveEscalationTarget(StudentEnrollment enrollment) {
+    private Teacher resolveEscalationTarget(StudentEnrollment enrollment) {
         return classAssignmentRepository.findActiveFixedByEnrollmentId(enrollment.getId())
-                .map(ClassAssignment::getHomeroomEmployee)
+                .map(ClassAssignment::getHomeroomTeacher)
                 .orElse(null);
     }
 
@@ -167,13 +167,12 @@ public class ApprovalService {
             return ApproverType.PARENT;
         }
 
-        if (approver.getAccountType() == AccountType.EMPLOYEE) {
-            Employee employee = approver.getEmployee();
-            if (employee.getEmployeeType() == EmployeeType.SUPER) {
-                return ApproverType.TEACHER;
-            }
-            Employee target = request.getEscalationEmployee();
-            if (target == null || !target.getId().equals(employee.getId())) {
+        // 선생님 승인 — 이 요청의 에스컬레이션 대상 본인만 가능하다.
+        // 상위 관리자 대리승인은 role/permission(§N3)이 서면 그때 열 것.
+        if (approver.getAccountType() == AccountType.TEACHER) {
+            Teacher teacher = approver.getTeacher();
+            Teacher target = request.getEscalationTeacher();
+            if (target == null || !target.getId().equals(teacher.getId())) {
                 throw new BusinessException(ErrorCode.NOT_AN_APPROVER);
             }
             return ApproverType.TEACHER;
@@ -182,7 +181,7 @@ public class ApprovalService {
         throw new BusinessException(ErrorCode.NOT_AN_APPROVER);
     }
 
-    private void notifyRequestCreated(ApprovalRequest request, Employee escalationTarget) {
+    private void notifyRequestCreated(ApprovalRequest request, Teacher escalationTarget) {
         Map<String, String> variables = new LinkedHashMap<>();
         variables.put("requestedAt", TIME_FORMAT.format(request.getRequestedAt()));
         variables.put("timeoutMinutes", String.valueOf(request.getTimeoutMinutes()));
@@ -190,7 +189,7 @@ public class ApprovalService {
         notifyAll(NotificationEvent.APPROVAL_REQUEST_CREATED, request, variables);
 
         if (escalationTarget != null) {
-            accountRepository.findByEmployeeId(escalationTarget.getId()).ifPresent(account ->
+            accountRepository.findByTeacherId(escalationTarget.getId()).ifPresent(account ->
                     notify(NotificationEvent.APPROVAL_REQUEST_CREATED, account, request, variables));
         }
     }
@@ -238,7 +237,7 @@ public class ApprovalService {
                 recipient,
                 request.getEnrollment().getStudent(),
                 request.getAcademy(),
-                request.getYear(),
+                request.getEnrollment().getYear(),
                 variables,
                 null));
     }

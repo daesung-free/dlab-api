@@ -15,7 +15,7 @@ public interface ClassAssignmentRepository extends JpaRepository<ClassAssignment
     @Query("""
             SELECT ca FROM ClassAssignment ca
             JOIN FETCH ca.classMaster cm
-            LEFT JOIN FETCH cm.homeroomEmployee
+            LEFT JOIN FETCH cm.homeroomTeacher
             WHERE ca.enrollment.id = :enrollmentId
               AND ca.classType = com.dlab.domain.user.entity.ClassType.FIXED
               AND ca.active = true

@@ -3,7 +3,7 @@ package com.dlab.domain.approval.entity;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.Account;
-import com.dlab.domain.user.entity.Employee;
+import com.dlab.domain.user.entity.Teacher;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -19,6 +19,8 @@ import java.time.Instant;
  * 기본 승인자는 학부모이고, 타임아웃이 지나면 담당선생님이 에스컬레이션 승인한다. 다만 타임아웃
  * 전에도 담당선생님이 먼저 승인할 수 있고, 그 경우 학부모에게 나가는 문구가 달라야 하므로
  * 결과를 {@link ResolutionCase}로 남긴다.
+ *
+ * <p>{@code year} 컬럼이 없는 것은 의도된 것이다 — {@code enrollment}가 이미 연도를 내포한다.
  *
  * <p>타임아웃 값과 에스컬레이션 대상은 <b>신청 시점 스냅샷</b>이다. 정책이 바뀌거나 반 담임이
  * 교체돼도 이미 처리된 건의 이력이 흔들리면 안 되기 때문이다.
@@ -36,9 +38,6 @@ public class ApprovalRequest extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "academy_id", nullable = false)
     private Academy academy;
-
-    @Column(name = "year", nullable = false)
-    private short year;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "approval_item_id", nullable = false)
@@ -64,10 +63,13 @@ public class ApprovalRequest extends BaseEntity {
     @Column(name = "escalation_at", nullable = false)
     private Instant escalationAt;
 
-    /** 신청 시점의 담당선생님. 반 배정에서 자동 도출되며, 미배정이면 null이다. */
+    /**
+     * 신청 시점의 담당선생님 스냅샷. 반 배정에서 자동 도출되며, 미배정이면 null이다.
+     * 직원(Employee)이 아니라 선생님(Teacher)을 참조한다 — 에스컬레이션 대상은 항상 담당선생님이다.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "escalation_employee_id")
-    private Employee escalationEmployee;
+    @JoinColumn(name = "escalation_teacher_id")
+    private Teacher escalationTeacher;
 
     // ── 처리 결과 ──
 
@@ -89,14 +91,13 @@ public class ApprovalRequest extends BaseEntity {
     @Column(name = "reject_reason", length = 500)
     private String rejectReason;
 
-    public ApprovalRequest(Academy academy, short year, ApprovalItem approvalItem,
-                           StudentEnrollment enrollment, Employee escalationEmployee,
+    public ApprovalRequest(Academy academy, ApprovalItem approvalItem,
+                           StudentEnrollment enrollment, Teacher escalationTeacher,
                            Instant requestedAt) {
         this.academy = academy;
-        this.year = year;
         this.approvalItem = approvalItem;
         this.enrollment = enrollment;
-        this.escalationEmployee = escalationEmployee;
+        this.escalationTeacher = escalationTeacher;
         this.status = ApprovalStatus.PENDING;
         this.requestedAt = requestedAt;
         this.timeoutMinutes = approvalItem.getTimeoutMinutes() == null

@@ -37,18 +37,18 @@ public class ClassMaster extends BaseEntity {
 
     /** 담임 = 담당선생님(사감). 미지정일 수 있다. */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "homeroom_employee_id")
-    private Employee homeroomEmployee;
+    @JoinColumn(name = "homeroom_teacher_id")
+    private Teacher homeroomTeacher;
 
-    public ClassMaster(Academy academy, short year, String name, ClassType classType, Employee homeroomEmployee) {
+    public ClassMaster(Academy academy, short year, String name, ClassType classType, Teacher homeroomTeacher) {
         this.academy = academy;
         this.year = year;
         this.name = name;
         this.classType = classType;
-        this.homeroomEmployee = homeroomEmployee;
+        this.homeroomTeacher = homeroomTeacher;
     }
 
-    public void assignHomeroom(Employee employee) {
-        this.homeroomEmployee = employee;
+    public void assignHomeroom(Teacher teacher) {
+        this.homeroomTeacher = teacher;
     }
 }

@@ -32,15 +32,12 @@ public class AbsenceReason extends BaseEntity {
     @JoinColumn(name = "academy_id", nullable = false)
     private Academy academy;
 
-    @Column(name = "year", nullable = false)
-    private short year;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "enrollment_id", nullable = false)
     private StudentEnrollment enrollment;
 
-    @Column(name = "target_date", nullable = false)
-    private LocalDate targetDate;
+    @Column(name = "attendance_date", nullable = false)
+    private LocalDate attendanceDate;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "reason_type", nullable = false, length = 20)
@@ -60,12 +57,11 @@ public class AbsenceReason extends BaseEntity {
     @JoinColumn(name = "approval_request_id")
     private ApprovalRequest approvalRequest;
 
-    public AbsenceReason(Academy academy, short year, StudentEnrollment enrollment,
-                         LocalDate targetDate, AbsenceReasonType reasonType, String reasonText) {
+    public AbsenceReason(Academy academy, StudentEnrollment enrollment,
+                         LocalDate attendanceDate, AbsenceReasonType reasonType, String reasonText) {
         this.academy = academy;
-        this.year = year;
         this.enrollment = enrollment;
-        this.targetDate = targetDate;
+        this.attendanceDate = attendanceDate;
         this.reasonType = reasonType;
         this.reasonText = reasonText;
     }

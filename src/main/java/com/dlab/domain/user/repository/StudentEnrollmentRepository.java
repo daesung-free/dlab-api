@@ -39,7 +39,7 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
                     WHERE t.enrollment = e AND t.attendanceDate = :date)
               AND NOT EXISTS (
                     SELECT 1 FROM AbsenceReason r
-                    WHERE r.enrollment = e AND r.targetDate = :date AND r.deleted = false)
+                    WHERE r.enrollment = e AND r.attendanceDate = :date AND r.deleted = false)
             """)
     List<StudentEnrollment> findUnexcusedAbsentees(Long academyId, LocalDate date);
 }

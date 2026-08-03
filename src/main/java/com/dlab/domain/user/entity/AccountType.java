@@ -4,5 +4,7 @@ package com.dlab.domain.user.entity;
 public enum AccountType {
     STUDENT,
     PARENT,
-    EMPLOYEE
+    EMPLOYEE,
+    /** 선생님(강사). 직원과 별개 엔티티다(§N). */
+    TEACHER
 }

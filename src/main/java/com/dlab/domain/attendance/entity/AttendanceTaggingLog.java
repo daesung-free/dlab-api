@@ -31,9 +31,6 @@ public class AttendanceTaggingLog extends BaseEntity {
     @JoinColumn(name = "academy_id", nullable = false)
     private Academy academy;
 
-    @Column(name = "year", nullable = false)
-    private short year;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "enrollment_id", nullable = false)
     private StudentEnrollment enrollment;
@@ -64,11 +61,10 @@ public class AttendanceTaggingLog extends BaseEntity {
     @Column(name = "attendance_date", nullable = false)
     private LocalDate attendanceDate;
 
-    public AttendanceTaggingLog(Academy academy, short year, StudentEnrollment enrollment,
+    public AttendanceTaggingLog(Academy academy, StudentEnrollment enrollment,
                                 AttendanceEventType eventType, AttendanceSource source,
                                 Instant recordedAt, LocalDate attendanceDate) {
         this.academy = academy;
-        this.year = year;
         this.enrollment = enrollment;
         this.eventType = eventType;
         this.source = source;

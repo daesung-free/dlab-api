@@ -11,10 +11,12 @@ import java.time.Instant;
 /**
  * 로그인 계정 (학생/학부모/직원 공통).
  *
- * <p>{@code student}/{@code guardian}/{@code employee} 셋 중 정확히 하나만 채워진다
+ * <p>{@code student}/{@code guardian}/{@code employee}/{@code teacher} 넷 중 정확히 하나만 채워진다
  * (DB에 {@code num_nonnulls(...) = 1} 체크 제약이 걸려 있다).
  *
  * <p>학생만 PENDING을 거치고 그동안 앱 접근이 완전히 차단된다. 학부모는 즉시 ACTIVE다.
+ *
+ * <p><b>학생 가입 승인은 행정(Employee)이 한다</b> — 담당선생님(Teacher)이 아니다.
  *
  * <p>학생 재가입 중복 차단은 {@code loginId} UNIQUE만으로 부족하다 —
  * <b>PENDING 상태의 기존 승인요청까지 함께 검사</b>해야 한다(승인 전이라도 이미 신청한 사람이다).
@@ -56,6 +58,10 @@ public class Account extends BaseEntity {
     @JoinColumn(name = "employee_id")
     private Employee employee;
 
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "teacher_id")
+    private Teacher teacher;
+
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
@@ -86,11 +92,17 @@ public class Account extends BaseEntity {
         return account;
     }
 
+    public static Account forTeacher(Teacher teacher, String loginId, String passwordHash) {
+        Account account = new Account(AccountType.TEACHER, loginId, passwordHash, AccountStatus.ACTIVE);
+        account.teacher = teacher;
+        return account;
+    }
+
     public boolean isActive() {
         return status == AccountStatus.ACTIVE;
     }
 
-    /** 학생 회원가입 승인 (PENDING → ACTIVE). */
+    /** 학생 회원가입 승인 (PENDING → ACTIVE). 승인 주체는 행정(Employee)이다. */
     public void approve() {
         this.status = AccountStatus.ACTIVE;
     }

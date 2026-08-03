@@ -29,9 +29,6 @@ public class AttendanceDailyStatus extends BaseEntity {
     @JoinColumn(name = "academy_id", nullable = false)
     private Academy academy;
 
-    @Column(name = "year", nullable = false)
-    private short year;
-
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "enrollment_id", nullable = false)
     private StudentEnrollment enrollment;
@@ -50,10 +47,9 @@ public class AttendanceDailyStatus extends BaseEntity {
     @Column(name = "calculated_at", nullable = false)
     private Instant calculatedAt = Instant.now();
 
-    public AttendanceDailyStatus(Academy academy, short year, StudentEnrollment enrollment,
+    public AttendanceDailyStatus(Academy academy, StudentEnrollment enrollment,
                                  LocalDate attendanceDate, DailyStatus finalStatus) {
         this.academy = academy;
-        this.year = year;
         this.enrollment = enrollment;
         this.attendanceDate = attendanceDate;
         this.finalStatus = finalStatus;
