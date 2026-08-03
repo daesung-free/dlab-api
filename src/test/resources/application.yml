@@ -1,0 +1,25 @@
+# 테스트 설정.
+# 스키마는 Flyway가 관리하므로 테스트도 실제 PostgreSQL에서 돌려야 마이그레이션까지 검증된다
+# (jsonb·부분 유니크 인덱스를 쓰므로 H2로는 검증되지 않는다).
+# docker-compose로 띄운 로컬 PostgreSQL의 별도 DB(dlab_test)를 쓴다 — 개발용 dlab_local과 분리.
+#
+# 최초 1회 테스트 DB 생성:
+#   docker exec dlab-postgres-local psql -U dlab -d postgres -c "CREATE DATABASE dlab_test OWNER dlab;"
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/dlab_test
+    username: dlab
+    password: dlab_local_password
+
+  jpa:
+    hibernate:
+      # 스키마는 Flyway가 만들고 JPA는 검증만 한다.
+      # 엔티티와 마이그레이션이 어긋나면 컨텍스트 기동 단계에서 바로 실패한다.
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # 테스트는 매번 깨끗한 스키마에서 시작한다
+    clean-disabled: false

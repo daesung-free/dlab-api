@@ -1,0 +1,67 @@
+package com.dlab.domain.approval.entity;
+
+import com.dlab.common.entity.BaseEntity;
+import com.dlab.domain.user.entity.Academy;
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+/**
+ * 승인 항목별 정책.
+ *
+ * <p>항목마다 정책이 다르다 — 방화벽은 학부모 → 10분 → 담당선생님, 정기일정은 학부모 단독
+ * (에스컬레이션 없음), 사유신청은 관리자 승인.
+ */
+@Getter
+@Entity
+@Table(name = "approval_item")
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class ApprovalItem extends BaseEntity {
+
+    /** 방화벽 해제 승인 타임아웃 확정값(분). */
+    public static final int FIREWALL_TIMEOUT_MINUTES = 10;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "academy_id", nullable = false)
+    private Academy academy;
+
+    @Column(name = "year", nullable = false)
+    private short year;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "request_type", nullable = false, length = 30)
+    private RequestType requestType;
+
+    /** 1차 승인 주체. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "approver_type", nullable = false, length = 10)
+    private ApproverType approverType;
+
+    /** null이면 에스컬레이션 없음. */
+    @Column(name = "timeout_minutes")
+    private Short timeoutMinutes;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "escalation_approver_type", length = 10)
+    private ApproverType escalationApproverType;
+
+    public ApprovalItem(Academy academy, short year, RequestType requestType,
+                        ApproverType approverType, Short timeoutMinutes,
+                        ApproverType escalationApproverType) {
+        this.academy = academy;
+        this.year = year;
+        this.requestType = requestType;
+        this.approverType = approverType;
+        this.timeoutMinutes = timeoutMinutes;
+        this.escalationApproverType = escalationApproverType;
+    }
+
+    public boolean hasEscalation() {
+        return timeoutMinutes != null && escalationApproverType != null;
+    }
+}
