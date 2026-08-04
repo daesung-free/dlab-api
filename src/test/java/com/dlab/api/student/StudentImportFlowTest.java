@@ -244,6 +244,43 @@ class StudentImportFlowTest {
     }
 
     @Test
+    @DisplayName("★ Export → 그대로 Import 왕복이 성립한다 (마스킹된 연락처가 날아가지 않는다)")
+    void exportImportRoundTrip() throws Exception {
+        byte[] exported = mvc.perform(get("/api/v1/admin/students/export")
+                        .header("Authorization", token())
+                        .param("year", String.valueOf(YEAR)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsByteArray();
+
+        // 내려받은 파일의 연락처는 마스킹돼 있다
+        try (var wb = new org.apache.poi.xssf.usermodel.XSSFWorkbook(
+                new java.io.ByteArrayInputStream(exported))) {
+            var sheet = wb.getSheetAt(0);
+            int phoneCol = -1;
+            for (int i = 0; i < sheet.getRow(0).getLastCellNum(); i++) {
+                if ("연락처".equals(sheet.getRow(0).getCell(i).getStringCellValue())) {
+                    phoneCol = i;
+                }
+            }
+            assertThat(phoneCol).isNotNegative();
+            assertThat(sheet.getRow(1).getCell(phoneCol).getStringCellValue())
+                    .isEqualTo("010-****-5678");
+        }
+
+        // 손대지 않고 그대로 다시 올린다 — 실무에서 가장 흔한 흐름
+        MockMultipartFile again = new MockMultipartFile("file", "students.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", exported);
+        upload("/import", again).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.errorRows").value(0))
+                .andExpect(jsonPath("$.data.rows[0].existing").value(true));
+        em.flush();
+        em.clear();
+
+        // 연락처가 마스킹 문자열로 덮이지 않았다
+        assertThat(phoneOf(existingCode)).isEqualTo(REAL_PHONE);
+    }
+
+    @Test
     @DisplayName("★ 고유ID가 같으면 새 학생을 만들지 않고 기존 학생을 갱신한다 — 상담 이력이 끊기면 안 된다")
     void existingStudentIsUpdatedNotDuplicated() throws Exception {
         MockMultipartFile file = excel(

@@ -39,6 +39,12 @@ public final class StudentRequests {
             EnrollmentStatus status) {
     }
 
+    /** 검색조건 저장. {@code conditions}는 화면이 만든 JSON 문자열 그대로 — 서버가 파싱하지 않는다. */
+    public record SaveSearch(
+            @NotBlank(message = "이름은 필수입니다.") @Size(max = 50) String name,
+            @NotBlank(message = "검색조건은 필수입니다.") @Size(max = 4000) String conditions) {
+    }
+
     /** 재등록 — 같은 사람에 등록 건만 추가한다. */
     public record ReEnroll(
             @NotNull(message = "지점은 필수입니다.") Long academyId,

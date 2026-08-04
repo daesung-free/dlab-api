@@ -52,7 +52,7 @@ public class StudentImportService {
      * 엑셀 컬럼 정의. <b>위치가 아니라 헤더명으로 찾는다</b> — 학원마다 열 순서가 다르고
      * 중간에 열이 끼기도 한다. 별칭을 넉넉히 받아 파일을 되돌려보내는 일을 줄인다.
      */
-    private static final ColumnMapping MAPPING = ColumnMapping.builder()
+    static final ColumnMapping MAPPING = ColumnMapping.builder()
             .required("name", "이름", "성명", "학생명")
             .required("grade", "학년", "구분")
             .optional("uniqueCode", "학생고유ID", "고유ID", "학생ID")

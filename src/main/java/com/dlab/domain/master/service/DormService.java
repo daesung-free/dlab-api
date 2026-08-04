@@ -93,6 +93,9 @@ public class DormService {
     /**
      * 배정.
      *
+     * <p><b>방 행을 잠그고 시작한다.</b> 정원 N은 좌석·사물함의 "1칸 1명"과 달리 유니크 제약으로
+     * 표현할 수 없어, 잠그지 않으면 동시 요청이 전부 정원 검사를 통과한다.
+     *
      * <p>순서가 중요하다 — <b>이전 배정을 먼저 비우고 flush</b>한 뒤 새 배정을 넣는다.
      * Hibernate는 기본적으로 INSERT를 UPDATE보다 먼저 내보내는데, 그러면 이전 배정이 아직
      * 활성인 상태로 새 행이 들어가 {@code uq_dorm_assignment_active}(부분 유니크)에 걸린다.
@@ -100,7 +103,10 @@ public class DormService {
      */
     @Transactional
     public DormAssignment assign(Long roomId, Long enrollmentId, AuthPrincipal principal) {
-        DormRoom room = loadRoom(roomId);
+        // ★ 방 행을 잠그고 시작한다. 정원 N은 DB 제약으로 표현할 수 없어
+        //   잠그지 않으면 동시 요청이 전부 "자리 있음"을 보고 통과한다.
+        DormRoom room = roomRepository.findByIdForUpdate(roomId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
         verifyAccess(room.getAcademy().getId(), principal);
 
         StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
