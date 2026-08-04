@@ -5,6 +5,7 @@ import com.dlab.common.search.SearchScope;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.master.service.MasterDataService;
+import com.dlab.domain.master.service.YearlySnapshotService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -25,6 +26,23 @@ import java.util.List;
 public class AdminMasterController {
 
     private final MasterDataService masterDataService;
+    private final YearlySnapshotService yearlySnapshotService;
+
+    // ── 전년도 복사 ──
+
+    /**
+     * 기초 데이터를 다음 연도로 복사한다 (F-4.10-1).
+     *
+     * <p>여러 표를 한 트랜잭션에서 만들고 되돌릴 수 없는 양의 데이터를 생성하므로
+     * <b>상위 관리자만</b> 실행할 수 있게 둔다. 대상 연도에 데이터가 있으면 409로 거부된다.
+     */
+    @PostMapping("/yearly-copy")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ApiResponse<YearlySnapshotService.SnapshotResult> copyYear(
+            @CurrentAccount AuthPrincipal me, @Valid @RequestBody MasterRequests.CopyYear request) {
+        return ApiResponse.success(yearlySnapshotService.copy(
+                request.academyId(), request.fromYear().shortValue(), request.toYear().shortValue(), me));
+    }
 
     // ── 학과 ──
 
