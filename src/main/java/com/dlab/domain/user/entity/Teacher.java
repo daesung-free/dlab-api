@@ -52,6 +52,11 @@ public class Teacher extends BaseEntity {
     @Column(name = "resigned_date")
     private LocalDate resignedDate;
 
+    public void updateContact(String phone, String email) {
+        this.phone = phone;
+        this.email = email;
+    }
+
     public Teacher(Academy academy, String name, String phone) {
         this.academy = academy;
         this.name = name;
