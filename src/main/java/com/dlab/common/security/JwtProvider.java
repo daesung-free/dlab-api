@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -31,6 +32,10 @@ public class JwtProvider {
     private static final String CLAIM_ACADEMY_ID = "aid";
     private static final String CLAIM_ROLES = "rol";
     private static final String CLAIM_ALL_ACADEMY = "all";
+    /** 토큰 종류. 대조하지 않으면 Refresh로 API를 호출할 수 있다. */
+    private static final String CLAIM_TOKEN_TYPE = "tkn";
+    private static final String TYPE_ACCESS = "A";
+    private static final String TYPE_REFRESH = "R";
 
     private final SecretKey key;
     private final Duration accessTtl;
@@ -57,7 +62,10 @@ public class JwtProvider {
     public String issueAccessToken(AuthPrincipal principal) {
         Date now = Date.from(clock.instant());
         return Jwts.builder()
+                // 같은 초에 두 번 발급해도 서로 다른 토큰이 되도록
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(principal.accountId()))
+                .claim(CLAIM_TOKEN_TYPE, TYPE_ACCESS)
                 .claim(CLAIM_ACCOUNT_TYPE, principal.accountType())
                 .claim(CLAIM_ACADEMY_ID, principal.academyId())
                 .claim(CLAIM_ROLES, principal.roles().stream().map(Enum::name).toList())
@@ -68,10 +76,18 @@ public class JwtProvider {
                 .compact();
     }
 
-    /** Refresh는 식별자만 담는다 — 권한이 바뀌어도 재발급 시 최신 값을 다시 싣기 위해서다. */
+    /**
+     * Refresh는 식별자만 담는다 — 권한이 바뀌어도 재발급 시 최신 값을 다시 싣기 위해서다.
+     *
+     * <p><b>{@code jti}가 필요한 이유</b>: 없으면 같은 초 안에 두 번 발급했을 때 클레임이
+     * 전부 같아 <b>바이트 단위로 동일한 토큰</b>이 나온다. 그러면 회전(재발급 시 이전 토큰
+     * 무효화)이 성립하지 않는다 — 새 토큰이 옛 토큰과 같으니 무효화할 대상이 없다.
+     */
     public String issueRefreshToken(Long accountId) {
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(accountId))
+                .claim(CLAIM_TOKEN_TYPE, TYPE_REFRESH)
                 .issuedAt(Date.from(clock.instant()))
                 .expiration(Date.from(clock.instant().plus(refreshTtl)))
                 .signWith(key)
@@ -92,6 +108,10 @@ public class JwtProvider {
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
+
+            // Refresh를 Access 자리에 쓰면 역할이 비어 "인증됐지만 권한 없는 사용자"가 되어
+            // authenticated()만 요구하는 경로를 통과한다. 종류를 먼저 막는다.
+            requireType(claims, TYPE_ACCESS);
 
             List<String> roleNames = claims.get(CLAIM_ROLES, List.class);
             List<Role> roles = roleNames == null ? List.of() : roleNames.stream().map(Role::from).toList();
@@ -116,15 +136,23 @@ public class JwtProvider {
         return Long.valueOf(parseSubjectOnly(token));
     }
 
+    private void requireType(Claims claims, String expected) {
+        if (!expected.equals(claims.get(CLAIM_TOKEN_TYPE, String.class))) {
+            throw new JwtAuthenticationException(JwtAuthenticationException.Reason.INVALID, null);
+        }
+    }
+
     private String parseSubjectOnly(String token) {
         try {
-            return Jwts.parser()
+            Claims claims = Jwts.parser()
                     .verifyWith(key)
                     .clock(() -> Date.from(clock.instant()))
                     .build()
                     .parseSignedClaims(token)
-                    .getPayload()
-                    .getSubject();
+                    .getPayload();
+            // Access Token으로 재발급받는 것도 막는다
+            requireType(claims, TYPE_REFRESH);
+            return claims.getSubject();
         } catch (ExpiredJwtException e) {
             throw new JwtAuthenticationException(JwtAuthenticationException.Reason.EXPIRED, e);
         } catch (JwtException | IllegalArgumentException e) {

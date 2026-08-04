@@ -7,7 +7,10 @@ import com.dlab.domain.approval.entity.RequestType;
 import com.dlab.domain.approval.service.ApprovalService;
 import com.dlab.domain.firewall.entity.FirewallRequest;
 import com.dlab.domain.firewall.repository.FirewallRequestRepository;
+import com.dlab.domain.user.entity.Account;
+import com.dlab.domain.user.entity.AccountType;
 import com.dlab.domain.user.entity.StudentEnrollment;
+import com.dlab.domain.user.repository.AccountRepository;
 import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,7 +28,28 @@ public class FirewallRequestService {
 
     private final FirewallRequestRepository firewallRequestRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final AccountRepository accountRepository;
     private final ApprovalService approvalService;
+
+    /**
+     * 로그인한 학생 본인의 신청.
+     *
+     * <p>등록 건을 요청 값으로 받지 않고 <b>토큰의 계정에서 찾아낸다</b> —
+     * 클라이언트가 지정하게 하면 남의 등록 건으로 신청할 수 있다.
+     */
+    @Transactional
+    public FirewallRequest createForAccount(Long accountId, int requestedMinutes, String reason) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        if (account.getAccountType() != AccountType.STUDENT || account.getStudent() == null) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "학생만 신청할 수 있습니다.");
+        }
+        StudentEnrollment enrollment = enrollmentRepository
+                .findCurrentByStudentId(account.getStudent().getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+
+        return create(enrollment.getId(), requestedMinutes, reason);
+    }
 
     @Transactional
     public FirewallRequest create(Long enrollmentId, int requestedMinutes, String reason) {

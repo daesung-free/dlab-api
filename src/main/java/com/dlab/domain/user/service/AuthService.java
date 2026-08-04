@@ -1,0 +1,156 @@
+package com.dlab.domain.user.service;
+
+import com.dlab.common.exception.BusinessException;
+import com.dlab.common.exception.ErrorCode;
+import com.dlab.common.security.*;
+import com.dlab.domain.user.entity.Account;
+import com.dlab.domain.user.entity.AccountStatus;
+import com.dlab.domain.user.entity.AccountType;
+import com.dlab.domain.user.repository.AccountRepository;
+import com.dlab.domain.user.repository.AccountRoleRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * 로그인 · 토큰 재발급 · 로그아웃.
+ *
+ * <p>토큰의 서명·클레임은 {@link JwtProvider}가, 저장·무효화는 Redis
+ * ({@link RefreshTokenStore} · {@link TokenBlacklist})가 담당한다.
+ *
+ * <p>학생은 관리자 승인 전(PENDING)에는 로그인 자체가 막힌다 — 승인 전 앱 접근을 완전히
+ * 차단해야 하기 때문이다(CLAUDE.md §3). 중간 상태는 두지 않는다.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+
+    private final AccountRepository accountRepository;
+    private final AccountRoleRepository accountRoleRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtProvider jwtProvider;
+    private final RefreshTokenStore refreshTokenStore;
+    private final TokenBlacklist tokenBlacklist;
+    private final Clock clock;
+
+    @Value("${jwt.access-ttl:PT1H}")
+    private Duration accessTtl;
+
+    @Value("${jwt.refresh-ttl:P7D}")
+    private Duration refreshTtl;
+
+    public record TokenPair(String accessToken, String refreshToken) {
+    }
+
+    @Transactional
+    public TokenPair login(String loginId, String rawPassword) {
+        Account account = accountRepository.findByLoginId(loginId)
+                // 계정 없음과 비밀번호 틀림을 구분해서 알려주지 않는다 — 계정 존재 여부가 새어나간다
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_CREDENTIALS));
+
+        if (account.getPasswordHash() == null
+                || !passwordEncoder.matches(rawPassword, account.getPasswordHash())) {
+            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+        }
+
+        verifyLoginAllowed(account);
+        account.recordLogin(Instant.now(clock));
+        return issue(account);
+    }
+
+    /**
+     * Refresh Token으로 재발급.
+     *
+     * <p>역할·지점은 <b>DB에서 다시 읽는다</b> — 권한이 회수됐는데 옛 토큰의 값을 그대로
+     * 복사하면 회수가 무의미해진다.
+     */
+    @Transactional
+    public TokenPair refresh(String refreshToken) {
+        Long accountId;
+        try {
+            accountId = jwtProvider.parseRefreshSubject(refreshToken);
+        } catch (JwtAuthenticationException e) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+
+        // 저장된 것과 다르면 이미 회전됐거나 탈취된 토큰이다
+        if (!refreshTokenStore.matches(accountId, refreshToken)) {
+            log.warn("저장되지 않은 Refresh Token 사용 시도: accountId={}", accountId);
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_TOKEN));
+        verifyLoginAllowed(account);
+
+        return issue(account);
+    }
+
+    /**
+     * 로그아웃.
+     *
+     * <p>Refresh Token을 지우는 것만으로는 부족하다 — 이미 발급된 Access Token이 만료될
+     * 때까지 살아 있으므로 블랙리스트에 올려 즉시 막는다.
+     */
+    @Transactional
+    public void logout(Long accountId, String accessToken) {
+        refreshTokenStore.delete(accountId);
+        if (accessToken != null) {
+            // 남은 수명만큼만 들고 있으면 된다 — 그 뒤엔 어차피 만료로 거부된다
+            tokenBlacklist.add(accessToken, accessTtl);
+        }
+    }
+
+    /** 발급 + Refresh 회전(이전 토큰은 이 시점부터 무효). */
+    private TokenPair issue(Account account) {
+        AuthPrincipal principal = toPrincipal(account);
+        String access = jwtProvider.issueAccessToken(principal);
+        String refresh = jwtProvider.issueRefreshToken(account.getId());
+        refreshTokenStore.save(account.getId(), refresh, refreshTtl);
+        return new TokenPair(access, refresh);
+    }
+
+    private void verifyLoginAllowed(Account account) {
+        if (account.getStatus() == AccountStatus.PENDING) {
+            // 학생 가입 승인 대기. 안내 문구가 달라야 해서 별도 코드로 구분한다.
+            throw new BusinessException(ErrorCode.SIGNUP_PENDING);
+        }
+        if (account.getStatus() != AccountStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+    }
+
+    private AuthPrincipal toPrincipal(Account account) {
+        Set<String> roleNames = accountRoleRepository.findRoleNamesByAccountId(account.getId());
+        List<Role> roles = roleNames.stream().map(Role::from).toList();
+        // 전 지점 접근은 SUPER_ADMIN만. permission.academy_scope='ALL'이 실제로 채워지면
+        // 그 데이터로 판단하도록 바꿀 것 — 지금은 매트릭스가 미수령이다(Role 참고).
+        boolean allAcademy = roles.contains(Role.SUPER_ADMIN);
+        return AuthPrincipal.of(account.getId(), account.getAccountType().name(),
+                resolveAcademyId(account), roles, allAcademy);
+    }
+
+    /**
+     * 소속 지점. 학부모는 자녀를 따라가므로 지점이 없다 — null이면 지점 필터가 필요한
+     * 조회에서 걸러야 한다.
+     */
+    private Long resolveAcademyId(Account account) {
+        if (account.getAccountType() == AccountType.TEACHER && account.getTeacher() != null) {
+            return account.getTeacher().getAcademy().getId();
+        }
+        if (account.getAccountType() == AccountType.EMPLOYEE && account.getEmployee() != null) {
+            return account.getEmployee().getAcademy().getId();
+        }
+        return null;
+    }
+}

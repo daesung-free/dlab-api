@@ -23,3 +23,8 @@ spring:
     locations: classpath:db/migration
     # 테스트는 매번 깨끗한 스키마에서 시작한다
     clean-disabled: false
+
+jwt:
+  secret: test-only-secret-value-at-least-32-bytes
+  access-token-ttl: 30m
+  refresh-token-ttl: 14d
