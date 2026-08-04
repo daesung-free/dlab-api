@@ -20,6 +20,9 @@ public enum ErrorCode {
     // 지점 / 조직
     ACADEMY_NOT_FOUND(HttpStatus.NOT_FOUND, "지점을 찾을 수 없습니다."),
     CLASS_NOT_FOUND(HttpStatus.NOT_FOUND, "반을 찾을 수 없습니다."),
+    SEAT_NOT_FOUND(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."),
+    SEAT_ALREADY_OCCUPIED(HttpStatus.CONFLICT, "이미 배정된 좌석입니다."),
+    SEAT_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "배정된 좌석이 없습니다."),
     OTHER_BRANCH_ACCESS_DENIED(HttpStatus.FORBIDDEN, "다른 지점의 데이터에 접근할 수 없습니다."),
 
     // 사용자
