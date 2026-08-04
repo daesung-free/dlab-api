@@ -170,6 +170,37 @@ class YearlySnapshotFlowTest {
     }
 
     @Test
+    @DisplayName("★ 복사본은 copied_from_id로 원본을 가리킨다 — 신규 생성분과 구분할 유일한 근거(S-4)")
+    void copiesAreTraceableToSource() throws Exception {
+        copy(FROM, TO).andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        // 복사되는 6개 표 전부. 하나라도 NULL이면 그 표는 복사본 여부를 알 수 없다.
+        for (String table : new String[]{"department_master", "class_master", "period_master",
+                "approval_item", "penalty_item", "penalty_rule"}) {
+            Number untracked = (Number) em.createNativeQuery("""
+                            SELECT COUNT(*) FROM %s
+                            WHERE academy_id = :academyId AND year = :year AND copied_from_id IS NULL
+                            """.formatted(table))
+                    .setParameter("academyId", academyId).setParameter("year", TO)
+                    .getSingleResult();
+            assertThat(untracked.intValue())
+                    .withFailMessage("%s에 원본을 못 가리키는 복사본이 있다", table)
+                    .isZero();
+        }
+
+        // 원본(2026년)은 신규 생성분이므로 계속 NULL이어야 한다
+        Number sourceTracked = (Number) em.createNativeQuery("""
+                        SELECT COUNT(*) FROM department_master
+                        WHERE academy_id = :academyId AND year = :year AND copied_from_id IS NOT NULL
+                        """)
+                .setParameter("academyId", academyId).setParameter("year", FROM)
+                .getSingleResult();
+        assertThat(sourceTracked.intValue()).isZero();
+    }
+
+    @Test
     @DisplayName("★ 복사된 규칙은 꺼진 상태다 — 연도가 바뀌었다고 자동 부여가 켜지면 안 된다")
     void copiedRuleIsInactive() throws Exception {
         copy(FROM, TO).andExpect(status().isOk());

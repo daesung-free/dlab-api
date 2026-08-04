@@ -129,8 +129,11 @@ public class YearlySnapshotService {
 
     private int copyDepartments(Academy academy, short fromYear, short toYear) {
         List<DepartmentMaster> sources = departmentRepository.search(academy.getId(), fromYear);
-        sources.forEach(src ->
-                departmentRepository.save(new DepartmentMaster(academy, toYear, src.getName())));
+        sources.forEach(src -> {
+            DepartmentMaster copy = departmentRepository.save(
+                    new DepartmentMaster(academy, toYear, src.getName()));
+            copy.markCopiedFrom(src.getId());
+        });
         return sources.size();
     }
 
@@ -144,8 +147,9 @@ public class YearlySnapshotService {
      */
     private int copyPeriods(Long academyId, short fromYear, short toYear) {
         return em.createNativeQuery("""
-                        INSERT INTO period_master (academy_id, year, period_no, name, start_time, end_time)
-                        SELECT academy_id, :toYear, period_no, name, start_time, end_time
+                        INSERT INTO period_master
+                            (academy_id, year, period_no, name, start_time, end_time, copied_from_id)
+                        SELECT academy_id, :toYear, period_no, name, start_time, end_time, id
                         FROM period_master
                         WHERE academy_id = :academyId AND year = :fromYear AND is_deleted = FALSE
                         """)
@@ -174,9 +178,12 @@ public class YearlySnapshotService {
      */
     private int copyClasses(Academy academy, short fromYear, short toYear) {
         List<ClassMaster> sources = classMasterRepository.search(academy.getId(), fromYear);
-        sources.forEach(src -> classMasterRepository.save(new ClassMaster(
-                academy, toYear, src.getName(), src.getClassType(),
-                activeTeacherOrNull(src.getHomeroomTeacher()))));
+        sources.forEach(src -> {
+            ClassMaster copy = classMasterRepository.save(new ClassMaster(
+                    academy, toYear, src.getName(), src.getClassType(),
+                    activeTeacherOrNull(src.getHomeroomTeacher())));
+            copy.markCopiedFrom(src.getId());
+        });
         return sources.size();
     }
 
@@ -190,9 +197,12 @@ public class YearlySnapshotService {
     private int copyApprovalItems(Academy academy, short fromYear, short toYear) {
         List<ApprovalItem> sources =
                 approvalItemRepository.findByAcademyIdAndYearAndDeletedFalse(academy.getId(), fromYear);
-        sources.forEach(src -> approvalItemRepository.save(new ApprovalItem(
-                academy, toYear, src.getRequestType(), src.getApproverType(),
-                src.getTimeoutMinutes(), src.getEscalationApproverType())));
+        sources.forEach(src -> {
+            ApprovalItem copy = approvalItemRepository.save(new ApprovalItem(
+                    academy, toYear, src.getRequestType(), src.getApproverType(),
+                    src.getTimeoutMinutes(), src.getEscalationApproverType()));
+            copy.markCopiedFrom(src.getId());
+        });
         return sources.size();
     }
 
@@ -204,6 +214,7 @@ public class YearlySnapshotService {
         for (PenaltyItem src : sources) {
             PenaltyItem copy = penaltyItemRepository.save(new PenaltyItem(
                     academy, toYear, src.getItemName(), src.getPointValue(), src.getCategory()));
+            copy.markCopiedFrom(src.getId());
             mapping.put(src.getId(), copy);
         }
         return mapping;
@@ -229,8 +240,9 @@ public class YearlySnapshotService {
                         src.getId(), src.getPenaltyItem().getId());
                 continue;
             }
-            penaltyRuleRepository.save(new PenaltyRule(
+            PenaltyRule copy = penaltyRuleRepository.save(new PenaltyRule(
                     academy, toYear, src.getTriggerType(), src.getTriggerCondition(), newItem));
+            copy.markCopiedFrom(src.getId());
             count++;
         }
         return count;
