@@ -296,6 +296,12 @@ com.dlab
                  SearchPredicates.eq(enrollment.grade, grade))
       ```
     - `year`는 전 테이블이 `SMALLINT`라 `Short`다. `academy`는 연관관계라 경로가 `엔티티.academy.id`.
+- **★ 휴일 판정은 `common/holiday`를 쓴다. 요일로 직접 계산하지 말 것.**
+    - `HolidayCalendar.mealAvailableDates(academyId, month)` — 급식 가능일(주말+공휴일 제외). `operatingDates(..., excludeWeekend)`로 주말 포함 여부를 고른다.
+    - **주말 제외는 급식에만 해당한다.** 이 학원은 **토요일에도 운영**한다(시안 `plan-3`이 토요일 학습계획, 교시 마스터에 주말 구성이 따로 있다). 학습계획·출결에서 주말을 빼면 안 된다.
+    - **음력 공휴일·대체공휴일·임시공휴일을 코드로 계산하지 않는다.** 규칙이 해마다 바뀌고 임시공휴일은 규칙 자체가 없다 — `holiday` 테이블에 데이터로 넣는다. 공공데이터포털 API를 붙이더라도 **이 테이블에 적재하는 방향**이어야 한다(API 장애 시 급식 신청이 멈추면 안 됨).
+    - `holiday.academy_id`가 `null`이면 전 지점 공통, 값이 있으면 그 지점만(개원기념일 등). 조회는 **둘을 합쳐서** 본다.
+    - **앱이 자체 판정하지 못하게 서버가 내려준다** (앱 요구사항 A-9). 임시공휴일 추가에 앱 배포가 필요해지면 안 된다.
 - **공통 API 응답 형식**: `/api/v1/**` 컨트롤러는 `ApiResponse<T>`로 감싼다 (`{ success, data, meta, error }` — 목록은 `meta`에 페이징 정보). 도메인 오류는 `throw new BusinessException(ErrorCode.XXX)` → `GlobalExceptionHandler`가 공통 실패 응답으로 변환. 에러코드는 `common/exception/ErrorCode`에 추가 (예: `BRANCH_NOT_FOUND`, `APPROVAL_ALREADY_PROCESSED`).
 - **★ DSA 호환 구획(`/auth/**`, `/kiosk/**`)은 위 규칙의 예외다.** 응답이 `{ code, message, data, … }`이고 **성공 판정이 `code == 0`**(HTTP 상태코드 아님)이며, `total_inwon`·`study_tm` 같은 **부가 필드가 최상위에 흩뿌려진다**. `ApiResponse` 래퍼와 `GlobalExceptionHandler`를 이 구획에 적용하면 **키오스크가 응답을 못 읽는다** — 전용 응답 객체와 전용 예외 핸들러를 쓰고, `BusinessException` → DSA code 매핑 테이블을 둔다.
 - **★ DSA 호환 응답을 "정리"하지 말 것.** `data`가 `[[{...}]]` 이중 배열로 오는 것, `study_tm`이 `"N시간 M분"` 문자열인 것, `meal_gb`가 요청은 `L`/`D`인데 응답은 `"점심"`/`"저녁"`인 것 — 전부 **의도적으로 그대로 유지**해야 한다. 하나라도 고치면 키오스크 파싱이 깨진다. 전체 목록은 `docs/dsa-compat.md` §2.
