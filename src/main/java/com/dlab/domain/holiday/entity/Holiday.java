@@ -64,4 +64,9 @@ public class Holiday extends BaseEntity {
     public boolean isNationwide() {
         return academyId == null;
     }
+
+    /** 날짜·유형·지점은 바꾸지 않는다 — 바꿀 일이면 지우고 새로 넣는 게 이력상 명확하다. */
+    public void rename(String name) {
+        this.name = name;
+    }
 }

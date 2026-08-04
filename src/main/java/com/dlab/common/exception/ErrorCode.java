@@ -34,7 +34,13 @@ public enum ErrorCode {
 
     // 알림
     NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "알림 템플릿을 찾을 수 없습니다."),
-    NOTIFICATION_VARIABLE_MISSING(HttpStatus.INTERNAL_SERVER_ERROR, "알림 템플릿 변수가 누락되었습니다.");
+    NOTIFICATION_VARIABLE_MISSING(HttpStatus.INTERNAL_SERVER_ERROR, "알림 템플릿 변수가 누락되었습니다."),
+
+    // 공휴일
+    HOLIDAY_NOT_FOUND(HttpStatus.NOT_FOUND, "공휴일을 찾을 수 없습니다."),
+    HOLIDAY_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 날짜입니다."),
+    /** 법정공휴일은 전 지점에 적용되므로 본사만 등록할 수 있다. */
+    NATIONWIDE_HOLIDAY_FORBIDDEN(HttpStatus.FORBIDDEN, "전 지점 공휴일은 본사만 등록할 수 있습니다.");
 
     private final HttpStatus status;
     private final String message;
