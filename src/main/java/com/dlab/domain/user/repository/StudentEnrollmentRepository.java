@@ -54,4 +54,20 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
                     WHERE r.enrollment = e AND r.attendanceDate = :date AND r.deleted = false)
             """)
     List<StudentEnrollment> findUnexcusedAbsentees(Long academyId, LocalDate date);
+
+    /**
+     * 지점의 현재 재원생 전체. 키오스크 {@code getStdInfoList}가 쓴다.
+     *
+     * <p><b>파라미터로 연도를 받지 않는다.</b> 키오스크는 연도를 보내지 않고, 학번이 매년
+     * 초기화되므로 "지금 유효한 등록 건"({@code current = true})이 곧 올해분이다.
+     */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            WHERE e.academy.id = :academyId
+              AND e.current = true
+              AND e.deleted = false
+            ORDER BY e.studentNo ASC
+            """)
+    List<StudentEnrollment> findCurrentByAcademyId(Long academyId);
 }
