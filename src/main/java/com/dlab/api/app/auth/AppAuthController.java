@@ -6,7 +6,7 @@ import com.dlab.domain.user.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.dlab.common.security.CurrentAccount;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -35,7 +35,7 @@ public class AppAuthController {
     }
 
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(@AuthenticationPrincipal AuthPrincipal principal,
+    public ApiResponse<Void> logout(@CurrentAccount AuthPrincipal principal,
                                     @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String header) {
         authService.logout(principal.accountId(), stripBearer(header));
         return ApiResponse.empty();

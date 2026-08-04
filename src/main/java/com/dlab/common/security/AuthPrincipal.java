@@ -1,42 +1,73 @@
 package com.dlab.common.security;
 
-import com.dlab.domain.user.entity.AccountType;
-
+import java.util.Collection;
+import java.util.List;
 import java.util.Set;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
 
 /**
- * 인증된 요청의 주체. JWT 클레임에서 복원되며 DB를 다시 읽지 않는다.
+ * 인증된 요청 주체. JWT 클레임에서 복원되며 DB를 다시 조회하지 않는다.
  *
- * @param accountId  계정 PK
- * @param accountType 학생/학부모/직원/선생님
- * @param academyId  소속 지점. 전 지점 권한이면 null일 수 있다
- * @param roles      RBAC 5단계 role 이름 (SUPER_ADMIN / BRANCH_ADMIN / TEACHER / STAFF / READONLY)
+ * <p><b>{@code academyId}를 반드시 들고 다닌다.</b> 지점 필터링이 CLAUDE.md §7 필수 규칙인데,
+ * 이 값이 없으면 서비스 레이어마다 계정을 다시 조회해야 하고 한 곳만 빠뜨려도
+ * 다른 지점 데이터가 새어나간다.
+ *
+ * @param accountId   account.id
+ * @param accountType STUDENT / PARENT / EMPLOYEE / TEACHER
+ * @param academyId   소속 지점. 전 지점 권한자는 null일 수 있다
+ * @param roles       부여된 역할
+ * @param allAcademy  전 지점 접근 가능 여부(permission.academy_scope='ALL')
  */
 public record AuthPrincipal(
         Long accountId,
-        AccountType accountType,
+        String accountType,
         Long academyId,
-        Set<String> roles
-) {
+        Set<Role> roles,
+        boolean allAcademy
+) implements UserDetails {
 
-    public AuthPrincipal {
-        roles = roles == null ? Set.of() : Set.copyOf(roles);
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return roles.stream()
+                .map(r -> (GrantedAuthority) new SimpleGrantedAuthority(r.authority()))
+                .toList();
+    }
+
+    /** JWT 인증이라 비밀번호를 들고 있지 않다. */
+    @Override
+    public String getPassword() {
+        return null;
+    }
+
+    @Override
+    public String getUsername() {
+        return String.valueOf(accountId);
+    }
+
+    public boolean hasRole(Role role) {
+        return roles.contains(role);
     }
 
     /**
-     * 전 지점 조회가 가능한가.
-     * 지점 필터링을 빠뜨리면 다른 지점 데이터가 새므로(CLAUDE.md §7),
-     * 조회 서비스는 이 값을 반드시 확인해야 한다.
+     * 해당 지점에 접근 가능한지. 전 지점 권한이 없으면 소속 지점만 허용한다.
+     * 조회·수정 양쪽에서 이걸 통과시키지 않으면 지점 격리가 뚫린다.
      */
-    public boolean canAccessAllAcademies() {
-        return roles.contains("SUPER_ADMIN");
-    }
-
-    /** 이 주체가 해당 지점 데이터를 볼 수 있는가. */
-    public boolean canAccess(Long targetAcademyId) {
-        if (canAccessAllAcademies()) {
+    public boolean canAccessAcademy(Long targetAcademyId) {
+        if (allAcademy) {
             return true;
         }
         return academyId != null && academyId.equals(targetAcademyId);
+    }
+
+    /** 조회 시 강제할 지점 필터. 전 지점 권한자는 null(=필터 없음). */
+    public Long academyScopeFilter() {
+        return allAcademy ? null : academyId;
+    }
+
+    public static AuthPrincipal of(Long accountId, String accountType, Long academyId,
+                                   List<Role> roles, boolean allAcademy) {
+        return new AuthPrincipal(accountId, accountType, academyId, Set.copyOf(roles), allAcademy);
     }
 }

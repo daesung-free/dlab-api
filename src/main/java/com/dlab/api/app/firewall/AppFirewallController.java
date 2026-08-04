@@ -5,7 +5,7 @@ import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.firewall.service.FirewallRequestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.dlab.common.security.CurrentAccount;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -22,7 +22,7 @@ public class AppFirewallController {
     private final FirewallRequestService firewallRequestService;
 
     @PostMapping
-    public ApiResponse<FirewallResponse> create(@AuthenticationPrincipal AuthPrincipal principal,
+    public ApiResponse<FirewallResponse> create(@CurrentAccount AuthPrincipal principal,
                                                 @Valid @RequestBody FirewallRequests.Create request) {
         return ApiResponse.success(FirewallResponse.from(
                 firewallRequestService.createForAccount(

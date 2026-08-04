@@ -33,6 +33,18 @@ public class Academy extends BaseEntity {
     @Column(name = "acad_nm", nullable = false, length = 100)
     private String acadNm;
 
+    /**
+     * getDlabList의 세 번째 필드. V2에서 추가됐다.
+     * nullable인 이유는 기존 행 때문이며, 비어 있으면 {@link #getFullNmOrFallback()}이
+     * acadNm으로 대체한다 — 키오스크가 null을 못 읽는다.
+     */
+    @Column(name = "full_nm", length = 100)
+    private String fullNm;
+
+    /** 키오스크 백엔드 stores.store_code 대조용. */
+    @Column(name = "store_code", length = 20)
+    private String storeCode;
+
     /** 등원 기준시각(지점 공통, 학생별 아님). 이 시각에 미등원 감지 배치가 돈다. */
     @Column(name = "attendance_deadline", nullable = false)
     private LocalTime attendanceDeadline;
@@ -50,5 +62,10 @@ public class Academy extends BaseEntity {
     /** 로그·알림에서 쓰는 표시용 이름. */
     public String getName() {
         return acadNm;
+    }
+
+    /** DSA getDlabList의 full_nm. 미입력 지점은 짧은명으로 대체한다. */
+    public String getFullNmOrFallback() {
+        return fullNm == null || fullNm.isBlank() ? acadNm : fullNm;
     }
 }

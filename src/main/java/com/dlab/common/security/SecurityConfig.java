@@ -1,14 +1,10 @@
 package com.dlab.common.security;
 
-import com.dlab.common.exception.ErrorCode;
-import com.dlab.common.response.ApiResponse;
-import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
-import org.springframework.http.MediaType;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,64 +14,92 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
- * Security 설정.
+ * 보안 설정. <b>필터 체인을 두 개로 나눈다</b> — 인증 체계가 서로 완전히 다르기 때문이다.
  *
- * <p><b>★ 체인을 경로별로 나눈다.</b> 이 서버는 인증 체계가 두 개다 —
- * 앱·웹은 JWT, DSA 호환 구획(키오스크)은 MD5 기반 자체 토큰이다.
+ * <table>
+ *   <tr><th>구획</th><th>경로</th><th>인증</th><th>응답</th></tr>
+ *   <tr><td>DSA 호환</td><td>{@code /auth/**}, {@code /kiosk/**}</td>
+ *       <td>본문 {@code token} 필드 + MD5(yyyyMMdd+secret)</td>
+ *       <td>{@code {code, message, data}}</td></tr>
+ *   <tr><td>앱·관리자</td><td>{@code /api/v1/**}</td>
+ *       <td>{@code Authorization: Bearer} JWT</td>
+ *       <td>{@code ApiResponse}</td></tr>
+ * </table>
  *
- * <p><b>모든 {@code SecurityFilterChain}은 반드시 {@code securityMatcher}로 자기 경로를
- * 한정하고 {@code @Order}를 붙일 것.</b> 한정 없는 체인이 하나라도 있으면 그게 전체 요청을
- * 먹어버려 다른 체인이 아예 동작하지 않는다. DSA 호환 구획 담당자도 같은 규칙으로
- * 자기 체인을 별도 파일에 추가하면 이 파일을 건드릴 필요가 없다.
+ * <p>DSA 호환 구획을 Spring Security로 인증하면 안 된다 — 키오스크는 헤더가 아니라
+ * <b>본문</b>에 토큰을 싣고, 실패 응답도 401이 아니라 {@code code:910}이라야 한다.
+ * 그래서 이 체인은 통과만 시키고 검증은 해당 컨트롤러·인터셉터가 직접 한다.
+ *
+ * <p>순서가 중요하다. {@code @Order(1)} 체인이 먼저 매칭되므로 DSA 구획을 위에 둔다.
  */
 @Configuration
-@RequiredArgsConstructor
 @EnableMethodSecurity
-@EnableConfigurationProperties(JwtProperties.class)
+@RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtTokenProvider tokenProvider;
-    private final TokenBlacklist tokenBlacklist;
-    private final ObjectMapper objectMapper;
+    private final JwtProvider jwtProvider;
+    private final RestAuthenticationEntryPoint authenticationEntryPoint;
+    private final RestAccessDeniedHandler accessDeniedHandler;
 
     /**
-     * 앱·웹 API 체인.
-     *
-     * <p>DSA 호환 구획(/auth/**, /kiosk/**)은 여기 걸리지 않는다 — 그쪽은 담당자가
-     * 별도 체인으로 등록한다.
+     * DSA 호환 구획. 키오스크가 경로를 하드코딩하고 있어 {@code /api/v1} prefix를 붙일 수 없다
+     * (CLAUDE.md §5 경로 규칙의 명시적 예외).
      */
     @Bean
-    @Order(100)
-    public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
-        http
-                .securityMatcher("/api/v1/**")
+    @Order(1)
+    public SecurityFilterChain dsaCompatFilterChain(HttpSecurity http) throws Exception {
+        return http
+                .securityMatcher("/auth/**", "/kiosk/**")
                 .csrf(csrf -> csrf.disable())
-                // 토큰 기반이라 세션을 만들지 않는다
+                .cors(cors -> cors.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
-                .authorizeHttpRequests(auth -> auth
-                        // 로그인·재발급은 토큰이 없는 상태로 들어온다
-                        .requestMatchers("/api/v1/app/auth/**", "/api/v1/admin/auth/**").permitAll()
-                        // 나머지는 인증 필수. role 체크는 컨트롤러에서 @PreAuthorize로 건다
-                        // — 여기서 경로별로 role을 나열하면 경로가 바뀔 때마다 두 곳을 고쳐야 한다.
-                        .anyRequest().authenticated())
-                .addFilterBefore(new JwtAuthenticationFilter(tokenProvider, tokenBlacklist),
-                        UsernamePasswordAuthenticationFilter.class)
-                .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((req, res, e) -> write(res, ErrorCode.UNAUTHORIZED))
-                        .accessDeniedHandler((req, res, e) -> write(res, ErrorCode.FORBIDDEN)));
-
-        return http.build();
+                .formLogin(form -> form.disable())
+                // 인증은 이 구획 전용 로직이 본문 token으로 직접 수행한다.
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .build();
     }
 
-    /** 인증 실패·권한 부족도 공통 응답 형식으로 내보낸다(CLAUDE.md §7). */
-    private void write(jakarta.servlet.http.HttpServletResponse response, ErrorCode errorCode)
-            throws java.io.IOException {
-        response.setStatus(errorCode.getStatus().value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        response.setCharacterEncoding("UTF-8");
-        objectMapper.writeValue(response.getWriter(), ApiResponse.fail(errorCode));
+    /** 앱·관리자 웹 구획. */
+    @Bean
+    @Order(2)
+    public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
+        return http
+                .securityMatcher("/api/**")
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .httpBasic(basic -> basic.disable())
+                .formLogin(form -> form.disable())
+                .authorizeHttpRequests(auth -> auth
+                        // 로그인·토큰재발급은 인증 전에 호출된다
+                        .requestMatchers("/api/v1/app/auth/**").permitAll()
+                        .requestMatchers("/api/v1/admin/auth/**").permitAll()
+                        // 외부 시스템 수신(키오스크 제외)은 자체 서명검증을 한다
+                        .requestMatchers("/api/v1/webhook/**").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .anyRequest().authenticated())
+                .addFilterBefore(new JwtAuthenticationFilter(jwtProvider),
+                        UsernamePasswordAuthenticationFilter.class)
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
+                .build();
+    }
+
+    /**
+     * 그 외 경로(액추에이터·정적자원·문서). 기본 잠금을 풀어두지 않으면
+     * springdoc 붙일 때 문서 페이지까지 막힌다.
+     */
+    @Bean
+    @Order(3)
+    public SecurityFilterChain defaultFilterChain(HttpSecurity http) throws Exception {
+        return http
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .httpBasic(basic -> basic.disable())
+                .formLogin(form -> form.disable())
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .build();
     }
 
     @Bean

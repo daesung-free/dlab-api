@@ -18,6 +18,10 @@ repositories {
     mavenCentral()
 }
 
+ext {
+    querydslVersion = '6.11'
+}
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
@@ -30,6 +34,23 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // API 스펙 자동생성. 이 레포가 스펙의 단일 진실 공급원이고(CLAUDE.md §6-4)
+    // dlab-admin-web(openapi-typescript)·dlab-app(openapi-generator)이 여기서 타입을 뽑는다.
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0'
+
+    // 엑셀 Import/Export. 학생 일괄 등록(P1-02)·명단 출력(F-4.9)이 여기 의존한다.
+    implementation 'org.apache.poi:poi-ooxml:5.4.1'
+
+    // 동적 검색 빌더. 학생 검색만 12개 조건이라 조건 조합이 코드로 관리되지 않으면 감당이 안 된다.
+    // openfeign 포크를 쓰는 이유: 본가 querydsl은 릴리스가 멈춰 Hibernate 7(Boot 4)을 지원하지 않는다.
+    implementation "io.github.openfeign.querydsl:querydsl-jpa:${querydslVersion}"
+    annotationProcessor "io.github.openfeign.querydsl:querydsl-apt:${querydslVersion}:jakarta"
+    annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
+    annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'
     annotationProcessor 'org.projectlombok:lombok'

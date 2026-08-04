@@ -4,62 +4,61 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
-import java.util.List;
-
 /**
- * Access Token을 읽어 SecurityContext에 주체를 심는다.
+ * {@code Authorization: Bearer <token>}을 읽어 SecurityContext를 채운다.
  *
- * <p>토큰이 없거나 유효하지 않아도 여기서 예외를 던지지 않는다 — 인증이 필요한 경로인지는
- * {@code SecurityConfig}가 판단하고, 거부는 EntryPoint가 처리한다. 여기서 막으면
- * permitAll 경로까지 401이 난다.
- *
- * <p>이 필터는 <b>{@code /api/v1/**} 체인에만</b> 붙는다. DSA 호환 구획(/auth/**, /kiosk/**)은
- * MD5 기반 자체 토큰을 쓰므로 JWT와 무관하다.
+ * <p>토큰이 없거나 깨졌으면 <b>여기서 401을 내지 않고 그냥 통과시킨다.</b>
+ * 인증이 필요한지는 SecurityConfig의 경로 규칙이 판단하고, 거부 응답은
+ * {@link RestAuthenticationEntryPoint}가 공통 포맷으로 만든다 — 두 군데서 401을
+ * 만들면 응답 형태가 갈린다.
  */
+@Slf4j
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String HEADER = "Authorization";
     private static final String PREFIX = "Bearer ";
 
-    private final JwtTokenProvider tokenProvider;
-    private final TokenBlacklist blacklist;
+    private final JwtProvider jwtProvider;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-                                    FilterChain chain) throws ServletException, IOException {
+    protected void doFilterInternal(@NonNull HttpServletRequest request,
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain chain) throws ServletException, IOException {
         String token = resolveToken(request);
-
-        if (token != null && !blacklist.contains(token)) {
-            AuthPrincipal principal = tokenProvider.parseAccessToken(token);
-            if (principal != null) {
-                SecurityContextHolder.getContext().setAuthentication(toAuthentication(principal));
+        if (token != null) {
+            try {
+                AuthPrincipal principal = jwtProvider.parse(token);
+                // authenticated() 팩토리를 쓴다 — 3-arg 생성자는 Security 7에서 deprecated이고,
+                // 자격증명 없이 인증완료 토큰을 만드는 의도가 이름에 드러난다.
+                var authentication = UsernamePasswordAuthenticationToken.authenticated(
+                        principal, null, principal.getAuthorities());
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            } catch (JwtAuthenticationException e) {
+                // 만료는 흔한 정상 흐름이라 로그를 남기지 않는다. 위조만 남긴다.
+                if (e.getReason() == JwtAuthenticationException.Reason.INVALID) {
+                    log.warn("유효하지 않은 토큰 - {} {}", request.getMethod(), request.getRequestURI());
+                }
+                SecurityContextHolder.clearContext();
+                request.setAttribute(JwtAuthenticationException.class.getName(), e);
             }
         }
-
         chain.doFilter(request, response);
-    }
-
-    private UsernamePasswordAuthenticationToken toAuthentication(AuthPrincipal principal) {
-        List<SimpleGrantedAuthority> authorities = principal.roles().stream()
-                // Spring Security의 hasRole()은 ROLE_ 접두사를 전제한다
-                .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                .toList();
-        return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }
 
     private String resolveToken(HttpServletRequest request) {
         String header = request.getHeader(HEADER);
-        if (StringUtils.hasText(header) && header.startsWith(PREFIX)) {
-            return header.substring(PREFIX.length());
+        if (header != null && header.startsWith(PREFIX)) {
+            String value = header.substring(PREFIX.length()).trim();
+            return value.isEmpty() ? null : value;
         }
         return null;
     }

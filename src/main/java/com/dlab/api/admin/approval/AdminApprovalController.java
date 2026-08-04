@@ -9,7 +9,7 @@ import com.dlab.domain.approval.service.ApprovalService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.dlab.common.security.CurrentAccount;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,7 +31,7 @@ public class AdminApprovalController {
 
     /** 내가 담당선생님인 승인 대기 목록. */
     @GetMapping
-    public ApiResponse<List<ApprovalResponse>> pending(@AuthenticationPrincipal AuthPrincipal principal) {
+    public ApiResponse<List<ApprovalResponse>> pending(@CurrentAccount AuthPrincipal principal) {
         return ApiResponse.success(
                 approvalQueryService.pendingForTeacher(principal.accountId()).stream()
                         .map(ApprovalResponse::from)
@@ -39,14 +39,14 @@ public class AdminApprovalController {
     }
 
     @PostMapping("/{id}/approve")
-    public ApiResponse<ApprovalResponse> approve(@AuthenticationPrincipal AuthPrincipal principal,
+    public ApiResponse<ApprovalResponse> approve(@CurrentAccount AuthPrincipal principal,
                                                  @PathVariable Long id) {
         return ApiResponse.success(
                 ApprovalResponse.from(approvalService.approve(id, principal.accountId())));
     }
 
     @PostMapping("/{id}/reject")
-    public ApiResponse<ApprovalResponse> reject(@AuthenticationPrincipal AuthPrincipal principal,
+    public ApiResponse<ApprovalResponse> reject(@CurrentAccount AuthPrincipal principal,
                                                 @PathVariable Long id,
                                                 @Valid @RequestBody ApprovalRequests.Reject request) {
         return ApiResponse.success(ApprovalResponse.from(

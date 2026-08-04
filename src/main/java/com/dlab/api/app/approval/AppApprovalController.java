@@ -7,7 +7,7 @@ import com.dlab.domain.approval.service.ApprovalService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.dlab.common.security.CurrentAccount;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,7 +28,7 @@ public class AppApprovalController {
 
     /** 내가 승인해야 할 대기 목록. */
     @GetMapping
-    public ApiResponse<List<ApprovalResponse>> pending(@AuthenticationPrincipal AuthPrincipal principal) {
+    public ApiResponse<List<ApprovalResponse>> pending(@CurrentAccount AuthPrincipal principal) {
         return ApiResponse.success(
                 approvalQueryService.pendingForGuardian(principal.accountId()).stream()
                         .map(ApprovalResponse::from)
@@ -40,14 +40,14 @@ public class AppApprovalController {
      * 담당선생님이 같은 순간 승인하면 여기서 409가 나간다.
      */
     @PostMapping("/{id}/approve")
-    public ApiResponse<ApprovalResponse> approve(@AuthenticationPrincipal AuthPrincipal principal,
+    public ApiResponse<ApprovalResponse> approve(@CurrentAccount AuthPrincipal principal,
                                                  @PathVariable Long id) {
         return ApiResponse.success(
                 ApprovalResponse.from(approvalService.approve(id, principal.accountId())));
     }
 
     @PostMapping("/{id}/reject")
-    public ApiResponse<ApprovalResponse> reject(@AuthenticationPrincipal AuthPrincipal principal,
+    public ApiResponse<ApprovalResponse> reject(@CurrentAccount AuthPrincipal principal,
                                                 @PathVariable Long id,
                                                 @Valid @RequestBody ApprovalRequests.Reject request) {
         return ApiResponse.success(ApprovalResponse.from(
