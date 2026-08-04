@@ -16,6 +16,18 @@ public enum DsaCode {
     /** 토큰 만료. 키오스크가 refreshToken으로 재시도한다. */
     TOKEN_EXPIRED(910, "토큰이 만료되었습니다.", true),
 
+    /** 파라미터 오류. 규격서 전 엔드포인트 공통 실패 코드({@code Invalid paramater}). */
+    INVALID_PARAMETER(901, "Invalid paramater", true),
+
+    /**
+     * 카드번호 오류(등록되지 않은 RFID) 또는 구역코드 오류.
+     * 규격서가 엔드포인트별로 같은 {@code 101}을 다른 의미로 쓴다.
+     */
+    INVALID_KEY(101, "존재하지 않는 코드입니다.", true),
+
+    /** 대상 월 오류({@code getRequestListStd}). */
+    INVALID_MONTH(102, "조회할 수 없는 대상 월입니다.", true),
+
     /** 이미 조퇴 처리된 학생의 재태깅. 차단하고 이상 로그를 남긴다. */
     ALREADY_LEFT_EARLY(121, "이미 조퇴 처리되었습니다.", true),
 

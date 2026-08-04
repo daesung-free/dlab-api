@@ -40,11 +40,11 @@ public class KioskStudentController {
         return DsaResponse.ok(studentQueryService.studentList(academyId));
     }
 
-    /** 3.24 — 카드번호로 학생 연락처. */
+    /** 3.24 — 카드번호로 학생 상세. */
     @PostMapping("/getStdInfo")
     public DsaResponse studentInfo(@RequestBody RfidRequest request) {
         Long academyId = tokenService.resolveAcademyId(request.token());
-        return DsaResponse.ok(studentQueryService.studentPhone(academyId, request.rfidNo()));
+        return DsaResponse.ok(studentQueryService.studentDetail(academyId, request.rfidNo()));
     }
 
     /** 3.19 — 지점 목록. 요청 지점이 아니라 전 지점을 내린다. */
@@ -61,11 +61,20 @@ public class KioskStudentController {
         return DsaResponse.ok(studentQueryService.parentPhones(academyId, request.rfidNo()));
     }
 
-    /** 3.16 — 당월 사유신청 목록. */
+    /**
+     * 3.16 — 당월 사유신청 목록.
+     *
+     * <p>규격서가 {@code hak_no}·{@code std_nm}을 <b>최상위에도</b> 싣는다.
+     * 행마다 반복되는 중복이지만 계약이라 그대로 따른다.
+     */
     @PostMapping("/getRequestListStd")
     public DsaResponse requestList(@RequestBody RfidMonthRequest request) {
         Long academyId = tokenService.resolveAcademyId(request.token());
-        return DsaResponse.ok(
-                studentQueryService.requestList(academyId, request.rfidNo(), request.month()));
+        var result = studentQueryService.requestList(
+                academyId, request.rfidNo(), request.month());
+
+        return DsaResponse.ok(result.rows())
+                .with("hak_no", result.hakNo())
+                .with("std_nm", result.stdNm());
     }
 }

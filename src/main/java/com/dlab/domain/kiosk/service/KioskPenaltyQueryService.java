@@ -1,6 +1,7 @@
 package com.dlab.domain.kiosk.service;
 
 import com.dlab.api.kiosk.dto.DsaRows;
+import com.dlab.common.privacy.Masking;
 import com.dlab.domain.penalty.entity.PenaltyCategory;
 import com.dlab.domain.penalty.entity.PenaltyPoint;
 import com.dlab.domain.penalty.repository.PenaltyPointRepository;
@@ -43,10 +44,12 @@ public class KioskPenaltyQueryService {
         return penaltyPointRepository.findByAcademyAndPeriod(academyId, fromInstant, toInstant)
                 .stream()
                 .map(p -> new DsaRows.PointRow(
-                        p.getEnrollment().getStudentNo(),
                         LocalDate.ofInstant(p.getOccurredAt(), zone).toString(),
+                        // 규격서 샘플이 "홍*동" — 공용 화면이라 이름을 마스킹한다
+                        Masking.name(p.getEnrollment().getStudent().getName()),
+                        p.getEnrollment().getStudentNo(),
                         reasonOf(p),
-                        signedPoints(p)))
+                        String.valueOf(signedPoints(p))))
                 .toList();
     }
 
@@ -64,6 +67,8 @@ public class KioskPenaltyQueryService {
      * <p>우리는 {@code points}를 항상 양수로 저장하고 상/벌 구분을 {@code category}로 둔다.
      * 키오스크는 카테고리를 안 받으므로 부호로 구분하지 않으면
      * <b>벌점 10점이 상점 10점으로 보인다.</b>
+     *
+     * <p>규격서 샘플도 {@code "point" : "-1"}(벌점) / {@code "2"}(상점)로 부호를 쓴다.
      */
     private int signedPoints(PenaltyPoint p) {
         int value = Math.abs(p.getPoints());

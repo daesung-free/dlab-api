@@ -136,29 +136,35 @@ class KioskQueryIntegrationTest {
     // ── 학생·지점·학부모 ──────────────────────────────────────────────
 
     @Test
-    @DisplayName("★ getStdInfoList — data는 평면 배열이어야 한다 (이중 배열이면 키오스크가 0건으로 읽는다)")
+    @DisplayName("★ getStdInfoList — 평면 배열 + 이름 마스킹 + hp는 뒷 4자리 (공용 화면이다)")
     void studentListIsFlatArray() throws Exception {
         call("/kiosk/getStdInfoList", tokenOnly())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data").isArray())
                 // 첫 원소가 배열이 아니라 객체여야 한다
                 .andExpect(jsonPath("$.data[0].std_no").value("2026-0001"))
-                .andExpect(jsonPath("$.data[0].std_nm").value("김민지"))
+                // 규격서 샘플: 이름은 "홍*동", hp는 뒷 4자리 "1521"
+                .andExpect(jsonPath("$.data[0].std_nm").value("김*지"))
+                .andExpect(jsonPath("$.data[0].hp").value("2222"))
                 .andExpect(jsonPath("$.data[0].rfid_no").value("ABC001"))
-                .andExpect(jsonPath("$.data[0].hp").value("010-1111-2222"))
                 .andExpect(jsonPath("$.data[0].seat_cd").value("A-01"));
     }
 
     @Test
-    @DisplayName("★ getStdInfo — std_no를 실어야 한다 (키오스크가 이걸로 한 번 더 필터한다)")
-    void studentInfoCarriesStudentNoForMatching() throws Exception {
+    @DisplayName("★ getStdInfo — 상세는 전체 번호다 (본인 한 명만 나오는 화면). std_no 필수")
+    void studentDetailReturnsFullPhoneAndStudentNo() throws Exception {
         call("/kiosk/getStdInfo",
                 "{\"token\":\"" + token + "\",\"rfid_no\":\"ABC001\"}")
                 .andExpect(jsonPath("$.code").value(0))
+                // 키오스크가 std_no로 한 번 더 필터한다 — 빠지면 전화번호가 null이 된다
                 .andExpect(jsonPath("$.data[0].std_no").value("2026-0001"))
+                .andExpect(jsonPath("$.data[0].std_nm").value("김민지"))
                 .andExpect(jsonPath("$.data[0].hp").value("010-1111-2222"))
-                // hp가 없을 때의 폴백 경로. 키오스크가 hp ?? p_hp로 읽는다
-                .andExpect(jsonPath("$.data[0].p_hp").value("010-9999-8888"));
+                // 규격서엔 없지만 키오스크가 hp ?? p_hp로 폴백하므로 함께 싣는다
+                .andExpect(jsonPath("$.data[0].p_hp").value("010-9999-8888"))
+                // 주소는 우리 스키마에 없다. 키만 유지한다
+                .andExpect(jsonPath("$.data[0].zip").doesNotExist())
+                .andExpect(jsonPath("$.data[0].addr1").doesNotExist());
     }
 
     @Test
@@ -175,7 +181,7 @@ class KioskQueryIntegrationTest {
         // 분당 토큰으로 일산 학생 카드 조회 → 실패해야 한다
         call("/kiosk/getStdInfo",
                 "{\"token\":\"" + token + "\",\"rfid_no\":\"XYZ999\"}")
-                .andExpect(jsonPath("$.code").value(DsaCode.NO_APPROVAL.value()));
+                .andExpect(jsonPath("$.code").value(DsaCode.INVALID_KEY.value()));
     }
 
     @Test
@@ -199,7 +205,23 @@ class KioskQueryIntegrationTest {
                 .andExpect(jsonPath("$.code").value(0))
                 // gender 'M'(남)으로 저장했지만 p_gb는 'F'(Father)로 나가야 한다
                 .andExpect(jsonPath("$.data[0].p_gb").value("F"))
+                // 부모에게 전화를 걸어야 하는 화면이라 전체 번호다
                 .andExpect(jsonPath("$.data[0].p_hp").value("010-9999-8888"));
+    }
+
+    @Test
+    @DisplayName("성별 미상 보호자는 기타(E) — 규격서 3값 중 하나여야 한다")
+    void unknownGenderBecomesOtherRelation() throws Exception {
+        ParentGuardian unknown = new ParentGuardian("보호자", "010-7777-6666", null);
+        em.persist(unknown);
+        em.persist(new StudentGuardianLink(
+                em.find(com.dlab.domain.user.entity.Student.class,
+                        minji.getStudent().getId()), unknown, (short) 2));
+        em.flush();
+
+        call("/kiosk/getParentHpList",
+                "{\"token\":\"" + token + "\",\"rfid_no\":\"ABC001\"}")
+                .andExpect(jsonPath("$.data[?(@.p_hp=='010-7777-6666')].p_gb").value("E"));
     }
 
     @Test
@@ -209,7 +231,18 @@ class KioskQueryIntegrationTest {
                 "{\"token\":\"" + token + "\",\"rfid_no\":\"ABC001\",\"month\":\"2026-08\"}")
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data").isArray())
-                .andExpect(jsonPath("$.data").isEmpty());
+                .andExpect(jsonPath("$.data").isEmpty())
+                // 규격서는 hak_no·std_nm을 최상위에도 싣는다
+                .andExpect(jsonPath("$.hak_no").value("2026-0001"))
+                .andExpect(jsonPath("$.std_nm").value("김*지"));
+    }
+
+    @Test
+    @DisplayName("★ 잘못된 month는 규격서 코드 102")
+    void invalidMonthReturnsCode102() throws Exception {
+        call("/kiosk/getRequestListStd",
+                "{\"token\":\"" + token + "\",\"rfid_no\":\"ABC001\",\"month\":\"2026년8월\"}")
+                .andExpect(jsonPath("$.code").value(DsaCode.INVALID_MONTH.value()));
     }
 
     // ── 좌석 ────────────────────────────────────────────────────────
@@ -220,30 +253,33 @@ class KioskQueryIntegrationTest {
         call("/kiosk/getStudyAreaInfo", tokenOnly())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data[0].area_cd").value("A"))
-                .andExpect(jsonPath("$.data[0].area_nm").value("A구역"));
+                .andExpect(jsonPath("$.data[0].area_nm").value("A구역"))
+                // 규격서 area_inwon = 구역 총 수용인원. 좌석 수에서 센다
+                .andExpect(jsonPath("$.data[0].area_inwon").value("1"));
     }
 
     @Test
-    @DisplayName("★ getStudyAreaSeatInfo — 좌표 키는 xpos/ypos다 (배치도가 이걸로 그려진다)")
-    void seatInfoUsesOriginalCoordinateKeys() throws Exception {
+    @DisplayName("★ getStudyAreaSeatInfo — 좌표 키는 규격서 표기 x_pos/y_pos (배치도가 이걸로 그려진다)")
+    void seatInfoUsesSpecCoordinateKeys() throws Exception {
         call("/kiosk/getStudyAreaSeatInfo",
                 "{\"token\":\"" + token + "\",\"area_cd\":\"A\"}")
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data[0].seat_cd").value("A-01"))
                 .andExpect(jsonPath("$.data[0].seat_nm").value("1번"))
-                .andExpect(jsonPath("$.data[0].xpos").value(10))
-                .andExpect(jsonPath("$.data[0].ypos").value(20))
+                .andExpect(jsonPath("$.data[0].x_pos").value("10"))
+                .andExpect(jsonPath("$.data[0].y_pos").value("20"))
                 .andExpect(jsonPath("$.data[0].seat_gn").value("Y"));
     }
 
     @Test
-    @DisplayName("★ 좌석 상태 — 등원하면 S, 외출하면 D, 태깅 없으면 B")
+    @DisplayName("★ 좌석 상태 4종 — 배정됐는데 안 왔으면 N(미출석)이지 B(공석)가 아니다")
     void seatStateDerivesFromLatestTagging() throws Exception {
         String path = "/kiosk/getStudyAreaSeatState";
         String body = "{\"token\":\"" + token + "\",\"area_cd\":\"A\"}";
 
-        // 아직 태깅 전 → 빈좌석
-        call(path, body).andExpect(jsonPath("$.data[0].state").value("B"));
+        // 배정은 됐는데 아직 태깅 전 → 미출석. 공석(B)과 구분돼야
+        // 사감이 "결석자 자리"와 "빈 자리"를 구별할 수 있다
+        call(path, body).andExpect(jsonPath("$.data[0].state").value("N"));
 
         tag(AttendanceEventType.CHECK_IN, Instant.now().minusSeconds(600));
         call(path, body).andExpect(jsonPath("$.data[0].state").value("S"));
@@ -251,8 +287,22 @@ class KioskQueryIntegrationTest {
         tag(AttendanceEventType.OUTING, Instant.now().minusSeconds(60));
         call(path, body).andExpect(jsonPath("$.data[0].state").value("D"));
 
+        // 하원한 자리는 공석이 아니라 "오늘 더는 안 오는 자리"다
         tag(AttendanceEventType.CHECK_OUT, Instant.now());
-        call(path, body).andExpect(jsonPath("$.data[0].state").value("B"));
+        call(path, body).andExpect(jsonPath("$.data[0].state").value("N"));
+    }
+
+    @Test
+    @DisplayName("★ 아무도 배정되지 않은 좌석만 B(공석)다")
+    void unassignedSeatIsEmpty() throws Exception {
+        StudyArea area = em.find(SeatMaster.class, seatA1.getId()).getStudyArea();
+        em.persist(new SeatMaster(bundang, area, "A-02", "2번", 11, 20));
+        em.flush();
+
+        call("/kiosk/getStudyAreaSeatState",
+                "{\"token\":\"" + token + "\",\"area_cd\":\"A\"}")
+                .andExpect(jsonPath("$.data[?(@.seat_cd=='A-01')].state").value("N"))
+                .andExpect(jsonPath("$.data[?(@.seat_cd=='A-02')].state").value("B"));
     }
 
     private void tag(AttendanceEventType type, Instant at) {
@@ -291,9 +341,11 @@ class KioskQueryIntegrationTest {
                 "{\"token\":\"" + token + "\",\"st_dt\":\"" + today.withDayOfMonth(1)
                         + "\",\"ed_dt\":\"" + today + "\"}")
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data[?(@.reason=='지각 3회')].point").value(-5))
-                .andExpect(jsonPath("$.data[?(@.reason=='청소 도움')].point").value(3))
-                .andExpect(jsonPath("$.data[0].std_no").value("2026-0001"));
+                // 규격서 샘플이 "point" : "-1" — 문자열이고 벌점은 음수다
+                .andExpect(jsonPath("$.data[?(@.reason=='지각 3회')].point").value("-5"))
+                .andExpect(jsonPath("$.data[?(@.reason=='청소 도움')].point").value("3"))
+                .andExpect(jsonPath("$.data[0].std_no").value("2026-0001"))
+                .andExpect(jsonPath("$.data[0].std_nm").value("김*지"));
     }
 
     // ── 인증 ────────────────────────────────────────────────────────
