@@ -91,6 +91,15 @@ public class StudentEnrollment extends BaseEntity {
         return student.getName();
     }
 
+    public void changeTrack(TrackType track) {
+        this.track = track;
+    }
+
+    /** 키오스크 카드 발급·재발급. */
+    public void assignCard(String rfidNo) {
+        this.rfidNo = rfidNo;
+    }
+
     /** 이 기수가 끝나 다음 기수로 넘어갈 때 이전 등록 건을 내린다. */
     public void expire() {
         this.current = false;

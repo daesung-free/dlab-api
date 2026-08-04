@@ -23,6 +23,19 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
     Optional<StudentEnrollment> findCurrentByRfidNo(String rfidNo);
 
     /**
+     * 해당 지점·연도의 학번 최대 일련번호. 채번의 다음 값 계산에 쓴다.
+     *
+     * <p>학번 형식이 {@code yyyy-NNNN}이라 뒤 4자리만 잘라 숫자로 본다.
+     * 행이 없으면 0 — 그 해 첫 학생이다.
+     */
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SPLIT_PART(student_no, '-', 2) AS INTEGER)), 0)
+            FROM student_enrollment
+            WHERE academy_id = :academyId AND year = :year AND student_no IS NOT NULL
+            """, nativeQuery = true)
+    int findMaxSequence(Long academyId, short year);
+
+    /**
      * 학생(사람)의 현재 유효한 등록 건.
      * 신청·조회는 전부 "올해 등록 건" 기준이라 앱 요청마다 이걸로 변환한다.
      */
