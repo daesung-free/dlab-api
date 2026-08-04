@@ -18,10 +18,10 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 기초 마스터 — 학과 · 계열 · 사물함 · 장학.
+ * 기초 마스터 — 학과 · 과정 · 전형 · 계열 · 사물함 · 장학.
  *
- * <p>학과는 지점·연도 단위라 <b>전년도 복사 대상</b>이고, 계열은 전 지점 공통 고정값이라
- * 복사 대상이 아니다(docs/entity-design.md §0-1의 의도된 예외).
+ * <p>학과·과정·전형은 지점·연도 단위라 <b>전년도 복사 대상</b>이고, 계열은 전 지점 공통
+ * 고정값이라 복사 대상이 아니다(docs/entity-design.md §0-1의 의도된 예외).
  *
  * <p>삭제는 전부 soft delete다 — 과거 데이터가 이 마스터를 참조하고 있어서
  * 물리 삭제하면 작년 기록의 학과명·장학 내역이 사라진다.
@@ -34,6 +34,8 @@ public class MasterDataService {
     private final TrackMasterRepository trackRepository;
     private final LockerMasterRepository lockerRepository;
     private final ScholarshipRepository scholarshipRepository;
+    private final CourseTypeRepository courseTypeRepository;
+    private final AdmissionTypeRepository admissionTypeRepository;
     private final AcademyRepository academyRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
 
@@ -69,6 +71,81 @@ public class MasterDataService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
         verifyAccess(department.getAcademy().getId(), principal);
         department.markDeleted();
+    }
+
+    // ── 과정 (course_type) ──
+
+    @Transactional(readOnly = true)
+    public List<CourseType> courseTypes(Long academyId, short year, AuthPrincipal principal) {
+        verifyAccess(academyId, principal);
+        return courseTypeRepository
+                .findByAcademyIdAndYearAndDeletedFalseOrderBySortOrderAscNameAsc(academyId, year);
+    }
+
+    @Transactional
+    public CourseType createCourseType(Long academyId, short year, String name, short sortOrder,
+                                       AuthPrincipal principal) {
+        verifyAccess(academyId, principal);
+        if (courseTypeRepository.existsByAcademyIdAndYearAndNameAndDeletedFalse(academyId, year, name)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "같은 연도에 같은 이름의 과정이 있습니다.");
+        }
+        return courseTypeRepository.save(new CourseType(loadAcademy(academyId), year, name, sortOrder));
+    }
+
+    @Transactional
+    public CourseType renameCourseType(Long id, String name, AuthPrincipal principal) {
+        CourseType courseType = courseTypeRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
+        verifyAccess(courseType.getAcademy().getId(), principal);
+        courseType.rename(name);
+        return courseType;
+    }
+
+    @Transactional
+    public void deleteCourseType(Long id, AuthPrincipal principal) {
+        CourseType courseType = courseTypeRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
+        verifyAccess(courseType.getAcademy().getId(), principal);
+        // 물리 삭제하면 이 과정을 참조하던 반의 FK가 깨진다
+        courseType.markDeleted();
+    }
+
+    // ── 전형 (admission_type) ──
+
+    @Transactional(readOnly = true)
+    public List<AdmissionType> admissionTypes(Long academyId, short year, AuthPrincipal principal) {
+        verifyAccess(academyId, principal);
+        return admissionTypeRepository
+                .findByAcademyIdAndYearAndDeletedFalseOrderBySortOrderAscNameAsc(academyId, year);
+    }
+
+    @Transactional
+    public AdmissionType createAdmissionType(Long academyId, short year, String name, short sortOrder,
+                                             AuthPrincipal principal) {
+        verifyAccess(academyId, principal);
+        if (admissionTypeRepository.existsByAcademyIdAndYearAndNameAndDeletedFalse(
+                academyId, year, name)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "같은 연도에 같은 이름의 전형이 있습니다.");
+        }
+        return admissionTypeRepository.save(
+                new AdmissionType(loadAcademy(academyId), year, name, sortOrder));
+    }
+
+    @Transactional
+    public AdmissionType renameAdmissionType(Long id, String name, AuthPrincipal principal) {
+        AdmissionType admissionType = admissionTypeRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
+        verifyAccess(admissionType.getAcademy().getId(), principal);
+        admissionType.rename(name);
+        return admissionType;
+    }
+
+    @Transactional
+    public void deleteAdmissionType(Long id, AuthPrincipal principal) {
+        AdmissionType admissionType = admissionTypeRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
+        verifyAccess(admissionType.getAcademy().getId(), principal);
+        admissionType.markDeleted();
     }
 
     // ── 계열 (지점 무관) ──

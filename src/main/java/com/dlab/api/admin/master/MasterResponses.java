@@ -36,4 +36,35 @@ public final class MasterResponses {
                     s.getScholarshipType(), s.getDiscountRate());
         }
     }
+
+    public record CourseType(Long id, Long academyId, short year, String name, short sortOrder) {
+        public static CourseType from(com.dlab.domain.master.entity.CourseType c) {
+            return new CourseType(c.getId(), c.getAcademy().getId(), c.getYear(),
+                    c.getName(), c.getSortOrder());
+        }
+    }
+
+    public record AdmissionType(Long id, Long academyId, short year, String name, short sortOrder) {
+        public static AdmissionType from(com.dlab.domain.master.entity.AdmissionType a) {
+            return new AdmissionType(a.getId(), a.getAcademy().getId(), a.getYear(),
+                    a.getName(), a.getSortOrder());
+        }
+    }
+
+    /** 기숙사 방. 정원 대비 현재 인원을 같이 내려준다 — 배정 화면이 매번 세지 않아도 되게. */
+    public record DormRoom(Long id, String building, String roomNo, short capacity,
+                           String gender, long occupied) {
+        public static DormRoom from(com.dlab.domain.master.entity.DormRoom r, long occupied) {
+            return new DormRoom(r.getId(), r.getBuilding(), r.getRoomNo(),
+                    r.getCapacity(), r.getGender(), occupied);
+        }
+    }
+
+    public record DormOccupant(Long assignmentId, Long enrollmentId, String studentName) {
+        public static DormOccupant from(com.dlab.domain.master.entity.DormAssignment a) {
+            return new DormOccupant(a.getId(), a.getEnrollment().getId(),
+                    a.getEnrollment().getStudentName());
+        }
+    }
+
 }

@@ -74,6 +74,75 @@ public class AdminMasterController {
         return ApiResponse.empty();
     }
 
+    // ── 과정 ──
+
+    @GetMapping("/course-types")
+    public ApiResponse<List<MasterResponses.CourseType>> courseTypes(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam Long academyId, @RequestParam Integer year) {
+        return ApiResponse.success(
+                masterDataService.courseTypes(academyId, year.shortValue(), me).stream()
+                        .map(MasterResponses.CourseType::from).toList());
+    }
+
+    @PostMapping("/course-types")
+    public ApiResponse<MasterResponses.CourseType> createCourseType(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody MasterRequests.CreateNamedMaster request) {
+        return ApiResponse.success(MasterResponses.CourseType.from(masterDataService.createCourseType(
+                request.academyId(), request.year().shortValue(), request.name(),
+                request.sortOrderOrZero(), me)));
+    }
+
+    @PutMapping("/course-types/{id}")
+    public ApiResponse<MasterResponses.CourseType> renameCourseType(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long id,
+            @Valid @RequestBody MasterRequests.Rename request) {
+        return ApiResponse.success(MasterResponses.CourseType.from(
+                masterDataService.renameCourseType(id, request.name(), me)));
+    }
+
+    @DeleteMapping("/course-types/{id}")
+    public ApiResponse<Void> deleteCourseType(@CurrentAccount AuthPrincipal me, @PathVariable Long id) {
+        masterDataService.deleteCourseType(id, me);
+        return ApiResponse.empty();
+    }
+
+    // ── 전형 ──
+
+    @GetMapping("/admission-types")
+    public ApiResponse<List<MasterResponses.AdmissionType>> admissionTypes(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam Long academyId, @RequestParam Integer year) {
+        return ApiResponse.success(
+                masterDataService.admissionTypes(academyId, year.shortValue(), me).stream()
+                        .map(MasterResponses.AdmissionType::from).toList());
+    }
+
+    @PostMapping("/admission-types")
+    public ApiResponse<MasterResponses.AdmissionType> createAdmissionType(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody MasterRequests.CreateNamedMaster request) {
+        return ApiResponse.success(MasterResponses.AdmissionType.from(
+                masterDataService.createAdmissionType(request.academyId(), request.year().shortValue(),
+                        request.name(), request.sortOrderOrZero(), me)));
+    }
+
+    @PutMapping("/admission-types/{id}")
+    public ApiResponse<MasterResponses.AdmissionType> renameAdmissionType(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long id,
+            @Valid @RequestBody MasterRequests.Rename request) {
+        return ApiResponse.success(MasterResponses.AdmissionType.from(
+                masterDataService.renameAdmissionType(id, request.name(), me)));
+    }
+
+    @DeleteMapping("/admission-types/{id}")
+    public ApiResponse<Void> deleteAdmissionType(@CurrentAccount AuthPrincipal me,
+                                                 @PathVariable Long id) {
+        masterDataService.deleteAdmissionType(id, me);
+        return ApiResponse.empty();
+    }
+
     // ── 계열 (전 지점 공통) ──
 
     @GetMapping("/tracks")

@@ -69,6 +69,11 @@ public class StudentEnrollment extends BaseEntity {
     @Column(name = "enrollment_status", nullable = false, length = 20)
     private EnrollmentStatus enrollmentStatus = EnrollmentStatus.ENROLLED;
 
+    /** 입학 전형. 그 해 입학 방식이라 사람이 아니라 등록 건에 붙는다. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "admission_type_id")
+    private com.dlab.domain.master.entity.AdmissionType admissionType;
+
     @Column(name = "admission_date")
     private LocalDate admissionDate;
 
@@ -103,6 +108,10 @@ public class StudentEnrollment extends BaseEntity {
     /** 이 기수가 끝나 다음 기수로 넘어갈 때 이전 등록 건을 내린다. */
     public void expire() {
         this.current = false;
+    }
+
+    public void assignAdmissionType(com.dlab.domain.master.entity.AdmissionType admissionType) {
+        this.admissionType = admissionType;
     }
 
     /**
