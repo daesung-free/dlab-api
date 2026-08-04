@@ -38,6 +38,19 @@ public final class MasterRequests {
 
 
 
+    /** 커리큘럼. 반은 선택 — 지점 공통 커리큘럼이 있을 수 있다. */
+    public record CreateCurriculum(
+            @NotNull(message = "지점은 필수입니다.") Long academyId,
+            @NotNull(message = "연도는 필수입니다.") @Min(2000) @Max(2100) Integer year,
+            @NotBlank(message = "이름은 필수입니다.") @Size(max = 100) String name,
+            Long classId,
+            @Min(0) @Max(999) Integer sortOrder) {
+
+        public short sortOrderOrZero() {
+            return sortOrder == null ? 0 : sortOrder.shortValue();
+        }
+    }
+
     public record Rename(
             @NotBlank(message = "이름은 필수입니다.") @Size(max = 50) String name) {
     }

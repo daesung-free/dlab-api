@@ -34,6 +34,9 @@ public interface ClassAssignmentRepository extends JpaRepository<ClassAssignment
     List<ClassAssignment> findActiveByClassId(Long classId);
 
     /** 같은 유형의 기존 활성 배정. 새로 배정할 때 이전 것을 내리기 위해 찾는다. */
+    /** 이 학생의 활성 배정 전체. 고정반·이동수업반이 따로 있어 여러 건이 나온다. */
+    List<ClassAssignment> findByEnrollmentIdAndActiveTrue(Long enrollmentId);
+
     Optional<ClassAssignment> findByEnrollmentIdAndClassTypeAndActiveTrue(
             Long enrollmentId, com.dlab.domain.user.entity.ClassType classType);
 }

@@ -7,6 +7,7 @@ import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.master.entity.*;
 import com.dlab.domain.master.repository.*;
 import com.dlab.domain.user.entity.Academy;
+import com.dlab.domain.user.entity.ClassMaster;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.repository.AcademyRepository;
 import com.dlab.domain.user.repository.StudentEnrollmentRepository;
@@ -18,7 +19,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 기초 마스터 — 학과 · 과정 · 전형 · 계열 · 사물함 · 장학.
+ * 기초 마스터 — 학과 · 과정 · 전형 · 커리큘럼 · 계열 · 사물함 · 장학.
  *
  * <p>학과·과정·전형은 지점·연도 단위라 <b>전년도 복사 대상</b>이고, 계열은 전 지점 공통
  * 고정값이라 복사 대상이 아니다(docs/entity-design.md §0-1의 의도된 예외).
@@ -36,6 +37,8 @@ public class MasterDataService {
     private final ScholarshipRepository scholarshipRepository;
     private final CourseTypeRepository courseTypeRepository;
     private final AdmissionTypeRepository admissionTypeRepository;
+    private final CurriculumRepository curriculumRepository;
+    private final com.dlab.domain.user.repository.ClassMasterRepository classMasterRepository;
     private final AcademyRepository academyRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
 
@@ -146,6 +149,51 @@ public class MasterDataService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
         verifyAccess(admissionType.getAcademy().getId(), principal);
         admissionType.markDeleted();
+    }
+
+    // ── 커리큘럼 ──
+
+    @Transactional(readOnly = true)
+    public List<Curriculum> curriculums(Long academyId, short year, AuthPrincipal principal) {
+        verifyAccess(academyId, principal);
+        return curriculumRepository.findAllOfYear(academyId, year);
+    }
+
+    /** 반은 선택이다 — 지점 공통 커리큘럼이 있을 수 있다. */
+    @Transactional
+    public Curriculum createCurriculum(Long academyId, short year, String name, Long classId,
+                                       short sortOrder, AuthPrincipal principal) {
+        verifyAccess(academyId, principal);
+        if (curriculumRepository.existsByAcademyIdAndYearAndNameAndDeletedFalse(academyId, year, name)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "같은 연도에 같은 이름의 커리큘럼이 있습니다.");
+        }
+        ClassMaster classMaster = null;
+        if (classId != null) {
+            classMaster = classMasterRepository.findDetailById(classId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.CLASS_NOT_FOUND));
+            if (!classMaster.getAcademy().getId().equals(academyId)) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST, "다른 지점의 반은 지정할 수 없습니다.");
+            }
+        }
+        return curriculumRepository.save(
+                new Curriculum(loadAcademy(academyId), year, name, classMaster, sortOrder));
+    }
+
+    @Transactional
+    public Curriculum renameCurriculum(Long id, String name, AuthPrincipal principal) {
+        Curriculum curriculum = curriculumRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
+        verifyAccess(curriculum.getAcademy().getId(), principal);
+        curriculum.rename(name);
+        return curriculum;
+    }
+
+    @Transactional
+    public void deleteCurriculum(Long id, AuthPrincipal principal) {
+        Curriculum curriculum = curriculumRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
+        verifyAccess(curriculum.getAcademy().getId(), principal);
+        curriculum.markDeleted();
     }
 
     // ── 계열 (지점 무관) ──

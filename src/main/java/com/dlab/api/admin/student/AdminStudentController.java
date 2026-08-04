@@ -9,6 +9,7 @@ import com.dlab.domain.search.entity.SearchType;
 import com.dlab.domain.search.service.SavedSearchService;
 import com.dlab.domain.user.service.StudentExportService;
 import com.dlab.domain.user.service.StudentImportService;
+import com.dlab.domain.user.service.StudentStatusService;
 import com.dlab.domain.user.service.StudentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +44,7 @@ public class AdminStudentController {
     private final StudentImportService studentImportService;
     private final StudentExportService studentExportService;
     private final SavedSearchService savedSearchService;
+    private final StudentStatusService studentStatusService;
 
     @GetMapping
     public ApiResponse<Page<StudentResponse>> search(
@@ -84,6 +86,30 @@ public class AdminStudentController {
                 enrollmentId, request.name(), request.phone(), request.birthDate(),
                 request.gender(), request.schoolName(), request.grade(), request.track(),
                 request.status(), me)));
+    }
+
+    // ── 상태 관리 (F-4.1-8) ──
+
+    /**
+     * 재적 상태 전이. 상태만 바꾸는 게 아니라 <b>후속처리까지 한 트랜잭션</b>에 묶는다 —
+     * 퇴원·제적·수료면 반·좌석·사물함 배정을 비우고 앱 계정을 막는다.
+     *
+     * <p>휴원은 정리하지 않는다. 돌아올 학생의 자리를 비우면 복귀 때 잃는다.
+     */
+    @PostMapping("/{enrollmentId}/status")
+    public ApiResponse<StudentResponse> changeStatus(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId,
+            @Valid @RequestBody StudentRequests.ChangeStatus request) {
+        return ApiResponse.success(StudentResponse.from(studentStatusService.changeStatus(
+                enrollmentId, request.status(), request.reason(), me)));
+    }
+
+    /** 상태 변경 이력. "퇴원 처리가 언제 누구에 의해 됐나"에 답하는 화면용. */
+    @GetMapping("/{enrollmentId}/status-logs")
+    public ApiResponse<List<StatusLogResponse>> statusLogs(@CurrentAccount AuthPrincipal me,
+                                                           @PathVariable Long enrollmentId) {
+        return ApiResponse.success(studentStatusService.history(enrollmentId, me).stream()
+                .map(StatusLogResponse::from).toList());
     }
 
     // ── 엑셀 Export ──

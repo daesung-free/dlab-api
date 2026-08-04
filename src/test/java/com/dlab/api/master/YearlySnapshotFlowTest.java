@@ -5,6 +5,7 @@ import com.dlab.domain.approval.entity.ApproverType;
 import com.dlab.domain.approval.entity.RequestType;
 import com.dlab.domain.master.entity.AdmissionType;
 import com.dlab.domain.master.entity.CourseType;
+import com.dlab.domain.master.entity.Curriculum;
 import com.dlab.domain.master.entity.DepartmentMaster;
 import com.dlab.domain.penalty.entity.PenaltyCategory;
 import com.dlab.domain.penalty.entity.PenaltyItem;
@@ -60,6 +61,7 @@ class YearlySnapshotFlowTest {
     Long academyId;
     Long oldPenaltyItemId;
     Long oldCourseTypeId;
+    Long oldClassId;
     Teacher activeTeacher;
     Teacher resignedTeacher;
 
@@ -100,6 +102,9 @@ class YearlySnapshotFlowTest {
         ClassMaster first = new ClassMaster(academy, FROM, "1반", ClassType.FIXED, activeTeacher);
         first.assignCourseType(courseType);
         em.persist(first);
+        em.flush();
+        oldClassId = first.getId();
+        em.persist(new Curriculum(academy, FROM, "수학 심화", first, (short) 1));
         em.persist(new ClassMaster(academy, FROM, "2반", ClassType.FIXED, resignedTeacher));
         em.persist(new ApprovalItem(academy, FROM, RequestType.FIREWALL_UNLOCK,
                 ApproverType.PARENT, (short) ApprovalItem.FIREWALL_TIMEOUT_MINUTES, ApproverType.TEACHER));
@@ -156,6 +161,7 @@ class YearlySnapshotFlowTest {
                 .andExpect(jsonPath("$.data.copied.department").value(1))
                 .andExpect(jsonPath("$.data.copied.admissionType").value(1))
                 .andExpect(jsonPath("$.data.copied.courseType").value(1))
+                .andExpect(jsonPath("$.data.copied.curriculum").value(1))
                 .andExpect(jsonPath("$.data.copied.period").value(1))
                 .andExpect(jsonPath("$.data.copied.class").value(2))
                 .andExpect(jsonPath("$.data.copied.approvalItem").value(1))
@@ -193,7 +199,7 @@ class YearlySnapshotFlowTest {
         // 복사되는 6개 표 전부. 하나라도 NULL이면 그 표는 복사본 여부를 알 수 없다.
         for (String table : new String[]{"department_master", "class_master", "period_master",
                 "approval_item", "penalty_item", "penalty_rule",
-                "course_type", "admission_type"}) {
+                "course_type", "admission_type", "curriculum"}) {
             Number untracked = (Number) em.createNativeQuery("""
                             SELECT COUNT(*) FROM %s
                             WHERE academy_id = :academyId AND year = :year AND copied_from_id IS NULL
@@ -232,6 +238,25 @@ class YearlySnapshotFlowTest {
         assertThat(copied.getCourseType().getId()).isNotEqualTo(oldCourseTypeId);
         assertThat(copied.getCourseType().getYear()).isEqualTo(TO);
         assertThat(copied.getCourseType().getName()).isEqualTo("종합반");
+    }
+
+    @Test
+    @DisplayName("★ 복사된 커리큘럼은 새 연도 반을 가리킨다 — 세 번째 갈아끼움")
+    void curriculumClassIsRemapped() throws Exception {
+        copy(FROM, TO).andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        Curriculum copied = em.createQuery("""
+                SELECT c FROM Curriculum c JOIN FETCH c.classMaster
+                WHERE c.academy.id = :academyId AND c.year = :year
+                """, Curriculum.class)
+                .setParameter("academyId", academyId).setParameter("year", TO)
+                .getSingleResult();
+
+        assertThat(copied.getClassMaster().getId()).isNotEqualTo(oldClassId);
+        assertThat(copied.getClassMaster().getYear()).isEqualTo(TO);
+        assertThat(copied.getClassMaster().getName()).isEqualTo("1반");
     }
 
     @Test

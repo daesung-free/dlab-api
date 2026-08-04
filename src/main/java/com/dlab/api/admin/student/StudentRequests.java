@@ -39,6 +39,16 @@ public final class StudentRequests {
             EnrollmentStatus status) {
     }
 
+    /**
+     * 재적 상태 변경.
+     *
+     * <p>사유는 필수가 아니지만 <b>제적처럼 다툼이 생길 수 있는 전이</b>에는 남겨야 한다.
+     */
+    public record ChangeStatus(
+            @NotNull(message = "변경할 상태는 필수입니다.") EnrollmentStatus status,
+            @Size(max = 200) String reason) {
+    }
+
     /** 검색조건 저장. {@code conditions}는 화면이 만든 JSON 문자열 그대로 — 서버가 파싱하지 않는다. */
     public record SaveSearch(
             @NotBlank(message = "이름은 필수입니다.") @Size(max = 50) String name,

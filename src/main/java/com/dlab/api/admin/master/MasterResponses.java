@@ -53,4 +53,14 @@ public final class MasterResponses {
 
 
 
+    public record Curriculum(Long id, short year, String name, Long classId,
+                             String className, short sortOrder) {
+        public static Curriculum from(com.dlab.domain.master.entity.Curriculum c) {
+            return new Curriculum(c.getId(), c.getYear(), c.getName(),
+                    c.getClassMaster() == null ? null : c.getClassMaster().getId(),
+                    c.getClassMaster() == null ? null : c.getClassMaster().getName(),
+                    c.getSortOrder());
+        }
+    }
+
 }

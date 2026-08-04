@@ -143,6 +143,40 @@ public class AdminMasterController {
         return ApiResponse.empty();
     }
 
+    // ── 커리큘럼 ──
+
+    @GetMapping("/curriculums")
+    public ApiResponse<List<MasterResponses.Curriculum>> curriculums(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam Long academyId, @RequestParam Integer year) {
+        return ApiResponse.success(
+                masterDataService.curriculums(academyId, year.shortValue(), me).stream()
+                        .map(MasterResponses.Curriculum::from).toList());
+    }
+
+    @PostMapping("/curriculums")
+    public ApiResponse<MasterResponses.Curriculum> createCurriculum(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody MasterRequests.CreateCurriculum request) {
+        return ApiResponse.success(MasterResponses.Curriculum.from(
+                masterDataService.createCurriculum(request.academyId(), request.year().shortValue(),
+                        request.name(), request.classId(), request.sortOrderOrZero(), me)));
+    }
+
+    @PutMapping("/curriculums/{id}")
+    public ApiResponse<MasterResponses.Curriculum> renameCurriculum(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long id,
+            @Valid @RequestBody MasterRequests.Rename request) {
+        return ApiResponse.success(MasterResponses.Curriculum.from(
+                masterDataService.renameCurriculum(id, request.name(), me)));
+    }
+
+    @DeleteMapping("/curriculums/{id}")
+    public ApiResponse<Void> deleteCurriculum(@CurrentAccount AuthPrincipal me, @PathVariable Long id) {
+        masterDataService.deleteCurriculum(id, me);
+        return ApiResponse.empty();
+    }
+
     // ── 계열 (전 지점 공통) ──
 
     @GetMapping("/tracks")

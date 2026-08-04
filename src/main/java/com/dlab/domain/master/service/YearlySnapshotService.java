@@ -7,9 +7,11 @@ import com.dlab.domain.approval.entity.ApprovalItem;
 import com.dlab.domain.approval.repository.ApprovalItemRepository;
 import com.dlab.domain.master.entity.AdmissionType;
 import com.dlab.domain.master.entity.CourseType;
+import com.dlab.domain.master.entity.Curriculum;
 import com.dlab.domain.master.entity.DepartmentMaster;
 import com.dlab.domain.master.repository.AdmissionTypeRepository;
 import com.dlab.domain.master.repository.CourseTypeRepository;
+import com.dlab.domain.master.repository.CurriculumRepository;
 import com.dlab.domain.master.repository.DepartmentMasterRepository;
 import com.dlab.domain.penalty.entity.PenaltyItem;
 import com.dlab.domain.penalty.entity.PenaltyRule;
@@ -48,7 +50,7 @@ import java.util.Map;
  * <p>복사 순서는 참조하는 쪽이 나중에 오도록 한다:
  * <pre>
  *   학과 · 전형 · 교시 · 승인정책 (서로 독립)
- *   과정 → 반           (반이 과정을 참조)
+ *   과정 → 반 → 커리큘럼   (반이 과정을, 커리큘럼이 반을 참조)
  *   상벌점 항목 → 상벌점 규칙 (규칙이 항목을 참조)
  * </pre>
  *
@@ -64,6 +66,7 @@ public class YearlySnapshotService {
     private final AcademyRepository academyRepository;
     private final DepartmentMasterRepository departmentRepository;
     private final CourseTypeRepository courseTypeRepository;
+    private final CurriculumRepository curriculumRepository;
     private final AdmissionTypeRepository admissionTypeRepository;
     private final ClassMasterRepository classMasterRepository;
     private final ApprovalItemRepository approvalItemRepository;
@@ -102,7 +105,10 @@ public class YearlySnapshotService {
         // 과정 → 반 순서. 반이 과정을 참조하므로 매핑을 넘겨받는다.
         Map<Long, CourseType> courseMapping = copyCourseTypes(academy, fromYear, toYear);
         copied.put("courseType", courseMapping.size());
-        copied.put("class", copyClasses(academy, fromYear, toYear, courseMapping));
+        Map<Long, ClassMaster> classMapping = copyClasses(academy, fromYear, toYear, courseMapping);
+        copied.put("class", classMapping.size());
+        // 반 → 커리큘럼 순서. 커리큘럼이 반을 참조하므로 세 번째 갈아끼움이다.
+        copied.put("curriculum", copyCurriculums(academy, fromYear, toYear, classMapping));
         copied.put("approvalItem", copyApprovalItems(academy, fromYear, toYear));
 
         // 상벌점은 항목 → 규칙 순서. 규칙이 항목을 참조하므로 매핑을 넘겨받아야 한다.
@@ -130,6 +136,7 @@ public class YearlySnapshotService {
                         || !courseTypeRepository
                                 .findByAcademyIdAndYearAndDeletedFalseOrderBySortOrderAscNameAsc(
                                         academyId, toYear).isEmpty()
+                        || !curriculumRepository.findAllOfYear(academyId, toYear).isEmpty()
                         || !admissionTypeRepository
                                 .findByAcademyIdAndYearAndDeletedFalseOrderBySortOrderAscNameAsc(
                                         academyId, toYear).isEmpty()
@@ -193,10 +200,11 @@ public class YearlySnapshotService {
      * <p>담임은 그대로 가져오되 <b>퇴사자는 비운다</b> — 퇴사한 선생님이 담임으로 남으면
      * 그 반 학생의 승인 요청이 아무에게도 가지 않는다(§3 에스컬레이션 대상은 담임에서 도출된다).
      */
-    private int copyClasses(Academy academy, short fromYear, short toYear,
-                            Map<Long, CourseType> courseMapping) {
-        List<ClassMaster> sources = classMasterRepository.search(academy.getId(), fromYear);
-        sources.forEach(src -> {
+    /** @return 옛 반 ID → 새 반. 커리큘럼이 참조를 갈아끼울 때 쓴다. */
+    private Map<Long, ClassMaster> copyClasses(Academy academy, short fromYear, short toYear,
+                                               Map<Long, CourseType> courseMapping) {
+        Map<Long, ClassMaster> mapping = new HashMap<>();
+        for (ClassMaster src : classMasterRepository.search(academy.getId(), fromYear)) {
             ClassMaster copy = classMasterRepository.save(new ClassMaster(
                     academy, toYear, src.getName(), src.getClassType(),
                     activeTeacherOrNull(src.getHomeroomTeacher())));
@@ -205,7 +213,23 @@ public class YearlySnapshotService {
             if (src.getCourseType() != null) {
                 copy.assignCourseType(courseMapping.get(src.getCourseType().getId()));
             }
-        });
+            mapping.put(src.getId(), copy);
+        }
+        return mapping;
+    }
+
+    /** 커리큘럼 복사 — <b>반 참조를 새 연도 반으로 갈아끼운다.</b> */
+    private int copyCurriculums(Academy academy, short fromYear, short toYear,
+                                Map<Long, ClassMaster> classMapping) {
+        List<Curriculum> sources = curriculumRepository.findAllOfYear(academy.getId(), fromYear);
+        for (Curriculum src : sources) {
+            ClassMaster newClass = src.getClassMaster() == null
+                    ? null
+                    : classMapping.get(src.getClassMaster().getId());
+            Curriculum copy = curriculumRepository.save(new Curriculum(
+                    academy, toYear, src.getName(), newClass, src.getSortOrder()));
+            copy.markCopiedFrom(src.getId());
+        }
         return sources.size();
     }
 
