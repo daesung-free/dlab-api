@@ -34,6 +34,9 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
+    // 엑셀 Import/Export. 학생 일괄 등록(P1-02)·명단 출력(F-4.9)이 여기 의존한다.
+    implementation 'org.apache.poi:poi-ooxml:5.4.1'
+
     // 동적 검색 빌더. 학생 검색만 12개 조건이라 조건 조합이 코드로 관리되지 않으면 감당이 안 된다.
     // openfeign 포크를 쓰는 이유: 본가 querydsl은 릴리스가 멈춰 Hibernate 7(Boot 4)을 지원하지 않는다.
     implementation "io.github.openfeign.querydsl:querydsl-jpa:${querydslVersion}"
