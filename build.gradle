@@ -34,6 +34,10 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
+    // API 스펙 자동생성. 이 레포가 스펙의 단일 진실 공급원이고(CLAUDE.md §6-4)
+    // dlab-admin-web(openapi-typescript)·dlab-app(openapi-generator)이 여기서 타입을 뽑는다.
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0'
+
     // 엑셀 Import/Export. 학생 일괄 등록(P1-02)·명단 출력(F-4.9)이 여기 의존한다.
     implementation 'org.apache.poi:poi-ooxml:5.4.1'
 

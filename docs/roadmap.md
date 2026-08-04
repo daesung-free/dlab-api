@@ -69,8 +69,10 @@
 - ⚠️ **앱 스토어 심사는 12월 단 한 번의 기회**다. 이 둘이 밀리면 앱 Phase 전체가 **빌드 불가** 상태로 지연된다. 개발이 아니라 계정·키 발급이라 리드타임이 곧 마감이다.
 
 **기타** `인프라`
-- `YearlySnapshotService` 골격 — 의존 순서 `department → course_type → class_group → curriculum → penalty_item → tuition`, **단순 `INSERT SELECT` 금지**
-- springdoc-openapi → `docs/openapi.yaml` 자동 생성 (CLAUDE.md §6-4)
+- ~~`YearlySnapshotService`~~ → **Phase 1로 정정.** 공식 개발문서가 *"Phase 1 · 8. 관리자 기초설정 — 전년도복사(YearlySnapshotService) 최초 적용"*, 실행가이드가 **P1-13**으로 분류한다. 이 문서가 Phase 0에 넣은 게 오류였다
+- springdoc-openapi (CLAUDE.md §6-4) — ✅ 구현됨. 그룹 `app`/`admin` 분리, DSA 호환 구획 제외
+- 요청/응답 로깅 + `traceId` — ✅ 구현됨
+- `created_by` 자동 주입(`AuditorAware`) — ✅ 구현됨. 배치·DSA 구획은 시스템 계정 `0`
 
 > **교시 마스터 주의** — 시안(`07_admin_plan`, `plan-1~3`)에서 시간까지 확정됐다. 0교시 07:40 ~ 야3 23:20, 점심·저녁·종례·간식 포함 14블록. 주말은 구성이 다르다.
 > **출결 판정(`code 113`·`122`)과 학습계획 그리드가 같은 마스터를 쓴다.** 두 번 만들지 말 것.
