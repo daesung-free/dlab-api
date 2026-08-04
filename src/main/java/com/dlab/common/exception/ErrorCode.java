@@ -25,9 +25,6 @@ public enum ErrorCode {
     SEAT_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "배정된 좌석이 없습니다."),
     MASTER_NOT_FOUND(HttpStatus.NOT_FOUND, "기초 데이터를 찾을 수 없습니다."),
     LOCKER_ALREADY_OCCUPIED(HttpStatus.CONFLICT, "이미 배정된 사물함입니다."),
-    DORM_ROOM_FULL(HttpStatus.CONFLICT, "기숙사 방 정원이 찼습니다."),
-    DORM_GENDER_MISMATCH(HttpStatus.BAD_REQUEST, "배정 가능 성별이 아닙니다."),
-    DORM_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "배정된 기숙사가 없습니다."),
     OTHER_BRANCH_ACCESS_DENIED(HttpStatus.FORBIDDEN, "다른 지점의 데이터에 접근할 수 없습니다."),
     SNAPSHOT_TARGET_NOT_EMPTY(HttpStatus.CONFLICT, "복사 대상 연도에 이미 기초 데이터가 있습니다."),
 

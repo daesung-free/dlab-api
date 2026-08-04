@@ -35,26 +35,8 @@ public final class MasterRequests {
         }
     }
 
-    public record CreateDormRoom(
-            @NotNull(message = "지점은 필수입니다.") Long academyId,
-            @NotNull(message = "연도는 필수입니다.") @Min(2000) @Max(2100) Integer year,
-            @Size(max = 30) String building,
-            @NotBlank(message = "호수는 필수입니다.") @Size(max = 20) String roomNo,
-            @NotNull(message = "정원은 필수입니다.") @Min(1) @Max(20) Integer capacity,
-            @Pattern(regexp = "[MF]", message = "성별은 M 또는 F여야 합니다.") String gender) {
-    }
 
-    /** 방 정보 수정. null은 변경하지 않는다. */
-    public record UpdateDormRoom(
-            @Size(max = 30) String building,
-            @Size(max = 20) String roomNo,
-            @Min(1) @Max(20) Integer capacity,
-            @Pattern(regexp = "[MF]", message = "성별은 M 또는 F여야 합니다.") String gender) {
-    }
 
-    public record AssignDorm(
-            @NotNull(message = "등록 건은 필수입니다.") Long enrollmentId) {
-    }
 
     public record Rename(
             @NotBlank(message = "이름은 필수입니다.") @Size(max = 50) String name) {

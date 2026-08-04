@@ -51,20 +51,6 @@ public final class MasterResponses {
         }
     }
 
-    /** 기숙사 방. 정원 대비 현재 인원을 같이 내려준다 — 배정 화면이 매번 세지 않아도 되게. */
-    public record DormRoom(Long id, String building, String roomNo, short capacity,
-                           String gender, long occupied) {
-        public static DormRoom from(com.dlab.domain.master.entity.DormRoom r, long occupied) {
-            return new DormRoom(r.getId(), r.getBuilding(), r.getRoomNo(),
-                    r.getCapacity(), r.getGender(), occupied);
-        }
-    }
 
-    public record DormOccupant(Long assignmentId, Long enrollmentId, String studentName) {
-        public static DormOccupant from(com.dlab.domain.master.entity.DormAssignment a) {
-            return new DormOccupant(a.getId(), a.getEnrollment().getId(),
-                    a.getEnrollment().getStudentName());
-        }
-    }
 
 }

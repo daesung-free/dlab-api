@@ -2,10 +2,6 @@ package com.dlab.domain;
 
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
-import com.dlab.domain.master.entity.DormRoom;
-import com.dlab.domain.master.repository.DormAssignmentRepository;
-import com.dlab.domain.master.repository.DormRoomRepository;
-import com.dlab.domain.master.service.DormService;
 import com.dlab.domain.user.entity.*;
 import com.dlab.domain.user.repository.*;
 import com.dlab.domain.user.service.ClassService;
@@ -48,14 +44,11 @@ class ConcurrencyTest {
 
     @Autowired StudentService studentService;
     @Autowired ClassService classService;
-    @Autowired DormService dormService;
     @Autowired AcademyRepository academyRepository;
     @Autowired StudentRepository studentRepository;
     @Autowired StudentEnrollmentRepository enrollmentRepository;
     @Autowired ClassMasterRepository classMasterRepository;
     @Autowired ClassAssignmentRepository classAssignmentRepository;
-    @Autowired DormRoomRepository dormRoomRepository;
-    @Autowired DormAssignmentRepository dormAssignmentRepository;
     @Autowired TransactionTemplate tx;
     @Autowired EntityManager em;
 
@@ -93,7 +86,7 @@ class ConcurrencyTest {
                             "SELECT student_id FROM student_enrollment WHERE academy_id = :id")
                     .setParameter("id", academyId).getResultList();
 
-            for (String table : List.of("dorm_assignment", "class_assignment")) {
+            for (String table : List.of("class_assignment")) {
                 em.createNativeQuery("DELETE FROM " + table + " WHERE academy_id = :id")
                         .setParameter("id", academyId).executeUpdate();
             }
@@ -104,7 +97,7 @@ class ConcurrencyTest {
                         .setParameter("ids", studentIds.stream().map(Number::longValue).toList())
                         .executeUpdate();
             }
-            for (String table : List.of("dorm_room", "class_master")) {
+            for (String table : List.of("class_master")) {
                 em.createNativeQuery("DELETE FROM " + table + " WHERE academy_id = :id")
                         .setParameter("id", academyId).executeUpdate();
             }
@@ -185,30 +178,6 @@ class ConcurrencyTest {
         assertThat(active).isEqualTo(1);
     }
 
-    @Test
-    @DisplayName("★ 정원 2명인 방에 동시에 몰려도 3명이 들어가지 않는다")
-    void dormCapacityHoldsUnderRace() throws Exception {
-        Long roomId = tx.execute(status -> {
-            Academy academy = academyRepository.findById(academyId).orElseThrow();
-            return dormRoomRepository.save(
-                    new DormRoom(academy, (short) 2026, "A동", "101", (short) 2, null)).getId();
-        });
-        List<Long> enrollmentIds = tx.execute(status ->
-                java.util.stream.IntStream.range(0, THREADS)
-                        .mapToObj(i -> createStudent("기숙사대상" + i))
-                        .toList());
-
-        AtomicInteger index = new AtomicInteger();
-        runConcurrently(THREADS, () ->
-                dormService.assign(roomId, enrollmentIds.get(index.getAndIncrement()), principal));
-
-        long occupied = tx.execute(status -> dormAssignmentRepository.countActiveByRoomId(roomId));
-
-        // ⚠️ 정원은 "세고 나서 넣는" 방식이라 DB 제약이 없다 — 초과가 나면 여기서 드러난다
-        assertThat(occupied)
-                .withFailMessage("정원 2명인 방에 %d명이 들어갔다 — 정원 검사가 레이스에 뚫린다", occupied)
-                .isLessThanOrEqualTo(2);
-    }
 
     @Transactional(propagation = Propagation.MANDATORY)
     Long createStudent(String name) {
