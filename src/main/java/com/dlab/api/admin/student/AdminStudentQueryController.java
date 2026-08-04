@@ -1,5 +1,7 @@
 package com.dlab.api.admin.student;
 
+import com.dlab.api.admin.student.dto.StudentDetailMapper;
+import com.dlab.api.admin.student.dto.StudentDetailResponse;
 import com.dlab.api.admin.student.dto.StudentSummaryResponse;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
@@ -75,16 +77,24 @@ public class AdminStudentQueryController {
                 ApiResponse.PageMeta.of(page));
     }
 
+    /**
+     * 상세. 반 배정·담임·보호자까지 한 번에 내린다.
+     *
+     * <p>연락처·생년월일은 상위 관리자가 아니면 마스킹된다. 응답의 {@code masked}로 알린다.
+     */
     @GetMapping("/{enrollmentId}")
-    public ApiResponse<StudentSummaryResponse> get(
+    public ApiResponse<StudentDetailResponse> get(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long enrollmentId) {
-        return ApiResponse.success(
-                StudentSummaryResponse.from(studentQueryService.getEnrollment(me, enrollmentId)));
+        return ApiResponse.success(StudentDetailMapper.toResponse(
+                me, studentQueryService.getDetail(me, enrollmentId)));
     }
 
     /**
      * 목록 엑셀 다운로드. <b>검색 조건에 맞는 전건</b>이 나간다 — 화면 페이지가 아니다.
+     *
+     * <p><b>연락처 마스킹이 기본 ON이다.</b> {@code unmask=true}는 상위 관리자에게만 먹는다 —
+     * 파일은 회수가 안 되므로 화면보다 기준을 높게 잡는다.
      */
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(
@@ -94,11 +104,13 @@ public class AdminStudentQueryController {
             @RequestParam(required = false) GradeType grade,
             @RequestParam(required = false) TrackType track,
             @RequestParam(required = false) List<EnrollmentStatus> statuses,
-            @RequestParam(required = false) Long classId) {
+            @RequestParam(required = false) Long classId,
+            @RequestParam(defaultValue = "false") boolean unmask) {
 
         byte[] body = studentQueryService.export(me,
                 new StudentSearchCondition(keyword, year, null, null, null, grade, track,
-                        statuses, classId, null, null, null, null, null));
+                        statuses, classId, null, null, null, null, null),
+                unmask);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)

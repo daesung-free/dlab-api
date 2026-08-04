@@ -4,10 +4,14 @@ import com.dlab.common.excel.ColumnMapping;
 import com.dlab.common.excel.ExcelExporter;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
+import com.dlab.common.privacy.Masking;
+import com.dlab.common.privacy.PersonalDataPolicy;
 import com.dlab.common.search.SearchScope;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.user.entity.StudentEnrollment;
+import com.dlab.domain.user.repository.ClassAssignmentRepository;
 import com.dlab.domain.user.repository.StudentEnrollmentRepository;
+import com.dlab.domain.user.repository.StudentGuardianLinkRepository;
 import com.dlab.domain.user.repository.StudentSearchCondition;
 import com.dlab.domain.user.repository.StudentSearchRepository;
 import java.time.format.DateTimeFormatter;
@@ -45,6 +49,8 @@ public class StudentQueryService {
 
     private final StudentSearchRepository searchRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final ClassAssignmentRepository classAssignmentRepository;
+    private final StudentGuardianLinkRepository guardianLinkRepository;
     private final ExcelExporter excelExporter;
 
     public Page<StudentEnrollment> search(AuthPrincipal principal,
@@ -70,6 +76,21 @@ public class StudentQueryService {
         return enrollment;
     }
 
+    /**
+     * 상세 조회. 등록 건 + 반 배정(담임 포함) + 보호자 연결을 한 번에 모은다.
+     *
+     * <p>지점 확인은 {@link #getEnrollment}가 이미 한다.
+     */
+    public StudentDetail getDetail(AuthPrincipal principal, Long enrollmentId) {
+        StudentEnrollment enrollment = getEnrollment(principal, enrollmentId);
+
+        return new StudentDetail(
+                enrollment,
+                classAssignmentRepository.findActiveFixedByEnrollmentId(enrollmentId).orElse(null),
+                // 보호자는 등록 건이 아니라 사람에 붙는다 — 재등록해도 연결이 유지돼야 한다
+                guardianLinkRepository.findByStudentId(enrollment.getStudent().getId()));
+    }
+
     /** 카드번호로 현재 등록 건. 키오스크 경로가 전부 이걸 쓴다. */
     public StudentEnrollment getByRfid(String rfidNo) {
         return enrollmentRepository.findCurrentByRfidNo(rfidNo)
@@ -79,20 +100,26 @@ public class StudentQueryService {
     /**
      * 목록 엑셀. <b>페이징 없이 조건에 맞는 전건</b>을 내린다 —
      * 화면 한 페이지만 받으면 사용자는 목록을 다 못 받았다는 걸 모른다.
+     *
+     * <p><b>연락처는 마스킹이 기본이다</b>(실행가이드 3.2). 파일은 한번 나가면 회수가 안 되고
+     * 메신저로 재전달되므로, 화면 조회보다 기준을 높게 잡는다. 상위 관리자가
+     * {@code unmask=true}로 명시 요청한 경우에만 원본이 나간다.
      */
-    public byte[] export(AuthPrincipal principal, StudentSearchCondition condition) {
+    public byte[] export(AuthPrincipal principal, StudentSearchCondition condition, boolean unmask) {
+        boolean raw = unmask && PersonalDataPolicy.canViewRaw(principal);
         List<StudentEnrollment> rows = searchRepository.searchAll(scopeOf(principal, condition), condition);
-        return excelExporter.export("재원생", EXPORT_MAPPING, rows, this::toRow);
+        return excelExporter.export("재원생", EXPORT_MAPPING, rows, e -> toRow(e, raw));
     }
 
-    private List<String> toRow(StudentEnrollment e) {
+    private List<String> toRow(StudentEnrollment e, boolean raw) {
+        String phone = e.getStudent().getPhone();
         return Arrays.asList(
                 e.getStudentNo(),
                 e.getStudent().getName(),
                 e.getGrade() == null ? null : e.getGrade().name(),
                 e.getTrack() == null ? null : e.getTrack().name(),
                 e.getEnrollmentStatus() == null ? null : e.getEnrollmentStatus().name(),
-                e.getStudent().getPhone(),
+                raw ? phone : Masking.phone(phone),
                 e.getStudent().getSchoolName(),
                 e.getAdmissionDate() == null ? null : e.getAdmissionDate().format(DATE),
                 e.getRfidNo());

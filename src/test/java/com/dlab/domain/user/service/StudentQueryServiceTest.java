@@ -3,6 +3,8 @@ package com.dlab.domain.user.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.dlab.api.admin.student.dto.StudentDetailMapper;
+import com.dlab.api.admin.student.dto.StudentDetailResponse;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
@@ -10,11 +12,14 @@ import com.dlab.common.security.Role;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.EnrollmentStatus;
 import com.dlab.domain.user.entity.GradeType;
+import com.dlab.domain.user.entity.ParentGuardian;
 import com.dlab.domain.user.entity.Student;
 import com.dlab.domain.user.entity.StudentEnrollment;
+import com.dlab.domain.user.entity.StudentGuardianLink;
 import com.dlab.domain.user.entity.TrackType;
 import com.dlab.domain.user.repository.StudentSearchCondition;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,6 +64,12 @@ class StudentQueryServiceTest {
 
         minji = persistStudent(bundang, "DL-2026-0419", "김민지", "010-1111-2222",
                 "2026-0001", "ABC001", GradeType.HIGH3, TrackType.SCIENCE);
+        ReflectionTestUtils.setField(minji.getStudent(), "birthDate", LocalDate.of(2007, 3, 14));
+
+        ParentGuardian guardian = new ParentGuardian("김보호", "010-9999-8888", "F");
+        em.persist(guardian);
+        em.persist(new StudentGuardianLink(minji.getStudent(), guardian, (short) 1));
+
         persistStudent(bundang, "DL-2026-0420", "박서준", "010-3333-4444",
                 "2026-0002", null, GradeType.N_SU, TrackType.HUMANITIES);
         persistStudent(ilsan, "DL-2026-0500", "최유나", "010-5555-6666",
@@ -197,17 +208,110 @@ class StudentQueryServiceTest {
     @Test
     @DisplayName("★ Export는 검색 조건에 맞는 전건 — 화면 페이지가 아니다")
     void exportContainsAllMatchingRows() {
-        byte[] file = studentQueryService.export(bundangAdmin, StudentSearchCondition.empty());
+        byte[] file = studentQueryService.export(bundangAdmin, StudentSearchCondition.empty(), false);
 
         assertThat(file).isNotEmpty();
         // 헤더 1행 + 분당 학생 2행. 일산 학생은 스코프에서 빠진다.
         assertThat(rowCountOf(file)).isEqualTo(3);
     }
 
+    @Test
+    @DisplayName("★ Export 연락처는 마스킹이 기본 — 파일은 한번 나가면 회수가 안 된다")
+    void exportMasksPhoneByDefault() {
+        String masked = textOf(studentQueryService.export(
+                bundangAdmin, StudentSearchCondition.empty(), false));
+
+        assertThat(masked).contains("010-****-2222").doesNotContain("010-1111-2222");
+    }
+
+    @Test
+    @DisplayName("★ unmask는 상위 관리자에게만 먹는다")
+    void unmaskRequiresElevatedRole() {
+        AuthPrincipal teacher = AuthPrincipal.of(4L, "TEACHER", bundang.getId(),
+                List.of(Role.TEACHER), false);
+
+        assertThat(textOf(studentQueryService.export(
+                bundangAdmin, StudentSearchCondition.empty(), true)))
+                .contains("010-1111-2222");
+
+        assertThat(textOf(studentQueryService.export(
+                teacher, StudentSearchCondition.empty(), true)))
+                .contains("010-****-2222")
+                .doesNotContain("010-1111-2222");
+    }
+
+    @Test
+    @DisplayName("상세는 등록 건·보호자를 한 번에 준다 — 반 미배정이면 null")
+    void detailIncludesGuardiansAndNullClassWhenUnassigned() {
+        StudentDetail detail = studentQueryService.getDetail(bundangAdmin, minji.getId());
+
+        assertThat(detail.enrollment().getStudentNo()).isEqualTo("2026-0001");
+        assertThat(detail.classAssignment()).isNull();
+        assertThat(detail.guardianLinks())
+                .extracting(l -> l.getGuardian().getName())
+                .containsExactly("김보호");
+    }
+
+    @Test
+    @DisplayName("★ 상세도 지점을 확인한다")
+    void detailChecksAcademy() {
+        AuthPrincipal ilsanAdmin = AuthPrincipal.of(3L, "EMPLOYEE", ilsan.getId(),
+                List.of(Role.BRANCH_ADMIN), false);
+
+        assertThatThrownBy(() -> studentQueryService.getDetail(ilsanAdmin, minji.getId()))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("★ 상세 응답은 열람 권한에 따라 마스킹되고, masked 플래그로 그 사실을 알린다")
+    void detailMasksForNonElevatedViewer() {
+        StudentDetail detail = studentQueryService.getDetail(bundangAdmin, minji.getId());
+        AuthPrincipal teacher = AuthPrincipal.of(4L, "TEACHER", bundang.getId(),
+                List.of(Role.TEACHER), false);
+
+        var asAdmin = StudentDetailMapper.toResponse(bundangAdmin, detail);
+        assertThat(asAdmin.masked()).isFalse();
+        assertThat(asAdmin.phone()).isEqualTo("010-1111-2222");
+        assertThat(asAdmin.birthDate()).isEqualTo("2007-03-14");
+        assertThat(asAdmin.guardians()).first()
+                .extracting(StudentDetailResponse.GuardianInfo::phone)
+                .isEqualTo("010-9999-8888");
+
+        var asTeacher = StudentDetailMapper.toResponse(teacher, detail);
+        assertThat(asTeacher.masked()).isTrue();
+        assertThat(asTeacher.phone()).isEqualTo("010-****-2222");
+        assertThat(asTeacher.birthDate()).isEqualTo("2007-**-**");
+        assertThat(asTeacher.guardians()).first()
+                .extracting(StudentDetailResponse.GuardianInfo::phone)
+                .isEqualTo("010-****-8888");
+    }
+
+    @Test
+    @DisplayName("★ 카드번호는 상세에서도 안 내린다 — 발급 여부만")
+    void detailNeverExposesRfid() {
+        var response = StudentDetailMapper.toResponse(
+                bundangAdmin, studentQueryService.getDetail(bundangAdmin, minji.getId()));
+
+        assertThat(response.rfidIssued()).isTrue();
+        assertThat(response.toString()).doesNotContain("ABC001");
+    }
+
     private int rowCountOf(byte[] xlsx) {
         try (var wb = org.apache.poi.ss.usermodel.WorkbookFactory.create(
                 new java.io.ByteArrayInputStream(xlsx))) {
             return wb.getSheetAt(0).getLastRowNum() + 1;
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** 엑셀 전 셀을 한 문자열로. 마스킹 여부만 보면 되므로 셀 좌표까지 따지지 않는다. */
+    private String textOf(byte[] xlsx) {
+        try (var wb = org.apache.poi.ss.usermodel.WorkbookFactory.create(
+                new java.io.ByteArrayInputStream(xlsx))) {
+            StringBuilder sb = new StringBuilder();
+            wb.getSheetAt(0).forEach(row -> row.forEach(cell -> sb.append(cell.toString()).append('|')));
+            return sb.toString();
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
