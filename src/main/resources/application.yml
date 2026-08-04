@@ -1,3 +1,28 @@
 spring:
   application:
     name: dlab-api
+
+logging:
+  pattern:
+    # traceId를 모든 로그 줄에 붙인다. 없으면 동시 요청의 로그가 뒤섞여 추적이 불가능하다.
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{traceId:-        }] %logger{36} - %msg%n"
+
+springdoc:
+  # 이 레포가 스펙의 단일 진실 공급원이다(CLAUDE.md §6-4).
+  # dlab-admin-web·dlab-app이 여기서 타입을 생성한다.
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    # 그룹(app/admin) 순서를 알파벳이 아니라 선언 순서로
+    groups-order: asc
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+jwt:
+  # 운영 값은 환경변수로 주입한다. 커밋 금지(CLAUDE.md §8).
+  # HS256이 최소 256비트를 요구하므로 32바이트 이상이어야 하고, 짧으면 기동 시점에 막힌다.
+  secret: ${JWT_SECRET:local-only-dev-secret-do-not-use-in-production-32b}
+  # 앱 요구사항 A-1 기준
+  access-ttl: PT1H
+  refresh-ttl: P7D
