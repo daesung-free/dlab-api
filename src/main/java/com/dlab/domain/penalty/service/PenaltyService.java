@@ -60,7 +60,7 @@ public class PenaltyService {
                         null))
                 .toList();
 
-        granted.forEach(p -> p.recordCreatedBy(principal.accountId()));
+        // created_by는 SecurityAuditorAware가 채운다 — 여기서 설정하지 않는다.
         return pointRepository.saveAll(granted);
     }
 

@@ -297,6 +297,9 @@ com.dlab
                  SearchPredicates.eq(enrollment.grade, grade))
       ```
     - `year`는 전 테이블이 `SMALLINT`라 `Short`다. `academy`는 연관관계라 경로가 `엔티티.academy.id`.
+- **★ `created_by`를 직접 설정하지 말 것.** `SecurityAuditorAware`가 저장 시점에 자동으로 채운다. 서비스마다 수동으로 넣으면 반드시 빠뜨리고, **감사로그는 나중에 붙여도 그 이전 기간을 복구할 수 없다** — "누가 이 학생 벌점을 지웠나"에 답할 수 없게 된다(보안심사 직결).
+    - 인증 주체가 없는 경로(**배치·스케줄러·DSA 호환 구획**)는 **시스템 계정 `0`**으로 기록된다. `null`로 두면 "배치가 했다"와 "그냥 빠뜨렸다"가 구분되지 않는다. `account.id`는 `BIGSERIAL`이라 1부터 시작해 `0`과 겹치지 않는다.
+    - `created_by`는 `updatable = false`다. 수정자를 남겨야 하면 `@LastModifiedBy`를 추가해야 하는데 **지금은 스키마에 컬럼이 없다**.
 - **★ 상벌점 자동부여는 `PenaltyRuleEngine`을 쓴다. 규칙을 코드에 박지 말 것.**
     - 트리거→점수 매핑(I-5)이 미확정이라 **규칙을 `penalty_rule` 테이블 데이터로** 둔다. 확정되면 행만 채우면 되고, 규칙이 없으면 아무 일도 안 일어난다.
     - **`penalty_rule.active`는 기본 `false`다.** 행을 넣어도 명시적으로 켜기 전엔 안 돈다 — 미검증 규칙이 실수로 도는 걸 막는다.
