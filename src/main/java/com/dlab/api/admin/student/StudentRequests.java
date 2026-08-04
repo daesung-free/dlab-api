@@ -1,8 +1,11 @@
 package com.dlab.api.admin.student;
 
+import com.dlab.domain.user.entity.EnrollmentStatus;
 import com.dlab.domain.user.entity.GradeType;
 import com.dlab.domain.user.entity.TrackType;
 import jakarta.validation.constraints.*;
+
+import java.time.LocalDate;
 
 public final class StudentRequests {
 
@@ -17,6 +20,23 @@ public final class StudentRequests {
             @Size(max = 20) String phone,
             @NotNull(message = "학년 구분은 필수입니다.") GradeType grade,
             TrackType track) {
+    }
+
+    /**
+     * 정보 수정. <b>보내지 않은(= {@code null}) 필드는 변경하지 않는다.</b>
+     *
+     * <p>학번은 여기 없다 — 서버가 채번하고 유니크 제약으로 지키는 값이라 임의 수정을 열면
+     * 중복·건너뜀이 생긴다.
+     */
+    public record Update(
+            @Size(max = 20) String name,
+            @Size(max = 20) String phone,
+            LocalDate birthDate,
+            @Size(max = 1) String gender,
+            @Size(max = 64) String schoolName,
+            GradeType grade,
+            TrackType track,
+            EnrollmentStatus status) {
     }
 
     /** 재등록 — 같은 사람에 등록 건만 추가한다. */

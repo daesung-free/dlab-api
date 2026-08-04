@@ -190,4 +190,49 @@ class StudentAdmissionFlowTest {
                         .param("year", "2027").param("keyword", "이월"))
                 .andExpect(jsonPath("$.data.content[0].name").value("이월학생"));
     }
+
+    @Test
+    @DisplayName("★ 수정에서 보내지 않은 필드는 그대로 둔다 — 부분 수정이라 빈 값으로 덮으면 안 된다")
+    void patchKeepsOmittedFields() throws Exception {
+        long enrollmentId = objectMapper.readTree(admit("수정대상"))
+                .path("data").path("enrollmentId").asLong();
+        em.flush();
+
+        // 학년만 바꾼다. 이름·연락처는 보내지 않는다.
+        mvc.perform(patch("/api/v1/admin/students/{id}", enrollmentId)
+                        .header("Authorization", token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"grade":"HIGH3"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.grade").value("HIGH3"))
+                .andExpect(jsonPath("$.data.name").value("수정대상"));
+        em.flush();
+        em.clear();
+
+        String phone = em.createQuery("""
+                SELECT e.student.phone FROM StudentEnrollment e WHERE e.id = :id
+                """, String.class).setParameter("id", enrollmentId).getSingleResult();
+        assertThat(phone).isEqualTo("010-0000-0000");
+    }
+
+    @Test
+    @DisplayName("다른 지점 학생은 수정할 수 없다")
+    void cannotPatchOtherBranchStudent() throws Exception {
+        Academy other = new Academy("OT99", "다른지점", java.time.LocalTime.of(9, 0));
+        em.persist(other);
+        Student student = new Student("OTHER001", "타지점생", "010-0000-0000");
+        em.persist(student);
+        StudentEnrollment enrollment =
+                new StudentEnrollment(student, other, (short) 2026, "2026-9999", null, GradeType.N_SU);
+        em.persist(enrollment);
+        em.flush();
+
+        mvc.perform(patch("/api/v1/admin/students/{id}", enrollment.getId())
+                        .header("Authorization", token())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"grade":"HIGH3"}"""))
+                .andExpect(status().isForbidden());
+    }
 }

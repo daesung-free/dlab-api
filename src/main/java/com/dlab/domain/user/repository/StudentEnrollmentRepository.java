@@ -11,6 +11,15 @@ import java.util.Optional;
 public interface StudentEnrollmentRepository extends JpaRepository<StudentEnrollment, Long> {
 
     /**
+     * 그 해 그 지점의 등록 건. 엑셀 일괄 업로드가 "이미 있는 학생인가"를 판정할 때 쓴다.
+     *
+     * <p>{@code is_current}로 거르지 않는다 — 같은 연도·지점에는 등록 건이 하나뿐이고,
+     * 지난 기수 행까지 걸러버리면 이번 기수 행을 못 찾아 같은 사람을 또 만들게 된다.
+     */
+    Optional<StudentEnrollment> findByStudentIdAndAcademyIdAndYearAndDeletedFalse(
+            Long studentId, Long academyId, short year);
+
+    /**
      * 카드번호로 현재 유효한 등록 건 찾기.
      * rfid_no는 UNIQUE가 아니므로(이력) is_current 필터가 필수다 —
      * 빠뜨리면 퇴원생 카드로 태깅이 통과한다.

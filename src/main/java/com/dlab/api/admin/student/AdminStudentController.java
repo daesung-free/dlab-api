@@ -5,6 +5,7 @@ import com.dlab.common.search.SearchScope;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.user.entity.*;
+import com.dlab.domain.user.service.StudentImportService;
 import com.dlab.domain.user.service.StudentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,9 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 /**
  * 관리자 웹 — 학생 검색·신규 접수.
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminStudentController {
 
     private final StudentService studentService;
+    private final StudentImportService studentImportService;
 
     @GetMapping
     public ApiResponse<Page<StudentResponse>> search(
@@ -57,6 +62,46 @@ public class AdminStudentController {
         return ApiResponse.success(StudentResponse.from(studentService.admit(
                 request.academyId(), request.year().shortValue(), request.name(),
                 request.phone(), request.grade(), request.track(), me)));
+    }
+
+    /** 학생 정보 수정. 보내지 않은 필드는 그대로 둔다 — 부분 수정이라 {@code PATCH}다. */
+    @PatchMapping("/{enrollmentId}")
+    public ApiResponse<StudentResponse> update(@CurrentAccount AuthPrincipal me,
+                                               @PathVariable Long enrollmentId,
+                                               @Valid @RequestBody StudentRequests.Update request) {
+        return ApiResponse.success(StudentResponse.from(studentService.update(
+                enrollmentId, request.name(), request.phone(), request.birthDate(),
+                request.gender(), request.schoolName(), request.grade(), request.track(),
+                request.status(), me)));
+    }
+
+    // ── 엑셀 일괄 업로드 ──
+
+    /**
+     * 미리보기 — <b>아무것도 저장하지 않는다.</b> "총 N행 중 M행 정상, K행 오류"를 먼저 보여준다.
+     *
+     * <p>결과를 서버에 들고 있지 않으므로 반영할 때 <b>같은 파일을 다시 올려야 한다.</b>
+     * 세션에 보관하면 다중 인스턴스에서 어느 서버가 받을지 모른다.
+     */
+    @PostMapping("/import/preview")
+    public ApiResponse<ImportResponse> previewImport(@CurrentAccount AuthPrincipal me,
+                                                     @RequestParam Long academyId,
+                                                     @RequestParam Integer year,
+                                                     @RequestPart("file") MultipartFile file)
+            throws IOException {
+        return ApiResponse.success(ImportResponse.from(studentImportService.preview(
+                file.getInputStream(), academyId, year.shortValue(), me)));
+    }
+
+    /** 반영 — <b>오류행이 있어도 정상행은 넣는다.</b> 100건 중 3건 틀렸다고 전부 되돌리면 실무가 안 돈다. */
+    @PostMapping("/import")
+    public ApiResponse<ImportResponse> importStudents(@CurrentAccount AuthPrincipal me,
+                                                      @RequestParam Long academyId,
+                                                      @RequestParam Integer year,
+                                                      @RequestPart("file") MultipartFile file)
+            throws IOException {
+        return ApiResponse.success(ImportResponse.from(studentImportService.importStudents(
+                file.getInputStream(), academyId, year.shortValue(), me)));
     }
 
     /** 재등록 — 같은 사람에 등록 건만 추가한다(상담 이력이 이어져야 하므로). */

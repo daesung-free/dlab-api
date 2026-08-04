@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
+import java.time.LocalDate;
 
 /**
  * 학생 검색 · 신규 접수.
@@ -72,6 +73,37 @@ public class StudentService {
 
         Student student = studentRepository.save(new Student(generateUniqueCode(), name, phone));
         return enroll(academy, year, student, grade, track);
+    }
+
+    /**
+     * 엑셀 일괄 업로드용 신규 등록.
+     *
+     * <p>{@link #admit}와 달리 권한 검사·지점 조회를 하지 않는다 — 호출자가 파일 단위로
+     * 이미 한 번 했고, 행마다 다시 하면 수백 번 반복된다. 대신 <b>이 메서드를 컨트롤러에서
+     * 직접 부르지 말 것</b>: 권한 검사가 없다.
+     */
+    @Transactional
+    public StudentEnrollment admitParsed(Academy academy, short year, String name, String phone,
+                                         LocalDate birthDate, String gender, String schoolName,
+                                         GradeType grade, TrackType track) {
+        Student student = studentRepository.save(new Student(generateUniqueCode(), name, phone));
+        student.updateProfile(null, null, birthDate, gender, schoolName);
+        return enroll(academy, year, student, grade, track);
+    }
+
+    /** 학생 정보 수정. {@code null} 인자는 변경하지 않는다. */
+    @Transactional
+    public StudentEnrollment update(Long enrollmentId, String name, String phone, LocalDate birthDate,
+                                    String gender, String schoolName, GradeType grade,
+                                    TrackType track, EnrollmentStatus status, AuthPrincipal principal) {
+        StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+        if (!principal.canAccessAcademy(enrollment.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        enrollment.getStudent().updateProfile(name, phone, birthDate, gender, schoolName);
+        enrollment.updateEnrollment(grade, track, status);
+        return enrollment;
     }
 
     /**
