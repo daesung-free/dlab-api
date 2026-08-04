@@ -110,4 +110,31 @@ public class Account extends BaseEntity {
     public void approve() {
         this.status = AccountStatus.ACTIVE;
     }
+
+    /** 휴원 등 일시 정지. 복귀 시 {@link #reactivate()}로 되돌린다. */
+    public void suspend() {
+        if (this.status == AccountStatus.PENDING) {
+            return;
+        }
+        this.status = AccountStatus.SUSPENDED;
+    }
+
+    /** 퇴원·제적·수료. 되돌리려면 다시 승인 절차를 탄다. */
+    public void withdraw() {
+        this.status = AccountStatus.WITHDRAWN;
+    }
+
+    /**
+     * 재원 복귀.
+     *
+     * <p><b>{@code PENDING}은 건드리지 않는다.</b> 가입 승인 전인 계정이 여기서 활성화되면
+     * 학생 승인제(승인 전 앱 접근 완전 차단, CLAUDE.md §3)가 그대로 뚫린다.
+     * 재원 상태와 가입 승인은 별개 축이다.
+     */
+    public void reactivate() {
+        if (this.status == AccountStatus.PENDING) {
+            return;
+        }
+        this.status = AccountStatus.ACTIVE;
+    }
 }

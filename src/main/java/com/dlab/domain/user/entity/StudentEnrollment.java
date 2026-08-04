@@ -95,4 +95,32 @@ public class StudentEnrollment extends BaseEntity {
     public void expire() {
         this.current = false;
     }
+
+    /**
+     * 재원 상태 전이 (P1-04). 전이 가능 여부는 {@link EnrollmentStatusTransition}이 판정하고,
+     * 여기서는 상태에 딸린 필드를 함께 맞춘다.
+     *
+     * <p><b>{@code current}를 같이 뒤집는 게 이 메서드의 핵심이다.</b> 종료 상태가 되면
+     * {@code current = false}가 돼 카드 조회({@code findCurrentByRfidNo})에서 빠진다 —
+     * 이걸 빠뜨리면 퇴원생 카드로 출결 태깅이 그대로 통과한다.
+     *
+     * <p><b>휴원은 {@code current}를 건드리지 않는다.</b> 복귀 예정이라 등록 건 자체는
+     * 유효하다. 다만 그래서 휴원생 카드는 여전히 태깅을 통과한다 —
+     * 출결 경로에서 상태를 따로 확인해야 한다.
+     *
+     * @param effectiveDate 효력 발생일. 처리일과 다를 수 있다(소급 처리)
+     */
+    public void changeStatus(EnrollmentStatus to, LocalDate effectiveDate) {
+        this.enrollmentStatus = to;
+
+        if (to.isTerminal()) {
+            this.current = false;
+            this.withdrawalDate = effectiveDate;
+        } else {
+            // 착오 정정으로 되돌아온 경우. 퇴원일이 남아 있으면 재원인데 퇴원일이 있는
+            // 모순된 행이 되고, 이후 통계가 이 학생을 퇴원으로 집계한다.
+            this.current = true;
+            this.withdrawalDate = null;
+        }
+    }
 }
