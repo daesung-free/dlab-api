@@ -26,3 +26,23 @@ jwt:
   # 앱 요구사항 A-1 기준
   access-ttl: PT1H
   refresh-ttl: P7D
+
+# ─────────────────────────────────────────────────────────────
+# 운영 감시
+#
+# ★ 키오스크 구획은 우리 장애가 그쪽 화면에서 안 보인다(폴백이 가린다, CLAUDE.md §3).
+#   /actuator/health/kiosk 를 외부 모니터가 주기적으로 확인해야 한다.
+#
+# ⚠️ 컷오버 전에 접근 제한을 걸 것. 지금은 기본 체인이 permitAll이라 누구나 볼 수 있다.
+#   상세(show-details)에 에러 경로가 드러나므로 운영에서는 VPC 내부·보안그룹으로 막거나
+#   actuator 전용 인증을 붙여야 한다.
+# ─────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        # health만 연다. env·beans 등은 내부 구조가 그대로 드러난다
+        include: health
+  endpoint:
+    health:
+      show-details: always
