@@ -5,6 +5,7 @@ import com.dlab.api.kiosk.DsaCode;
 import com.dlab.common.privacy.Masking;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
+import com.dlab.domain.attendance.repository.AttendanceDailyStatusRepository;
 import com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository;
 import com.dlab.domain.attendance.service.StudyTimeCalculator;
 import com.dlab.domain.period.entity.DayType;
@@ -43,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class KioskStatsQueryService {
 
     private final AttendanceTaggingLogRepository taggingLogRepository;
+    private final AttendanceDailyStatusRepository dailyStatusRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final PeriodMasterRepository periodMasterRepository;
     private final StudyTimeCalculator studyTimeCalculator;
@@ -72,10 +74,12 @@ public class KioskStatsQueryService {
     /**
      * 3.21 {@code getAttendState} — 기간 내 조퇴·결석·지각 수(지점 전체).
      *
-     * <p><b>결석은 여기서 셀 수 없다.</b> "안 찍은 것"이라 원장에 남지 않는다 —
-     * 일자 집계 배치가 {@code attendance_daily_status}를 확정해야 나오는 값이다.
-     * 배치가 없는 지금은 <b>0으로 나간다</b>. 0이 "결석이 없다"로 읽히므로
-     * 배치를 붙이기 전에는 이 필드를 믿으면 안 된다.
+     * <p><b>결석만 원장이 아니라 일자 집계에서 온다.</b> "안 찍은 것"이라 원장에 남을 수
+     * 없어서, {@link com.dlab.domain.attendance.service.DailyAttendanceConfirmService}가
+     * 확정한 {@code attendance_daily_status}를 센다.
+     *
+     * <p>아직 확정되지 않은 날(오늘 등)은 <b>0으로 나간다</b> — 배치가 새벽 2시에
+     * 전날분을 확정하기 때문이다. 당일 결석을 실시간으로 아는 방법은 없다.
      */
     public AttendCounts attendCounts(Long academyId, String startDate, String endDate) {
         LocalDate today = LocalDate.now(clock);
@@ -87,7 +91,7 @@ public class KioskStatsQueryService {
 
         return new AttendCounts(
                 counts.getOrDefault(AttendanceEventType.EARLY_LEAVE, 0L),
-                0L,   // 결석 — 배치 대기
+                dailyStatusRepository.countAbsenceByAcademy(academyId, from, to),
                 counts.getOrDefault(AttendanceEventType.LATE, 0L));
     }
 
@@ -109,7 +113,7 @@ public class KioskStatsQueryService {
 
         return new AttendCounts(
                 counts.getOrDefault(AttendanceEventType.EARLY_LEAVE, 0L),
-                0L,   // 결석 — 배치 대기
+                dailyStatusRepository.countAbsenceByEnrollment(enrollment.getId(), from, to),
                 outing);
     }
 
