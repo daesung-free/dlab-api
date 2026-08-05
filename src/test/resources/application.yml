@@ -5,6 +5,14 @@
 #
 # 최초 1회 테스트 DB 생성:
 #   docker exec dlab-postgres-local psql -U dlab -d postgres -c "CREATE DATABASE dlab_test OWNER dlab;"
+#
+# ★ 5432·6379를 다른 프로젝트가 쓰고 있으면 임시 컨테이너를 다른 포트에 띄우고 환경변수로 덮어쓴다.
+#   (@SpringBootTest 통합 테스트는 DB가 없으면 컨텍스트 로드 단계에서 한꺼번에 실패한다)
+#     docker run -d --name dlab-it-db -e POSTGRES_USER=dlab -e POSTGRES_PASSWORD=dlab_local_password \
+#       -e POSTGRES_DB=dlab_test -p 55434:5432 postgres:16
+#     docker run -d --name dlab-it-redis -p 56380:6379 redis:7
+#     SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:55434/dlab_test \
+#     SPRING_DATA_REDIS_PORT=56380 ./gradlew test --no-daemon
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/dlab_test
@@ -21,6 +29,9 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # 타임스탬프 버전이라 늦게 푸시된 과거 시각 마이그레이션이 뒤늦게 올 수 있다.
+    # 개발 환경만 허용한다 — 운영은 순차 배포라 발생하지 않는다.
+    out-of-order: true
     # 테스트는 매번 깨끗한 스키마에서 시작한다
     clean-disabled: false
 

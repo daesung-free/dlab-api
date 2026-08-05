@@ -34,4 +34,12 @@ public interface SeatAssignmentRepository extends JpaRepository<SeatAssignment, 
             WHERE s.studyArea.id = :studyAreaId AND a.releasedAt IS NULL AND a.deleted = false
             """)
     List<SeatAssignment> findActiveByStudyAreaId(Long studyAreaId);
+
+    /** 지점의 현재 배정 전체. 키오스크 {@code getStdInfoList}가 학생별 좌석코드를 붙이는 데 쓴다. */
+    @Query("""
+            SELECT a FROM SeatAssignment a
+            JOIN FETCH a.seat
+            WHERE a.academy.id = :academyId AND a.releasedAt IS NULL AND a.deleted = false
+            """)
+    List<SeatAssignment> findActiveByAcademyId(Long academyId);
 }

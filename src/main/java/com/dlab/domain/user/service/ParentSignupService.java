@@ -82,15 +82,18 @@ public class ParentSignupService {
         }
 
         Student child = findStudentByCode(studentUniqueCode);
-        // 학생당 학부모 최대 1인(I-12 0803). DB 유니크 제약이 최후 방어선이지만,
+        // 승인 주체는 학생당 1명(I-12 0803). 부분 유니크 인덱스가 최후 방어선이지만,
         // 먼저 걸러야 "이미 연결됨"이라는 제대로 된 안내가 나간다.
-        if (linkRepository.existsByStudentId(child.getId())) {
+        // ★ 연락처 보관용 보호자(approver=false)는 여러 명이어도 막지 않는다 —
+        //   DSA getParentHpList가 부·모를 목록으로 내려야 하기 때문이다.
+        if (linkRepository.existsByStudentIdAndApproverTrue(child.getId())) {
             throw new BusinessException(ErrorCode.GUARDIAN_ALREADY_LINKED);
         }
 
         // 이름은 사용자 입력이다 — 휴대폰 인증은 실명을 알려주지 않는다(VerifiedIdentity 참고)
         ParentGuardian guardian = guardianRepository.save(new ParentGuardian(name, phone, null));
-        linkRepository.save(new StudentGuardianLink(child, guardian, (short) 1));
+        // 앱 가입으로 만들어진 연결이므로 승인 주체다
+        linkRepository.save(new StudentGuardianLink(child, guardian, (short) 1, true));
 
         // 로그인 아이디는 전화번호다(account.login_id 규약). 학부모는 승인 없이 즉시 ACTIVE.
         Account account = accountRepository.save(
@@ -115,11 +118,11 @@ public class ParentSignupService {
         if (linkRepository.existsByStudentIdAndGuardianId(child.getId(), guardianId)) {
             throw new BusinessException(ErrorCode.CHILD_ALREADY_LINKED);
         }
-        if (linkRepository.existsByStudentId(child.getId())) {
+        if (linkRepository.existsByStudentIdAndApproverTrue(child.getId())) {
             throw new BusinessException(ErrorCode.GUARDIAN_ALREADY_LINKED);
         }
 
-        linkRepository.save(new StudentGuardianLink(child, guardian, (short) 1));
+        linkRepository.save(new StudentGuardianLink(child, guardian, (short) 1, true));
         return child;
     }
 

@@ -76,7 +76,7 @@ class ParentSignupFlowTest {
                 .setParameter("code", linkedChildCode).getSingleResult();
         ParentGuardian existing = new ParentGuardian("기존학부모", "010-9999-9999", null);
         em.persist(existing);
-        em.persist(new StudentGuardianLink(linked, existing, (short) 1));
+        em.persist(new StudentGuardianLink(linked, existing, (short) 1, true));
 
         em.flush();
     }
@@ -202,11 +202,39 @@ class ParentSignupFlowTest {
     }
 
     @Test
-    @DisplayName("★ 이미 학부모가 있는 학생에는 연결할 수 없다 — 학부모 최대 1인(I-12 0803)")
-    void studentCanHaveOnlyOneGuardian() throws Exception {
+    @DisplayName("★ 이미 승인 주체가 있는 학생에는 연결할 수 없다 — 학부모 최대 1인(I-12 0803)")
+    void studentCanHaveOnlyOneApprover() throws Exception {
         signup(verifyPhone(PARENT_PHONE), linkedChildCode)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("GUARDIAN_ALREADY_LINKED"));
+    }
+
+    @Test
+    @DisplayName("★ 연락처 보관용 보호자는 여러 명이어도 가입을 막지 않는다 — DSA가 부·모를 목록으로 내린다")
+    void contactOnlyGuardiansDoNotBlockSignup() throws Exception {
+        Student child = em.createQuery(
+                        "SELECT s FROM Student s WHERE s.uniqueCode = :code", Student.class)
+                .setParameter("code", firstChildCode).getSingleResult();
+
+        // 레거시 이관 등으로 들어온 연락처 전용 보호자 2명(승인 주체 아님)
+        ParentGuardian father = new ParentGuardian("아버지", "010-7777-0001", "M");
+        ParentGuardian mother = new ParentGuardian("어머니", "010-7777-0002", "F");
+        em.persist(father);
+        em.persist(mother);
+        em.persist(new StudentGuardianLink(child, father, (short) 1, false));
+        em.persist(new StudentGuardianLink(child, mother, (short) 2, false));
+        em.flush();
+
+        // 승인 주체가 없으므로 앱 가입은 정상적으로 된다
+        signup(verifyPhone(PARENT_PHONE), firstChildCode).andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        // 그리고 연락처는 셋 다 남는다 — 키오스크 getParentHpList가 이걸 목록으로 내린다
+        Long links = em.createQuery("""
+                SELECT COUNT(l) FROM StudentGuardianLink l WHERE l.student.id = :id
+                """, Long.class).setParameter("id", child.getId()).getSingleResult();
+        assertThat(links).isEqualTo(3);
     }
 
     // ─────────────────────────────────────────────────────────────

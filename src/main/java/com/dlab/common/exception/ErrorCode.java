@@ -53,6 +53,7 @@ public enum ErrorCode {
     PARENT_NOT_FOUND(HttpStatus.NOT_FOUND, "학부모를 찾을 수 없습니다."),
     EMPLOYEE_NOT_FOUND(HttpStatus.NOT_FOUND, "직원을 찾을 수 없습니다."),
     ENROLLMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "등록 정보를 찾을 수 없습니다."),
+    INVALID_ENROLLMENT_STATUS_TRANSITION(HttpStatus.BAD_REQUEST, "허용되지 않는 재원 상태 변경입니다."),
     DUPLICATE_SIGNUP(HttpStatus.CONFLICT, "이미 가입 신청된 번호입니다."),
     STUDENT_NOT_APPROVED(HttpStatus.FORBIDDEN, "가입 승인 대기 중입니다."),
 

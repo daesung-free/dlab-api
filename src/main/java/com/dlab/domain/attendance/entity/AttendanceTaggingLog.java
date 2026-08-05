@@ -71,4 +71,15 @@ public class AttendanceTaggingLog extends BaseEntity {
         this.recordedAt = recordedAt;
         this.attendanceDate = attendanceDate;
     }
+
+    /**
+     * 이벤트 종류 정정. {@code setReAttendProc}(조퇴 해제)만 쓴다.
+     *
+     * <p><b>행을 지우지 않고 고친다.</b> 지우면 "조퇴했다가 돌아왔다"는 사실이 사라져
+     * 정정 이력을 추적할 수 없다. 일반 태깅 경로에서는 절대 호출하지 말 것 —
+     * 원장은 append-only여야 출결 분쟁에서 근거가 된다.
+     */
+    public void correctEventType(AttendanceEventType corrected) {
+        this.eventType = corrected;
+    }
 }

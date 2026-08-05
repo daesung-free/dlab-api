@@ -38,4 +38,18 @@ public class StudyArea extends BaseEntity {
 
     @Column(nullable = false)
     private boolean active = true;
+
+    /**
+     * 구역 생성.
+     *
+     * <p>{@code areaCd}는 <b>DSA 체계를 그대로 쓴다</b> — 키오스크가 이 코드로 좌석을
+     * 조회하므로 우리 내부 id로 바꾸면 안 된다(docs/dsa-compat.md 3.7·3.8).
+     */
+    public StudyArea(Academy academy, String areaCd, String areaNm, short sortOrder) {
+        this.academy = academy;
+        this.areaCd = areaCd;
+        this.areaNm = areaNm;
+        this.sortOrder = sortOrder;
+        this.active = true;
+    }
 }

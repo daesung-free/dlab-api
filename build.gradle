@@ -29,6 +29,9 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    // 키오스크 구획 감시용. 우리 장애가 키오스크 화면에서는 안 보이므로(폴백이 가린다)
+    // 외부 모니터가 직접 찔러볼 창구가 필요하다 — CLAUDE.md §3
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     // JWT — jjwt는 api/impl/jackson 3개를 함께 넣어야 동작한다
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'

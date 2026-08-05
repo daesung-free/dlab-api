@@ -41,4 +41,21 @@ public class SeatMaster extends BaseEntity {
     /** 고장·공사 등으로 쓸 수 없는 좌석. 배정 대상에서 제외한다. */
     @Column(nullable = false)
     private boolean usable = true;
+
+    /**
+     * 좌석 생성.
+     *
+     * <p>좌표는 <b>키오스크가 좌석배치도를 그리는 데 쓴다</b> — 없으면 화면이 빈다.
+     * {@code usable}은 DSA {@code seat_gn}에 대응한다(사용 {@code Y} / 미사용 {@code N}).
+     */
+    public SeatMaster(Academy academy, StudyArea studyArea, String seatCd, String seatNm,
+                      int xPos, int yPos) {
+        this.academy = academy;
+        this.studyArea = studyArea;
+        this.seatCd = seatCd;
+        this.seatNm = seatNm;
+        this.xPos = xPos;
+        this.yPos = yPos;
+        this.usable = true;
+    }
 }

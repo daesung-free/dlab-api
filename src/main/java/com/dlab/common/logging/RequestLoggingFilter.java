@@ -29,9 +29,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 @Slf4j
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 10)
+@lombok.RequiredArgsConstructor
 public class RequestLoggingFilter extends OncePerRequestFilter {
 
+    private final com.dlab.common.monitoring.KioskHealthMonitor kioskHealthMonitor;
+
     public static final String TRACE_ID = "traceId";
+
+    /** 키오스크 구획. 이 두 prefix는 DSA 호환이라 {@code /api/v1}이 붙지 않는다(CLAUDE.md §5). */
+    private static final String[] KIOSK_PREFIXES = {"/kiosk/", "/auth/"};
     private static final String TRACE_HEADER = "X-Trace-Id";
 
     /** 이 시간을 넘으면 경고로 올린다. 키오스크 클라이언트 타임아웃이 5초라 그보다 낮게 잡는다. */
@@ -51,8 +57,25 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         } finally {
             long tookMs = (System.nanoTime() - start) / 1_000_000;
             write(request, response, tookMs);
+            recordKioskCall(request, response);
             // 스레드가 재사용되므로 반드시 지운다. 안 지우면 다음 요청에 남의 traceId가 붙는다.
             MDC.remove(TRACE_ID);
+        }
+    }
+
+    /**
+     * 키오스크 구획 호출만 감시 대상에 넣는다.
+     *
+     * <p>앱·관리자 웹은 화면에 에러가 그대로 뜨므로 사용자가 먼저 안다.
+     * 키오스크만 <b>폴백이 장애를 가려서</b> 우리가 직접 봐야 한다.
+     */
+    private void recordKioskCall(HttpServletRequest request, HttpServletResponse response) {
+        String path = request.getRequestURI();
+        for (String prefix : KIOSK_PREFIXES) {
+            if (path.startsWith(prefix)) {
+                kioskHealthMonitor.record(path, response.getStatus());
+                return;
+            }
         }
     }
 

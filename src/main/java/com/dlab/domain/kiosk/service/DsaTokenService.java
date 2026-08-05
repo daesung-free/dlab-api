@@ -14,6 +14,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +49,25 @@ public class DsaTokenService {
 
     private static final String ACCESS_PREFIX = "dsa:token:";
     private static final String REFRESH_PREFIX = "dsa:refresh:";
+
+    /**
+     * 지점별 발급 토큰 역인덱스.
+     *
+     * <p>토큰 키가 {@code dsa:token:{토큰값}} 구조라 <b>"이 지점의 토큰들"을 찾을 방법이 없다.</b>
+     * 그래서 재발급해도 이전 토큰이 만료(10일)까지 살아 있었다 — 단말을 교체·분실해도
+     * 옛 토큰으로 계속 조회가 됐다.
+     */
+    private static final String ACCESS_INDEX_PREFIX = "dsa:tokens:";
+    private static final String REFRESH_INDEX_PREFIX = "dsa:refreshes:";
+
+    /**
+     * refresh → 그 refresh로 발급한 access 토큰들.
+     *
+     * <p><b>지점 단위로 뭉뚱그리면 안 된다.</b> 한 지점에 키오스크가 여러 대이고 각자
+     * 토큰을 받으므로, 지점당 1개만 유지하면 <b>한 대가 갱신할 때마다 다른 대가 튕긴다.</b>
+     * refresh는 단말 하나에 대응하므로 이 단위가 정확하다.
+     */
+    private static final String ISSUED_BY_PREFIX = "dsa:issued-by:";
 
     private final BranchConfigRepository branchConfigRepository;
     private final AcademyRepository academyRepository;
@@ -89,8 +109,11 @@ public class DsaTokenService {
 
         String token = newToken();
         String refreshToken = newToken();
-        redis.opsForValue().set(ACCESS_PREFIX + token, String.valueOf(config.getAcademyId()), ACCESS_TTL);
-        redis.opsForValue().set(REFRESH_PREFIX + refreshToken, String.valueOf(config.getAcademyId()), REFRESH_TTL);
+        String academyId = String.valueOf(config.getAcademyId());
+
+        redis.opsForValue().set(ACCESS_PREFIX + token, academyId, ACCESS_TTL);
+        redis.opsForValue().set(REFRESH_PREFIX + refreshToken, academyId, REFRESH_TTL);
+        index(academyId, token, refreshToken);
 
         return new IssuedToken(token, refreshToken);
     }
@@ -108,9 +131,82 @@ public class DsaTokenService {
                 .filter(c -> String.valueOf(c.getAcademyId()).equals(academyId))
                 .orElseThrow(() -> new DsaApiException(DsaCode.TOKEN_EXPIRED));
 
+        // ★ 이 refresh로 앞서 발급했던 access를 먼저 죽인다.
+        //   갱신했다는 건 이전 것을 더는 안 쓴다는 뜻인데, 그대로 두면 10일간 유효하다.
+        //   같은 refresh를 쓰는 단말은 하나뿐이라 다른 키오스크에는 영향이 없다.
+        revokePreviouslyIssued(refreshToken);
+
         String token = newToken();
         redis.opsForValue().set(ACCESS_PREFIX + token, academyId, ACCESS_TTL);
+        redis.opsForSet().add(ACCESS_INDEX_PREFIX + academyId, token);
+        redis.opsForSet().add(ISSUED_BY_PREFIX + refreshToken, token);
+        redis.expire(ISSUED_BY_PREFIX + refreshToken, REFRESH_TTL);
+
         return new IssuedToken(token, refreshToken);
+    }
+
+    /**
+     * 지점의 <b>모든</b> 키오스크 토큰을 폐기한다.
+     *
+     * <p>시크릿을 재발급하거나 단말을 분실했을 때 쓴다. 이걸 부르면 그 지점 키오스크가
+     * 전부 재인증해야 하므로 <b>일상적으로 부르면 안 된다</b> —
+     * 갱신 시 자동 정리는 {@link #revokePreviouslyIssued}가 단말 단위로 처리한다.
+     *
+     * @return 폐기한 토큰 수
+     */
+    public long revokeAll(Long academyId) {
+        String accessIndex = ACCESS_INDEX_PREFIX + academyId;
+        String refreshIndex = REFRESH_INDEX_PREFIX + academyId;
+
+        long revoked = deleteMembers(accessIndex, ACCESS_PREFIX)
+                + deleteMembers(refreshIndex, REFRESH_PREFIX);
+        redis.delete(List.of(accessIndex, refreshIndex));
+
+        log.info("키오스크 토큰 전체 폐기: academyId={}, {}건", academyId, revoked);
+        return revoked;
+    }
+
+    private long deleteMembers(String indexKey, String valuePrefix) {
+        Set<String> members = redis.opsForSet().members(indexKey);
+        if (members == null || members.isEmpty()) {
+            return 0;
+        }
+        // refresh 인덱스는 그 refresh가 발급한 access 목록도 함께 지운다
+        if (REFRESH_PREFIX.equals(valuePrefix)) {
+            members.forEach(m -> redis.delete(ISSUED_BY_PREFIX + m));
+        }
+        Long deleted = redis.delete(members.stream().map(m -> valuePrefix + m).toList());
+        return deleted == null ? 0 : deleted;
+    }
+
+    /** 이 refresh로 앞서 발급한 access 토큰을 폐기한다. */
+    private void revokePreviouslyIssued(String refreshToken) {
+        String key = ISSUED_BY_PREFIX + refreshToken;
+        Set<String> previous = redis.opsForSet().members(key);
+        if (previous == null || previous.isEmpty()) {
+            return;
+        }
+        redis.delete(previous.stream().map(t -> ACCESS_PREFIX + t).toList());
+        redis.delete(key);
+    }
+
+    /**
+     * 역인덱스 등록.
+     *
+     * <p>인덱스에도 TTL을 건다 — 안 걸면 만료된 토큰의 흔적이 영원히 쌓인다.
+     * 이미 만료된 멤버가 남아 있어도 무해하다(없는 키 삭제는 no-op).
+     */
+    private void index(String academyId, String token, String refreshToken) {
+        String accessIndex = ACCESS_INDEX_PREFIX + academyId;
+        String refreshIndex = REFRESH_INDEX_PREFIX + academyId;
+
+        redis.opsForSet().add(accessIndex, token);
+        redis.opsForSet().add(refreshIndex, refreshToken);
+        redis.opsForSet().add(ISSUED_BY_PREFIX + refreshToken, token);
+
+        redis.expire(accessIndex, REFRESH_TTL);
+        redis.expire(refreshIndex, REFRESH_TTL);
+        redis.expire(ISSUED_BY_PREFIX + refreshToken, REFRESH_TTL);
     }
 
     /**

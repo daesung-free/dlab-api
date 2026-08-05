@@ -2,6 +2,7 @@ package com.dlab.api.kiosk.dto;
 
 import com.dlab.api.kiosk.DsaCode;
 import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
@@ -101,6 +102,13 @@ public final class DsaResponse {
         return data;
     }
 
+    /**
+     * <b>{@code @JsonIgnore}가 반드시 붙어야 한다.</b> 없으면 Jackson이 getter로 보고
+     * {@code "success": true}를 응답에 실어버리는데, 이건 DSA 계약에 없는 필드다.
+     * 키오스크는 미지 필드를 {@code @JsonAnySetter}로 흘려보내 당장 깨지진 않지만,
+     * 계약에 없는 것을 내보내는 순간 "DSA인 척한다"는 전제가 흔들린다.
+     */
+    @JsonIgnore
     public boolean isSuccess() {
         return code == DsaCode.SUCCESS.value();
     }
