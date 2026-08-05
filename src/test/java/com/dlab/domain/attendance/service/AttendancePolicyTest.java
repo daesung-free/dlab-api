@@ -91,8 +91,9 @@ class AttendancePolicyTest {
     @Test
     @DisplayName("★ 마지막 교시 종료가 하원과 외출을 가른다")
     void afterLastPeriodIsCheckOut() {
-        // 종료 전이면 아직 돌아온다고 본다
-        assertThat(decide(List.of(CHECK_IN), LocalTime.of(21, 59)).event()).isEqualTo(OUTING);
+        // 종료 전이면 조퇴·외출이라 승인이 필요하다
+        assertThat(decide(List.of(CHECK_IN), LocalTime.of(21, 59)).code())
+                .isEqualTo(DsaCode.NO_APPROVAL);
 
         assertThat(decide(List.of(CHECK_IN), LocalTime.of(22, 0)).event()).isEqualTo(CHECK_OUT);
         assertThat(decide(List.of(CHECK_IN), LocalTime.of(22, 30)).event()).isEqualTo(CHECK_OUT);
@@ -110,11 +111,14 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("★ 수업 중간 재태깅은 외출 — 평일에 되물으면 매번 버튼을 눌러야 한다")
-    void midDayRetagIsOuting() {
-        // 키오스크는 "마감시간까지 DSA가 판별한다"고 전제한다(그쪽 TagService 주석).
-        // 113은 시간표가 없는 날에만 쓰는 코드다
-        assertThat(decide(List.of(CHECK_IN), LocalTime.of(14, 0)).event()).isEqualTo(OUTING);
+    @DisplayName("★ 승인 없이 나가려 하면 130 — 자동 외출 처리하면 승인 절차가 무의미해진다")
+    void leavingWithoutApprovalIsRejected() {
+        var decision = decide(List.of(CHECK_IN), LocalTime.of(14, 0));
+
+        assertThat(decision.isAccepted()).isFalse();
+        assertThat(decision.code()).isEqualTo(DsaCode.NO_APPROVAL);
+        // 이 문구가 그대로 학생 화면에 뜬다
+        assertThat(decision.message()).contains("승인 내역이 없습니다");
     }
 
     @Test
@@ -160,9 +164,9 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("복귀 후 다시 나가면 또 외출이다")
-    void afterReturnCanGoOutAgain() {
-        assertThat(decide(List.of(CHECK_IN, OUTING, RETURN), LocalTime.of(15, 0)).event())
-                .isEqualTo(OUTING);
+    @DisplayName("복귀 후 또 나가려 해도 승인이 필요하다")
+    void afterReturnStillNeedsApproval() {
+        assertThat(decide(List.of(CHECK_IN, OUTING, RETURN), LocalTime.of(15, 0)).code())
+                .isEqualTo(DsaCode.NO_APPROVAL);
     }
 }

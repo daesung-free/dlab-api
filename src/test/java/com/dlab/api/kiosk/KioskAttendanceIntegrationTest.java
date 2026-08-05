@@ -193,13 +193,16 @@ class KioskAttendanceIntegrationTest {
     }
 
     @Test
-    @DisplayName("★ 사유신청이 없으면 수업 중간 재태깅은 외출로 자동 처리된다")
-    void midDayRetagIsOutingWithoutPrompt() throws Exception {
+    @DisplayName("★ 사유신청이 없으면 130 — 승인 없이 나갈 수 없다")
+    void leavingWithoutApprovalIsRejected() throws Exception {
         tag("08:30:00");
 
-        tag("15:00:00").andExpect(jsonPath("$.att_gn").value("D"));
+        tag("15:00:00")
+                .andExpect(jsonPath("$.code").value(130))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("승인 내역이 없습니다")));
 
-        assertThat(logCount()).isEqualTo(2);
+        assertThat(logCount()).isEqualTo(1);
     }
 
     @Test
@@ -261,7 +264,7 @@ class KioskAttendanceIntegrationTest {
         tag("15:00:00", "N")
                 .andExpect(jsonPath("$.code").value(130));
 
-        // 일반 외출(D)은 승인이 필요 없다
+        // 학생이 명시적으로 고른 외출(D)은 승인 없이도 받는다 — 113 왕복의 2차 호출이다
         tag("15:00:00", "D").andExpect(jsonPath("$.att_gn").value("D"));
     }
 
@@ -306,7 +309,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("1분이 지나면 다시 판정한다")
     void afterDedupWindowItDecidesAgain() throws Exception {
         tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
-        tag("08:31:01").andExpect(jsonPath("$.att_gn").value("D"));
+        tag("08:31:01").andExpect(jsonPath("$.code").value(130));
     }
 
     // ── 조퇴 해제 ────────────────────────────────────────────
