@@ -267,6 +267,30 @@ class KioskAttendanceIntegrationTest {
     }
 
     @Test
+    @DisplayName("★ 학생이 고른 요청(con_gn)은 중복억제 창을 타지 않는다 — 2-phase 2차가 삼켜진다")
+    void explicitActionBypassesDedupWindow() throws Exception {
+        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+
+        // 8초 뒤 2차 호출. 창 안이지만 학생이 화면에서 고른 것이라 처리돼야 한다
+        tag("08:30:08", "D").andExpect(jsonPath("$.att_gn").value("D"));
+
+        assertThat(logCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("★ 외출 중에는 중복억제 창을 적용하지 않는다 — 키오스크가 복귀(R)를 기대한다")
+    void dedupWindowDoesNotBlockReturn() throws Exception {
+        tag("08:30:00");
+        tag("15:00:00", "D").andExpect(jsonPath("$.att_gn").value("D"));
+
+        // 25초 만에 복귀 — 창 안이지만 R로 처리돼야 한다.
+        // 직전 결과(D)를 되돌려주면 키오스크가 "상태 불일치"로 에러를 띄운다
+        tag("15:00:25").andExpect(jsonPath("$.att_gn").value("R"));
+
+        assertThat(logCount()).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("1분이 지나면 다시 판정한다")
     void afterDedupWindowItDecidesAgain() throws Exception {
         tag("08:30:00");
@@ -292,11 +316,16 @@ class KioskAttendanceIntegrationTest {
         var logs = taggingLogRepository
                 .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), today);
 
-        // 조퇴 행이 사라지지 않고 외출로 바뀌어야 한다 — 지우면 정정 이력이 끊긴다
+        // 조퇴 행이 사라지지 않고 외출로 바뀌어야 한다 — 지우면 정정 이력이 끊긴다.
+        //
+        // 순서는 단언하지 않는다: 태깅은 tag_dt(15:00)로 들어가는데 복귀는 서버 현재 시각이라
+        // 테스트를 15시 이전에 돌리면 복귀가 앞에 온다. 실제 키오스크는 항상 현재 시각을
+        // 보내므로 운영에서는 생기지 않는 어긋남이다.
         assertThat(logs).extracting(l -> l.getEventType())
-                .containsExactly(AttendanceEventType.CHECK_IN,
+                .containsExactlyInAnyOrder(AttendanceEventType.CHECK_IN,
                         AttendanceEventType.OUTING,
                         AttendanceEventType.RETURN);
+        assertThat(logs).noneMatch(l -> l.getEventType() == AttendanceEventType.EARLY_LEAVE);
     }
 
     @Test

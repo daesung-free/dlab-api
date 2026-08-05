@@ -74,22 +74,30 @@ public class KioskAttendanceService {
         LocalDate date = at.toLocalDate();
 
         List<AttendanceTaggingLog> todayLogs = todayLogs(enrollment.getId(), date);
+        boolean explicit = conGn != null && !conGn.isBlank();
 
         // ── 중복 억제 ──
         // 창 안이면 원장에 남기지 않고 직전 결과를 그대로 되돌려준다.
         // 에러를 주면 학생이 "인식이 안 됐나" 하고 계속 태깅한다.
-        AttendanceTaggingLog recent = withinDedupWindow(todayLogs, at);
-        if (recent != null) {
-            return TagResult.accepted(enrollment, recent.getEventType());
+        //
+        // ★ 학생이 화면에서 고른 요청(con_gn 있음)에는 적용하지 않는다.
+        //   카드 이중 접촉으로는 con_gn이 붙을 수 없으므로 실수가 아니다.
+        //   적용했다가 로컬 E2E에서 실제로 사고가 났다 — 2-phase 2차 호출이 창에 걸려
+        //   삼켜지면서 키오스크 DB에는 외출이 남고 우리 DB에는 안 남았다.
+        if (!explicit) {
+            AttendanceTaggingLog recent = withinDedupWindow(todayLogs, at);
+            if (recent != null) {
+                return TagResult.accepted(enrollment, recent.getEventType());
+            }
         }
 
         List<AttendanceEventType> history = todayLogs.stream()
                 .map(AttendanceTaggingLog::getEventType)
                 .toList();
 
-        AttendanceDecision decision = (conGn == null || conGn.isBlank())
-                ? autoDecide(enrollment, history, at, date)
-                : explicitDecide(enrollment, history, conGn, date);
+        AttendanceDecision decision = explicit
+                ? explicitDecide(enrollment, history, conGn, date)
+                : autoDecide(enrollment, history, at, date);
 
         if (!decision.isAccepted()) {
             return TagResult.rejected(enrollment, decision.code(), decision.message());
@@ -223,12 +231,32 @@ public class KioskAttendanceService {
                 .toList();
     }
 
+    /**
+     * 중복 억제 대상인지.
+     *
+     * <p><b>★ 외출 중에는 창을 적용하지 않는다.</b> 로컬 E2E에서 실제로 터진 지점이다 —
+     * 외출을 찍고 25초 만에 돌아온 학생에게 직전 결과({@code D})를 그대로 되돌려주자,
+     * 키오스크가 <b>복귀({@code R})를 기대하고 있다가</b> "DSA-우리 DB 상태 불일치"
+     * 이상 로그를 남기고 학생에게 에러를 띄웠다({@code RETURN_CONTEXT_NOT_R}).
+     *
+     * <p>키오스크는 외출 중 태깅을 <b>반드시 복귀</b>로 간주한다(그쪽 {@code TagService} 1번 분기).
+     * 화장실처럼 짧은 외출이 정상이라 이 경로는 창으로 막으면 안 된다.
+     *
+     * <p>이중 접촉 방어는 그대로 유지된다 — 등원·지각·하원 직후 재태깅이 원래 대상이고,
+     * 키오스크 자체 60초 가드({@code guardRetagInterval})가 그 위를 한 겹 더 덮는다.
+     */
     private AttendanceTaggingLog withinDedupWindow(List<AttendanceTaggingLog> logs,
                                                    LocalDateTime at) {
         if (logs.isEmpty()) {
             return null;
         }
         AttendanceTaggingLog last = logs.get(logs.size() - 1);
+
+        if (last.getEventType() == AttendanceEventType.OUTING
+                || last.getEventType() == AttendanceEventType.EXCUSED_OUTING) {
+            return null;
+        }
+
         Instant now = at.atZone(clock.getZone()).toInstant();
         Duration gap = Duration.between(last.getRecordedAt(), now);
 
