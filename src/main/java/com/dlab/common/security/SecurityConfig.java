@@ -77,6 +77,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/auth/**").permitAll()
                         // 가입은 토큰이 생기기 전에 호출된다(휴대폰 인증 → 가입)
                         .requestMatchers("/api/v1/app/signup/**").permitAll()
+                        // ★ 앱 부팅 첫 호출. 점검 중이거나 강제 업데이트가 필요한지는
+                        //   로그인 전에 판단해야 하고, 로그인 API 자체가 점검으로 막혔을 수도 있다
+                        .requestMatchers("/api/v1/app/app-config").permitAll()
                         // 외부 시스템 수신(키오스크 제외)은 자체 서명검증을 한다
                         .requestMatchers("/api/v1/webhook/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
