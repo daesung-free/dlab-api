@@ -91,8 +91,45 @@ public class StudentEnrollment extends BaseEntity {
         return student.getName();
     }
 
+    public void changeTrack(TrackType track) {
+        this.track = track;
+    }
+
+    /** 키오스크 카드 발급·재발급. */
+    public void assignCard(String rfidNo) {
+        this.rfidNo = rfidNo;
+    }
+
+    /**
+     * 퇴원·제적 시 그날 날짜를 남긴다. 상태만으로는 <b>언제</b> 나갔는지 알 수 없어
+     * 재원 기간 산정(환불 일할계산 등)이 불가능하다.
+     */
+    public void markWithdrawn(java.time.LocalDate date) {
+        this.withdrawalDate = date;
+        this.current = false;
+    }
+
     /** 이 기수가 끝나 다음 기수로 넘어갈 때 이전 등록 건을 내린다. */
     public void expire() {
         this.current = false;
+    }
+
+
+    /**
+     * 등록 건 수정. {@code null}은 "변경하지 않음"이다({@link Student#updateProfile} 참고).
+     *
+     * <p>학번은 여기서 못 바꾼다 — 서버가 채번하고 {@code UNIQUE(academy_id, year, student_no)}로
+     * 지키는 값이라, 임의 수정을 열면 중복·건너뜀이 생긴다.
+     */
+    public void updateEnrollment(GradeType grade, TrackType track, EnrollmentStatus status) {
+        if (grade != null) {
+            this.grade = grade;
+        }
+        if (track != null) {
+            this.track = track;
+        }
+        if (status != null) {
+            this.enrollmentStatus = status;
+        }
     }
 }

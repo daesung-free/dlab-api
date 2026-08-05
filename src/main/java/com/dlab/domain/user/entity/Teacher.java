@@ -52,6 +52,23 @@ public class Teacher extends BaseEntity {
     @Column(name = "resigned_date")
     private LocalDate resignedDate;
 
+    public void updateContact(String phone, String email) {
+        this.phone = phone;
+        this.email = email;
+    }
+
+    /**
+     * 퇴사 처리. 행을 지우지 않는다 — 과거 반의 담임이 누구였는지, 지난 승인을 누가 처리했는지가
+     * 남아 있어야 한다. 대신 다음 연도로 넘어갈 때 담임 자리에서 빠진다(전년도 복사).
+     */
+    public void resign(LocalDate resignedDate) {
+        this.resignedDate = resignedDate;
+    }
+
+    public boolean isResigned() {
+        return resignedDate != null;
+    }
+
     public Teacher(Academy academy, String name, String phone) {
         this.academy = academy;
         this.name = name;

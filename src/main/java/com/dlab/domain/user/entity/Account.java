@@ -110,4 +110,14 @@ public class Account extends BaseEntity {
     public void approve() {
         this.status = AccountStatus.ACTIVE;
     }
+
+    /**
+     * 퇴원·제적·수료 시 앱 접근 차단.
+     *
+     * <p><b>계정을 지우지 않는다</b> — 재등록 시 같은 사람을 다시 찾아야 하고,
+     * 지난 로그인 이력도 감사 대상이다.
+     */
+    public void deactivate() {
+        this.status = AccountStatus.WITHDRAWN;
+    }
 }
