@@ -75,6 +75,8 @@ public class SecurityConfig {
                         // 로그인·토큰재발급은 인증 전에 호출된다
                         .requestMatchers("/api/v1/app/auth/**").permitAll()
                         .requestMatchers("/api/v1/admin/auth/**").permitAll()
+                        // 가입은 토큰이 생기기 전에 호출된다(휴대폰 인증 → 가입)
+                        .requestMatchers("/api/v1/app/signup/**").permitAll()
                         // 외부 시스템 수신(키오스크 제외)은 자체 서명검증을 한다
                         .requestMatchers("/api/v1/webhook/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()

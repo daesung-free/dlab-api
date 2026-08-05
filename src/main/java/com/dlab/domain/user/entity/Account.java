@@ -171,6 +171,17 @@ public class Account extends BaseEntity {
     }
 
     /**
+     * 가입 시점의 비밀번호 설정 기록.
+     *
+     * <p>{@code changePassword}와 나눈 이유는 <b>의미가 다르기 때문</b>이다 — 이쪽은
+     * 최초 설정이라 "변경 강제 해제"가 일어날 게 없다. 같은 메서드를 쓰면 나중에
+     * 변경 정책이 붙을 때 최초 설정까지 같이 걸린다.
+     */
+    public void markPasswordInitialized(Instant at) {
+        this.passwordChangedAt = at;
+    }
+
+    /**
      * 본인 비밀번호 변경. 변경과 동시에 강제 플래그가 풀린다.
      *
      * <p>{@code passwordChangedAt}을 남기는 이유는 만료 정책(NF-05 미확보)이 나중에

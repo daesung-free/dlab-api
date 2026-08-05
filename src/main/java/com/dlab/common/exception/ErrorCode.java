@@ -23,6 +23,18 @@ public enum ErrorCode {
     PASSWORD_POLICY_VIOLATION(HttpStatus.BAD_REQUEST, "비밀번호 정책에 맞지 않습니다."),
     PASSWORD_SAME_AS_BEFORE(HttpStatus.BAD_REQUEST, "이전과 다른 비밀번호를 입력해 주세요."),
     ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "계정을 찾을 수 없습니다."),
+    // 휴대폰 본인인증 (A-2)
+    VERIFICATION_CODE_EXPIRED(HttpStatus.BAD_REQUEST, "인증번호가 만료되었습니다. 다시 요청해 주세요."),
+    VERIFICATION_CODE_MISMATCH(HttpStatus.BAD_REQUEST, "인증번호가 일치하지 않습니다."),
+    VERIFICATION_ATTEMPTS_EXCEEDED(HttpStatus.BAD_REQUEST,
+            "인증번호 입력 횟수를 초과했습니다. 다시 요청해 주세요."),
+    PHONE_NOT_VERIFIED(HttpStatus.BAD_REQUEST, "휴대폰 인증이 완료되지 않았습니다."),
+    // 학부모 가입·자녀 연결 (A-2)
+    STUDENT_CODE_NOT_FOUND(HttpStatus.NOT_FOUND, "학생 고유ID를 찾을 수 없습니다."),
+    GUARDIAN_ALREADY_LINKED(HttpStatus.CONFLICT, "이미 학부모가 연결된 학생입니다."),
+    CHILD_ALREADY_LINKED(HttpStatus.CONFLICT, "이미 연결된 자녀입니다."),
+    PHONE_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 가입된 휴대폰 번호입니다."),
+    NOT_MY_CHILD(HttpStatus.FORBIDDEN, "본인의 자녀가 아닙니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다."),
 
     // 지점 / 조직
