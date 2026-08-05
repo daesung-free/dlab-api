@@ -104,14 +104,16 @@ public class PhoneVerificationService {
      *
      * <p>재사용을 막지 않으면 토큰 하나로 여러 계정을 만들 수 있다.
      *
-     * @return 인증된 전화번호
+     * @return 인증 결과. 현재 방식으로는 전화번호만 채워진다 — 나머지는 PASS 도입 시
+     *         채워지고, 그때 <b>이 메서드의 호출부는 고칠 필요가 없다</b>
+     *         ({@link VerifiedIdentity} 참고)
      */
-    public String consume(String token) {
+    public VerifiedIdentity consume(String token) {
         String phone = redis.opsForValue().get(TOKEN_KEY + token);
         if (phone == null) {
             throw new BusinessException(ErrorCode.PHONE_NOT_VERIFIED);
         }
         redis.delete(TOKEN_KEY + token);
-        return phone;
+        return VerifiedIdentity.ofPhoneOnly(phone);
     }
 }

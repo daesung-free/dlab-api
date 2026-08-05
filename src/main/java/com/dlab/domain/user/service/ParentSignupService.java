@@ -4,6 +4,7 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.PasswordPolicy;
 import com.dlab.common.verification.PhoneVerificationService;
+import com.dlab.common.verification.VerifiedIdentity;
 import com.dlab.domain.user.entity.*;
 import com.dlab.domain.user.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -71,7 +72,10 @@ public class ParentSignupService {
     @Transactional
     public Account signup(String verificationToken, String name, String rawPassword,
                           String studentUniqueCode) {
-        String phone = phoneVerificationService.consume(verificationToken);
+        VerifiedIdentity identity = phoneVerificationService.consume(verificationToken);
+        String phone = identity.phone();
+        // PASS를 붙이면 인증 결과의 실명이 사용자 입력을 덮는다 — 여기 코드는 그대로 둔다
+        String verifiedName = identity.resolveName(name);
         PasswordPolicy.validate(rawPassword);
 
         // 재가입이 아니라 중복가입이다 — 같은 번호로 두 계정이 생기면
@@ -87,7 +91,8 @@ public class ParentSignupService {
             throw new BusinessException(ErrorCode.GUARDIAN_ALREADY_LINKED);
         }
 
-        ParentGuardian guardian = guardianRepository.save(new ParentGuardian(name, phone, null));
+        ParentGuardian guardian = guardianRepository.save(
+                new ParentGuardian(verifiedName, phone, identity.gender()));
         linkRepository.save(new StudentGuardianLink(child, guardian, (short) 1));
 
         // 로그인 아이디는 전화번호다(account.login_id 규약). 학부모는 승인 없이 즉시 ACTIVE.
