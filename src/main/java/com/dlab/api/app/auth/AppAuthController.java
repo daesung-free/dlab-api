@@ -34,6 +34,20 @@ public class AppAuthController {
                 authService.refresh(request.refreshToken())));
     }
 
+    /**
+     * 비밀번호 변경 (A-1 "임시 비밀번호 최초 로그인 시 변경 강제").
+     *
+     * <p>새 토큰을 함께 돌려준다 — 임시 비밀번호 플래그가 토큰 클레임에 있어서
+     * 갱신하지 않으면 바꾸고도 계속 막힌다.
+     */
+    @PostMapping("/password")
+    public ApiResponse<AuthResponse> changePassword(
+            @CurrentAccount AuthPrincipal principal,
+            @Valid @RequestBody AuthRequests.ChangePassword request) {
+        return ApiResponse.success(AuthResponse.from(authService.changePassword(
+                principal.accountId(), request.currentPassword(), request.newPassword())));
+    }
+
     @PostMapping("/logout")
     public ApiResponse<Void> logout(@CurrentAccount AuthPrincipal principal,
                                     @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String header) {

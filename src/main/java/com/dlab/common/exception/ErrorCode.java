@@ -15,6 +15,14 @@ public enum ErrorCode {
     ACCOUNT_NOT_ACTIVE(HttpStatus.FORBIDDEN, "사용할 수 없는 계정입니다."),
     SIGNUP_PENDING(HttpStatus.FORBIDDEN, "가입 승인 대기 중입니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
+    // 로그인 보안 (A-1 · F-4.12-1)
+    ACCOUNT_LOCKED(HttpStatus.FORBIDDEN,
+            "로그인 실패가 반복되어 계정이 잠겼습니다. 관리자에게 문의해 주세요."),
+    PASSWORD_CHANGE_REQUIRED(HttpStatus.FORBIDDEN,
+            "임시 비밀번호 상태입니다. 비밀번호를 변경한 뒤 이용해 주세요."),
+    PASSWORD_POLICY_VIOLATION(HttpStatus.BAD_REQUEST, "비밀번호 정책에 맞지 않습니다."),
+    PASSWORD_SAME_AS_BEFORE(HttpStatus.BAD_REQUEST, "이전과 다른 비밀번호를 입력해 주세요."),
+    ACCOUNT_NOT_FOUND(HttpStatus.NOT_FOUND, "계정을 찾을 수 없습니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다."),
 
     // 지점 / 조직

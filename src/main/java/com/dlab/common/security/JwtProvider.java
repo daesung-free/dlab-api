@@ -34,6 +34,13 @@ public class JwtProvider {
     private static final String CLAIM_ALL_ACADEMY = "all";
     /** 토큰 종류. 대조하지 않으면 Refresh로 API를 호출할 수 있다. */
     private static final String CLAIM_TOKEN_TYPE = "tkn";
+    /**
+     * 임시 비밀번호 상태(A-1).
+     *
+     * <p>클레임에 싣는 이유는 요청마다 계정을 다시 조회하지 않기 위해서다. 대신
+     * <b>비밀번호를 바꾸면 토큰을 새로 받아야 이 값이 풀린다</b> — 변경 API가 새 토큰을 함께 돌려준다.
+     */
+    private static final String CLAIM_MUST_CHANGE_PASSWORD = "pcr";
     private static final String TYPE_ACCESS = "A";
     private static final String TYPE_REFRESH = "R";
 
@@ -70,6 +77,7 @@ public class JwtProvider {
                 .claim(CLAIM_ACADEMY_ID, principal.academyId())
                 .claim(CLAIM_ROLES, principal.roles().stream().map(Enum::name).toList())
                 .claim(CLAIM_ALL_ACADEMY, principal.allAcademy())
+                .claim(CLAIM_MUST_CHANGE_PASSWORD, principal.mustChangePassword())
                 .issuedAt(now)
                 .expiration(Date.from(clock.instant().plus(accessTtl)))
                 .signWith(key)
@@ -123,7 +131,8 @@ public class JwtProvider {
                     claims.get(CLAIM_ACCOUNT_TYPE, String.class),
                     academyId == null ? null : academyId.longValue(),
                     roles,
-                    Boolean.TRUE.equals(claims.get(CLAIM_ALL_ACADEMY, Boolean.class))
+                    Boolean.TRUE.equals(claims.get(CLAIM_ALL_ACADEMY, Boolean.class)),
+                    Boolean.TRUE.equals(claims.get(CLAIM_MUST_CHANGE_PASSWORD, Boolean.class))
             );
         } catch (ExpiredJwtException e) {
             throw new JwtAuthenticationException(JwtAuthenticationException.Reason.EXPIRED, e);

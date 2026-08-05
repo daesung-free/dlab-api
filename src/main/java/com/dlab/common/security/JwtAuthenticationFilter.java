@@ -19,6 +19,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * 인증이 필요한지는 SecurityConfig의 경로 규칙이 판단하고, 거부 응답은
  * {@link RestAuthenticationEntryPoint}가 공통 포맷으로 만든다 — 두 군데서 401을
  * 만들면 응답 형태가 갈린다.
+ *
+ * <p><b>★ 블랙리스트를 여기서 대조한다.</b> 로그아웃은 Refresh를 지우고 Access를
+ * {@link TokenBlacklist}에 올리는데, <b>읽는 쪽이 없으면 로그아웃해도 그 Access Token으로
+ * 최대 1시간 동안 계속 호출된다</b>. 실제로 그 상태였다.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -28,6 +32,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String PREFIX = "Bearer ";
 
     private final JwtProvider jwtProvider;
+    private final TokenBlacklist tokenBlacklist;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -35,6 +40,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     @NonNull FilterChain chain) throws ServletException, IOException {
         String token = resolveToken(request);
         if (token != null) {
+            // 로그아웃된 토큰은 서명·만료가 멀쩡해도 무효다. 파싱보다 먼저 걸러낸다.
+            if (tokenBlacklist.contains(token)) {
+                SecurityContextHolder.clearContext();
+                request.setAttribute(JwtAuthenticationException.class.getName(),
+                        new JwtAuthenticationException(JwtAuthenticationException.Reason.INVALID, null));
+                chain.doFilter(request, response);
+                return;
+            }
             try {
                 AuthPrincipal principal = jwtProvider.parse(token);
                 // authenticated() 팩토리를 쓴다 — 3-arg 생성자는 Security 7에서 deprecated이고,
