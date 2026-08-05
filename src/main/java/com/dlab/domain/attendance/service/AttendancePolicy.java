@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  *       단 <b>운영 종료 후 첫 태깅</b>은 {@code 122}다 — 하루가 이미 끝났다</li>
  *   <li>승인된 사유신청 있음 → {@code 126}/{@code 128}/{@code 129} 선택지</li>
  *   <li>마지막 교시 종료 후 → 하원({@code T})</li>
- *   <li>그 외 → {@code 113}. <b>서버가 임의로 정하지 않고 학생에게 묻는다</b></li>
+ *   <li>그 외(수업 중간) → 외출({@code D})</li>
  * </ol>
  *
  * <h2>운영 종료 시각이 하원을 막으면 안 된다</h2>
@@ -106,8 +106,9 @@ public class AttendancePolicy {
             return AttendanceDecision.of(AttendanceEventType.CHECK_OUT);
         }
 
-        // 8. 수업 중간 재태깅 — 하원인지 외출인지 서버가 정하지 않는다
-        return AttendanceDecision.reject(DsaCode.NO_TIMETABLE);
+        // 8. 수업 중간 재태깅 — 외출이다.
+        //    나가는 시각이 아직 마감 전이므로 돌아온다고 본다. 복귀는 규칙 2번이 받는다.
+        return AttendanceDecision.of(AttendanceEventType.OUTING);
     }
 
     /**

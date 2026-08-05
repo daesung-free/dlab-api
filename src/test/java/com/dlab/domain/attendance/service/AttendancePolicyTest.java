@@ -89,11 +89,10 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("★ 마지막 교시가 끝났으면 하원이 확실하다")
+    @DisplayName("★ 마지막 교시 종료가 하원과 외출을 가른다")
     void afterLastPeriodIsCheckOut() {
-        // 마지막 교시 종료(22:00) 직전은 아직 애매하다
-        assertThat(decide(List.of(CHECK_IN), LocalTime.of(21, 59)).code())
-                .isEqualTo(DsaCode.NO_TIMETABLE);
+        // 종료 전이면 아직 돌아온다고 본다
+        assertThat(decide(List.of(CHECK_IN), LocalTime.of(21, 59)).event()).isEqualTo(OUTING);
 
         assertThat(decide(List.of(CHECK_IN), LocalTime.of(22, 0)).event()).isEqualTo(CHECK_OUT);
         assertThat(decide(List.of(CHECK_IN), LocalTime.of(22, 30)).event()).isEqualTo(CHECK_OUT);
@@ -111,12 +110,11 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("★ 수업 중간 재태깅은 서버가 정하지 않고 113으로 되묻는다")
-    void midDayRetagAsksUserInsteadOfGuessing() {
-        var decision = decide(List.of(CHECK_IN), LocalTime.of(14, 0));
-
-        assertThat(decision.isAccepted()).isFalse();
-        assertThat(decision.code()).isEqualTo(DsaCode.NO_TIMETABLE);
+    @DisplayName("★ 수업 중간 재태깅은 외출 — 평일에 되물으면 매번 버튼을 눌러야 한다")
+    void midDayRetagIsOuting() {
+        // 키오스크는 "마감시간까지 DSA가 판별한다"고 전제한다(그쪽 TagService 주석).
+        // 113은 시간표가 없는 날에만 쓰는 코드다
+        assertThat(decide(List.of(CHECK_IN), LocalTime.of(14, 0)).event()).isEqualTo(OUTING);
     }
 
     @Test
@@ -162,9 +160,9 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("복귀 후에는 다시 하원/외출을 되묻는다")
-    void afterReturnAsksAgain() {
-        assertThat(decide(List.of(CHECK_IN, OUTING, RETURN), LocalTime.of(15, 0)).code())
-                .isEqualTo(DsaCode.NO_TIMETABLE);
+    @DisplayName("복귀 후 다시 나가면 또 외출이다")
+    void afterReturnCanGoOutAgain() {
+        assertThat(decide(List.of(CHECK_IN, OUTING, RETURN), LocalTime.of(15, 0)).event())
+                .isEqualTo(OUTING);
     }
 }

@@ -177,18 +177,29 @@ class KioskAttendanceIntegrationTest {
     // ── 분기 코드의 자리 ───────────────────────────────────────
 
     @Test
-    @DisplayName("★ 113은 data 내부에 실리고 최상위는 0이다 (뒤바뀌면 키오스크가 분기를 놓친다)")
-    void code113GoesInsideDataWhileTopLevelStaysZero() throws Exception {
+    @DisplayName("★ 분기 코드는 data 내부에 실리고 최상위는 0이다 (뒤바뀌면 키오스크가 분기를 놓친다)")
+    void branchCodeGoesInsideDataWhileTopLevelStaysZero() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
         tag("08:30:00");
 
         tag("15:00:00")
                 .andExpect(jsonPath("$.code").value(0))          // ← 최상위는 성공
-                .andExpect(jsonPath("$.data[0].code").value(113)) // ← 거부는 안쪽
+                .andExpect(jsonPath("$.data[0].code").value(128)) // ← 거부는 안쪽
                 .andExpect(jsonPath("$.att_gn").doesNotExist())
                 .andExpect(jsonPath("$.hak_no").value("2026-0001"));
 
         // 되물은 것이므로 원장에 남지 않는다
         assertThat(logCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("★ 사유신청이 없으면 수업 중간 재태깅은 외출로 자동 처리된다")
+    void midDayRetagIsOutingWithoutPrompt() throws Exception {
+        tag("08:30:00");
+
+        tag("15:00:00").andExpect(jsonPath("$.att_gn").value("D"));
+
+        assertThat(logCount()).isEqualTo(2);
     }
 
     @Test
@@ -227,12 +238,13 @@ class KioskAttendanceIntegrationTest {
     // ── 2-phase 왕복 ─────────────────────────────────────────
 
     @Test
-    @DisplayName("★ 113 → con_gn 실어 재호출하면 처리된다 (서버는 사이 상태를 안 든다)")
+    @DisplayName("★ 선택지 → con_gn 실어 재호출하면 처리된다 (서버는 사이 상태를 안 든다)")
     void statelessTwoPhaseRoundTrip() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
         tag("08:30:00");
-        tag("15:00:00").andExpect(jsonPath("$.data[0].code").value(113));
+        tag("15:00:00").andExpect(jsonPath("$.data[0].code").value(128));
 
-        tag("15:00:30", "D").andExpect(jsonPath("$.att_gn").value("D"));
+        tag("15:00:30", "C").andExpect(jsonPath("$.att_gn").value("C"));
 
         assertThat(logCount()).isEqualTo(2);
     }
@@ -293,8 +305,8 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("1분이 지나면 다시 판정한다")
     void afterDedupWindowItDecidesAgain() throws Exception {
-        tag("08:30:00");
-        tag("08:31:01").andExpect(jsonPath("$.data[0].code").value(113));
+        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("08:31:01").andExpect(jsonPath("$.att_gn").value("D"));
     }
 
     // ── 조퇴 해제 ────────────────────────────────────────────
