@@ -89,11 +89,11 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("★ 마지막 교시가 끝났으면 하원이 확실하다")
+    @DisplayName("★ 마지막 교시 종료가 하원과 외출을 가른다")
     void afterLastPeriodIsCheckOut() {
-        // 마지막 교시 종료(22:00) 직전은 아직 애매하다
+        // 종료 전이면 조퇴·외출이라 승인이 필요하다
         assertThat(decide(List.of(CHECK_IN), LocalTime.of(21, 59)).code())
-                .isEqualTo(DsaCode.NO_TIMETABLE);
+                .isEqualTo(DsaCode.NO_APPROVAL);
 
         assertThat(decide(List.of(CHECK_IN), LocalTime.of(22, 0)).event()).isEqualTo(CHECK_OUT);
         assertThat(decide(List.of(CHECK_IN), LocalTime.of(22, 30)).event()).isEqualTo(CHECK_OUT);
@@ -111,12 +111,14 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("★ 수업 중간 재태깅은 서버가 정하지 않고 113으로 되묻는다")
-    void midDayRetagAsksUserInsteadOfGuessing() {
+    @DisplayName("★ 승인 없이 나가려 하면 130 — 자동 외출 처리하면 승인 절차가 무의미해진다")
+    void leavingWithoutApprovalIsRejected() {
         var decision = decide(List.of(CHECK_IN), LocalTime.of(14, 0));
 
         assertThat(decision.isAccepted()).isFalse();
-        assertThat(decision.code()).isEqualTo(DsaCode.NO_TIMETABLE);
+        assertThat(decision.code()).isEqualTo(DsaCode.NO_APPROVAL);
+        // 이 문구가 그대로 학생 화면에 뜬다
+        assertThat(decision.message()).contains("승인 내역이 없습니다");
     }
 
     @Test
@@ -162,9 +164,9 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("복귀 후에는 다시 하원/외출을 되묻는다")
-    void afterReturnAsksAgain() {
+    @DisplayName("복귀 후 또 나가려 해도 승인이 필요하다")
+    void afterReturnStillNeedsApproval() {
         assertThat(decide(List.of(CHECK_IN, OUTING, RETURN), LocalTime.of(15, 0)).code())
-                .isEqualTo(DsaCode.NO_TIMETABLE);
+                .isEqualTo(DsaCode.NO_APPROVAL);
     }
 }

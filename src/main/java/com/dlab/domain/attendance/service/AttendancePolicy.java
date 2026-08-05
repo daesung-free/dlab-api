@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  *       단 <b>운영 종료 후 첫 태깅</b>은 {@code 122}다 — 하루가 이미 끝났다</li>
  *   <li>승인된 사유신청 있음 → {@code 126}/{@code 128}/{@code 129} 선택지</li>
  *   <li>마지막 교시 종료 후 → 하원({@code T})</li>
- *   <li>그 외 → {@code 113}. <b>서버가 임의로 정하지 않고 학생에게 묻는다</b></li>
+ *   <li>그 외 → {@code 130} <b>"승인 내역이 없습니다"</b></li>
  * </ol>
  *
  * <h2>운영 종료 시각이 하원을 막으면 안 된다</h2>
@@ -106,8 +106,10 @@ public class AttendancePolicy {
             return AttendanceDecision.of(AttendanceEventType.CHECK_OUT);
         }
 
-        // 8. 수업 중간 재태깅 — 하원인지 외출인지 서버가 정하지 않는다
-        return AttendanceDecision.reject(DsaCode.NO_TIMETABLE);
+        // 8. 승인 없이 나가려 한다 — 거절한다.
+        //    등원 상태에서 재태깅은 조퇴 아니면 외출인데 둘 다 사전 승인이 필요하다.
+        return AttendanceDecision.reject(DsaCode.NO_APPROVAL,
+                "사전조퇴/사전외출 승인 내역이 없습니다. 데스크로 문의해주세요.");
     }
 
     /**
