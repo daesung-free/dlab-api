@@ -65,6 +65,25 @@ public class Account extends BaseEntity {
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
+    /**
+     * 임시 비밀번호 상태. {@code true}면 비밀번호 변경 외 모든 API가 차단된다
+     * (앱 요구사항 A-1 "임시 비밀번호 최초 로그인 시 변경 강제").
+     */
+    @Column(name = "must_change_password", nullable = false)
+    private boolean mustChangePassword = false;
+
+    @Column(name = "password_changed_at")
+    private Instant passwordChangedAt;
+
+    /**
+     * 로그인 실패 누적 잠금 시각. {@code null}이면 잠기지 않음.
+     *
+     * <p><b>{@code status}와 분리한다</b> — SUSPENDED(관리자 정지)와 섞으면
+     * 잠금 해제만으로 정지된 계정이 되살아난다.
+     */
+    @Column(name = "locked_at")
+    private Instant lockedAt;
+
     private Account(AccountType accountType, String loginId, String passwordHash, AccountStatus status) {
         this.accountType = accountType;
         this.loginId = loginId;
@@ -119,5 +138,58 @@ public class Account extends BaseEntity {
      */
     public void deactivate() {
         this.status = AccountStatus.WITHDRAWN;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 로그인 보안 (A-1 · F-4.12-1)
+    // ─────────────────────────────────────────────────────────────
+
+    public boolean isLocked() {
+        return lockedAt != null;
+    }
+
+    /** 로그인 실패 누적 잠금. 자동 해제는 없고 관리자가 푼다(F-4.12-1). */
+    public void lock(Instant at) {
+        this.lockedAt = at;
+    }
+
+    /** 관리자 잠금 해제. 실패 카운터 초기화는 호출자가 함께 해야 한다. */
+    public void unlock() {
+        this.lockedAt = null;
+    }
+
+    /**
+     * 관리자의 임시 비밀번호 재발급 (분실 시에 한함 — F-4.12-1).
+     *
+     * <p>잠금도 함께 푼다. 비밀번호를 잊어 여러 번 틀리다 잠긴 경우가 대부분이라,
+     * 재발급만 하고 잠금을 남기면 새 비밀번호로도 로그인이 안 돼 문의가 두 번 온다.
+     */
+    public void issueTemporaryPassword(String encodedPassword) {
+        this.passwordHash = encodedPassword;
+        this.mustChangePassword = true;
+        this.lockedAt = null;
+    }
+
+    /**
+     * 가입 시점의 비밀번호 설정 기록.
+     *
+     * <p>{@code changePassword}와 나눈 이유는 <b>의미가 다르기 때문</b>이다 — 이쪽은
+     * 최초 설정이라 "변경 강제 해제"가 일어날 게 없다. 같은 메서드를 쓰면 나중에
+     * 변경 정책이 붙을 때 최초 설정까지 같이 걸린다.
+     */
+    public void markPasswordInitialized(Instant at) {
+        this.passwordChangedAt = at;
+    }
+
+    /**
+     * 본인 비밀번호 변경. 변경과 동시에 강제 플래그가 풀린다.
+     *
+     * <p>{@code passwordChangedAt}을 남기는 이유는 만료 정책(NF-05 미확보)이 나중에
+     * 확정될 때 <b>그 시점 이후 데이터만으로는 판정할 수 없기</b> 때문이다.
+     */
+    public void changePassword(String encodedPassword, Instant at) {
+        this.passwordHash = encodedPassword;
+        this.mustChangePassword = false;
+        this.passwordChangedAt = at;
     }
 }

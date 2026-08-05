@@ -36,6 +36,15 @@ public class AdminAuthController {
                 authService.refresh(request.refreshToken())));
     }
 
+    /** 비밀번호 변경. 관리자도 임시 비밀번호를 재발급받으면 변경 강제 대상이 된다. */
+    @PostMapping("/password")
+    public ApiResponse<AuthResponse> changePassword(
+            @CurrentAccount AuthPrincipal principal,
+            @Valid @RequestBody AuthRequests.ChangePassword request) {
+        return ApiResponse.success(AuthResponse.from(authService.changePassword(
+                principal.accountId(), request.currentPassword(), request.newPassword())));
+    }
+
     @PostMapping("/logout")
     public ApiResponse<Void> logout(@CurrentAccount AuthPrincipal principal,
                                     @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String header) {

@@ -19,13 +19,15 @@ import org.springframework.security.core.userdetails.UserDetails;
  * @param academyId   소속 지점. 전 지점 권한자는 null일 수 있다
  * @param roles       부여된 역할
  * @param allAcademy  전 지점 접근 가능 여부(permission.academy_scope='ALL')
+ * @param mustChangePassword 임시 비밀번호 상태(A-1). true면 비밀번호 변경 외 API가 막힌다
  */
 public record AuthPrincipal(
         Long accountId,
         String accountType,
         Long academyId,
         Set<Role> roles,
-        boolean allAcademy
+        boolean allAcademy,
+        boolean mustChangePassword
 ) implements UserDetails {
 
     @Override
@@ -66,8 +68,16 @@ public record AuthPrincipal(
         return allAcademy ? null : academyId;
     }
 
+    /** 임시 비밀번호 상태가 아닌 일반 주체. */
     public static AuthPrincipal of(Long accountId, String accountType, Long academyId,
                                    List<Role> roles, boolean allAcademy) {
-        return new AuthPrincipal(accountId, accountType, academyId, Set.copyOf(roles), allAcademy);
+        return of(accountId, accountType, academyId, roles, allAcademy, false);
+    }
+
+    public static AuthPrincipal of(Long accountId, String accountType, Long academyId,
+                                   List<Role> roles, boolean allAcademy,
+                                   boolean mustChangePassword) {
+        return new AuthPrincipal(accountId, accountType, academyId, Set.copyOf(roles),
+                allAcademy, mustChangePassword);
     }
 }
