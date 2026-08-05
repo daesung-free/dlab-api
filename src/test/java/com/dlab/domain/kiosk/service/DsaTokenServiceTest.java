@@ -46,6 +46,7 @@ class DsaTokenServiceTest {
     private BranchConfigRepository repository;
     private AcademyRepository academyRepository;
     private Map<String, String> store;
+    private Map<String, java.util.Set<String>> sets;
     private DsaTokenService service;
     private Clock clock;
 
@@ -53,16 +54,10 @@ class DsaTokenServiceTest {
     void setUp() {
         repository = mock(BranchConfigRepository.class);
         store = new HashMap<>();
+        sets = new HashMap<>();
         clock = Clock.fixed(Instant.parse("2026-08-03T12:00:00Z"), KST);
 
-        StringRedisTemplate redis = mock(StringRedisTemplate.class);
-        ValueOperations<String, String> ops = mock(ValueOperations.class);
-        given(redis.opsForValue()).willReturn(ops);
-        given(ops.get(anyString())).willAnswer(inv -> store.get(inv.getArgument(0, String.class)));
-        org.mockito.BDDMockito.willAnswer(inv -> {
-            store.put(inv.getArgument(0), inv.getArgument(1));
-            return null;
-        }).given(ops).set(anyString(), anyString(), any(java.time.Duration.class));
+        StringRedisTemplate redis = fakeRedis();
 
         BranchConfig config = new BranchConfig(ACADEMY_ID);
         config.issueKioskCredential(CLIENT_ID, SECRET);
@@ -76,6 +71,61 @@ class DsaTokenServiceTest {
         given(academyRepository.findById(ACADEMY_ID)).willReturn(Optional.of(academy));
 
         service = new DsaTokenService(repository, academyRepository, redis, clock);
+    }
+
+    /**
+     * 최소 기능 가짜 Redis.
+     *
+     * <p>값(String)과 집합(Set)을 <b>같은 맵에 담지 않는다</b> — 토큰 폐기가
+     * 역인덱스 집합을 훑어 값 키를 지우는 구조라, 둘이 섞이면 테스트가
+     * 실제 동작과 다르게 통과해버린다.
+     */
+    @SuppressWarnings("unchecked")
+    private StringRedisTemplate fakeRedis() {
+        StringRedisTemplate redis = mock(StringRedisTemplate.class);
+
+        ValueOperations<String, String> ops = mock(ValueOperations.class);
+        given(redis.opsForValue()).willReturn(ops);
+        given(ops.get(anyString())).willAnswer(inv -> store.get(inv.getArgument(0, String.class)));
+        org.mockito.BDDMockito.willAnswer(inv -> {
+            store.put(inv.getArgument(0), inv.getArgument(1));
+            return null;
+        }).given(ops).set(anyString(), anyString(), any(java.time.Duration.class));
+
+        org.springframework.data.redis.core.SetOperations<String, String> setOps =
+                mock(org.springframework.data.redis.core.SetOperations.class);
+        given(redis.opsForSet()).willReturn(setOps);
+        given(setOps.members(anyString()))
+                .willAnswer(inv -> sets.get(inv.getArgument(0, String.class)));
+        org.mockito.BDDMockito.willAnswer(inv -> {
+            String key = inv.getArgument(0);
+            Object[] values = inv.getArguments();
+            for (int i = 1; i < values.length; i++) {
+                sets.computeIfAbsent(key, k -> new java.util.HashSet<>())
+                        .add(String.valueOf(values[i]));
+            }
+            return 1L;
+        }).given(setOps).add(anyString(), any(String[].class));
+
+        given(redis.delete(anyString())).willAnswer(inv -> {
+            String key = inv.getArgument(0);
+            sets.remove(key);
+            return store.remove(key) != null;
+        });
+        given(redis.delete(any(java.util.Collection.class))).willAnswer(inv -> {
+            java.util.Collection<String> keys = inv.getArgument(0);
+            long removed = 0;
+            for (String key : keys) {
+                sets.remove(key);
+                if (store.remove(key) != null) {
+                    removed++;
+                }
+            }
+            return removed;
+        });
+        given(redis.expire(anyString(), any(java.time.Duration.class))).willReturn(true);
+
+        return redis;
     }
 
     private String secretIdFor(LocalDate date) {
@@ -177,6 +227,49 @@ class DsaTokenServiceTest {
                 .willReturn(Optional.of(other));
 
         assertThatThrownBy(() -> service.refresh("client9_1", issued.refreshToken()))
+                .isInstanceOf(DsaApiException.class);
+    }
+
+    @Test
+    @DisplayName("★ 갱신하면 이전 access 토큰이 죽는다 — 안 그러면 10일간 함께 살아 있다")
+    void refreshKillsPreviousAccessToken() {
+        var first = service.issue(ACAD_CD, CLIENT_ID, secretIdFor(LocalDate.now(clock)));
+        assertThat(service.resolveAcademyId(first.token())).isEqualTo(ACADEMY_ID);
+
+        var refreshed = service.refresh(CLIENT_ID, first.refreshToken());
+
+        assertThat(service.resolveAcademyId(refreshed.token())).isEqualTo(ACADEMY_ID);
+        assertThatThrownBy(() -> service.resolveAcademyId(first.token()))
+                .isInstanceOf(DsaApiException.class);
+    }
+
+    @Test
+    @DisplayName("★ 다른 키오스크는 영향받지 않는다 — 지점당 단말이 여러 대다")
+    void refreshDoesNotAffectOtherKiosks() {
+        var kioskA = service.issue(ACAD_CD, CLIENT_ID, secretIdFor(LocalDate.now(clock)));
+        var kioskB = service.issue(ACAD_CD, CLIENT_ID, secretIdFor(LocalDate.now(clock)));
+
+        service.refresh(CLIENT_ID, kioskA.refreshToken());
+
+        // A만 갱신했는데 B가 튕기면 매번 서로를 쫓아낸다
+        assertThat(service.resolveAcademyId(kioskB.token())).isEqualTo(ACADEMY_ID);
+    }
+
+    @Test
+    @DisplayName("★ 지점 전체 폐기 — 시크릿 유출·단말 분실 시")
+    void revokeAllKillsEveryTokenOfBranch() {
+        var kioskA = service.issue(ACAD_CD, CLIENT_ID, secretIdFor(LocalDate.now(clock)));
+        var kioskB = service.issue(ACAD_CD, CLIENT_ID, secretIdFor(LocalDate.now(clock)));
+
+        long revoked = service.revokeAll(ACADEMY_ID);
+
+        assertThat(revoked).isEqualTo(4);   // access 2 + refresh 2
+        assertThatThrownBy(() -> service.resolveAcademyId(kioskA.token()))
+                .isInstanceOf(DsaApiException.class);
+        assertThatThrownBy(() -> service.resolveAcademyId(kioskB.token()))
+                .isInstanceOf(DsaApiException.class);
+        // refresh도 죽어야 한다 — 살아 있으면 바로 새 access를 받아간다
+        assertThatThrownBy(() -> service.refresh(CLIENT_ID, kioskA.refreshToken()))
                 .isInstanceOf(DsaApiException.class);
     }
 }
