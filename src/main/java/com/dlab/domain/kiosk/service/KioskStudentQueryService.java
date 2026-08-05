@@ -8,7 +8,7 @@ import com.dlab.domain.approval.entity.ApprovalStatus;
 import com.dlab.domain.attendance.entity.AbsenceReason;
 import com.dlab.domain.attendance.entity.AbsenceReasonType;
 import com.dlab.domain.attendance.repository.AbsenceReasonRepository;
-import com.dlab.domain.seat.repository.SeatAssignmentRepository;
+import com.dlab.domain.facility.repository.SeatAssignmentRepository;
 import com.dlab.domain.user.entity.ParentGuardian;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.repository.AcademyRepository;

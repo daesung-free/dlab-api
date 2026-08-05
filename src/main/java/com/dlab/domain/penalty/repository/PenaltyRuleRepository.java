@@ -25,4 +25,17 @@ public interface PenaltyRuleRepository extends JpaRepository<PenaltyRule, Long> 
     List<PenaltyRule> findActive(@Param("academyId") Long academyId,
                                  @Param("year") short year,
                                  @Param("triggerType") PenaltyTriggerType triggerType);
+
+    /**
+     * 해당 연도 전체 규칙. 전년도 복사가 쓴다 — 아직 켜지 않은(active=false) 규칙도
+     * 그대로 넘어가야 하므로 {@link #findActive}를 재사용할 수 없다.
+     */
+    @Query("""
+            SELECT r FROM PenaltyRule r
+              JOIN FETCH r.penaltyItem
+            WHERE r.deleted = false
+              AND r.academy.id = :academyId
+              AND r.year = :year
+            """)
+    List<PenaltyRule> findAllOfYear(@Param("academyId") Long academyId, @Param("year") short year);
 }

@@ -1,5 +1,6 @@
 package com.dlab.domain.user.repository;
 
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 
@@ -19,4 +20,17 @@ public interface AccountRoleRepository extends Repository<com.dlab.domain.user.e
             WHERE ar.account_id = :accountId AND r.is_deleted = false
             """, nativeQuery = true)
     Set<String> findRoleNamesByAccountId(Long accountId);
+
+    /** 역할 부여. 이미 있으면 무시한다(PK 충돌 방지). */
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            INSERT INTO account_role (account_id, role_id)
+            SELECT :accountId, id FROM role WHERE name = :roleName
+            ON CONFLICT DO NOTHING
+            """, nativeQuery = true)
+    void grant(Long accountId, String roleName);
+
+    @Modifying(clearAutomatically = true)
+    @Query(value = "DELETE FROM account_role WHERE account_id = :accountId", nativeQuery = true)
+    void deleteByAccountId(Long accountId);
 }

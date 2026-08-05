@@ -2,10 +2,10 @@ package com.dlab.domain.kiosk.service;
 
 import com.dlab.api.kiosk.DsaApiException;
 import com.dlab.api.kiosk.DsaCode;
-import com.dlab.domain.seat.entity.SeatAssignment;
-import com.dlab.domain.seat.entity.SeatMaster;
-import com.dlab.domain.seat.repository.SeatAssignmentRepository;
-import com.dlab.domain.seat.repository.SeatMasterRepository;
+import com.dlab.domain.facility.entity.SeatAssignment;
+import com.dlab.domain.facility.entity.SeatMaster;
+import com.dlab.domain.facility.repository.SeatAssignmentRepository;
+import com.dlab.domain.facility.repository.SeatMasterRepository;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import jakarta.persistence.EntityManager;

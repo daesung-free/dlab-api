@@ -6,10 +6,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.dlab.domain.kiosk.entity.BranchConfig;
-import com.dlab.domain.seat.entity.SeatAssignment;
-import com.dlab.domain.seat.entity.SeatMaster;
-import com.dlab.domain.seat.entity.StudyArea;
-import com.dlab.domain.seat.repository.SeatAssignmentRepository;
+import com.dlab.domain.facility.entity.SeatAssignment;
+import com.dlab.domain.facility.entity.SeatMaster;
+import com.dlab.domain.facility.entity.StudyArea;
+import com.dlab.domain.facility.repository.SeatAssignmentRepository;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.GradeType;
 import com.dlab.domain.user.entity.Student;

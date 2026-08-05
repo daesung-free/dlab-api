@@ -40,6 +40,14 @@ public class ClassMaster extends BaseEntity {
     @JoinColumn(name = "homeroom_teacher_id")
     private Teacher homeroomTeacher;
 
+    /**
+     * 소속 과정. ★ 전년도 복사 시 <b>새 연도 {@code course_type}으로 갈아끼워야 한다</b> —
+     * 그냥 복사하면 새 연도 반이 옛 연도 과정을 가리킨다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "course_type_id")
+    private com.dlab.domain.master.entity.CourseType courseType;
+
     public ClassMaster(Academy academy, short year, String name, ClassType classType, Teacher homeroomTeacher) {
         this.academy = academy;
         this.year = year;
@@ -51,4 +59,21 @@ public class ClassMaster extends BaseEntity {
     public void assignHomeroom(Teacher teacher) {
         this.homeroomTeacher = teacher;
     }
+
+    public void assignCourseType(com.dlab.domain.master.entity.CourseType courseType) {
+        this.courseType = courseType;
+    }
+
+    /**
+     * 전년도 복사 원본. NULL이면 그 해에 새로 만든 것이다.
+     * 복사본과 신규 생성분을 구분할 유일한 근거라 복사 시 반드시 채운다.
+     */
+    @Column(name = "copied_from_id")
+    private Long copiedFromId;
+
+    /** 전년도 복사가 호출한다. 원본 없이 만든 행은 계속 NULL이어야 한다. */
+    public void markCopiedFrom(Long sourceId) {
+        this.copiedFromId = sourceId;
+    }
+
 }

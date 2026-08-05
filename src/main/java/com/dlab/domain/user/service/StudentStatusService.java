@@ -3,73 +3,125 @@ package com.dlab.domain.user.service;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
-import com.dlab.domain.user.entity.EnrollmentStatus;
-import com.dlab.domain.user.entity.EnrollmentStatusHistory;
-import com.dlab.domain.user.entity.EnrollmentStatusTransition;
-import com.dlab.domain.user.entity.StudentEnrollment;
-import com.dlab.domain.user.repository.EnrollmentStatusHistoryRepository;
-import java.time.Clock;
-import java.time.LocalDate;
-import java.util.List;
+import com.dlab.domain.facility.repository.SeatAssignmentRepository;
+import com.dlab.domain.master.entity.LockerMaster;
+import com.dlab.domain.master.repository.LockerMasterRepository;
+import com.dlab.domain.user.entity.*;
+import com.dlab.domain.user.repository.AccountRepository;
+import com.dlab.domain.user.repository.ClassAssignmentRepository;
+import com.dlab.domain.user.repository.StudentEnrollmentRepository;
+import com.dlab.domain.user.repository.StudentStatusLogRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+
 /**
- * 학생 상태 관리 (P1-04) — 재원/휴원/퇴원/제적/수료 전이와 후속처리.
+ * 학생 상태 관리 (요구사항 F-4.1-8).
  *
- * <p><b>상태 변경과 후속처리는 같은 트랜잭션이다</b>(실행가이드 명시). 반만 처리되면
- * "퇴원인데 반 배정이 살아 있는" 상태가 남고, 그건 화면에서 보이지 않아 아무도 못 고친다.
+ * <p>재원 → 휴원 → 재원 / 퇴원 / 제적 / 수료.
  *
- * <p>후속처리 목록은 {@link EnrollmentStatusFollowUp} 구현체를 주입받아 돌린다 —
- * 급식·좌석 도메인이 생기면 이 클래스를 수정하지 않고 빈만 추가하면 된다.
+ * <p><b>★ 상태만 바꾸고 끝나면 안 된다.</b> 시트가 요구하는 후속처리를
+ * <b>같은 트랜잭션에</b> 묶는다 — 상태는 퇴원인데 좌석은 그대로 잡혀 있는 상태가 생기면
+ * 다음 학생이 그 자리를 못 받고, 원인을 찾기도 어렵다.
+ *
+ * <p><b>휴원은 정리 대상이 아니다.</b> 돌아올 학생의 좌석·사물함을 비우면 복귀 때 다시
+ * 배정해야 하고 그 사이 다른 학생이 들어가 자리를 잃는다.
+ *
+ * <p><b>아직 못 하는 후속처리</b>(도메인 자체가 없다) — 급식 정기신청 중단, 미납 채권 이관.
+ * 해당 도메인이 생기면 여기에 붙인다. 지금 임시로 흉내 내면 나중에 이중 처리가 된다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class StudentStatusService {
 
-    private final StudentQueryService studentQueryService;
-    private final EnrollmentStatusHistoryRepository historyRepository;
-    private final List<EnrollmentStatusFollowUp> followUps;
+    private final StudentEnrollmentRepository enrollmentRepository;
+    private final StudentStatusLogRepository statusLogRepository;
+    private final ClassAssignmentRepository classAssignmentRepository;
+    private final SeatAssignmentRepository seatAssignmentRepository;
+    private final LockerMasterRepository lockerRepository;
+    private final AccountRepository accountRepository;
     private final Clock clock;
 
+    @Transactional(readOnly = true)
+    public List<StudentStatusLog> history(Long enrollmentId, AuthPrincipal principal) {
+        StudentEnrollment enrollment = load(enrollmentId, principal);
+        return statusLogRepository.findByEnrollmentIdAndDeletedFalseOrderByChangedAtDesc(
+                enrollment.getId());
+    }
+
     /**
-     * 상태 전이.
+     * 상태 전이 + 후속처리.
      *
-     * @param effectiveDate 효력 발생일. 없으면 오늘. 소급 처리가 실제로 있어
-     *                      (지난달에 그만뒀는데 이번 달에 입력) 받아둔다 —
-     *                      환불 일할계산(I-26)이 이 날짜를 쓴다
-     * @param reason        변경 사유. 제적·퇴원은 분쟁 소지가 있어 사실상 필수지만,
-     *                      휴원 복귀까지 강제하면 입력을 피하려 아무 값이나 넣게 된다
+     * @param reason 사유. 제적처럼 다툼이 생길 수 있는 전이는 사유가 남아야 한다
      */
-    public StudentEnrollment changeStatus(AuthPrincipal me, Long enrollmentId,
-                                          EnrollmentStatus to, LocalDate effectiveDate,
-                                          String reason) {
-        // 지점 확인이 여기 들어 있다
-        StudentEnrollment enrollment = studentQueryService.getEnrollment(me, enrollmentId);
+    @Transactional
+    public StudentEnrollment changeStatus(Long enrollmentId, EnrollmentStatus to, String reason,
+                                          AuthPrincipal principal) {
+        StudentEnrollment enrollment = load(enrollmentId, principal);
         EnrollmentStatus from = enrollment.getEnrollmentStatus();
 
-        if (!EnrollmentStatusTransition.isAllowed(from, to)) {
-            throw new BusinessException(ErrorCode.INVALID_ENROLLMENT_STATUS_TRANSITION);
+        if (from == to) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "이미 같은 상태입니다.");
+        }
+        // 수료·퇴원·제적에서 되돌리는 건 실수 정정이라 화면이 아니라 별도 절차로 다뤄야 한다
+        if (from.requiresCleanup() && to == EnrollmentStatus.ENROLLED) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "%s 상태에서 재원으로 되돌릴 수 없습니다. 재등록으로 처리하세요.".formatted(from));
         }
 
-        LocalDate effective = effectiveDate == null ? LocalDate.now(clock) : effectiveDate;
-        enrollment.changeStatus(to, effective);
-        historyRepository.save(
-                new EnrollmentStatusHistory(enrollment, from, to, effective, reason));
+        Instant now = Instant.now(clock);
+        enrollment.updateEnrollment(null, null, to);
+        statusLogRepository.save(new StudentStatusLog(enrollment, from, to, reason, now));
 
-        EnrollmentStatusFollowUp.Change change =
-                new EnrollmentStatusFollowUp.Change(enrollment, from, to, effective);
-        followUps.forEach(followUp -> followUp.apply(change));
-
+        if (to.requiresCleanup()) {
+            cleanup(enrollment, to, now);
+        }
+        log.info("학생 상태 변경: enrollmentId={}, {} → {}", enrollmentId, from, to);
         return enrollment;
     }
 
-    /** 이 등록 건의 상태 변경 이력(최신순). */
-    @Transactional(readOnly = true)
-    public List<EnrollmentStatusHistory> history(AuthPrincipal me, Long enrollmentId) {
-        studentQueryService.getEnrollment(me, enrollmentId);
-        return historyRepository.findByEnrollmentIdOrderByCreatedAtDesc(enrollmentId);
+    /**
+     * 자리·계정 정리.
+     *
+     * <p>배정은 <b>비우기만</b> 하고 행은 남긴다 — 누가 언제 그 자리를 썼는지가 사라지면
+     * 분실물·시설 파손 같은 문의에 답할 수 없다.
+     */
+    private void cleanup(StudentEnrollment enrollment, EnrollmentStatus to, Instant now) {
+        Long enrollmentId = enrollment.getId();
+
+        classAssignmentRepository.findByEnrollmentIdAndActiveTrue(enrollmentId)
+                .forEach(ClassAssignment::deactivate);
+
+        seatAssignmentRepository.findActiveByEnrollmentId(enrollmentId)
+                .ifPresent(seat -> seat.release(now));
+
+        lockerRepository.findByAssignedEnrollmentIdAndDeletedFalse(enrollmentId)
+                .ifPresent(LockerMaster::release);
+
+        // 앱 접근 차단. 계정을 지우지는 않는다 — 재등록 시 같은 사람을 다시 찾아야 한다
+        accountRepository.findByStudentId(enrollment.getStudent().getId())
+                .ifPresent(Account::deactivate);
+
+        // 수료는 정상 종료라 퇴원일을 남기지 않는다 — 환불 일할계산 대상이 아니다
+        if (to == EnrollmentStatus.WITHDRAWN || to == EnrollmentStatus.EXPELLED) {
+            enrollment.markWithdrawn(now.atZone(clock.getZone()).toLocalDate());
+        } else {
+            enrollment.expire();
+        }
+    }
+
+    private StudentEnrollment load(Long enrollmentId, AuthPrincipal principal) {
+        StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+        if (!principal.canAccessAcademy(enrollment.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        return enrollment;
     }
 }

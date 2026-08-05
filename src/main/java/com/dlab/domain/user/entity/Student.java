@@ -52,6 +52,10 @@ public class Student extends BaseEntity {
     @Column(name = "school_name", length = 64)
     private String schoolName;
 
+    /** ★ 민감 필드. 전화·생년월일과 같은 등급으로 다룬다(마스킹·상위 관리자 전용). */
+    @Column(length = 200)
+    private String address;
+
     @Column(name = "search_name_normalized", length = 20)
     private String searchNameNormalized;
 
@@ -59,5 +63,34 @@ public class Student extends BaseEntity {
         this.uniqueCode = uniqueCode;
         this.name = name;
         this.phone = phone;
+    }
+
+    /**
+     * 사람 정보 수정.
+     *
+     * <p><b>{@code null}인 인자는 "변경하지 않음"이다</b> — 빈 값으로 덮어쓰지 않는다.
+     * 엑셀 업로드에서 마스킹된 연락처가 오면 호출자가 {@code null}로 바꿔 넘기고,
+     * 그 결과 기존 번호가 그대로 남는다({@code common/privacy/Masking}).
+     */
+    public void updateProfile(String name, String phone, LocalDate birthDate,
+                              String gender, String schoolName, String address) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (phone != null) {
+            this.phone = phone;
+        }
+        if (birthDate != null) {
+            this.birthDate = birthDate;
+        }
+        if (gender != null) {
+            this.gender = gender;
+        }
+        if (schoolName != null) {
+            this.schoolName = schoolName;
+        }
+        if (address != null) {
+            this.address = address;
+        }
     }
 }

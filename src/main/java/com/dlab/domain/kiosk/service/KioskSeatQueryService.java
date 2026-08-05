@@ -4,11 +4,11 @@ import com.dlab.api.kiosk.dto.DsaRows;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository;
-import com.dlab.domain.seat.entity.SeatAssignment;
-import com.dlab.domain.seat.entity.StudyArea;
-import com.dlab.domain.seat.repository.SeatAssignmentRepository;
-import com.dlab.domain.seat.repository.SeatMasterRepository;
-import com.dlab.domain.seat.repository.StudyAreaRepository;
+import com.dlab.domain.facility.entity.SeatMaster;
+import com.dlab.domain.facility.entity.StudyArea;
+import com.dlab.domain.facility.repository.SeatAssignmentRepository;
+import com.dlab.domain.facility.repository.SeatMasterRepository;
+import com.dlab.domain.facility.repository.StudyAreaRepository;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Comparator;
@@ -76,9 +76,20 @@ public class KioskSeatQueryService {
                                 String.valueOf(s.getXPos()),
                                 String.valueOf(s.getYPos()),
                                 s.getSeatNm(),
-                                s.seatGn()))
+                                seatGn(s)))
                         .toList())
                 .orElse(List.of());
+    }
+
+    /**
+     * DSA {@code seat_gn} — {@code Y} 사용 / {@code N} 미사용 / {@code E} 통로.
+     *
+     * <p>엔티티는 {@code usable} boolean만 갖고 있어 <b>통로({@code E})를 표현하지 못한다.</b>
+     * 통로 좌석을 만들지 않는 한 무해하지만, 좌석배치도에 통로를 넣으려면
+     * {@code seat_master}에 유형 컬럼이 필요하다.
+     */
+    private String seatGn(SeatMaster seat) {
+        return seat.isUsable() ? "Y" : "N";
     }
 
     /**
