@@ -17,6 +17,7 @@ public record StudentResponse(
         String studentNo,
         String name,
         String phone,
+        String address,
         short year,
         GradeType grade,
         TrackType track,
@@ -28,7 +29,7 @@ public record StudentResponse(
         Student s = e.getStudent();
         return new StudentResponse(
                 e.getId(), s.getId(), s.getUniqueCode(), e.getStudentNo(),
-                s.getName(), s.getPhone(), e.getYear(),
+                s.getName(), s.getPhone(), s.getAddress(), e.getYear(),
                 e.getGrade(), e.getTrack(), e.getEnrollmentStatus(), e.getAdmissionDate());
     }
 }

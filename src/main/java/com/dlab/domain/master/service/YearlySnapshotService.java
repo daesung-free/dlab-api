@@ -5,13 +5,13 @@ import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.approval.entity.ApprovalItem;
 import com.dlab.domain.approval.repository.ApprovalItemRepository;
-import com.dlab.domain.master.entity.AdmissionType;
 import com.dlab.domain.master.entity.CourseType;
 import com.dlab.domain.master.entity.Curriculum;
+import com.dlab.domain.master.entity.Tuition;
 import com.dlab.domain.master.entity.DepartmentMaster;
-import com.dlab.domain.master.repository.AdmissionTypeRepository;
 import com.dlab.domain.master.repository.CourseTypeRepository;
 import com.dlab.domain.master.repository.CurriculumRepository;
+import com.dlab.domain.master.repository.TuitionRepository;
 import com.dlab.domain.master.repository.DepartmentMasterRepository;
 import com.dlab.domain.penalty.entity.PenaltyItem;
 import com.dlab.domain.penalty.entity.PenaltyRule;
@@ -49,7 +49,7 @@ import java.util.Map;
  *
  * <p>복사 순서는 참조하는 쪽이 나중에 오도록 한다:
  * <pre>
- *   학과 · 전형 · 교시 · 승인정책 (서로 독립)
+ *   학과 · 교시 · 승인정책 · 교습비 (서로 독립)
  *   과정 → 반 → 커리큘럼   (반이 과정을, 커리큘럼이 반을 참조)
  *   상벌점 항목 → 상벌점 규칙 (규칙이 항목을 참조)
  * </pre>
@@ -67,7 +67,7 @@ public class YearlySnapshotService {
     private final DepartmentMasterRepository departmentRepository;
     private final CourseTypeRepository courseTypeRepository;
     private final CurriculumRepository curriculumRepository;
-    private final AdmissionTypeRepository admissionTypeRepository;
+    private final TuitionRepository tuitionRepository;
     private final ClassMasterRepository classMasterRepository;
     private final ApprovalItemRepository approvalItemRepository;
     private final PenaltyItemRepository penaltyItemRepository;
@@ -99,7 +99,6 @@ public class YearlySnapshotService {
 
         Map<String, Integer> copied = new LinkedHashMap<>();
         copied.put("department", copyDepartments(academy, fromYear, toYear));
-        copied.put("admissionType", copyAdmissionTypes(academy, fromYear, toYear));
         copied.put("period", copyPeriods(academyId, fromYear, toYear));
 
         // 과정 → 반 순서. 반이 과정을 참조하므로 매핑을 넘겨받는다.
@@ -115,6 +114,7 @@ public class YearlySnapshotService {
         Map<Long, PenaltyItem> itemMapping = copyPenaltyItems(academy, fromYear, toYear);
         copied.put("penaltyItem", itemMapping.size());
         copied.put("penaltyRule", copyPenaltyRules(academy, fromYear, toYear, itemMapping));
+        copied.put("tuition", copyTuitions(academy, fromYear, toYear));
 
         SnapshotResult result = new SnapshotResult(fromYear, toYear, copied);
         log.info("전년도 복사 완료: academy={}, {} → {}, 합계 {}건 {}",
@@ -137,13 +137,11 @@ public class YearlySnapshotService {
                                 .findByAcademyIdAndYearAndDeletedFalseOrderBySortOrderAscNameAsc(
                                         academyId, toYear).isEmpty()
                         || !curriculumRepository.findAllOfYear(academyId, toYear).isEmpty()
-                        || !admissionTypeRepository
-                                .findByAcademyIdAndYearAndDeletedFalseOrderBySortOrderAscNameAsc(
-                                        academyId, toYear).isEmpty()
                         || !approvalItemRepository.findByAcademyIdAndYearAndDeletedFalse(academyId, toYear).isEmpty()
                         || !penaltyItemRepository
                                 .findByAcademyIdAndYearAndDeletedFalseOrderByItemNameAsc(academyId, toYear).isEmpty()
-                        || !penaltyRuleRepository.findAllOfYear(academyId, toYear).isEmpty();
+                        || !penaltyRuleRepository.findAllOfYear(academyId, toYear).isEmpty()
+                        || !tuitionRepository.findAllOfYear(academyId, toYear).isEmpty();
 
         if (hasData) {
             throw new BusinessException(ErrorCode.SNAPSHOT_TARGET_NOT_EMPTY,
@@ -247,17 +245,6 @@ public class YearlySnapshotService {
         return mapping;
     }
 
-    /** 전형은 등록 건이 참조하는데, 등록 건은 연도마다 새로 만들어지므로 갈아끼울 대상이 없다. */
-    private int copyAdmissionTypes(Academy academy, short fromYear, short toYear) {
-        List<AdmissionType> sources = admissionTypeRepository
-                .findByAcademyIdAndYearAndDeletedFalseOrderBySortOrderAscNameAsc(academy.getId(), fromYear);
-        sources.forEach(src -> {
-            AdmissionType copy = admissionTypeRepository.save(
-                    new AdmissionType(academy, toYear, src.getName(), src.getSortOrder()));
-            copy.markCopiedFrom(src.getId());
-        });
-        return sources.size();
-    }
 
     private Teacher activeTeacherOrNull(Teacher teacher) {
         if (teacher == null || teacher.isResigned() || teacher.isDeleted()) {
@@ -273,6 +260,17 @@ public class YearlySnapshotService {
             ApprovalItem copy = approvalItemRepository.save(new ApprovalItem(
                     academy, toYear, src.getRequestType(), src.getApproverType(),
                     src.getTimeoutMinutes(), src.getEscalationApproverType()));
+            copy.markCopiedFrom(src.getId());
+        });
+        return sources.size();
+    }
+
+    /** 교습비. 복사 의존순서의 마지막이고 다른 마스터를 참조하지 않는다. */
+    private int copyTuitions(Academy academy, short fromYear, short toYear) {
+        List<Tuition> sources = tuitionRepository.findAllOfYear(academy.getId(), fromYear);
+        sources.forEach(src -> {
+            Tuition copy = tuitionRepository.save(
+                    new Tuition(academy, toYear, src.getName(), src.getAmount(), src.getSortOrder()));
             copy.markCopiedFrom(src.getId());
         });
         return sources.size();

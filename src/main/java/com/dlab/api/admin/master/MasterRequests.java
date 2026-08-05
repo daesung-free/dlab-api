@@ -51,6 +51,24 @@ public final class MasterRequests {
         }
     }
 
+    public record CreateTuition(
+            @NotNull(message = "지점은 필수입니다.") Long academyId,
+            @NotNull(message = "연도는 필수입니다.") @Min(2000) @Max(2100) Integer year,
+            @NotBlank(message = "이름은 필수입니다.") @Size(max = 100) String name,
+            @NotNull(message = "금액은 필수입니다.") @Min(0) Integer amount,
+            @Min(0) @Max(999) Integer sortOrder) {
+
+        public short sortOrderOrZero() {
+            return sortOrder == null ? 0 : sortOrder.shortValue();
+        }
+    }
+
+    /** null은 변경하지 않는다. */
+    public record UpdateTuition(
+            @Size(max = 100) String name,
+            @Min(0) Integer amount) {
+    }
+
     public record Rename(
             @NotBlank(message = "이름은 필수입니다.") @Size(max = 50) String name) {
     }

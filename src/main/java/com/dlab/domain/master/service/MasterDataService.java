@@ -19,7 +19,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * 기초 마스터 — 학과 · 과정 · 전형 · 커리큘럼 · 계열 · 사물함 · 장학.
+ * 기초 마스터 — 학과 · 과정(전형) · 커리큘럼 · 교습비 · 계열 · 사물함 · 장학.
  *
  * <p>학과·과정·전형은 지점·연도 단위라 <b>전년도 복사 대상</b>이고, 계열은 전 지점 공통
  * 고정값이라 복사 대상이 아니다(docs/entity-design.md §0-1의 의도된 예외).
@@ -36,8 +36,8 @@ public class MasterDataService {
     private final LockerMasterRepository lockerRepository;
     private final ScholarshipRepository scholarshipRepository;
     private final CourseTypeRepository courseTypeRepository;
-    private final AdmissionTypeRepository admissionTypeRepository;
     private final CurriculumRepository curriculumRepository;
+    private final TuitionRepository tuitionRepository;
     private final com.dlab.domain.user.repository.ClassMasterRepository classMasterRepository;
     private final AcademyRepository academyRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
@@ -113,42 +113,49 @@ public class MasterDataService {
         courseType.markDeleted();
     }
 
-    // ── 전형 (admission_type) ──
+
+    // ── 교습비 ──
 
     @Transactional(readOnly = true)
-    public List<AdmissionType> admissionTypes(Long academyId, short year, AuthPrincipal principal) {
+    public List<Tuition> tuitions(Long academyId, short year, AuthPrincipal principal) {
         verifyAccess(academyId, principal);
-        return admissionTypeRepository
-                .findByAcademyIdAndYearAndDeletedFalseOrderBySortOrderAscNameAsc(academyId, year);
+        return tuitionRepository.findAllOfYear(academyId, year);
     }
 
     @Transactional
-    public AdmissionType createAdmissionType(Long academyId, short year, String name, short sortOrder,
-                                             AuthPrincipal principal) {
+    public Tuition createTuition(Long academyId, short year, String name, int amount,
+                                 short sortOrder, AuthPrincipal principal) {
         verifyAccess(academyId, principal);
-        if (admissionTypeRepository.existsByAcademyIdAndYearAndNameAndDeletedFalse(
-                academyId, year, name)) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "같은 연도에 같은 이름의 전형이 있습니다.");
+        if (amount < 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "금액은 0 이상이어야 합니다.");
         }
-        return admissionTypeRepository.save(
-                new AdmissionType(loadAcademy(academyId), year, name, sortOrder));
+        if (tuitionRepository.existsByAcademyIdAndYearAndNameAndDeletedFalse(academyId, year, name)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "같은 연도에 같은 이름의 교습비가 있습니다.");
+        }
+        return tuitionRepository.save(new Tuition(loadAcademy(academyId), year, name, amount, sortOrder));
+    }
+
+    /**
+     * 교습비 변경.
+     *
+     * <p><b>과거 청구에 소급되면 안 된다.</b> 청구 도메인이 생기면 청구 시점 금액을
+     * 청구 행에 복사해 남겨야 한다 — 상벌점이 부여 시점 점수를 복사하는 것과 같은 이유다.
+     */
+    @Transactional
+    public Tuition updateTuition(Long id, String name, Integer amount, AuthPrincipal principal) {
+        Tuition tuition = tuitionRepository.findById(id)
+                .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
+        verifyAccess(tuition.getAcademy().getId(), principal);
+        tuition.update(name, amount);
+        return tuition;
     }
 
     @Transactional
-    public AdmissionType renameAdmissionType(Long id, String name, AuthPrincipal principal) {
-        AdmissionType admissionType = admissionTypeRepository.findById(id)
+    public void deleteTuition(Long id, AuthPrincipal principal) {
+        Tuition tuition = tuitionRepository.findById(id)
                 .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
-        verifyAccess(admissionType.getAcademy().getId(), principal);
-        admissionType.rename(name);
-        return admissionType;
-    }
-
-    @Transactional
-    public void deleteAdmissionType(Long id, AuthPrincipal principal) {
-        AdmissionType admissionType = admissionTypeRepository.findById(id)
-                .orElseThrow(() -> new BusinessException(ErrorCode.MASTER_NOT_FOUND));
-        verifyAccess(admissionType.getAcademy().getId(), principal);
-        admissionType.markDeleted();
+        verifyAccess(tuition.getAcademy().getId(), principal);
+        tuition.markDeleted();
     }
 
     // ── 커리큘럼 ──

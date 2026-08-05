@@ -3,9 +3,9 @@ package com.dlab.api.master;
 import com.dlab.domain.approval.entity.ApprovalItem;
 import com.dlab.domain.approval.entity.ApproverType;
 import com.dlab.domain.approval.entity.RequestType;
-import com.dlab.domain.master.entity.AdmissionType;
 import com.dlab.domain.master.entity.CourseType;
 import com.dlab.domain.master.entity.Curriculum;
+import com.dlab.domain.master.entity.Tuition;
 import com.dlab.domain.master.entity.DepartmentMaster;
 import com.dlab.domain.penalty.entity.PenaltyCategory;
 import com.dlab.domain.penalty.entity.PenaltyItem;
@@ -92,7 +92,7 @@ class YearlySnapshotFlowTest {
         em.persist(resignedTeacher);
 
         em.persist(new DepartmentMaster(academy, FROM, "자연계열"));
-        em.persist(new AdmissionType(academy, FROM, "일반전형", (short) 1));
+        em.persist(new Tuition(academy, FROM, "정규 교습비", 1_500_000, (short) 1));
 
         CourseType courseType = new CourseType(academy, FROM, "종합반", (short) 1);
         em.persist(courseType);
@@ -159,7 +159,7 @@ class YearlySnapshotFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.toYear").value((int) TO))
                 .andExpect(jsonPath("$.data.copied.department").value(1))
-                .andExpect(jsonPath("$.data.copied.admissionType").value(1))
+                .andExpect(jsonPath("$.data.copied.tuition").value(1))
                 .andExpect(jsonPath("$.data.copied.courseType").value(1))
                 .andExpect(jsonPath("$.data.copied.curriculum").value(1))
                 .andExpect(jsonPath("$.data.copied.period").value(1))
@@ -199,7 +199,7 @@ class YearlySnapshotFlowTest {
         // 복사되는 6개 표 전부. 하나라도 NULL이면 그 표는 복사본 여부를 알 수 없다.
         for (String table : new String[]{"department_master", "class_master", "period_master",
                 "approval_item", "penalty_item", "penalty_rule",
-                "course_type", "admission_type", "curriculum"}) {
+                "course_type", "curriculum", "tuition"}) {
             Number untracked = (Number) em.createNativeQuery("""
                             SELECT COUNT(*) FROM %s
                             WHERE academy_id = :academyId AND year = :year AND copied_from_id IS NULL

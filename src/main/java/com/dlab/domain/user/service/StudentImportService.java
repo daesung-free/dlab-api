@@ -214,13 +214,13 @@ public class StudentImportService {
         if (existing.isPresent()) {
             StudentEnrollment enrollment = existing.get();
             enrollment.getStudent().updateProfile(
-                    row.name(), row.phone(), row.birthDate(), row.gender(), row.schoolName());
+                    row.name(), row.phone(), row.birthDate(), row.gender(), row.schoolName(), null);
             enrollment.updateEnrollment(row.grade(), row.track(), null);
             return;
         }
         // 신규 — 학번 채번은 StudentService가 한다(충돌 시 재시도 포함)
         studentService.admitParsed(academy, year, row.name(), row.phone(),
-                row.birthDate(), row.gender(), row.schoolName(), row.grade(), row.track());
+                row.birthDate(), row.gender(), row.schoolName(), null, row.grade(), row.track());
     }
 
     private Optional<StudentEnrollment> findExisting(String uniqueCode, Long academyId, short year) {

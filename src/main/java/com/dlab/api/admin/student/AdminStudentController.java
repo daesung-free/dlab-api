@@ -84,8 +84,8 @@ public class AdminStudentController {
                                                @Valid @RequestBody StudentRequests.Update request) {
         return ApiResponse.success(StudentResponse.from(studentService.update(
                 enrollmentId, request.name(), request.phone(), request.birthDate(),
-                request.gender(), request.schoolName(), request.grade(), request.track(),
-                request.status(), me)));
+                request.gender(), request.schoolName(), request.address(), request.grade(),
+                request.track(), request.status(), me)));
     }
 
     // ── 상태 관리 (F-4.1-8) ──

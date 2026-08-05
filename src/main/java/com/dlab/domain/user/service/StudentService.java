@@ -115,23 +115,23 @@ public class StudentService {
     @Transactional
     public StudentEnrollment admitParsed(Academy academy, short year, String name, String phone,
                                          LocalDate birthDate, String gender, String schoolName,
-                                         GradeType grade, TrackType track) {
+                                         String address, GradeType grade, TrackType track) {
         Student student = studentRepository.save(new Student(generateUniqueCode(), name, phone));
-        student.updateProfile(null, null, birthDate, gender, schoolName);
+        student.updateProfile(null, null, birthDate, gender, schoolName, address);
         return enroll(academy, year, student, grade, track);
     }
 
     /** 학생 정보 수정. {@code null} 인자는 변경하지 않는다. */
     @Transactional
     public StudentEnrollment update(Long enrollmentId, String name, String phone, LocalDate birthDate,
-                                    String gender, String schoolName, GradeType grade,
+                                    String gender, String schoolName, String address, GradeType grade,
                                     TrackType track, EnrollmentStatus status, AuthPrincipal principal) {
         StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
         if (!principal.canAccessAcademy(enrollment.getAcademy().getId())) {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
-        enrollment.getStudent().updateProfile(name, phone, birthDate, gender, schoolName);
+        enrollment.getStudent().updateProfile(name, phone, birthDate, gender, schoolName, address);
         enrollment.updateEnrollment(grade, track, status);
         return enrollment;
     }

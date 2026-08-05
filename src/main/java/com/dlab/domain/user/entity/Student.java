@@ -52,6 +52,10 @@ public class Student extends BaseEntity {
     @Column(name = "school_name", length = 64)
     private String schoolName;
 
+    /** ★ 민감 필드. 전화·생년월일과 같은 등급으로 다룬다(마스킹·상위 관리자 전용). */
+    @Column(length = 200)
+    private String address;
+
     @Column(name = "search_name_normalized", length = 20)
     private String searchNameNormalized;
 
@@ -69,7 +73,7 @@ public class Student extends BaseEntity {
      * 그 결과 기존 번호가 그대로 남는다({@code common/privacy/Masking}).
      */
     public void updateProfile(String name, String phone, LocalDate birthDate,
-                              String gender, String schoolName) {
+                              String gender, String schoolName, String address) {
         if (name != null) {
             this.name = name;
         }
@@ -84,6 +88,9 @@ public class Student extends BaseEntity {
         }
         if (schoolName != null) {
             this.schoolName = schoolName;
+        }
+        if (address != null) {
+            this.address = address;
         }
     }
 }

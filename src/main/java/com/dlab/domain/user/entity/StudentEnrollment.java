@@ -69,11 +69,6 @@ public class StudentEnrollment extends BaseEntity {
     @Column(name = "enrollment_status", nullable = false, length = 20)
     private EnrollmentStatus enrollmentStatus = EnrollmentStatus.ENROLLED;
 
-    /** 입학 전형. 그 해 입학 방식이라 사람이 아니라 등록 건에 붙는다. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "admission_type_id")
-    private com.dlab.domain.master.entity.AdmissionType admissionType;
-
     @Column(name = "admission_date")
     private LocalDate admissionDate;
 
@@ -119,9 +114,6 @@ public class StudentEnrollment extends BaseEntity {
         this.current = false;
     }
 
-    public void assignAdmissionType(com.dlab.domain.master.entity.AdmissionType admissionType) {
-        this.admissionType = admissionType;
-    }
 
     /**
      * 등록 건 수정. {@code null}은 "변경하지 않음"이다({@link Student#updateProfile} 참고).

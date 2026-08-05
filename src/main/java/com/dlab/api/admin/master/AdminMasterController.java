@@ -108,38 +108,37 @@ public class AdminMasterController {
         return ApiResponse.empty();
     }
 
-    // ── 전형 ──
 
-    @GetMapping("/admission-types")
-    public ApiResponse<List<MasterResponses.AdmissionType>> admissionTypes(
+    // ── 교습비 ──
+
+    @GetMapping("/tuitions")
+    public ApiResponse<List<MasterResponses.Tuition>> tuitions(
             @CurrentAccount AuthPrincipal me,
             @RequestParam Long academyId, @RequestParam Integer year) {
-        return ApiResponse.success(
-                masterDataService.admissionTypes(academyId, year.shortValue(), me).stream()
-                        .map(MasterResponses.AdmissionType::from).toList());
+        return ApiResponse.success(masterDataService.tuitions(academyId, year.shortValue(), me).stream()
+                .map(MasterResponses.Tuition::from).toList());
     }
 
-    @PostMapping("/admission-types")
-    public ApiResponse<MasterResponses.AdmissionType> createAdmissionType(
+    @PostMapping("/tuitions")
+    public ApiResponse<MasterResponses.Tuition> createTuition(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody MasterRequests.CreateNamedMaster request) {
-        return ApiResponse.success(MasterResponses.AdmissionType.from(
-                masterDataService.createAdmissionType(request.academyId(), request.year().shortValue(),
-                        request.name(), request.sortOrderOrZero(), me)));
+            @Valid @RequestBody MasterRequests.CreateTuition request) {
+        return ApiResponse.success(MasterResponses.Tuition.from(masterDataService.createTuition(
+                request.academyId(), request.year().shortValue(), request.name(),
+                request.amount(), request.sortOrderOrZero(), me)));
     }
 
-    @PutMapping("/admission-types/{id}")
-    public ApiResponse<MasterResponses.AdmissionType> renameAdmissionType(
+    @PatchMapping("/tuitions/{id}")
+    public ApiResponse<MasterResponses.Tuition> updateTuition(
             @CurrentAccount AuthPrincipal me, @PathVariable Long id,
-            @Valid @RequestBody MasterRequests.Rename request) {
-        return ApiResponse.success(MasterResponses.AdmissionType.from(
-                masterDataService.renameAdmissionType(id, request.name(), me)));
+            @Valid @RequestBody MasterRequests.UpdateTuition request) {
+        return ApiResponse.success(MasterResponses.Tuition.from(
+                masterDataService.updateTuition(id, request.name(), request.amount(), me)));
     }
 
-    @DeleteMapping("/admission-types/{id}")
-    public ApiResponse<Void> deleteAdmissionType(@CurrentAccount AuthPrincipal me,
-                                                 @PathVariable Long id) {
-        masterDataService.deleteAdmissionType(id, me);
+    @DeleteMapping("/tuitions/{id}")
+    public ApiResponse<Void> deleteTuition(@CurrentAccount AuthPrincipal me, @PathVariable Long id) {
+        masterDataService.deleteTuition(id, me);
         return ApiResponse.empty();
     }
 

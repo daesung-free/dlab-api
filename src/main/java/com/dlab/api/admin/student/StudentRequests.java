@@ -34,6 +34,7 @@ public final class StudentRequests {
             LocalDate birthDate,
             @Size(max = 1) String gender,
             @Size(max = 64) String schoolName,
+            @Size(max = 200) String address,
             GradeType grade,
             TrackType track,
             EnrollmentStatus status) {

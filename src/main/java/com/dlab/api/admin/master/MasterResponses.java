@@ -44,12 +44,6 @@ public final class MasterResponses {
         }
     }
 
-    public record AdmissionType(Long id, Long academyId, short year, String name, short sortOrder) {
-        public static AdmissionType from(com.dlab.domain.master.entity.AdmissionType a) {
-            return new AdmissionType(a.getId(), a.getAcademy().getId(), a.getYear(),
-                    a.getName(), a.getSortOrder());
-        }
-    }
 
 
 
@@ -60,6 +54,12 @@ public final class MasterResponses {
                     c.getClassMaster() == null ? null : c.getClassMaster().getId(),
                     c.getClassMaster() == null ? null : c.getClassMaster().getName(),
                     c.getSortOrder());
+        }
+    }
+
+    public record Tuition(Long id, short year, String name, int amount, short sortOrder) {
+        public static Tuition from(com.dlab.domain.master.entity.Tuition t) {
+            return new Tuition(t.getId(), t.getYear(), t.getName(), t.getAmount(), t.getSortOrder());
         }
     }
 
