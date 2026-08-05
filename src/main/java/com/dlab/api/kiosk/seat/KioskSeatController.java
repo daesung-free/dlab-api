@@ -3,7 +3,9 @@ package com.dlab.api.kiosk.seat;
 import com.dlab.api.kiosk.dto.AreaRequest;
 import com.dlab.api.kiosk.dto.DsaResponse;
 import com.dlab.api.kiosk.dto.TokenOnlyRequest;
+import com.dlab.api.kiosk.dto.SeatChangeRequest;
 import com.dlab.domain.kiosk.service.DsaTokenService;
+import com.dlab.domain.kiosk.service.KioskSeatChangeService;
 import com.dlab.domain.kiosk.service.KioskSeatQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class KioskSeatController {
 
     private final KioskSeatQueryService seatQueryService;
+    private final KioskSeatChangeService seatChangeService;
     private final DsaTokenService tokenService;
 
     /** 3.7 — 구역 목록. */
@@ -44,5 +47,18 @@ public class KioskSeatController {
     public DsaResponse seatStates(@RequestBody AreaRequest request) {
         Long academyId = tokenService.resolveAcademyId(request.token());
         return DsaResponse.ok(seatQueryService.seatStates(academyId, request.areaCd()));
+    }
+
+    /**
+     * 3.23 — 좌석 변경. 응답은 {@code code}·{@code message}만이다(규격서).
+     *
+     * <p>키오스크는 자기 쪽 변경을 마친 뒤 동기화로 부르고 실패 시 재시도할 수 있으므로,
+     * <b>이미 그 자리면 성공으로 응답한다</b>(멱등).
+     */
+    @PostMapping("/setSeatChgProc")
+    public DsaResponse changeSeat(@RequestBody SeatChangeRequest request) {
+        Long academyId = tokenService.resolveAcademyId(request.token());
+        seatChangeService.changeSeat(academyId, request.rfidNo(), request.seatCd());
+        return DsaResponse.ok();
     }
 }

@@ -28,6 +28,15 @@ public enum DsaCode {
     /** 대상 월 오류({@code getRequestListStd}). */
     INVALID_MONTH(102, "조회할 수 없는 대상 월입니다.", true),
 
+    /**
+     * 좌석이 이미 사용 중({@code setSeatChgProc}).
+     *
+     * <p>규격서가 이 엔드포인트의 오류코드를 명시하지 않았다. 101~200이 "요청 명령별 오류"
+     * 구간이라 그 안에서 잡았다. <b>키오스크는 {@code code == 0}만 보고 분기하므로</b>
+     * 정확한 값은 로그·운영용이고, 실제 동작에는 영향이 없다.
+     */
+    SEAT_OCCUPIED(103, "이미 사용 중인 좌석입니다.", true),
+
     /** 이미 조퇴 처리된 학생의 재태깅. 차단하고 이상 로그를 남긴다. */
     ALREADY_LEFT_EARLY(121, "이미 조퇴 처리되었습니다.", true),
 

@@ -38,4 +38,14 @@ public interface SeatAssignmentRepository extends JpaRepository<SeatAssignment, 
               AND sa.deleted = false
             """)
     Optional<SeatAssignment> findActiveByEnrollmentId(@Param("enrollmentId") Long enrollmentId);
+
+    /** 그 좌석의 현재 배정. 좌석 변경 시 선점 여부를 본다. */
+    @Query("""
+            SELECT sa FROM SeatAssignment sa
+            JOIN FETCH sa.enrollment
+            WHERE sa.seat.id = :seatId
+              AND sa.releasedAt IS NULL
+              AND sa.deleted = false
+            """)
+    Optional<SeatAssignment> findActiveBySeatId(@Param("seatId") Long seatId);
 }

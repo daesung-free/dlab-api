@@ -2,6 +2,7 @@ package com.dlab.domain.seat.repository;
 
 import com.dlab.domain.seat.entity.SeatMaster;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,4 +22,14 @@ public interface SeatMasterRepository extends JpaRepository<SeatMaster, Long> {
             ORDER BY s.yPos ASC, s.xPos ASC, s.seatCd ASC
             """)
     List<SeatMaster> findByStudyAreaId(@Param("studyAreaId") Long studyAreaId);
+
+    /** DSA {@code seat_cd}로 찾는다 — 키오스크는 우리 내부 id를 모른다. */
+    @Query("""
+            SELECT s FROM SeatMaster s
+            WHERE s.academy.id = :academyId
+              AND s.seatCd = :seatCd
+              AND s.deleted = false
+            """)
+    Optional<SeatMaster> findByAcademyIdAndSeatCd(@Param("academyId") Long academyId,
+                                                  @Param("seatCd") String seatCd);
 }
