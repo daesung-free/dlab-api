@@ -1,0 +1,165 @@
+# PR·develop 푸시마다 빌드와 테스트를 돌린다.
+#
+# ★ 왜 필요한가 — 테스트가 로컬에서만 돌면 "각자 자기 브랜치에서는 통과"만 확인된다.
+#   여러 명이 같은 develop에 병렬로 밀어넣는 구조라, 머지하고 나서야 깨진 것을 알게 된다.
+#   실제로 설계 충돌(같은 테이블을 각자 다르게 제약)이 머지 시점에 발견된 적이 있다.
+#
+# ★ 서비스 컨테이너로 진짜 PostgreSQL·Redis를 띄운다.
+#   H2로 대체할 수 없다 — jsonb·부분 유니크 인덱스를 쓰고, Flyway 마이그레이션 자체가
+#   검증 대상이기 때문이다(src/test/resources/application.yml 참고).
+
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+
+# 같은 브랜치에 연속으로 푸시하면 앞의 실행을 취소한다 — 오래된 결과를 기다릴 이유가 없다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: 빌드 · 테스트
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dlab
+          POSTGRES_PASSWORD: dlab_local_password
+          # 테스트 설정이 이 이름을 본다. 바꾸려면 application.yml도 같이 고쳐야 한다.
+          POSTGRES_DB: dlab_test
+        ports: ['5432:5432']
+        # 헬스체크가 없으면 DB가 뜨기 전에 테스트가 시작돼 컨텍스트 로드 단계에서 전부 실패한다
+        options: >-
+          --health-cmd "pg_isready -U dlab -d dlab_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Gradle 캐시
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 테스트
+        run: ./gradlew test --no-daemon
+
+      # 실패했을 때 무엇이 깨졌는지 로그만 보고 알기 어렵다. 리포트를 받아둔다.
+      - name: 테스트 리포트 업로드
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: |
+            build/reports/tests/test
+            build/test-results/test
+          retention-days: 7
+
+      # 통과/실패만 보면 "몇 건이 돌았는지"를 모른다 — 테스트가 통째로 안 돌아도 초록불이 된다.
+      - name: 테스트 건수 요약
+        if: always()
+        run: |
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import glob, re
+          total = failed = skipped = 0
+          for path in glob.glob('build/test-results/test/*.xml'):
+              head = open(path, encoding='utf-8').read(600)
+              m = re.search(r'tests="(\d+)".*?skipped="(\d+)".*?failures="(\d+)".*?errors="(\d+)"', head)
+              if m:
+                  total += int(m.group(1))
+                  skipped += int(m.group(2))
+                  failed += int(m.group(3)) + int(m.group(4))
+          print(f"## 테스트 결과\n\n- 총 **{total}건**\n- 실패 **{failed}건**\n- 건너뜀 {skipped}건")
+          PY
+
+  # 마이그레이션 순서·체크섬 문제는 "남의 환경"에서만 터진다.
+  # 빈 DB에 전부 적용해봐야 그걸 미리 잡는다 — 실제로 out-of-order 때문에 기동이 실패한 적이 있다.
+  migration:
+    name: Flyway 검증 (빈 DB)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dlab
+          POSTGRES_PASSWORD: dlab_local_password
+          POSTGRES_DB: dlab_migration_check
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dlab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Gradle 캐시
+        uses: gradle/actions/setup-gradle@v4
+
+      # ★ out-of-order를 끈다.
+      #   로컬은 여러 명이 며칠씩 쌓다가 푸시하므로 켜두지만, 운영은 순차 배포라 꺼져 있다.
+      #   여기서 꺼두면 "로컬에서는 되는데 운영 배포에서 터지는" 순서 역전을 미리 잡는다.
+      #
+      # ddl-auto=validate라 엔티티와 스키마가 어긋나도 여기서 실패한다.
+      - name: 빈 DB에 마이그레이션 전체 적용
+        run: |
+          ./gradlew bootRun --no-daemon --args='--spring.profiles.active=ci' &
+          APP_PID=$!
+          for i in $(seq 1 60); do
+            if curl -sf localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "기동 성공 — 마이그레이션 전체 적용 확인"
+              kill $APP_PID
+              exit 0
+            fi
+            if ! kill -0 $APP_PID 2>/dev/null; then
+              echo "::error::기동 실패 — 마이그레이션 또는 스키마 검증에서 멈췄습니다"
+              exit 1
+            fi
+            sleep 3
+          done
+          echo "::error::기동 타임아웃"
+          kill $APP_PID
+          exit 1
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/dlab_migration_check
+          SPRING_DATASOURCE_USERNAME: dlab
+          SPRING_DATASOURCE_PASSWORD: dlab_local_password
