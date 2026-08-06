@@ -126,6 +126,7 @@ public class KioskAttendanceService {
     private AttendanceDecision autoDecide(StudentEnrollment enrollment,
                                           List<AttendanceEventType> history,
                                           LocalDateTime at, LocalDate date) {
+        // history는 아래 excusedOptions에도 넘어간다 — 오늘 이미 쓴 신청을 걸러야 한다
         List<PeriodMaster> periods = periodMasterRepository.findByDayType(
                 enrollment.getAcademy().getId(), enrollment.getYear(), DayType.of(date));
 
@@ -134,7 +135,7 @@ public class KioskAttendanceService {
                 periods,
                 at.toLocalTime(),
                 enrollment.getAcademy().getAttendanceDeadline(),
-                excusedOptions(enrollment.getId(), at));
+                excusedOptions(enrollment.getId(), at, history));
     }
 
     /**
@@ -163,7 +164,7 @@ public class KioskAttendanceService {
             return AttendanceDecision.reject(DsaCode.ALREADY_LEFT_EARLY);
         }
 
-        AttendancePolicy.ExcusedOptions excused = excusedOptions(enrollment.getId(), at);
+        AttendancePolicy.ExcusedOptions excused = excusedOptions(enrollment.getId(), at, history);
         if (chosen == AttendanceEventType.EARLY_LEAVE && !excused.earlyLeave()) {
             return AttendanceDecision.reject(DsaCode.NO_APPROVAL, "승인된 조퇴 신청이 없습니다.");
         }
@@ -213,12 +214,26 @@ public class KioskAttendanceService {
      *
      * <p>상한은 두지 않는다. 예정보다 늦게 나가는 건 정상이다(병원 예약이 밀리는 등).
      *
+     * <p>★ <b>오늘 이미 쓴 신청은 다시 안 띄운다.</b> 신청 1건으로 하루에 여러 번 나가면
+     * 승인 절차가 무의미해진다. 키오스크도 같은 규칙을 갖고 있었다
+     * ({@code hadOutingToday}·{@code hadEarlyLeaveToday}, `ef2a5ce`).
+     *
+     * <p>⚠️ 조퇴 해제({@code setReAttendProc})는 조퇴 기록을 <b>외출로 정정</b>하므로,
+     * 재등원한 학생은 그날 외출을 쓴 것으로 집계된다. DSA 규격서가 그 변환을 정의하고 있어
+     * ("조퇴 후 재등원 시 하원 → 외출 변경") 원본 동작과 같다.
+     *
      * <p>{@code start_time}이 없는 건은 통과시킨다 — 결석·지각처럼 종일 사유이거나
      * 이관된 과거 데이터다. 시각을 모른다고 막으면 정상 신청이 거부된다.
      */
-    private AttendancePolicy.ExcusedOptions excusedOptions(Long enrollmentId, LocalDateTime at) {
+    private AttendancePolicy.ExcusedOptions excusedOptions(Long enrollmentId, LocalDateTime at,
+                                                          List<AttendanceEventType> history) {
         List<AbsenceReason> reasons = absenceReasonRepository
                 .findByEnrollmentIdAndAttendanceDate(enrollmentId, at.toLocalDate());
+
+        // 오늘 이미 썼으면 다시 안 띄운다 — 신청 1건으로 하루에 여러 번 나갈 수 없다
+        boolean usedEarlyLeave = history.contains(AttendanceEventType.EARLY_LEAVE);
+        boolean usedOuting = history.contains(AttendanceEventType.OUTING)
+                || history.contains(AttendanceEventType.EXCUSED_OUTING);
 
         boolean earlyLeave = false;
         boolean outing = false;
@@ -226,9 +241,9 @@ public class KioskAttendanceService {
             if (!isApproved(r) || !isUsableAt(r, at.toLocalTime())) {
                 continue;
             }
-            if (r.getReasonType() == AbsenceReasonType.EARLY_LEAVE) {
+            if (r.getReasonType() == AbsenceReasonType.EARLY_LEAVE && !usedEarlyLeave) {
                 earlyLeave = true;
-            } else if (r.getReasonType() == AbsenceReasonType.OUTING) {
+            } else if (r.getReasonType() == AbsenceReasonType.OUTING && !usedOuting) {
                 outing = true;
             }
         }
