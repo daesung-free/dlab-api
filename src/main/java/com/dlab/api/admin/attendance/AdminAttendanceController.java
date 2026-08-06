@@ -6,6 +6,7 @@ import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.attendance.service.AttendanceBoardService;
+import com.dlab.domain.attendance.service.StudyTimeRecalculationService;
 import com.dlab.domain.attendance.service.AttendanceBoardService.AttendanceRow;
 import com.dlab.domain.attendance.service.AttendanceBoardService.ScreenStatus;
 import java.time.LocalDate;
@@ -14,7 +15,9 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -30,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminAttendanceController {
 
     private final AttendanceBoardService boardService;
+    private final StudyTimeRecalculationService recalculationService;
 
     /**
      * 일별 출결 현황.
@@ -123,5 +127,29 @@ public class AdminAttendanceController {
                     raw ? r.guardianPhone() : Masking.phone(r.guardianPhone()),
                     r.unexcusedLate());
         }
+    }
+
+    /**
+     * 학습시간 일괄계산 (화면 버튼).
+     *
+     * <p>순공시간은 배치가 매일 저장한다. 저장했기 때문에 <b>나중의 정정이 자동으로
+     * 반영되지 않아</b> 관리자가 다시 돌릴 수 있어야 한다 — 출결을 수정했거나
+     * 교시(급식·쉬는시간)를 바꾼 경우다.
+     *
+     * <p><b>오늘은 대상이 아니다.</b> 아직 하원 전이라 값이 계속 늘어나므로 저장할 시점이 아니고,
+     * 조회 화면이 그날치만 즉석 계산한다.
+     */
+    @PostMapping("/study-time/recalculate")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN')")
+    public ApiResponse<RecalculationResult> recalculate(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return ApiResponse.success(
+                new RecalculationResult(recalculationService.recalculate(me, from, to)));
+    }
+
+    /** @param updated 다시 계산한 행 수. 0이면 확정된 날이 없다는 뜻이다 */
+    public record RecalculationResult(int updated) {
     }
 }

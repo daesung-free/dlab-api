@@ -80,6 +80,21 @@ public class AttendanceDailyStatus extends BaseEntity {
      * 재확정. <b>배치를 다시 돌려도 행이 늘지 않게</b> 기존 행을 덮어쓴다 —
      * 사유가 뒤늦게 승인되면 무단결석이 사유결석으로 바뀌어야 한다.
      */
+    /**
+     * 순공시간 저장.
+     *
+     * <p><b>계산해서 저장한다 — 조회 때마다 다시 계산하지 않는다.</b> 이유 둘:
+     * <ul>
+     *   <li>키오스크 순위·평균이 지점 전체 × 5일을 훑는다. 매번 계산하면 비용이 크다</li>
+     *   <li><b>교시를 수정하면 과거 순공시간이 소급해서 바뀐다.</b> 급식·쉬는시간을
+     *       교시 마스터에서 빼기 때문이다 — 저장해두면 그 시점 기준으로 고정된다</li>
+     * </ul>
+     */
+    public void recordStudyMinutes(int minutes, Instant at) {
+        this.studyMinutes = minutes;
+        this.calculatedAt = at;
+    }
+
     public void reconfirm(DailyStatus finalStatus, boolean excused, Instant at) {
         this.finalStatus = finalStatus;
         this.excused = excused;

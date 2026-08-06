@@ -113,13 +113,32 @@ public class AttendanceBoardService {
                             lastDeparture(logs),
                             screenStatus(logs, confirmed.get(e.getId())),
                             excused(confirmed.get(e.getId())),
-                            (int) studyTimeCalculator.calculate(logs, periods, until).toMinutes(),
+                            studyMinutes(confirmed.get(e.getId()), logs, periods, until),
                             guardianPhones.get(e.getId()),
                             unexcusedLate(logs, confirmed.get(e.getId())));
                 })
                 .sorted(Comparator.comparing(AttendanceRow::studentNo,
                         Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
+    }
+
+    /**
+     * 순공시간.
+     *
+     * <p><b>확정된 값이 있으면 그걸 읽는다.</b> 배치가 저장해둔 값이라 교시를 나중에 바꿔도
+     * 그날 기준이 유지된다 — 매번 다시 계산하면 과거 순공시간이 소급해서 바뀐다.
+     *
+     * <p>오늘은 저장하지 않는다. 아직 하원 전이라 계속 늘어나는 값이어서,
+     * 저장하면 분 단위로 갱신해야 한다. 조회 시점까지 즉석 계산한다.
+     */
+    private int studyMinutes(AttendanceDailyStatus confirmed,
+                             List<AttendanceTaggingLog> logs,
+                             List<com.dlab.domain.period.entity.PeriodMaster> periods,
+                             LocalTime until) {
+        if (confirmed != null && confirmed.getStudyMinutes() != null) {
+            return confirmed.getStudyMinutes();
+        }
+        return (int) studyTimeCalculator.calculate(logs, periods, until).toMinutes();
     }
 
     /**

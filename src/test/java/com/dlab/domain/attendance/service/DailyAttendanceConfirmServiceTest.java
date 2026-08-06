@@ -246,4 +246,29 @@ class DailyAttendanceConfirmServiceTest {
         assertThat(statusOf(student)).get()
                 .satisfies(s -> assertThat(s.isExcused()).isTrue());
     }
+
+    @Test
+    @DisplayName("★ 확정하면 순공시간도 저장된다 — 조회 때마다 다시 계산하지 않는다")
+    void confirmStoresStudyMinutes() {
+        StudentEnrollment student = enroll("DL-1", "김민지", "2026-0001");
+        tag(student, AttendanceEventType.CHECK_IN, 8);
+        tag(student, AttendanceEventType.CHECK_OUT, 12);
+
+        confirmService.confirm(bundang, day);
+
+        // 교시가 08:00~22:00이므로 08~12 = 4시간
+        assertThat(statusOf(student)).get()
+                .satisfies(s -> assertThat(s.getStudyMinutes()).isEqualTo(240));
+    }
+
+    @Test
+    @DisplayName("★ 결석자는 순공시간 0 — null이 아니다")
+    void absentStudentGetsZeroNotNull() {
+        StudentEnrollment student = enroll("DL-1", "김민지", "2026-0001");
+
+        confirmService.confirm(bundang, day);
+
+        assertThat(statusOf(student)).get()
+                .satisfies(s -> assertThat(s.getStudyMinutes()).isZero());
+    }
 }

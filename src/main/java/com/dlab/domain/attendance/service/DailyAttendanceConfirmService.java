@@ -18,6 +18,7 @@ import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +65,7 @@ public class DailyAttendanceConfirmService {
     private final AttendanceDailyStatusRepository dailyStatusRepository;
     private final AbsenceReasonRepository absenceReasonRepository;
     private final PeriodMasterRepository periodMasterRepository;
+    private final StudyTimeCalculator studyTimeCalculator;
     private final Clock clock;
 
     /**
@@ -92,7 +94,14 @@ public class DailyAttendanceConfirmService {
             return 0;
         }
 
-        Map<Long, List<AttendanceEventType>> eventsByEnrollment = eventsOf(academy, date);
+        Map<Long, List<AttendanceTaggingLog>> logsByEnrollment = logsOf(academy, date);
+        Map<Long, List<AttendanceEventType>> eventsByEnrollment = new HashMap<>();
+        logsByEnrollment.forEach((id, logs) -> eventsByEnrollment.put(id,
+                logs.stream().map(AttendanceTaggingLog::getEventType).toList()));
+
+        List<com.dlab.domain.period.entity.PeriodMaster> periods =
+                periodMasterRepository.findByDayType(
+                        academy.getId(), targets.get(0).getYear(), DayType.of(date));
         Set<Long> excusedEnrollments = excusedOf(targets, date);
         Instant now = Instant.now(clock);
 
@@ -102,13 +111,18 @@ public class DailyAttendanceConfirmService {
             DailyStatus status = statusOf(events);
             boolean excused = excusedEnrollments.contains(enrollment.getId());
 
+            // 지난 날이라 하원이 끝났다 — 마지막 교시 종료로 닫고 계산한다
+            int studyMinutes = (int) studyTimeCalculator.calculate(
+                    logsByEnrollment.getOrDefault(enrollment.getId(), List.of()),
+                    periods, LocalTime.MAX).toMinutes();
+
             // 이미 확정된 날을 다시 돌 수 있다 — 사유가 뒤늦게 승인되면 무단이 사유로 바뀐다
-            dailyStatusRepository
+            AttendanceDailyStatus confirmed = dailyStatusRepository
                     .findByEnrollmentIdAndAttendanceDate(enrollment.getId(), date)
-                    .ifPresentOrElse(
-                            existing -> existing.reconfirm(status, excused, now),
-                            () -> dailyStatusRepository.save(new AttendanceDailyStatus(
-                                    academy, enrollment, date, status, excused)));
+                    .orElseGet(() -> dailyStatusRepository.save(new AttendanceDailyStatus(
+                            academy, enrollment, date, status, excused)));
+            confirmed.reconfirm(status, excused, now);
+            confirmed.recordStudyMinutes(studyMinutes, now);
         }
 
         log.info("출결 확정: 지점={}, 일자={}, 대상={}명", academy.getName(), date, targets.size());
@@ -135,13 +149,13 @@ public class DailyAttendanceConfirmService {
         return DailyStatus.PRESENT;
     }
 
-    private Map<Long, List<AttendanceEventType>> eventsOf(Academy academy, LocalDate date) {
-        Map<Long, List<AttendanceEventType>> result = new HashMap<>();
-        for (AttendanceTaggingLog log : taggingLogRepository
-                .findByAcademyIdAndAttendanceDate(academy.getId(), date)) {
-            result.computeIfAbsent(log.getEnrollment().getId(), k -> new java.util.ArrayList<>())
-                    .add(log.getEventType());
-        }
+    /** 학생별 그날 원장(시간순). 상태 판정과 순공시간 계산이 함께 쓴다. */
+    private Map<Long, List<AttendanceTaggingLog>> logsOf(Academy academy, LocalDate date) {
+        Map<Long, List<AttendanceTaggingLog>> result = new HashMap<>();
+        taggingLogRepository.findByAcademyIdAndAttendanceDate(academy.getId(), date).stream()
+                .sorted(java.util.Comparator.comparing(AttendanceTaggingLog::getRecordedAt))
+                .forEach(log -> result.computeIfAbsent(
+                        log.getEnrollment().getId(), k -> new java.util.ArrayList<>()).add(log));
         return result;
     }
 
