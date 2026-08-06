@@ -5,6 +5,7 @@ import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository;
 import com.dlab.domain.facility.entity.SeatMaster;
+import com.dlab.domain.facility.entity.SeatPresence;
 import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.facility.repository.SeatAssignmentRepository;
 import com.dlab.domain.facility.repository.SeatMasterRepository;
@@ -32,14 +33,14 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class KioskSeatQueryService {
 
-    /** 등원(착석). */
-    private static final String STATE_IN = "S";
-    /** 외출. */
-    private static final String STATE_OUT = "D";
-    /** 미출석 — 배정된 학생이 아직 오지 않았다. */
-    private static final String STATE_ABSENT = "N";
-    /** 공석 — 아무도 배정되지 않았다. */
-    private static final String STATE_EMPTY = "B";
+    /**
+     * 공석 — 아무도 배정되지 않았다.
+     *
+     * <p>나머지 3값({@code S}/{@code D}/{@code N})은 {@link SeatPresence}가 갖는다.
+     * <b>판정 규칙을 여기 두지 않는 이유</b>: 관리자 좌석배치도(F-4.10-3)가 같은 판정을 쓰는데
+     * 두 벌로 두면 같은 좌석이 키오스크와 관리자 화면에서 다르게 보인다.
+     */
+    private static final String STATE_EMPTY = SeatPresence.EMPTY.dsaCode();
 
     private final StudyAreaRepository studyAreaRepository;
     private final SeatMasterRepository seatMasterRepository;
@@ -149,17 +150,13 @@ public class KioskSeatQueryService {
         return result;
     }
 
-    /** 배정된 좌석의 상태. 배정 자체가 없으면 이 메서드를 타지 않는다(그건 {@code B}). */
+    /**
+     * 배정된 좌석의 상태. 배정 자체가 없으면 이 메서드를 타지 않는다(그건 {@code B}).
+     *
+     * <p>판정은 {@link SeatPresence}가 한다 — 관리자 좌석배치도와 <b>같은 규칙</b>이어야 한다.
+     */
     private String stateOf(AttendanceEventType last) {
-        if (last == null) {
-            return STATE_ABSENT;   // 배정은 됐는데 그날 태깅이 없다
-        }
-        return switch (last) {
-            case CHECK_IN, LATE, RETURN -> STATE_IN;
-            case OUTING, EXCUSED_OUTING -> STATE_OUT;
-            // 하원·조퇴한 자리는 공석이 아니라 "오늘 더는 안 오는 자리"다
-            case CHECK_OUT, EARLY_LEAVE -> STATE_ABSENT;
-        };
+        return SeatPresence.of(last).dsaCode();
     }
 
     private Optional<StudyArea> area(Long academyId, String areaCd) {
