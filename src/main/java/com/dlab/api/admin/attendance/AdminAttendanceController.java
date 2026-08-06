@@ -5,10 +5,19 @@ import com.dlab.common.privacy.PersonalDataPolicy;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
+import com.dlab.domain.attendance.entity.AttendanceEventType;
+import com.dlab.domain.attendance.entity.AttendanceModification;
+import com.dlab.domain.attendance.entity.DailyStatus;
 import com.dlab.domain.attendance.service.AttendanceBoardService;
+import com.dlab.domain.attendance.service.AttendanceCorrectionService;
 import com.dlab.domain.attendance.service.StudyTimeRecalculationService;
 import com.dlab.domain.attendance.service.AttendanceBoardService.AttendanceRow;
 import com.dlab.domain.attendance.service.AttendanceBoardService.ScreenStatus;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -20,7 +29,10 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,7 +40,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 관리자 웹 출결 현황 (F-4.3-1).
  *
- * <p>화면은 <b>조회 전용</b>이다 — 승인·반려는 사유신청 화면(F-4.1-6)이 맡는다.
+ * <p>승인·반려는 여기 없다 — 사유신청 화면(F-4.1-6)이 맡는다. 여기 있는 쓰기는
+ * <b>정정</b>뿐이고, 태깅 보정과 상태 정정 두 가지로 갈린다.
  */
 @RestController
 @RequestMapping("/api/v1/admin/attendance")
@@ -37,6 +50,7 @@ public class AdminAttendanceController {
 
     private final AttendanceBoardService boardService;
     private final StudyTimeRecalculationService recalculationService;
+    private final AttendanceCorrectionService correctionService;
 
     /**
      * 일별 출결 현황.
@@ -178,5 +192,105 @@ public class AdminAttendanceController {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename*=UTF-8''%EC%B6%9C%EA%B2%B0_%ED%98%84%ED%99%A9.xlsx")
                 .body(body);
+    }
+
+    /**
+     * 태깅 누락 보정.
+     *
+     * <p>카드를 안 찍고 들어온 학생을 등원 처리하는 경로다. <b>상태를 고르지 않는다</b> —
+     * 이벤트와 시각만 넣으면 서버가 다시 판정한다. 관리자가 상태와 시각을 따로 입력하면
+     * 둘이 어긋난다.
+     */
+    @PostMapping("/{enrollmentId}/taggings")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN')")
+    public ApiResponse<Void> addTagging(@CurrentAccount AuthPrincipal me,
+                                        @PathVariable Long enrollmentId,
+                                        @Valid @RequestBody TaggingRequest request) {
+        correctionService.addTagging(me, enrollmentId, request.date(),
+                request.eventType(), request.at(), request.reason());
+        return ApiResponse.success(null);
+    }
+
+    /**
+     * @param eventType 7종 중 하나. 결석은 태깅이 아니라 상태라 여기 못 넣는다
+     * @param reason    필수. 없으면 이력이 감사 자료가 되지 못한다
+     */
+    public record TaggingRequest(
+            @NotNull(message = "일자는 필수입니다.")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @NotNull(message = "이벤트 종류는 필수입니다.") AttendanceEventType eventType,
+            @NotNull(message = "시각은 필수입니다.")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime at,
+            @NotBlank(message = "정정 사유는 필수입니다.") @Size(max = 200) String reason) {
+    }
+
+    /**
+     * 최종 상태 직접 정정.
+     *
+     * <p>태깅 보정으로 해결되는 건은 그쪽을 쓴다. 여기서 고친 값은 <b>확정 배치가 더 이상
+     * 갱신하지 않는다</b> — 이후 사유가 승인돼도 자동 반영되지 않으므로, 사유 승인이
+     * 늦어진 경우라면 승인 처리 쪽을 먼저 확인할 것.
+     */
+    @PutMapping("/{enrollmentId}/status")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN')")
+    public ApiResponse<Void> correctStatus(@CurrentAccount AuthPrincipal me,
+                                           @PathVariable Long enrollmentId,
+                                           @Valid @RequestBody StatusCorrectionRequest request) {
+        correctionService.correctStatus(me, enrollmentId, request.date(),
+                request.status(), request.excused(), request.reason());
+        return ApiResponse.success(null);
+    }
+
+    /** @param excused 사유 승인 여부. 상태와 직교하는 축이라 함께 받는다 */
+    public record StatusCorrectionRequest(
+            @NotNull(message = "일자는 필수입니다.")
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @NotNull(message = "상태는 필수입니다.") DailyStatus status,
+            boolean excused,
+            @NotBlank(message = "정정 사유는 필수입니다.") @Size(max = 200) String reason) {
+    }
+
+    /**
+     * 정정 이력.
+     *
+     * <p>원장을 고치지 않으므로 <b>여기가 유일한 추적 경로다.</b>
+     */
+    @GetMapping("/{enrollmentId}/modifications")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN')")
+    public ApiResponse<List<ModificationResponse>> modifications(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long enrollmentId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        return ApiResponse.success(correctionService.history(me, enrollmentId, date).stream()
+                .map(ModificationResponse::from)
+                .toList());
+    }
+
+    /**
+     * @param addedEvent 태깅 보정이면 참, 상태 정정이면 {@code null}이다.
+     *                   화면이 두 종류를 구분해 표시한다
+     */
+    public record ModificationResponse(
+            Long id,
+            LocalDate date,
+            DailyStatus beforeStatus,
+            DailyStatus afterStatus,
+            Boolean beforeExcused,
+            Boolean afterExcused,
+            AttendanceEventType addedEvent,
+            Instant addedAt,
+            String reason,
+            Long modifiedBy,
+            Instant modifiedAt) {
+
+        public static ModificationResponse from(AttendanceModification m) {
+            return new ModificationResponse(
+                    m.getId(), m.getAttendanceDate(),
+                    m.getBeforeStatus(), m.getAfterStatus(),
+                    m.getBeforeExcused(), m.getAfterExcused(),
+                    m.getAddedEvent(), m.getAddedAt(),
+                    m.getReason(), m.getCreatedBy(), m.getCreatedAt());
+        }
     }
 }

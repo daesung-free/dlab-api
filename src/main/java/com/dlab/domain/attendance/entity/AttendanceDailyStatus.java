@@ -19,7 +19,8 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "attendance_daily_status")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class AttendanceDailyStatus extends BaseEntity {
+public class
+AttendanceDailyStatus extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -61,6 +62,17 @@ public class AttendanceDailyStatus extends BaseEntity {
     @Column(name = "is_excused", nullable = false)
     private boolean excused;
 
+    /**
+     * 관리자가 손댄 행인가.
+     *
+     * <p><b>확정 배치가 이 행을 건너뛴다.</b> 배치는 매일 새벽 원장을 다시 훑어
+     * {@link #reconfirm}으로 덮어쓰는데, 그러면 관리자가 낮에 고쳐놓은 값이
+     * <b>다음 날 새벽에 조용히 원래대로 돌아간다.</b> 화면에는 정정된 값이 보이다가
+     * 하루 뒤 뒤집히므로 아무도 원인을 못 찾는다.
+     */
+    @Column(name = "manually_modified", nullable = false)
+    private boolean manuallyModified;
+
     public AttendanceDailyStatus(Academy academy, StudentEnrollment enrollment,
                                  LocalDate attendanceDate, DailyStatus finalStatus) {
         this.academy = academy;
@@ -99,5 +111,19 @@ public class AttendanceDailyStatus extends BaseEntity {
         this.finalStatus = finalStatus;
         this.excused = excused;
         this.calculatedAt = at;
+    }
+
+    /**
+     * 관리자 정정.
+     *
+     * <p>{@link #reconfirm}과 값을 바꾸는 건 같지만 <b>이후 배치가 덮지 못하게</b>
+     * 표시한다는 점이 다르다. 정정 이력은 {@code attendance_modification}에 따로 쌓인다 —
+     * 이 행에는 마지막 값만 남아 "무엇이 무엇으로 바뀌었나"를 답할 수 없다.
+     */
+    public void correct(DailyStatus finalStatus, boolean excused, Instant at) {
+        this.finalStatus = finalStatus;
+        this.excused = excused;
+        this.calculatedAt = at;
+        this.manuallyModified = true;
     }
 }
