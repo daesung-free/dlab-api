@@ -59,6 +59,15 @@ public class Student extends BaseEntity {
     @Column(name = "search_name_normalized", length = 20)
     private String searchNameNormalized;
 
+    /**
+     * 앱 온보딩 단계 (A-2). <b>서버의 이 값이 단일 진실</b>이고 앱이 여기 따라 화면을 분기한다.
+     *
+     * <p>승인 여부는 여기 없다 — {@code account.status}가 따로 관리한다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "onboarding_status", nullable = false, length = 20)
+    private OnboardingStatus onboardingStatus = OnboardingStatus.REGISTERED;
+
     public Student(String uniqueCode, String name, String phone) {
         this.uniqueCode = uniqueCode;
         this.name = name;
@@ -91,6 +100,21 @@ public class Student extends BaseEntity {
         }
         if (address != null) {
             this.address = address;
+        }
+    }
+
+    /**
+     * 온보딩 다음 단계로 전진.
+     *
+     * <p><b>단계를 건너뛸 수 없다.</b> 각 단계 완료 처리가 값을 직접 대입하면
+     * OT를 안 했는데 {@code SCHEDULE_SET}인 계정이 생긴다.
+     *
+     * @param expected 지금 있어야 하는 단계. 다르면 아무 일도 하지 않는다 —
+     *                 학부모 연결이 두 번 들어와도 단계가 두 칸 뛰지 않는다
+     */
+    public void advanceOnboarding(OnboardingStatus expected) {
+        if (this.onboardingStatus == expected) {
+            this.onboardingStatus = expected.next();
         }
     }
 }
