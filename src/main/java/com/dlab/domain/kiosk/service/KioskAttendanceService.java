@@ -54,6 +54,18 @@ public class KioskAttendanceService {
      */
     private static final Duration DEDUP_WINDOW = Duration.ofMinutes(1);
 
+    /**
+     * 조퇴·외출 선택지를 예정 시각 <b>몇 분 전부터</b> 띄울지.
+     *
+     * <p>키오스크가 한때 자체 구현했던 값이다 — 주석까지 남아 있다:
+     * <i>"예정 시각 30분 전부터 노출 (예: 12:10 외출은 11:40부터)"</i>.
+     * 나중에 <i>"DSA setAttendStd 응답 기반으로 통합"</i>하면서 그쪽 필터를 걷어냈으므로,
+     * <b>이제 이 판단은 우리 몫이다.</b>
+     *
+     * <p>요구사항정의서의 정기일정 인정 판정 기준도 30분이라 값이 일치한다.
+     */
+    private static final Duration PROMPT_LEAD_TIME = Duration.ofMinutes(30);
+
     private final StudentEnrollmentRepository enrollmentRepository;
     private final AttendanceTaggingLogRepository taggingLogRepository;
     private final AbsenceReasonRepository absenceReasonRepository;
@@ -96,7 +108,7 @@ public class KioskAttendanceService {
                 .toList();
 
         AttendanceDecision decision = explicit
-                ? explicitDecide(enrollment, history, conGn, date)
+                ? explicitDecide(enrollment, history, conGn, at)
                 : autoDecide(enrollment, history, at, date);
 
         if (!decision.isAccepted()) {
@@ -122,7 +134,7 @@ public class KioskAttendanceService {
                 periods,
                 at.toLocalTime(),
                 enrollment.getAcademy().getAttendanceDeadline(),
-                excusedOptions(enrollment.getId(), date));
+                excusedOptions(enrollment.getId(), at));
     }
 
     /**
@@ -137,7 +149,7 @@ public class KioskAttendanceService {
      */
     private AttendanceDecision explicitDecide(StudentEnrollment enrollment,
                                               List<AttendanceEventType> history,
-                                              String conGn, LocalDate date) {
+                                              String conGn, LocalDateTime at) {
         AttendanceEventType chosen;
         try {
             chosen = AttendanceEventType.fromCode(conGn.trim().toUpperCase());
@@ -151,7 +163,7 @@ public class KioskAttendanceService {
             return AttendanceDecision.reject(DsaCode.ALREADY_LEFT_EARLY);
         }
 
-        AttendancePolicy.ExcusedOptions excused = excusedOptions(enrollment.getId(), date);
+        AttendancePolicy.ExcusedOptions excused = excusedOptions(enrollment.getId(), at);
         if (chosen == AttendanceEventType.EARLY_LEAVE && !excused.earlyLeave()) {
             return AttendanceDecision.reject(DsaCode.NO_APPROVAL, "승인된 조퇴 신청이 없습니다.");
         }
@@ -192,15 +204,26 @@ public class KioskAttendanceService {
         return enrollment;
     }
 
-    /** 그날 승인된 사유신청 종류. */
-    private AttendancePolicy.ExcusedOptions excusedOptions(Long enrollmentId, LocalDate date) {
-        List<AbsenceReason> reasons =
-                absenceReasonRepository.findByEnrollmentIdAndAttendanceDate(enrollmentId, date);
+    /**
+     * 그 시점에 <b>쓸 수 있는</b> 승인된 사유신청.
+     *
+     * <p>★ <b>예정 시각 30분 전부터만 노출한다</b> — 승인만 있으면 하루 종일 뜨는 게 아니다.
+     * 16:30 조퇴를 승인받은 학생이 09시에 화장실 가려고 찍었을 때 "조퇴 하시겠습니까?"가
+     * 뜨면, 실수로 눌러 <b>09시 조퇴가 기록된다.</b>
+     *
+     * <p>상한은 두지 않는다. 예정보다 늦게 나가는 건 정상이다(병원 예약이 밀리는 등).
+     *
+     * <p>{@code start_time}이 없는 건은 통과시킨다 — 결석·지각처럼 종일 사유이거나
+     * 이관된 과거 데이터다. 시각을 모른다고 막으면 정상 신청이 거부된다.
+     */
+    private AttendancePolicy.ExcusedOptions excusedOptions(Long enrollmentId, LocalDateTime at) {
+        List<AbsenceReason> reasons = absenceReasonRepository
+                .findByEnrollmentIdAndAttendanceDate(enrollmentId, at.toLocalDate());
 
         boolean earlyLeave = false;
         boolean outing = false;
         for (AbsenceReason r : reasons) {
-            if (!isApproved(r)) {
+            if (!isApproved(r) || !isUsableAt(r, at.toLocalTime())) {
                 continue;
             }
             if (r.getReasonType() == AbsenceReasonType.EARLY_LEAVE) {
@@ -210,6 +233,15 @@ public class KioskAttendanceService {
             }
         }
         return new AttendancePolicy.ExcusedOptions(earlyLeave, outing);
+    }
+
+    /** 예정 시각 {@code -30분} 이후인가. */
+    private boolean isUsableAt(AbsenceReason reason, LocalTime now) {
+        LocalTime startTime = reason.getStartTime();
+        if (startTime == null) {
+            return true;
+        }
+        return !now.isBefore(startTime.minus(PROMPT_LEAD_TIME));
     }
 
     /**

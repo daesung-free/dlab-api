@@ -386,6 +386,10 @@ class KioskAttendanceIntegrationTest {
      * 필드를 직접 채운다 — 승인 흐름 자체는 {@code FirewallApprovalFlowTest}가 검증한다.
      */
     private void submitApprovedReason(AbsenceReasonType type) {
+        submitApprovedReason(type, null);
+    }
+
+    private void submitApprovedReason(AbsenceReasonType type, java.time.LocalTime startTime) {
         ApprovalItem item = new ApprovalItem(bundang, (short) 2026,
                 RequestType.ABSENCE_REASON, ApproverType.TEACHER, null, null);
         em.persist(item);
@@ -395,9 +399,62 @@ class KioskAttendanceIntegrationTest {
         ReflectionTestUtils.setField(approval, "status", ApprovalStatus.APPROVED);
         em.persist(approval);
 
-        AbsenceReason reason = new AbsenceReason(bundang, minji, today, type, "사유");
+        AbsenceReason reason = new AbsenceReason(bundang, minji, today, type, "사유",
+                startTime, type == AbsenceReasonType.OUTING && startTime != null
+                        ? startTime.plusHours(1) : null);
         reason.linkApproval(approval);
         em.persist(reason);
         em.flush();
+    }
+
+    // ── 선택지 노출 시각 ─────────────────────────────────────
+
+    @Test
+    @DisplayName("★ 예정 30분 전부터 뜬다 — 그 전엔 130이다")
+    void promptAppearsOnlyFromThirtyMinutesBefore() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
+        tag("08:30:00");
+
+        // 15:59 — 아직 이르다. 여기서 뜨면 실수로 눌러 이른 조퇴가 기록된다
+        tag("15:59:00").andExpect(jsonPath("$.code").value(130));
+
+        tag("16:00:00").andExpect(jsonPath("$.data[0].code").value(128));
+    }
+
+    @Test
+    @DisplayName("★ 예정 시각이 지나도 계속 뜬다 — 늦게 나가는 건 정상이다")
+    void promptStaysAfterScheduledTime() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
+        tag("08:30:00");
+
+        tag("18:00:00").andExpect(jsonPath("$.data[0].code").value(128));
+    }
+
+    @Test
+    @DisplayName("★ 외출도 같은 규칙이다")
+    void outingFollowsTheSameWindow() throws Exception {
+        submitApprovedReason(AbsenceReasonType.OUTING, java.time.LocalTime.of(13, 0));
+        tag("08:30:00");
+
+        tag("12:29:00").andExpect(jsonPath("$.code").value(130));
+        tag("12:30:00").andExpect(jsonPath("$.data[0].code").value(129));
+    }
+
+    @Test
+    @DisplayName("★ 창 밖에서는 con_gn을 실어도 거부된다 — 화면을 우회할 수 없다")
+    void explicitActionOutsideWindowIsRejected() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
+        tag("08:30:00");
+
+        tag("10:00:00", "C").andExpect(jsonPath("$.code").value(130));
+    }
+
+    @Test
+    @DisplayName("시각이 없는 사유는 통과시킨다 — 종일 사유이거나 이관된 과거 데이터다")
+    void reasonWithoutStartTimeIsAlwaysUsable() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
+        tag("08:30:00");
+
+        tag("10:00:00").andExpect(jsonPath("$.data[0].code").value(128));
     }
 }
