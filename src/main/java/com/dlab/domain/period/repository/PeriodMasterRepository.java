@@ -21,4 +21,15 @@ public interface PeriodMasterRepository extends JpaRepository<PeriodMaster, Long
     List<PeriodMaster> findByDayType(@Param("academyId") Long academyId,
                                      @Param("year") short year,
                                      @Param("dayType") DayType dayType);
+
+    /** 그 연도의 전 요일 구분(편집 화면이 평일·토요일을 한 번에 편다). */
+    @Query("""
+            SELECT p FROM PeriodMaster p
+            WHERE p.academy.id = :academyId
+              AND p.year = :year
+              AND p.deleted = false
+            ORDER BY p.dayType ASC, p.startTime ASC
+            """)
+    List<PeriodMaster> findByYear(@Param("academyId") Long academyId,
+                                  @Param("year") short year);
 }

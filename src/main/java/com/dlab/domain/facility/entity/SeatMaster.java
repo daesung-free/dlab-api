@@ -58,4 +58,18 @@ public class SeatMaster extends BaseEntity {
         this.yPos = yPos;
         this.usable = true;
     }
+
+    /**
+     * 사용중지 — 고장·공사 등.
+     *
+     * <p><b>좌석을 지우지 않는다.</b> 지우면 배치도에 구멍이 생겨 좌표가 어긋나 보이고,
+     * 그 자리에 앉았던 과거 배정 이력도 끊긴다. 배정 대상에서만 빠진다.
+     */
+    public void disable() {
+        this.usable = false;
+    }
+
+    public void enable() {
+        this.usable = true;
+    }
 }

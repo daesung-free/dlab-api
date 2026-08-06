@@ -72,7 +72,38 @@ public class PeriodMaster extends BaseEntity {
         this.planable = true;
     }
 
+    public PeriodMaster(Academy academy, short year, short periodNo, String name,
+                        DayType dayType, PeriodType periodType,
+                        LocalTime startTime, LocalTime endTime, boolean planable) {
+        this(academy, year, periodNo, name, dayType, periodType, startTime, endTime);
+        this.planable = planable;
+    }
+
     public boolean covers(LocalTime time) {
         return !time.isBefore(startTime) && time.isBefore(endTime);
+    }
+
+    /**
+     * 편집.
+     *
+     * <p><b>{@code dayType}은 바꾸지 않는다.</b> 평일 3교시를 토요일로 옮기면 양쪽 구성이
+     * 동시에 깨진다 — 지우고 다시 만드는 게 맞다.
+     *
+     * <p>수정해도 <b>이미 확정된 순공시간은 안 바뀐다</b>(저장값이다). 소급 반영이 필요하면
+     * 학습시간 일괄계산을 따로 돌려야 한다.
+     */
+    public void update(short periodNo, String name, PeriodType periodType,
+                       LocalTime startTime, LocalTime endTime, boolean planable) {
+        this.periodNo = periodNo;
+        this.name = name;
+        this.periodType = periodType;
+        this.startTime = startTime;
+        this.endTime = endTime;
+        this.planable = planable;
+    }
+
+    /** 다른 교시와 시간이 겹치는가. 경계가 맞닿는 건(이전 종료 == 다음 시작) 겹침이 아니다. */
+    public boolean overlaps(LocalTime otherStart, LocalTime otherEnd) {
+        return startTime.isBefore(otherEnd) && otherStart.isBefore(endTime);
     }
 }

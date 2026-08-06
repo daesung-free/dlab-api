@@ -93,7 +93,16 @@ public enum ErrorCode {
     HOLIDAY_NOT_FOUND(HttpStatus.NOT_FOUND, "공휴일을 찾을 수 없습니다."),
     HOLIDAY_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 날짜입니다."),
     /** 법정공휴일은 전 지점에 적용되므로 본사만 등록할 수 있다. */
-    NATIONWIDE_HOLIDAY_FORBIDDEN(HttpStatus.FORBIDDEN, "전 지점 공휴일은 본사만 등록할 수 있습니다.");
+    NATIONWIDE_HOLIDAY_FORBIDDEN(HttpStatus.FORBIDDEN, "전 지점 공휴일은 본사만 등록할 수 있습니다."),
+
+    // 교시
+    PERIOD_NOT_FOUND(HttpStatus.NOT_FOUND, "교시를 찾을 수 없습니다."),
+    PERIOD_NO_DUPLICATED(HttpStatus.CONFLICT, "같은 요일 구분에 이미 있는 교시 번호입니다."),
+    /** 겹치면 한 시각이 두 교시에 걸려 출결 판정·순공시간이 흔들린다. */
+    PERIOD_TIME_OVERLAPPED(HttpStatus.CONFLICT, "다른 교시와 시간이 겹칩니다."),
+    /** 교시가 하나도 없는 날은 "운영일 아님"이 돼 태깅이 전부 거부된다. */
+    PERIOD_LAST_ONE(HttpStatus.CONFLICT,
+            "마지막 교시는 삭제할 수 없습니다. 새 교시를 먼저 등록하세요.");
 
     private final HttpStatus status;
     private final String message;
