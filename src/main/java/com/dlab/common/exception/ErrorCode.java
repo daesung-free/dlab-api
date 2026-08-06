@@ -63,6 +63,14 @@ public enum ErrorCode {
     APPROVAL_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 신청입니다."),
     NOT_AN_APPROVER(HttpStatus.FORBIDDEN, "이 신청의 승인자가 아닙니다."),
 
+    // 앱 설정 · 약관 (A-21 · F-4.12-3)
+    TERMS_NOT_FOUND(HttpStatus.NOT_FOUND, "약관을 찾을 수 없습니다."),
+    TERMS_VERSION_DUPLICATED(HttpStatus.CONFLICT,
+            "같은 버전의 약관이 이미 있습니다. 문구를 고치려면 버전을 올려주세요."),
+    REQUIRED_TERMS_CANNOT_BE_REVOKED(HttpStatus.BAD_REQUEST, "필수 약관은 철회할 수 없습니다."),
+    REQUIRED_NOTIFICATION_CANNOT_BE_DISABLED(HttpStatus.BAD_REQUEST,
+            "이 알림은 수신 거부할 수 없습니다."),
+
     // 알림
     NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "알림 템플릿을 찾을 수 없습니다."),
     NOTIFICATION_VARIABLE_MISSING(HttpStatus.INTERNAL_SERVER_ERROR, "알림 템플릿 변수가 누락되었습니다."),
