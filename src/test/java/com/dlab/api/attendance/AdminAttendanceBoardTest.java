@@ -205,4 +205,47 @@ class AdminAttendanceBoardTest {
         assertThat(row.studyMinutes()).isEqualTo(240);
         assertThat(row.studyTimeLabel()).isEqualTo("4시간 00분");
     }
+
+    @Test
+    @DisplayName("★ 엑셀에 결석자까지 전부 나온다 — 화면과 같은 목록이어야 대조가 된다")
+    void exportContainsEveryStudent() {
+        StudentEnrollment came = enroll("DL-1", "김민지", "2026-0001");
+        enroll("DL-2", "박서준", "2026-0002");
+        tag(came, AttendanceEventType.CHECK_IN, 8, 30);
+
+        String text = textOf(boardService.export(admin, day, null, false));
+
+        assertThat(text).contains("2026-0001").contains("2026-0002");
+        assertThat(text).contains("결석");   // 코드값이 아니라 화면 표기로 나가야 한다
+    }
+
+    @Test
+    @DisplayName("★ 엑셀 연락처는 마스킹이 기본 — 파일은 회수가 안 된다")
+    void exportMasksPhoneByDefault() {
+        StudentEnrollment student = enroll("DL-1", "김민지", "2026-0001");
+        com.dlab.domain.user.entity.ParentGuardian guardian =
+                new com.dlab.domain.user.entity.ParentGuardian("김보호", "010-9999-8888", "M");
+        em.persist(guardian);
+        em.persist(new com.dlab.domain.user.entity.StudentGuardianLink(
+                student.getStudent(), guardian, (short) 1));
+        em.flush();
+
+        assertThat(textOf(boardService.export(admin, day, null, false)))
+                .contains("010-****-8888").doesNotContain("010-9999-8888");
+
+        assertThat(textOf(boardService.export(admin, day, null, true)))
+                .contains("010-9999-8888");
+    }
+
+    /** 엑셀 전 셀을 한 문자열로. 마스킹·표기만 보면 되므로 좌표까지 따지지 않는다. */
+    private String textOf(byte[] xlsx) {
+        try (var wb = org.apache.poi.ss.usermodel.WorkbookFactory.create(
+                new java.io.ByteArrayInputStream(xlsx))) {
+            StringBuilder sb = new StringBuilder();
+            wb.getSheetAt(0).forEach(row -> row.forEach(c -> sb.append(c.toString()).append('|')));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
 }

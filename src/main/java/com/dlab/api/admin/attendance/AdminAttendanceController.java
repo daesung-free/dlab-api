@@ -15,6 +15,9 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -151,5 +154,29 @@ public class AdminAttendanceController {
 
     /** @param updated 다시 계산한 행 수. 0이면 확정된 날이 없다는 뜻이다 */
     public record RecalculationResult(int updated) {
+    }
+
+    /**
+     * 출결 현황 엑셀 다운로드 (화면 버튼).
+     *
+     * <p><b>연락처 마스킹이 기본 ON</b>이다. 화면은 토글로 볼 수 있지만 파일은
+     * 회수가 안 되므로 기준을 높게 잡는다 — {@code unmask=true}는 상위 관리자에게만 먹는다.
+     */
+    @GetMapping("/export")
+    public ResponseEntity<byte[]> export(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Long classId,
+            @RequestParam(defaultValue = "false") boolean unmask) {
+
+        byte[] body = boardService.export(
+                me, date == null ? LocalDate.now() : date, classId, unmask);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                // 한글 파일명이 깨지지 않게 RFC 5987 인코딩
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename*=UTF-8''%EC%B6%9C%EA%B2%B0_%ED%98%84%ED%99%A9.xlsx")
+                .body(body);
     }
 }

@@ -63,7 +63,31 @@ public class AttendanceBoardService {
     private final StudentGuardianLinkRepository guardianLinkRepository;
     private final PeriodMasterRepository periodMasterRepository;
     private final StudyTimeCalculator studyTimeCalculator;
+    private final com.dlab.common.excel.ExcelExporter excelExporter;
     private final Clock clock;
+
+    /** 화면 표기 그대로. 코드값을 그대로 내리면 받는 사람이 못 읽는다. */
+    private static final Map<ScreenStatus, String> STATUS_LABELS = Map.of(
+            ScreenStatus.ON_TIME, "정상 등원",
+            ScreenStatus.LATE, "지각",
+            ScreenStatus.ABSENT, "결석",
+            ScreenStatus.OUT, "외출",
+            ScreenStatus.EARLY_LEAVE, "조퇴");
+
+    /** 화면 컬럼과 순서를 맞춘다 — 화면에서 본 대로 파일이 나와야 대조가 된다. */
+    private static final com.dlab.common.excel.ColumnMapping EXPORT_MAPPING =
+            com.dlab.common.excel.ColumnMapping.builder()
+                    .required("studentNo", "학번")
+                    .required("name", "이름")
+                    .optional("className", "반")
+                    .optional("seatCd", "좌석")
+                    .optional("checkInAt", "등원")
+                    .optional("checkOutAt", "하원")
+                    .optional("status", "상태")
+                    .optional("excused", "사유")
+                    .optional("studyTime", "순공시간")
+                    .optional("guardianPhone", "학부모 연락처")
+                    .optional("note", "비고");
 
     /**
      * 일별 출결 현황.
@@ -302,5 +326,30 @@ public class AttendanceBoardService {
             return Duration.ofMinutes(studyMinutes).toHours() + "시간 "
                     + String.format("%02d", studyMinutes % 60) + "분";
         }
+    }
+
+    /**
+     * 화면 컬럼 그대로 엑셀로 내린다.
+     *
+     * <p><b>연락처는 마스킹이 기본</b>이다(실행가이드 3.2). 파일은 한번 나가면 회수가 안 되고
+     * 메신저로 재전달되므로 화면보다 기준을 높게 잡는다 — 화면은 토글로 볼 수 있지만
+     * 파일은 상위 관리자가 명시 요청해야 원본이 나간다.
+     */
+    public byte[] export(AuthPrincipal me, LocalDate date, Long classId, boolean unmask) {
+        boolean raw = unmask && com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me);
+        List<AttendanceRow> rows = board(me, date, classId);
+
+        return excelExporter.export("출결현황", EXPORT_MAPPING, rows, r -> java.util.Arrays.asList(
+                r.studentNo(),
+                raw ? r.name() : com.dlab.common.privacy.Masking.name(r.name()),
+                r.className(),
+                r.seatCd(),
+                r.checkInAt() == null ? null : r.checkInAt().toString(),
+                r.checkOutAt() == null ? null : r.checkOutAt().toString(),
+                STATUS_LABELS.get(r.status()),
+                r.excused() ? "사유 승인" : null,
+                r.studyTimeLabel(),
+                raw ? r.guardianPhone() : com.dlab.common.privacy.Masking.phone(r.guardianPhone()),
+                r.unexcusedLate() ? "무단지각" : null));
     }
 }
