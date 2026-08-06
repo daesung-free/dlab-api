@@ -18,6 +18,7 @@ import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +65,7 @@ public class DailyAttendanceConfirmService {
     private final AttendanceDailyStatusRepository dailyStatusRepository;
     private final AbsenceReasonRepository absenceReasonRepository;
     private final PeriodMasterRepository periodMasterRepository;
+    private final StudyTimeCalculator studyTimeCalculator;
     private final Clock clock;
 
     /**
@@ -92,27 +94,76 @@ public class DailyAttendanceConfirmService {
             return 0;
         }
 
-        Map<Long, List<AttendanceEventType>> eventsByEnrollment = eventsOf(academy, date);
+        Map<Long, List<AttendanceTaggingLog>> logsByEnrollment = logsOf(academy, date);
+
+        List<com.dlab.domain.period.entity.PeriodMaster> periods =
+                periodMasterRepository.findByDayType(
+                        academy.getId(), targets.get(0).getYear(), DayType.of(date));
         Set<Long> excusedEnrollments = excusedOf(targets, date);
         Instant now = Instant.now(clock);
 
         for (StudentEnrollment enrollment : targets) {
-            List<AttendanceEventType> events =
-                    eventsByEnrollment.getOrDefault(enrollment.getId(), List.of());
-            DailyStatus status = statusOf(events);
-            boolean excused = excusedEnrollments.contains(enrollment.getId());
-
-            // 이미 확정된 날을 다시 돌 수 있다 — 사유가 뒤늦게 승인되면 무단이 사유로 바뀐다
-            dailyStatusRepository
-                    .findByEnrollmentIdAndAttendanceDate(enrollment.getId(), date)
-                    .ifPresentOrElse(
-                            existing -> existing.reconfirm(status, excused, now),
-                            () -> dailyStatusRepository.save(new AttendanceDailyStatus(
-                                    academy, enrollment, date, status, excused)));
+            apply(academy, enrollment, date,
+                    logsByEnrollment.getOrDefault(enrollment.getId(), List.of()),
+                    periods, excusedEnrollments.contains(enrollment.getId()), now);
         }
 
         log.info("출결 확정: 지점={}, 일자={}, 대상={}명", academy.getName(), date, targets.size());
         return targets.size();
+    }
+
+    /**
+     * 한 학생의 하루만 다시 확정한다.
+     *
+     * <p>관리자가 태깅을 보정한 직후에 쓴다. <b>배치를 기다리면 화면이 그날 밤까지
+     * 옛 상태를 보여준다</b> — 결석으로 보이는 학생을 두고 "보정이 안 먹었다"는 문의가 온다.
+     *
+     * <p>판정 규칙은 배치와 <b>같은 코드</b>를 탄다. 여기서 따로 계산하면 배치가 다시 돌 때
+     * 값이 갈린다.
+     */
+    @Transactional
+    public void confirmSingle(StudentEnrollment enrollment, LocalDate date) {
+        List<com.dlab.domain.period.entity.PeriodMaster> periods =
+                periodMasterRepository.findByDayType(
+                        enrollment.getAcademy().getId(), enrollment.getYear(), DayType.of(date));
+        if (periods.isEmpty()) {
+            // 운영일이 아니다 — 행을 만들면 출결률 분모가 늘어 통계가 왜곡된다
+            return;
+        }
+
+        List<AttendanceTaggingLog> logs = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(enrollment.getId(), date);
+
+        apply(enrollment.getAcademy(), enrollment, date, logs, periods,
+                !excusedOf(List.of(enrollment), date).isEmpty(), Instant.now(clock));
+    }
+
+    /** 한 학생의 하루 확정. 배치와 단건 보정이 함께 쓴다. */
+    private void apply(Academy academy, StudentEnrollment enrollment, LocalDate date,
+                       List<AttendanceTaggingLog> logs,
+                       List<com.dlab.domain.period.entity.PeriodMaster> periods,
+                       boolean excused, Instant now) {
+
+        DailyStatus status = statusOf(logs.stream().map(AttendanceTaggingLog::getEventType).toList());
+
+        // 지난 날이라 하원이 끝났다 — 마지막 교시 종료로 닫고 계산한다
+        int studyMinutes = (int) studyTimeCalculator
+                .calculate(logs, periods, LocalTime.MAX).toMinutes();
+
+        // 이미 확정된 날을 다시 돌 수 있다 — 사유가 뒤늦게 승인되면 무단이 사유로 바뀐다
+        AttendanceDailyStatus confirmed = dailyStatusRepository
+                .findByEnrollmentIdAndAttendanceDate(enrollment.getId(), date)
+                .orElseGet(() -> dailyStatusRepository.save(new AttendanceDailyStatus(
+                        academy, enrollment, date, status, excused)));
+
+        // ★ 관리자 정정분은 상태를 덮지 않는다. 덮으면 낮에 고친 값이 새벽에
+        //   조용히 되돌아가고, 화면상 원인을 추적할 방법이 없다
+        if (!confirmed.isManuallyModified()) {
+            confirmed.reconfirm(status, excused, now);
+        }
+        // 순공시간은 정정분에도 갱신한다 — 태깅 보정으로 원장이 늘었을 수 있고,
+        // 이건 관리자가 고른 값이 아니라 원장에서 파생되는 값이다
+        confirmed.recordStudyMinutes(studyMinutes, now);
     }
 
     /**
@@ -135,13 +186,13 @@ public class DailyAttendanceConfirmService {
         return DailyStatus.PRESENT;
     }
 
-    private Map<Long, List<AttendanceEventType>> eventsOf(Academy academy, LocalDate date) {
-        Map<Long, List<AttendanceEventType>> result = new HashMap<>();
-        for (AttendanceTaggingLog log : taggingLogRepository
-                .findByAcademyIdAndAttendanceDate(academy.getId(), date)) {
-            result.computeIfAbsent(log.getEnrollment().getId(), k -> new java.util.ArrayList<>())
-                    .add(log.getEventType());
-        }
+    /** 학생별 그날 원장(시간순). 상태 판정과 순공시간 계산이 함께 쓴다. */
+    private Map<Long, List<AttendanceTaggingLog>> logsOf(Academy academy, LocalDate date) {
+        Map<Long, List<AttendanceTaggingLog>> result = new HashMap<>();
+        taggingLogRepository.findByAcademyIdAndAttendanceDate(academy.getId(), date).stream()
+                .sorted(java.util.Comparator.comparing(AttendanceTaggingLog::getRecordedAt))
+                .forEach(log -> result.computeIfAbsent(
+                        log.getEnrollment().getId(), k -> new java.util.ArrayList<>()).add(log));
         return result;
     }
 

@@ -138,6 +138,11 @@ class KioskAttendanceIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    /** 현재 기준 상대 시각을 태깅 문자열로. 고정 시각은 서버 now와 순서가 뒤집힌다. */
+    private String fmt(java.time.LocalTime t) {
+        return t.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
+    }
+
     private long logCount() {
         em.flush();
         return taggingLogRepository
@@ -386,6 +391,10 @@ class KioskAttendanceIntegrationTest {
      * 필드를 직접 채운다 — 승인 흐름 자체는 {@code FirewallApprovalFlowTest}가 검증한다.
      */
     private void submitApprovedReason(AbsenceReasonType type) {
+        submitApprovedReason(type, null);
+    }
+
+    private void submitApprovedReason(AbsenceReasonType type, java.time.LocalTime startTime) {
         ApprovalItem item = new ApprovalItem(bundang, (short) 2026,
                 RequestType.ABSENCE_REASON, ApproverType.TEACHER, null, null);
         em.persist(item);
@@ -395,9 +404,112 @@ class KioskAttendanceIntegrationTest {
         ReflectionTestUtils.setField(approval, "status", ApprovalStatus.APPROVED);
         em.persist(approval);
 
-        AbsenceReason reason = new AbsenceReason(bundang, minji, today, type, "사유");
+        AbsenceReason reason = new AbsenceReason(bundang, minji, today, type, "사유",
+                startTime, type == AbsenceReasonType.OUTING && startTime != null
+                        ? startTime.plusHours(1) : null);
         reason.linkApproval(approval);
         em.persist(reason);
         em.flush();
+    }
+
+    // ── 선택지 노출 시각 ─────────────────────────────────────
+
+    @Test
+    @DisplayName("★ 예정 30분 전부터 뜬다 — 그 전엔 130이다")
+    void promptAppearsOnlyFromThirtyMinutesBefore() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
+        tag("08:30:00");
+
+        // 15:59 — 아직 이르다. 여기서 뜨면 실수로 눌러 이른 조퇴가 기록된다
+        tag("15:59:00").andExpect(jsonPath("$.code").value(130));
+
+        tag("16:00:00").andExpect(jsonPath("$.data[0].code").value(128));
+    }
+
+    @Test
+    @DisplayName("★ 예정 시각이 지나도 계속 뜬다 — 늦게 나가는 건 정상이다")
+    void promptStaysAfterScheduledTime() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
+        tag("08:30:00");
+
+        tag("18:00:00").andExpect(jsonPath("$.data[0].code").value(128));
+    }
+
+    @Test
+    @DisplayName("★ 외출도 같은 규칙이다")
+    void outingFollowsTheSameWindow() throws Exception {
+        submitApprovedReason(AbsenceReasonType.OUTING, java.time.LocalTime.of(13, 0));
+        tag("08:30:00");
+
+        tag("12:29:00").andExpect(jsonPath("$.code").value(130));
+        tag("12:30:00").andExpect(jsonPath("$.data[0].code").value(129));
+    }
+
+    @Test
+    @DisplayName("★ 창 밖에서는 con_gn을 실어도 거부된다 — 화면을 우회할 수 없다")
+    void explicitActionOutsideWindowIsRejected() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
+        tag("08:30:00");
+
+        tag("10:00:00", "C").andExpect(jsonPath("$.code").value(130));
+    }
+
+    @Test
+    @DisplayName("시각이 없는 사유는 통과시킨다 — 종일 사유이거나 이관된 과거 데이터다")
+    void reasonWithoutStartTimeIsAlwaysUsable() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
+        tag("08:30:00");
+
+        tag("10:00:00").andExpect(jsonPath("$.data[0].code").value(128));
+    }
+
+    @Test
+    @DisplayName("★ 오늘 이미 외출했으면 다시 안 띄운다 — 신청 1건으로 여러 번 나갈 수 없다")
+    void outingCanBeUsedOnlyOncePerDay() throws Exception {
+        submitApprovedReason(AbsenceReasonType.OUTING, java.time.LocalTime.of(13, 0));
+        tag("08:30:00");
+
+        tag("13:00:00").andExpect(jsonPath("$.data[0].code").value(129));
+        tag("13:01:00", "N").andExpect(jsonPath("$.att_gn").value("N"));
+        tag("14:00:00").andExpect(jsonPath("$.att_gn").value("R"));   // 복귀
+
+        // 같은 신청으로 또 나가려 한다
+        tag("15:00:00").andExpect(jsonPath("$.code").value(130));
+    }
+
+    @Test
+    @DisplayName("★ 조퇴는 하루 한 번 — 재등원 전에는 다시 안 뜬다")
+    void earlyLeaveCannotBeReusedWhileStillLeft() throws Exception {
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(15, 0));
+        tag("08:30:00");
+        tag("15:00:00", "C").andExpect(jsonPath("$.att_gn").value("C"));
+
+        // 조퇴 상태에서 재태깅은 121로 막힌다(선택지 이전 단계)
+        tag("16:00:00").andExpect(jsonPath("$.code").value(121));
+    }
+
+    @Test
+    @DisplayName("★ 재등원하면 조퇴를 다시 쓸 수 있다 — 키오스크가 '조퇴 카운트를 0으로' 되돌린다")
+    void earlyLeaveIsReusableAfterReAttend() throws Exception {
+        // ★ 시각을 현재 기준으로 잡는다. setReAttendProc의 복귀는 서버 현재시각이라
+        //    고정 시각으로 태깅하면 원장 순서가 뒤집힌다(운영에서는 생기지 않는 어긋남)
+        java.time.LocalTime now = java.time.LocalTime.now(clock);
+        String checkIn = fmt(now.minusHours(2));
+        String leaveAt = fmt(now.minusHours(1));
+        String retryAt = fmt(now.plusMinutes(2));
+
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, now.minusHours(1));
+        tag(checkIn);
+        tag(leaveAt, "C").andExpect(jsonPath("$.att_gn").value("C"));
+
+        // 조퇴 해제 → 조퇴 기록이 외출로 정정되고 복귀가 붙는다
+        mvc.perform(post("/kiosk/setReAttendProc")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"" + token + "\",\"rfid_no\":\"ABC001\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+
+        // 다시 조퇴할 수 있다 (키오스크 커밋 9dda934 "조퇴후 재등원 후 다시 조퇴 대응")
+        tag(retryAt).andExpect(jsonPath("$.data[0].code").value(128));
     }
 }

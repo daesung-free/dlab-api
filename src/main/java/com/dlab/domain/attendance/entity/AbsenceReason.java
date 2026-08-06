@@ -49,6 +49,20 @@ public class AbsenceReason extends BaseEntity {
     @Column(name = "submitted_at", nullable = false)
     private Instant submittedAt = Instant.now();
 
+    /**
+     * 외출·조퇴 시작 시각. 결석·지각은 종일이라 {@code null}이다.
+     *
+     * <p>화면 "기간" 컬럼이 이걸로 {@code "13:00 ~ 15:00"} / {@code "16:30 이후"} / {@code "종일"}을
+     * 만든다. 그리고 <b>정기일정 인정 판정</b>이 "등록 시간 대비 실제 출입 30분 이상 차이"를
+     * 보므로 일자만으로는 계산이 안 된다.
+     */
+    @Column(name = "start_time")
+    private java.time.LocalTime startTime;
+
+    /** 외출 종료 시각. 조퇴는 복귀가 없어 {@code null}이다. */
+    @Column(name = "end_time")
+    private java.time.LocalTime endTime;
+
     /** 당일 자정. */
     @Column(name = "deadline_at")
     private Instant deadlineAt;
@@ -64,6 +78,22 @@ public class AbsenceReason extends BaseEntity {
         this.attendanceDate = attendanceDate;
         this.reasonType = reasonType;
         this.reasonText = reasonText;
+    }
+
+    public AbsenceReason(Academy academy, StudentEnrollment enrollment,
+                         LocalDate attendanceDate, AbsenceReasonType reasonType, String reasonText,
+                         java.time.LocalTime startTime, java.time.LocalTime endTime) {
+        this(academy, enrollment, attendanceDate, reasonType, reasonText);
+        this.startTime = startTime;
+        this.endTime = endTime;
+    }
+
+    /** 화면 "기간" 표기. 서버가 만들어 내린다 — 화면마다 조립하면 표기가 갈린다. */
+    public String periodLabel() {
+        if (startTime == null) {
+            return "종일";
+        }
+        return endTime == null ? startTime + " 이후" : startTime + " ~ " + endTime;
     }
 
     public void linkApproval(ApprovalRequest approvalRequest) {
