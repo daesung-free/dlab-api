@@ -1,0 +1,55 @@
+package com.dlab.api.admin.lecture;
+
+import com.dlab.domain.lecture.entity.LectureAttendanceStatus;
+import com.dlab.domain.lecture.entity.LectureStatus;
+import com.dlab.domain.lecture.entity.LectureType;
+import jakarta.validation.constraints.*;
+
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+
+/** 특강 요청 DTO. */
+public final class LectureRequests {
+
+    private LectureRequests() {
+    }
+
+    public record Create(
+            @NotNull(message = "지점은 필수입니다.") Long academyId,
+            @NotNull(message = "연도는 필수입니다.") Integer year,
+            LectureType lectureType,
+            @NotBlank(message = "특강명은 필수입니다.") @Size(max = 100) String name) {
+    }
+
+    /** {@code null}은 "변경하지 않음"이다. */
+    public record Update(
+            @Size(max = 100) String name,
+            String description,
+            @Positive(message = "정원은 1명 이상이어야 합니다.") Integer capacity,
+            Instant applyFrom,
+            Instant applyTo,
+            LocalDate startDate,
+            LocalDate endDate,
+            @PositiveOrZero Integer fee) {
+    }
+
+    public record ChangeStatus(@NotNull(message = "상태는 필수입니다.") LectureStatus status) {
+    }
+
+    public record ChangeVisible(@NotNull(message = "노출 여부는 필수입니다.") Boolean visible) {
+    }
+
+    public record AddSession(
+            @NotNull(message = "회차 날짜는 필수입니다.") LocalDate sessionDate,
+            LocalTime startTime,
+            LocalTime endTime,
+            @Size(max = 50) String room) {
+    }
+
+    public record MarkAttendance(
+            @NotNull(message = "신청 ID는 필수입니다.") Long applicationId,
+            @NotNull(message = "출석 상태는 필수입니다.") LectureAttendanceStatus status,
+            @Size(max = 200) String memo) {
+    }
+}

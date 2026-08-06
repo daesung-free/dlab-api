@@ -71,6 +71,15 @@ public enum ErrorCode {
     REQUIRED_NOTIFICATION_CANNOT_BE_DISABLED(HttpStatus.BAD_REQUEST,
             "이 알림은 수신 거부할 수 없습니다."),
 
+    // 특강 (F-4.7 · F-4.10-4 · A-15)
+    LECTURE_NOT_FOUND(HttpStatus.NOT_FOUND, "특강을 찾을 수 없습니다."),
+    LECTURE_SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "특강 회차를 찾을 수 없습니다."),
+    LECTURE_APPLICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "특강 신청을 찾을 수 없습니다."),
+    LECTURE_NOT_ACCEPTING(HttpStatus.BAD_REQUEST, "지금은 신청할 수 없는 특강입니다."),
+    LECTURE_ALREADY_APPLIED(HttpStatus.CONFLICT, "이미 신청한 특강입니다."),
+    LECTURE_ALREADY_CANCELED(HttpStatus.CONFLICT, "이미 취소된 신청입니다."),
+    LECTURE_CAPACITY_BELOW_CONFIRMED(HttpStatus.BAD_REQUEST, "확정 인원보다 적은 정원으로 줄일 수 없습니다."),
+
     // 알림
     NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "알림 템플릿을 찾을 수 없습니다."),
     NOTIFICATION_VARIABLE_MISSING(HttpStatus.INTERNAL_SERVER_ERROR, "알림 템플릿 변수가 누락되었습니다."),
