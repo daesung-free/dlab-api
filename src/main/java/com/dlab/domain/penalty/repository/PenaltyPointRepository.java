@@ -47,4 +47,29 @@ public interface PenaltyPointRepository extends JpaRepository<PenaltyPoint, Long
     List<PenaltyPoint> findByAcademyAndPeriod(@Param("academyId") Long academyId,
                                               @Param("from") java.time.Instant from,
                                               @Param("to") java.time.Instant to);
+
+    /**
+     * 관리자 목록. 지점·기간 + 조건으로 훑는다.
+     *
+     * <p>{@code category}·{@code source}는 {@code null}이면 전체다 —
+     * 화면 칩 필터가 미선택 상태일 때 조건이 빠져야 한다.
+     */
+    @Query("""
+            SELECT p FROM PenaltyPoint p
+            JOIN FETCH p.enrollment e
+            JOIN FETCH e.student
+            JOIN FETCH p.penaltyItem i
+            WHERE p.academy.id = :academyId
+              AND p.occurredAt >= :from
+              AND p.occurredAt < :to
+              AND (:category IS NULL OR i.category = :category)
+              AND (:source IS NULL OR p.source = :source)
+              AND p.deleted = false
+            ORDER BY p.occurredAt DESC
+            """)
+    List<PenaltyPoint> search(@Param("academyId") Long academyId,
+                              @Param("from") java.time.Instant from,
+                              @Param("to") java.time.Instant to,
+                              @Param("category") com.dlab.domain.penalty.entity.PenaltyCategory category,
+                              @Param("source") com.dlab.domain.penalty.entity.PenaltySource source);
 }
