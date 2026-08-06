@@ -90,6 +90,14 @@ public class NotificationService {
             log.info("문구 미확정으로 발송 보류: event={}", notificationLog.getEventCode());
             return;
         }
+        if (!template.getReviewStatus().canSend()) {
+            // 카카오 알림톡 사전심사(E-5) 미통과. 문구가 확정돼도 심사를 못 넘으면
+            // 카카오가 발송을 거절한다 — 우리가 먼저 걸러야 실패 이력이 어지럽지 않다.
+            notificationLog.markSkipped("알림톡 심사 미통과: " + template.getReviewStatus());
+            log.info("심사 미통과로 발송 보류: event={}, status={}",
+                    notificationLog.getEventCode(), template.getReviewStatus());
+            return;
+        }
 
         NotificationSender sender = senders.get(template.getChannel());
         if (sender == null) {

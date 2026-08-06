@@ -74,6 +74,11 @@ public enum ErrorCode {
     // 알림
     NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "알림 템플릿을 찾을 수 없습니다."),
     NOTIFICATION_VARIABLE_MISSING(HttpStatus.INTERNAL_SERVER_ERROR, "알림 템플릿 변수가 누락되었습니다."),
+    NOTIFICATION_TEMPLATE_DUPLICATED(HttpStatus.CONFLICT, "이 이벤트의 템플릿이 이미 있습니다."),
+    NOTIFICATION_TEMPLATE_CONTENT_EMPTY(HttpStatus.BAD_REQUEST,
+            "문구가 비어 있어 확정할 수 없습니다."),
+    NOTIFICATION_REVIEW_NOT_APPLICABLE(HttpStatus.BAD_REQUEST,
+            "카카오 알림톡 템플릿만 심사 대상입니다."),
 
     // 공휴일
     HOLIDAY_NOT_FOUND(HttpStatus.NOT_FOUND, "공휴일을 찾을 수 없습니다."),
