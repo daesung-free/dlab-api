@@ -28,4 +28,21 @@ public interface AbsenceReasonRepository extends JpaRepository<AbsenceReason, Lo
     List<AbsenceReason> findByEnrollmentAndPeriod(@Param("enrollmentId") Long enrollmentId,
                                                   @Param("from") LocalDate from,
                                                   @Param("to") LocalDate to);
+
+    /** 지점의 기간 내 사유신청. 관리자 목록이 쓴다. */
+    @Query("""
+            SELECT r FROM AbsenceReason r
+            JOIN FETCH r.enrollment e
+            JOIN FETCH e.student
+            LEFT JOIN FETCH r.approvalRequest ar
+            LEFT JOIN FETCH ar.approvalItem
+            WHERE r.academy.id = :academyId
+              AND r.attendanceDate >= :from
+              AND r.attendanceDate <= :to
+              AND r.deleted = false
+            ORDER BY r.submittedAt DESC
+            """)
+    List<AbsenceReason> findByAcademyAndPeriod(@Param("academyId") Long academyId,
+                                               @Param("from") LocalDate from,
+                                               @Param("to") LocalDate to);
 }
