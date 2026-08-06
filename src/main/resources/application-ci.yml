@@ -1,0 +1,34 @@
+# CI 전용 프로필 — 빈 DB에 마이그레이션 전체를 적용해보는 용도다.
+#
+# ★ 이 프로필의 존재 이유는 하나다: **out-of-order를 끄고** 마이그레이션을 돌려보는 것.
+#   로컬(application-local.yml)은 여러 명이 며칠씩 쌓다가 푸시하는 구조라 켜두지만,
+#   운영은 순차 배포라 꺼져 있다. 켜둔 채로만 검증하면
+#   "로컬에서는 되는데 운영 배포에서 순서 역전으로 터지는" 상황을 못 잡는다.
+#
+# 접속 정보는 워크플로가 환경변수로 주입한다(SPRING_DATASOURCE_*).
+
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # 스키마는 Flyway가 만들고 JPA는 검증만 한다.
+      # 엔티티와 마이그레이션이 어긋나면 기동 단계에서 바로 실패한다 — 그게 이 잡의 검증 대상이다.
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # ★ 끈다. 운영과 같은 조건으로 순서를 검증한다.
+    out-of-order: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+# 스케줄러가 CI에서 돌 이유가 없다. 기동만 확인하면 된다.
+scheduling:
+  enabled: false
