@@ -5,7 +5,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.dlab.domain.kiosk.entity.BranchConfig;
-import com.dlab.domain.meal.entity.MealApplication;
+import com.dlab.domain.meal.entity.MealOrder;
+import com.dlab.domain.meal.entity.MealOrderItem;
 import com.dlab.domain.meal.entity.MealType;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.GradeType;
@@ -103,11 +104,24 @@ class KioskMealIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    private MealApplication apply(LocalDate date, MealType type) {
-        MealApplication application = new MealApplication(minji, date, type);
-        em.persist(application);
+    /** 주문 1개에 항목을 더한다 — 같은 달이면 주문을 재사용한다. */
+    private MealOrderItem apply(LocalDate date, MealType type) {
+        java.time.YearMonth month = java.time.YearMonth.from(date);
+        MealOrder order = em.createQuery("""
+                        SELECT o FROM MealOrder o
+                        WHERE o.enrollment.id = :id AND o.targetMonth = :m AND o.deleted = false
+                        """, MealOrder.class)
+                .setParameter("id", minji.getId())
+                .setParameter("m", month.atDay(1))
+                .getResultStream().findFirst()
+                .orElseGet(() -> {
+                    MealOrder created = new MealOrder(minji, month);
+                    em.persist(created);
+                    return created;
+                });
+        order.addItem(date, type);
         em.flush();
-        return application;
+        return order.activeItems().get(order.activeItems().size() - 1);
     }
 
     @Test
@@ -138,10 +152,10 @@ class KioskMealIntegrationTest {
     @Test
     @DisplayName("★ 취소분은 N이다")
     void canceledApplicationIsNotCounted() throws Exception {
-        MealApplication application = apply(today, MealType.LUNCH);
+        MealOrderItem item = apply(today, MealType.LUNCH);
         applyYn("L").andExpect(jsonPath("$.meal_yn").value("Y"));
 
-        application.cancel(Instant.now(clock));
+        item.cancel(Instant.now(clock), com.dlab.domain.meal.entity.CancelPath.APP);
         em.flush();
 
         applyYn("L").andExpect(jsonPath("$.meal_yn").value("N"));
