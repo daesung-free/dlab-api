@@ -216,6 +216,25 @@ class AttendancePolicyTest {
     }
 
     @Test
+    @DisplayName("★★ 마지막 교시 종료 후엔 조퇴 승인이 있어도 하원이다 — 그 시각엔 조퇴가 성립하지 않는다")
+    void checkOutWinsOverPromptAfterLastPeriod() {
+        // 조퇴 후 재등원하면 C가 D로 정정돼 "이미 썼다" 판정이 신청을 못 찾는다.
+        // 그 상태로 하원 시각에 찍으면 예전엔 128이 떠서 정상 하원이 조퇴로 기록됐다
+        var decision = policy.decide(List.of(CHECK_IN), weekday(), LocalTime.of(22, 0),
+                LATE_AFTER, new ExcusedOptions(true, false));
+
+        assertThat(decision.event()).isEqualTo(CHECK_OUT);
+    }
+
+    @Test
+    @DisplayName("마지막 교시 전이면 선택지가 그대로 뜬다")
+    void promptStillShownBeforeLastPeriodEnds() {
+        assertThat(policy.decide(List.of(CHECK_IN), weekday(), LocalTime.of(21, 59),
+                LATE_AFTER, new ExcusedOptions(true, false)).code())
+                .isEqualTo(DsaCode.CHOICE_EARLY_LEAVE);
+    }
+
+    @Test
     @DisplayName("★ 조퇴 판정이 사유신청 선택지보다 먼저다 — 이미 조퇴했으면 선택지도 안 뜬다")
     void earlyLeaveBlockWinsOverPrompt() {
         assertThat(policy.decide(List.of(CHECK_IN, EARLY_LEAVE), weekday(),

@@ -23,8 +23,9 @@ import org.springframework.stereotype.Component;
  *       <b>상한이 없다</b> — 밤늦게 와도 그날 등원이다(아래 참고).
  *       <b>교시 확인보다 앞</b>이라 자율등원일에도 등원이 찍힌다</li>
  *   <li>등원 상태인데 그날 교시가 없음 → {@code 113}. 하원·외출을 못 가려 되묻는다</li>
+ *   <li>마지막 교시 종료 후 → 하원({@code T}). <b>사유 선택지보다 앞</b>이다 —
+ *       그 시각엔 조퇴가 성립하지 않는다</li>
  *   <li>승인된 사유신청 있음 → {@code 126}/{@code 128}/{@code 129} 선택지</li>
- *   <li>마지막 교시 종료 후 → 하원({@code T})</li>
  *   <li>그 외 → {@code 130} <b>"승인 내역이 없습니다"</b></li>
  * </ol>
  *
@@ -112,16 +113,20 @@ public class AttendancePolicy {
             return AttendanceDecision.reject(DsaCode.NO_TIMETABLE);
         }
 
-        // 6. 승인된 사유신청이 있으면 선택지를 띄운다.
+        // 6. ★ 마지막 교시가 끝났으면 하원이 확실하다 — 사유 선택지보다 앞이다.
+        //    조퇴는 정의상 "수업 중에 일찍 나가는 것"이라 마지막 교시가 끝난 뒤엔 성립하지 않는다.
+        //    뒤에 두면 조퇴 승인이 살아 있는 학생에게 하원 시각에도 "조퇴를 선택해 주세요"가 떠서
+        //    정상 하원이 조퇴로 기록된다. 조퇴 후 재등원하면 C가 D로 정정되면서
+        //    "오늘 이미 썼다" 판정이 신청을 못 찾아 승인이 되살아나기 때문에 실제로 발생한다
+        if (!at.isBefore(lastClassEnd(periods))) {
+            return AttendanceDecision.of(AttendanceEventType.CHECK_OUT);
+        }
+
+        // 7. 승인된 사유신청이 있으면 선택지를 띄운다.
         //    자동으로 조퇴 처리해버리면 학생이 의도하지 않은 조퇴가 기록된다
         DsaCode prompt = excused.promptCode();
         if (prompt != null) {
             return AttendanceDecision.reject(prompt);
-        }
-
-        // 7. 마지막 교시가 끝났으면 하원이 확실하다
-        if (!at.isBefore(lastClassEnd(periods))) {
-            return AttendanceDecision.of(AttendanceEventType.CHECK_OUT);
         }
 
         // 8. 승인 없이 나가려 한다 — 거절한다.
