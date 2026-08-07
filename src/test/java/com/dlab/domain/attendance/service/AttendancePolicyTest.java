@@ -70,13 +70,33 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("★ 그날 교시가 없으면 113 — 일요일·공휴일이라 자동판별이 불가하다")
+    @DisplayName("★ 등원 상태인데 교시가 없으면 113 — 하원인지 외출인지 못 가린다")
     void noTimetableAsksUser() {
-        var decision = policy.decide(List.of(), List.of(), LocalTime.of(10, 0),
+        var decision = policy.decide(List.of(CHECK_IN), List.of(), LocalTime.of(15, 0),
                 LATE_AFTER, ExcusedOptions.none());
 
         assertThat(decision.code()).isEqualTo(DsaCode.NO_TIMETABLE);
         assertThat(decision.isAccepted()).isFalse();
+    }
+
+    @Test
+    @DisplayName("★★ 자율등원일(주말) 첫 태깅은 등원이다 — 113을 주면 등원할 방법이 없다")
+    void firstTagOnFreeDayIsCheckIn() {
+        // 키오스크가 113에 띄우는 선택지는 하원·외출 둘뿐이다
+        var decision = policy.decide(List.of(), List.of(), LocalTime.of(10, 0),
+                LATE_AFTER, ExcusedOptions.none());
+
+        assertThat(decision.event()).isEqualTo(CHECK_IN);
+    }
+
+    @Test
+    @DisplayName("★★ 자율등원일에는 지각이 없다 — 주말은 학생이 알아서 온다")
+    void noLatenessOnFreeDay() {
+        // 평일이면 지각인 시각(11시)인데 교시가 없으면 그냥 등원이다
+        var decision = policy.decide(List.of(), List.of(), LocalTime.of(11, 0),
+                LATE_AFTER, ExcusedOptions.none());
+
+        assertThat(decision.event()).isEqualTo(CHECK_IN);
     }
 
     @Test

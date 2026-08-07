@@ -18,10 +18,11 @@ import org.springframework.stereotype.Component;
  *   <li>조퇴 후 재태깅 → {@code 121}. 시간표와 무관하게 먼저 막는다</li>
  *   <li>외출 중 → 복귀({@code R}). 복귀는 시간표 밖에서도 가능해야 한다 —
  *       못 찍으면 학생이 나간 채로 기록이 남는다</li>
- *   <li>그날 교시가 없음 → {@code 113}. 주말·공휴일이라 자동판별이 불가하다</li>
  *   <li>새벽(하루 시작 전) → {@code 122}</li>
  *   <li>오늘 첫 태깅 → 등원({@code S}) 또는 지각({@code A}).
- *       <b>상한이 없다</b> — 밤늦게 와도 그날 등원이다(아래 참고)</li>
+ *       <b>상한이 없다</b> — 밤늦게 와도 그날 등원이다(아래 참고).
+ *       <b>교시 확인보다 앞</b>이라 자율등원일에도 등원이 찍힌다</li>
+ *   <li>등원 상태인데 그날 교시가 없음 → {@code 113}. 하원·외출을 못 가려 되묻는다</li>
  *   <li>승인된 사유신청 있음 → {@code 126}/{@code 128}/{@code 129} 선택지</li>
  *   <li>마지막 교시 종료 후 → 하원({@code T})</li>
  *   <li>그 외 → {@code 130} <b>"승인 내역이 없습니다"</b></li>
@@ -93,19 +94,22 @@ public class AttendancePolicy {
             return AttendanceDecision.of(AttendanceEventType.RETURN);
         }
 
-        // 3. 그날 교시가 아예 없다(일요일·공휴일) → 자동판별 불가
-        if (periods.isEmpty()) {
-            return AttendanceDecision.reject(DsaCode.NO_TIMETABLE);
-        }
-
-        // 4. 하루가 시작되기 전(새벽)
+        // 3. 하루가 시작되기 전(새벽)
         if (at.isBefore(DAY_START)) {
             return AttendanceDecision.reject(DsaCode.OUTSIDE_STUDY_HOURS);
         }
 
-        // 5. 오늘 첫 태깅
+        // 4. 오늘 첫 태깅 — ★ 교시 확인보다 먼저다.
+        //    등원 기록이 없으면 등원인 게 명백해서 시간표를 볼 필요가 없다.
+        //    뒤에 두면 자율등원일(주말)에 온 학생이 113을 받는데,
+        //    키오스크가 띄우는 선택지는 하원·외출 둘뿐이라 등원할 방법이 사라진다
         if (last == null) {
-            return firstTag(at, lateAfter, excused);
+            return firstTag(at, lateAfter, excused, periods.isEmpty());
+        }
+
+        // 5. 등원 상태인데 그날 교시가 없다(자율등원일) → 하원인지 외출인지 못 가린다
+        if (periods.isEmpty()) {
+            return AttendanceDecision.reject(DsaCode.NO_TIMETABLE);
         }
 
         // 6. 승인된 사유신청이 있으면 선택지를 띄운다.
@@ -143,8 +147,11 @@ public class AttendancePolicy {
      * 등원으로 떠야 한다. 무단/사유 구분은 일자 확정 배치가 {@code excused} 플래그로 이미 한다.
      */
     private AttendanceDecision firstTag(LocalTime at, LocalTime lateAfter,
-                                        ExcusedOptions excused) {
-        if (!at.isAfter(lateAfter)) {
+                                        ExcusedOptions excused, boolean freeDay) {
+        // ★ 자율등원일에는 지각이 없다. 교시가 없다는 건 운영일이 아니라는 뜻이고,
+        //   평일 기준 등원시각을 그대로 적용하면 주말에 11시에 온 학생이 지각으로 남는다.
+        //   결석 확정 배치도 교시 없는 날을 건너뛰므로(자율등원일엔 결석이 없다) 규칙이 일관된다
+        if (freeDay || !at.isAfter(lateAfter)) {
             return AttendanceDecision.of(AttendanceEventType.CHECK_IN);
         }
         // 지각 시각이다. 승인된 사유지각이 있으면 화면에만 등원으로 보인다
