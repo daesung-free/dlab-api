@@ -35,6 +35,8 @@ public enum ErrorCode {
     CHILD_ALREADY_LINKED(HttpStatus.CONFLICT, "이미 연결된 자녀입니다."),
     PHONE_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 가입된 휴대폰 번호입니다."),
     NOT_MY_CHILD(HttpStatus.FORBIDDEN, "본인의 자녀가 아닙니다."),
+    NOT_FOUND(HttpStatus.NOT_FOUND, "요청하신 경로를 찾을 수 없습니다."),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "허용되지 않은 요청 방식입니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다."),
 
     // 지점 / 조직
@@ -79,6 +81,13 @@ public enum ErrorCode {
     LECTURE_ALREADY_APPLIED(HttpStatus.CONFLICT, "이미 신청한 특강입니다."),
     LECTURE_ALREADY_CANCELED(HttpStatus.CONFLICT, "이미 취소된 신청입니다."),
     LECTURE_CAPACITY_BELOW_CONFIRMED(HttpStatus.BAD_REQUEST, "확정 인원보다 적은 정원으로 줄일 수 없습니다."),
+
+    // 데일리 루틴 (F-4.11-1 · A-11)
+    ROUTINE_NOT_FOUND(HttpStatus.NOT_FOUND, "루틴을 찾을 수 없습니다."),
+    ROUTINE_TARGET_MONTH_NOT_EMPTY(HttpStatus.CONFLICT,
+            "복사 대상 월에 이미 루틴이 있습니다. 덮어쓰지 않습니다."),
+    ROUTINE_SOURCE_MONTH_EMPTY(HttpStatus.NOT_FOUND, "전월에 복사할 루틴이 없습니다."),
+    ROUTINE_SCORE_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "점수가 만점 범위를 벗어났습니다."),
 
     // 알림
     NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "알림 템플릿을 찾을 수 없습니다."),

@@ -56,6 +56,16 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
             """)
     Optional<StudentEnrollment> findCurrentByStudentId(Long studentId);
 
+    /** 지점·연도의 현재 재원 등록 건. 반 지정이 없는 루틴의 대상 학생이 이것이다. */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            WHERE e.academy.id = :academyId AND e.year = :year
+              AND e.current = true AND e.deleted = false
+            ORDER BY e.studentNo
+            """)
+    List<StudentEnrollment> findCurrentByAcademyAndYear(Long academyId, short year);
+
     /**
      * 해당 날짜에 무단 미등원인 등록 건.
      * - 그날 등원 태깅(S/A)이 없고
