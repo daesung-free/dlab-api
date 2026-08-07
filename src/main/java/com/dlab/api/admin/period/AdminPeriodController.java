@@ -68,7 +68,8 @@ public class AdminPeriodController {
         return ApiResponse.success(PeriodResponse.from(periodService.create(
                 me, request.academyId(), request.year(), request.dayType(),
                 request.periodNo(), request.name(), request.periodType(),
-                request.startTime(), request.endTime(), request.planable())));
+                request.startTime(), request.endTime(),
+                request.planable(), request.mandatory())));
     }
 
     /** <b>요일 구분은 못 바꾼다.</b> 옮기면 양쪽 구성이 동시에 깨진다 — 지우고 새로 만든다. */
@@ -78,7 +79,8 @@ public class AdminPeriodController {
                                               @Valid @RequestBody PeriodUpdateRequest request) {
         return ApiResponse.success(PeriodResponse.from(periodService.update(
                 me, id, request.periodNo(), request.name(), request.periodType(),
-                request.startTime(), request.endTime(), request.planable())));
+                request.startTime(), request.endTime(),
+                request.planable(), request.mandatory())));
     }
 
     @DeleteMapping("/{id}")
@@ -103,7 +105,8 @@ public class AdminPeriodController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime startTime,
             @NotNull(message = "종료 시각은 필수입니다.")
             @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime endTime,
-            boolean planable) {
+            boolean planable,
+            boolean mandatory) {
     }
 
     public record PeriodUpdateRequest(
@@ -114,7 +117,8 @@ public class AdminPeriodController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime startTime,
             @NotNull(message = "종료 시각은 필수입니다.")
             @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime endTime,
-            boolean planable) {
+            boolean planable,
+            boolean mandatory) {
     }
 
     public record PeriodResponse(
@@ -126,12 +130,13 @@ public class AdminPeriodController {
             PeriodType periodType,
             LocalTime startTime,
             LocalTime endTime,
-            boolean planable) {
+            boolean planable,
+            boolean mandatory) {
 
         public static PeriodResponse from(PeriodMaster p) {
             return new PeriodResponse(p.getId(), p.getYear(), p.getDayType(), p.getPeriodNo(),
                     p.getName(), p.getPeriodType(), p.getStartTime(), p.getEndTime(),
-                    p.isPlanable());
+                    p.isPlanable(), p.isMandatory());
         }
     }
 }

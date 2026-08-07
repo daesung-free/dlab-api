@@ -104,12 +104,17 @@ public class AttendancePolicy {
         //    등원 기록이 없으면 등원인 게 명백해서 시간표를 볼 필요가 없다.
         //    뒤에 두면 자율등원일(주말)에 온 학생이 113을 받는데,
         //    키오스크가 띄우는 선택지는 하원·외출 둘뿐이라 등원할 방법이 사라진다
+        // ★ "자율등원일"은 교시가 없는 날이 아니라 <b>의무 교시가 없는 날</b>이다.
+        //    주말·공휴일도 교시는 그대로 있고 전부 자율선택자습일 뿐이다
+        LocalTime mandatoryEnd = lastMandatoryEnd(periods);
+        boolean freeDay = mandatoryEnd == null;
+
         if (last == null) {
-            return firstTag(at, lateAfter, excused, periods.isEmpty());
+            return firstTag(at, lateAfter, excused, freeDay);
         }
 
-        // 5. 등원 상태인데 그날 교시가 없다(자율등원일) → 하원인지 외출인지 못 가린다
-        if (periods.isEmpty()) {
+        // 5. 등원 상태인데 그날 의무 교시가 없다(자율등원일) → 하원인지 외출인지 못 가린다
+        if (freeDay) {
             return AttendanceDecision.reject(DsaCode.NO_TIMETABLE);
         }
 
@@ -118,7 +123,7 @@ public class AttendancePolicy {
         //    뒤에 두면 조퇴 승인이 살아 있는 학생에게 하원 시각에도 "조퇴를 선택해 주세요"가 떠서
         //    정상 하원이 조퇴로 기록된다. 조퇴 후 재등원하면 C가 D로 정정되면서
         //    "오늘 이미 썼다" 판정이 신청을 못 찾아 승인이 되살아나기 때문에 실제로 발생한다
-        if (!at.isBefore(lastClassEnd(periods))) {
+        if (!at.isBefore(mandatoryEnd)) {
             return AttendanceDecision.of(AttendanceEventType.CHECK_OUT);
         }
 
@@ -166,14 +171,20 @@ public class AttendancePolicy {
     }
 
     /**
-     * 하원으로 볼 수 있는 경계.
+     * 하원 경계 — <b>마지막 의무 교시</b>의 종료 시각.
      *
-     * <p>마지막 <b>교시</b>의 종료 시각이다. 운영 종료({@code close})와 같은 값이지만
-     * 의미가 달라 따로 둔다 — 나중에 "야자 이후 정리시간" 같은 교시가 붙으면
-     * 하원 경계는 그 앞이어야 한다.
+     * <p><b>마지막 교시가 아니다.</b> 평일 8·9교시(22:00~23:50)는 자율선택자습이라
+     * 그때 나가는 건 조퇴가 아니라 하원이다. 의무는 7교시 21:50에 끝난다 —
+     * 마지막 교시로 잡으면 22:00에 나가는 학생이 {@code 130}("승인 내역이 없습니다")을 받는다.
+     *
+     * @return 의무 교시가 하나도 없으면(주말·공휴일) {@code null} — 자율등원일이다
      */
-    private LocalTime lastClassEnd(List<PeriodMaster> periods) {
-        return periods.get(periods.size() - 1).getEndTime();
+    private LocalTime lastMandatoryEnd(List<PeriodMaster> periods) {
+        return periods.stream()
+                .filter(PeriodMaster::isMandatory)
+                .map(PeriodMaster::getEndTime)
+                .max(LocalTime::compareTo)
+                .orElse(null);
     }
 
     /**

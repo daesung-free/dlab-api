@@ -60,7 +60,7 @@ class AdminPeriodTest {
                                 DayType dayType, PeriodType type) {
         PeriodMaster saved = periodService.create(admin, bundang.getId(), YEAR, dayType,
                 no, no + "교시", type,
-                LocalTime.of(fromHour, 0), LocalTime.of(toHour, 0), true);
+                LocalTime.of(fromHour, 0), LocalTime.of(toHour, 0), true, true);
         em.flush();
         return saved;
     }
@@ -118,12 +118,12 @@ class AdminPeriodTest {
     void reversedTimeIsRejected() {
         assertThatThrownBy(() -> periodService.create(admin, bundang.getId(), YEAR,
                 DayType.WEEKDAY, (short) 1, "1교시", PeriodType.CLASS,
-                LocalTime.of(11, 0), LocalTime.of(9, 0), true))
+                LocalTime.of(11, 0), LocalTime.of(9, 0), true, true))
                 .isInstanceOf(BusinessException.class);
 
         assertThatThrownBy(() -> periodService.create(admin, bundang.getId(), YEAR,
                 DayType.WEEKDAY, (short) 2, "2교시", PeriodType.CLASS,
-                LocalTime.of(9, 0), LocalTime.of(9, 0), true))
+                LocalTime.of(9, 0), LocalTime.of(9, 0), true, true))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -134,7 +134,7 @@ class AdminPeriodTest {
         em.clear();
 
         periodService.update(admin, period.getId(), (short) 1, "1교시",
-                PeriodType.CLASS, LocalTime.of(9, 0), LocalTime.of(10, 30), true);
+                PeriodType.CLASS, LocalTime.of(9, 0), LocalTime.of(10, 30), true, true);
         em.flush();
         em.clear();
 
@@ -150,7 +150,7 @@ class AdminPeriodTest {
         em.clear();
 
         assertThatThrownBy(() -> periodService.update(admin, first.getId(), (short) 1, "1교시",
-                PeriodType.CLASS, LocalTime.of(9, 0), LocalTime.of(10, 30), true))
+                PeriodType.CLASS, LocalTime.of(9, 0), LocalTime.of(10, 30), true, true))
                 .isInstanceOf(BusinessException.class);
     }
 

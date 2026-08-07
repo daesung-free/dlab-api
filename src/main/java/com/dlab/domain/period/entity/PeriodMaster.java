@@ -58,6 +58,21 @@ public class PeriodMaster extends BaseEntity {
     @Column(nullable = false)
     private boolean planable = true;
 
+    /**
+     * 의무자습 여부.
+     *
+     * <p><b>지각 판정과 하원 경계가 이 값으로 갈린다.</b> 실제 교시표에 "의무자습"과
+     * "자율선택자습"이 나뉘어 있다:
+     * <ul>
+     *   <li><b>주말·공휴일은 교시가 그대로 있지만 전부 자율</b>이다(9교시만 미운영).
+     *       교시 유무로 자율등원일을 판정하면 주말 등원이 전부 지각으로 남는다</li>
+     *   <li><b>평일 8·9교시(22:00~23:50)도 자율</b>이다. 의무는 7교시(21:50)에 끝난다 —
+     *       하원 경계를 마지막 교시로 잡으면 22:00에 나가는 학생이 하원을 못 찍는다</li>
+     * </ul>
+     */
+    @Column(nullable = false)
+    private boolean mandatory = true;
+
     public PeriodMaster(Academy academy, short year, short periodNo, String name,
                         DayType dayType, PeriodType periodType,
                         LocalTime startTime, LocalTime endTime) {
@@ -79,6 +94,14 @@ public class PeriodMaster extends BaseEntity {
         this.planable = planable;
     }
 
+    public PeriodMaster(Academy academy, short year, short periodNo, String name,
+                        DayType dayType, PeriodType periodType,
+                        LocalTime startTime, LocalTime endTime,
+                        boolean planable, boolean mandatory) {
+        this(academy, year, periodNo, name, dayType, periodType, startTime, endTime, planable);
+        this.mandatory = mandatory;
+    }
+
     public boolean covers(LocalTime time) {
         return !time.isBefore(startTime) && time.isBefore(endTime);
     }
@@ -93,13 +116,15 @@ public class PeriodMaster extends BaseEntity {
      * 학습시간 일괄계산을 따로 돌려야 한다.
      */
     public void update(short periodNo, String name, PeriodType periodType,
-                       LocalTime startTime, LocalTime endTime, boolean planable) {
+                       LocalTime startTime, LocalTime endTime,
+                       boolean planable, boolean mandatory) {
         this.periodNo = periodNo;
         this.name = name;
         this.periodType = periodType;
         this.startTime = startTime;
         this.endTime = endTime;
         this.planable = planable;
+        this.mandatory = mandatory;
     }
 
     /** 다른 교시와 시간이 겹치는가. 경계가 맞닿는 건(이전 종료 == 다음 시작) 겹침이 아니다. */
