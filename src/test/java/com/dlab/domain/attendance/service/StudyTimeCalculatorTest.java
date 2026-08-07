@@ -12,7 +12,7 @@ import com.dlab.domain.period.entity.PeriodType;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
+import com.dlab.common.config.TimeConfig;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -50,7 +50,8 @@ class StudyTimeCalculatorTest {
 
     private AttendanceTaggingLog log(AttendanceEventType type, int hour, int minute) {
         return new AttendanceTaggingLog(null, null, type, AttendanceSource.KIOSK_NFC,
-                DAY.atTime(hour, minute).atZone(ZoneId.systemDefault()).toInstant(), DAY);
+                // 서버 타임존이 아니라 KST로 만든다 — 운영(UTC)에서도 같은 시각으로 읽혀야 한다
+                DAY.atTime(hour, minute).atZone(TimeConfig.KST).toInstant(), DAY);
     }
 
     private Duration calc(List<AttendanceTaggingLog> logs) {

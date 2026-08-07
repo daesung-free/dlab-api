@@ -1,5 +1,6 @@
 package com.dlab.domain.attendance.service;
 
+import com.dlab.common.config.TimeConfig;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.period.entity.PeriodMaster;
@@ -100,8 +101,10 @@ public class StudyTimeCalculator {
                 .toList();
 
         for (AttendanceTaggingLog log : sorted) {
-            LocalTime at = log.getRecordedAt().atZone(java.time.ZoneId.systemDefault())
-                    .toLocalTime();
+            // ★ systemDefault()를 쓰면 안 된다 — 운영 서버(EC2/ECS)는 UTC라
+            //   교시(KST 기준 시각)와 9시간 어긋나 순공시간이 통째로 틀어진다.
+            //   로컬은 KST라 통과하고 CI·운영에서만 깨져서 알아채기 어렵다
+            LocalTime at = log.getRecordedAt().atZone(TimeConfig.KST).toLocalTime();
 
             if (OPENING.contains(log.getEventType())) {
                 // 이미 열려 있으면 무시한다. 중복 등원 기록이 재실을 두 번 세지 않게

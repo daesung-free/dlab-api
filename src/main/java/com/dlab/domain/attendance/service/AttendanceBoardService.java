@@ -1,5 +1,6 @@
 package com.dlab.domain.attendance.service;
 
+import com.dlab.common.config.TimeConfig;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.attendance.entity.AttendanceDailyStatus;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
@@ -20,7 +21,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -232,8 +232,14 @@ public class AttendanceBoardService {
                 .orElse(null);
     }
 
+    /**
+     * 태깅 시각을 화면 시각으로.
+     *
+     * <p><b>{@code systemDefault()}를 쓰면 안 된다</b> — 운영 서버(EC2/ECS)는 UTC라
+     * 등원 09:30이 00:30으로 보인다. 로컬은 KST라 통과하고 CI·운영에서만 깨진다.
+     */
     private LocalTime timeOf(AttendanceTaggingLog log) {
-        return log.getRecordedAt().atZone(ZoneId.systemDefault()).toLocalTime();
+        return log.getRecordedAt().atZone(TimeConfig.KST).toLocalTime();
     }
 
     private boolean matchesClass(ClassAssignment assignment, Long classId) {
