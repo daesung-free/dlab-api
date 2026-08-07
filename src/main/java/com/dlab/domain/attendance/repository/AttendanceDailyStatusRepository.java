@@ -39,6 +39,22 @@ public interface AttendanceDailyStatusRepository extends JpaRepository<Attendanc
             """)
     long countAbsenceByEnrollment(Long enrollmentId, LocalDate from, LocalDate to);
 
+    /**
+     * 등록 건의 기간 내 확정 행. 앱 출결 조회(A-18)가 쓴다.
+     *
+     * <p>확정 배치는 <b>교시가 있는 날</b>만 돌므로 주말·공휴일에는 행이 없을 수 있다 —
+     * 호출자가 태깅 원장과 합쳐서 봐야 달력에 구멍이 안 생긴다.
+     */
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT d FROM AttendanceDailyStatus d
+            WHERE d.enrollment.id = :enrollmentId
+              AND d.attendanceDate >= :from
+              AND d.attendanceDate <= :to
+              AND d.deleted = false
+            ORDER BY d.attendanceDate
+            """)
+    List<AttendanceDailyStatus> findByEnrollmentAndPeriod(Long enrollmentId, LocalDate from, LocalDate to);
+
     /** 지점의 그날 확정 행 전체. 순공시간 재계산이 쓴다. */
     @org.springframework.data.jpa.repository.Query("""
             SELECT d FROM AttendanceDailyStatus d
