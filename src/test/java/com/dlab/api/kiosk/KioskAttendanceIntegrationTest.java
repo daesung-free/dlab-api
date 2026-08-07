@@ -251,9 +251,9 @@ class KioskAttendanceIntegrationTest {
     }
 
     @Test
-    @DisplayName("운영시간 밖은 122 — data 내부")
+    @DisplayName("새벽 태깅은 122 — data 내부")
     void code122GoesInsideData() throws Exception {
-        tag("06:00:00")
+        tag("03:00:00")
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data[0].code").value(122));
     }

@@ -80,10 +80,20 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("문 열기 전이면 122")
-    void beforeOpeningIsRejected() {
-        assertThat(decide(List.of(), LocalTime.of(7, 0)).code())
+    @DisplayName("★ 새벽 태깅은 122 — 자정 넘겨 남아 있던 학생이 새 날 등원으로 찍히면 안 된다")
+    void beforeDayStartIsRejected() {
+        assertThat(decide(List.of(), LocalTime.of(1, 0)).code())
                 .isEqualTo(DsaCode.OUTSIDE_STUDY_HOURS);
+        assertThat(decide(List.of(), LocalTime.of(4, 59)).code())
+                .isEqualTo(DsaCode.OUTSIDE_STUDY_HOURS);
+    }
+
+    @Test
+    @DisplayName("★★ 첫 교시 전에 일찍 와도 등원이다 — 학원 문은 첫 교시보다 일찍 연다")
+    void earlyArrivalBeforeFirstPeriodIsCheckIn() {
+        // 첫 교시는 08:00인데 07:00 도착. 예전엔 122로 거부했다
+        assertThat(decide(List.of(), LocalTime.of(7, 0)).event()).isEqualTo(CHECK_IN);
+        assertThat(decide(List.of(), LocalTime.of(5, 0)).event()).isEqualTo(CHECK_IN);
     }
 
     @Test

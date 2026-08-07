@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
  *   <li>외출 중 → 복귀({@code R}). 복귀는 시간표 밖에서도 가능해야 한다 —
  *       못 찍으면 학생이 나간 채로 기록이 남는다</li>
  *   <li>그날 교시가 없음 → {@code 113}. 주말·공휴일이라 자동판별이 불가하다</li>
- *   <li>문 열기 전 → {@code 122}</li>
+ *   <li>새벽(하루 시작 전) → {@code 122}</li>
  *   <li>오늘 첫 태깅 → 등원({@code S}) 또는 지각({@code A}).
  *       <b>상한이 없다</b> — 밤늦게 와도 그날 등원이다(아래 참고)</li>
  *   <li>승인된 사유신청 있음 → {@code 126}/{@code 128}/{@code 129} 선택지</li>
@@ -33,8 +33,10 @@ import org.springframework.stereotype.Component;
  * 자정을 넘기면 {@code attendance_date}가 다음 날로 바뀌므로 <b>자정이 자연 경계</b>이고,
  * 별도 마감 시각을 둘 필요가 없다.
  *
- * <p>하한({@code open})은 그대로 남는다 — 문 열기 전 태깅은 여전히 {@code 122}다.
- * 그리고 상한은 원래도 첫 태깅에만 걸려 있었다. 전체에 걸면 <b>하원 태깅이
+ * <p>하한은 {@link #DAY_START}(새벽)만 남는다. 한때 "첫 교시 시작 전"으로 잡았으나
+ * <b>학원 문은 첫 교시보다 일찍 열어서</b> 일찍 온 학생이 거부됐다.
+ *
+ * <p>상한은 원래도 첫 태깅에만 걸려 있었다. 전체에 걸면 <b>하원 태깅이
  * 영원히 불가능해지기</b> 때문이다 — 하원은 마지막 교시가 끝난 뒤에 찍는다.
  *
  * <h2>애매하면 되묻는다</h2>
@@ -45,6 +47,23 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class AttendancePolicy {
+
+    /**
+     * 하루의 시작. 이 시각 전 태깅은 {@code 122}로 거부한다.
+     *
+     * <p><b>막으려는 건 하나다</b> — 자정을 넘겨 남아 있던 학생이 새벽에 찍었을 때
+     * 그게 <b>새 날의 등원</b>으로 기록되는 것. 실제로는 어제를 끝내는 태깅인데
+     * {@code attendance_date}가 이미 다음 날이라 "오늘 첫 태깅 = 등원"이 돼버린다.
+     * 그대로 두면 순공시간이 새벽부터 계산돼 랭킹이 어긋난다.
+     *
+     * <p><b>첫 교시 시작을 경계로 쓰지 않는 이유</b>: 학원 문은 첫 교시보다 일찍 연다.
+     * 첫 교시가 08:00인데 07:30에 온 학생이 거부되면, 늦게 온 학생을 막던 것과
+     * 대칭인 문제가 생긴다.
+     *
+     * <p>지점별 설정으로 두지 않는다 — 어느 지점이든 새벽 3시 태깅은 정상이 아니고
+     * 아침 6시 태깅은 정상이다. 지점마다 다를 이유가 없다.
+     */
+    private static final LocalTime DAY_START = LocalTime.of(5, 0);
 
     /**
      * 자동 판별.
@@ -79,10 +98,8 @@ public class AttendancePolicy {
             return AttendanceDecision.reject(DsaCode.NO_TIMETABLE);
         }
 
-        LocalTime open = periods.get(0).getStartTime();
-
-        // 4. 문 열기 전
-        if (at.isBefore(open)) {
+        // 4. 하루가 시작되기 전(새벽)
+        if (at.isBefore(DAY_START)) {
             return AttendanceDecision.reject(DsaCode.OUTSIDE_STUDY_HOURS);
         }
 
