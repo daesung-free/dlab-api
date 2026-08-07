@@ -179,6 +179,34 @@ class KioskAttendanceIntegrationTest {
         tag("22:00:00").andExpect(jsonPath("$.att_gn").value("T"));
     }
 
+    @Test
+    @DisplayName("★★ 마지막 교시가 끝난 뒤 첫 태깅도 지각(A) — 하원이 아니다")
+    void firstTagAfterLastPeriodIsLateNotCheckOut() throws Exception {
+        // 동탄 사례. 등원 기록이 없는데 하원으로 찍히면 그날 등원 자체가 사라진다
+        tag("22:30:00").andExpect(jsonPath("$.att_gn").value("A"));
+    }
+
+    @Test
+    @DisplayName("★★ 사유지각은 화면에 등원(S)으로 내리되 원장에는 지각(A)으로 남는다")
+    void excusedLateIsReportedAsCheckInButRecordedAsLate() throws Exception {
+        submitApprovedReason(AbsenceReasonType.LATE);
+
+        tag("22:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+
+        // 원장은 지각이다 — 사유가 있어도 늦게 온 건 사실이라 지우면 안 된다
+        em.flush();
+        assertThat(taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), today))
+                .extracting(l -> l.getEventType())
+                .containsExactly(com.dlab.domain.attendance.entity.AttendanceEventType.LATE);
+    }
+
+    @Test
+    @DisplayName("사유지각 신청이 없으면 화면에도 지각(A)")
+    void unexcusedLateStaysLate() throws Exception {
+        tag("09:30:00").andExpect(jsonPath("$.att_gn").value("A"));
+    }
+
     // ── 분기 코드의 자리 ───────────────────────────────────────
 
     @Test
