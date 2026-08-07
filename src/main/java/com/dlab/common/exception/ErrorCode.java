@@ -89,6 +89,11 @@ public enum ErrorCode {
     NOTIFICATION_REVIEW_NOT_APPLICABLE(HttpStatus.BAD_REQUEST,
             "카카오 알림톡 템플릿만 심사 대상입니다."),
 
+    // 공지 (F-4.11-3)
+    NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지를 찾을 수 없습니다."),
+    /** 범위마다 쓸 수 있는 사람이 다르다 — 전체는 본사, 지점은 지점관리자, 반은 담임이다. */
+    NOTICE_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN, "이 범위의 공지를 작성할 권한이 없습니다."),
+
     // 공휴일
     HOLIDAY_NOT_FOUND(HttpStatus.NOT_FOUND, "공휴일을 찾을 수 없습니다."),
     HOLIDAY_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 날짜입니다."),
