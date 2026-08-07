@@ -89,6 +89,17 @@ public enum ErrorCode {
     NOTIFICATION_REVIEW_NOT_APPLICABLE(HttpStatus.BAD_REQUEST,
             "카카오 알림톡 템플릿만 심사 대상입니다."),
 
+    // 급식 (F-4.5 · A-9)
+    MEAL_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "급식 주문을 찾을 수 없습니다."),
+    MEAL_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "급식 신청 내역을 찾을 수 없습니다."),
+    /** 기간 밖에는 신청 화면이 열리지 않는다. 미등록도 닫힘이다. */
+    MEAL_WINDOW_CLOSED(HttpStatus.CONFLICT, "지금은 급식 신청 기간이 아닙니다."),
+    /** 주말·공휴일·중단일. */
+    MEAL_DATE_NOT_AVAILABLE(HttpStatus.CONFLICT, "급식을 신청할 수 없는 날짜입니다."),
+    MEAL_DEADLINE_PASSED(HttpStatus.CONFLICT, "신청·취소 마감이 지났습니다."),
+    MEAL_ALREADY_APPLIED(HttpStatus.CONFLICT, "이미 신청한 끼니입니다."),
+    MEAL_CLOSURE_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 급식 중단일입니다."),
+
     // 공지 (F-4.11-3)
     NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지를 찾을 수 없습니다."),
     /** 범위마다 쓸 수 있는 사람이 다르다 — 전체는 본사, 지점은 지점관리자, 반은 담임이다. */
