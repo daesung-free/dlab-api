@@ -68,4 +68,29 @@ public class Academy extends BaseEntity {
     public String getFullNmOrFallback() {
         return fullNm == null || fullNm.isBlank() ? acadNm : fullNm;
     }
+
+    /**
+     * 기본정보 수정.
+     *
+     * <p><b>{@code acadCd}와 {@code storeCode}는 바꾸지 않는다.</b> 대성전산이 부여한 값이고
+     * 키오스크가 이 값으로 인증·매칭한다 — 고치면 그 지점 연동이 조용히 끊긴다.
+     *
+     * <p>{@code attendanceDeadline}은 <b>지각 판정 기준</b>이라 바꾸면 그 시점부터
+     * 판정이 달라진다. 이미 확정된 과거 출결은 저장값이라 영향받지 않는다.
+     */
+    public void updateInfo(String acadNm, String fullNm, LocalTime attendanceDeadline) {
+        this.acadNm = acadNm;
+        this.fullNm = fullNm;
+        this.attendanceDeadline = attendanceDeadline;
+    }
+
+    /**
+     * 활성·비활성.
+     *
+     * <p><b>끄면 그 지점 전체가 멈춘다</b> — 키오스크 토큰 발급부터 막힌다.
+     * 그래서 본사만 할 수 있게 서비스에서 제한한다.
+     */
+    public void changeActive(boolean active) {
+        this.active = active;
+    }
 }

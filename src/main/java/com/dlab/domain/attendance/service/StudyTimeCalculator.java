@@ -67,13 +67,23 @@ public class StudyTimeCalculator {
     public Duration calculate(List<AttendanceTaggingLog> dayLogs,
                               List<PeriodMaster> periods,
                               LocalTime until) {
-        if (dayLogs.isEmpty() || periods.isEmpty()) {
+        if (dayLogs.isEmpty()) {
             return Duration.ZERO;
         }
 
         List<Interval> presence = presenceIntervals(dayLogs, periods, until);
         if (presence.isEmpty()) {
             return Duration.ZERO;
+        }
+
+        // ★ 교시가 없는 날(자율등원일)은 재실시간이 곧 순공이다.
+        //   교집합을 구하는 이유가 급식·쉬는시간을 빼기 위해서인데 뺄 것이 없다.
+        //   0을 돌려주면 주말에 하루 종일 공부한 학생이 순공 0분으로 남아
+        //   랭킹에서 주말이 통째로 빠진다. 외출은 재실 구간이 이미 걸러낸다
+        if (periods.isEmpty()) {
+            return presence.stream()
+                    .map(Interval::duration)
+                    .reduce(Duration.ZERO, Duration::plus);
         }
 
         Duration total = Duration.ZERO;
@@ -118,7 +128,10 @@ public class StudyTimeCalculator {
         }
 
         if (openedAt != null) {
-            LocalTime close = periods.get(periods.size() - 1).getEndTime();
+            // 교시가 없으면 닫을 기준이 조회 시점뿐이다(자율등원일)
+            LocalTime close = periods.isEmpty()
+                    ? until
+                    : periods.get(periods.size() - 1).getEndTime();
             result.add(new Interval(openedAt, until.isBefore(close) ? until : close));
         }
         return result;
@@ -131,6 +144,10 @@ public class StudyTimeCalculator {
     }
 
     private record Interval(LocalTime start, LocalTime end) {
+
+        Duration duration() {
+            return end.isAfter(start) ? Duration.between(start, end) : Duration.ZERO;
+        }
 
         Duration overlapWith(Interval other) {
             LocalTime from = start.isAfter(other.start) ? start : other.start;

@@ -18,20 +18,28 @@ import org.springframework.stereotype.Component;
  *   <li>조퇴 후 재태깅 → {@code 121}. 시간표와 무관하게 먼저 막는다</li>
  *   <li>외출 중 → 복귀({@code R}). 복귀는 시간표 밖에서도 가능해야 한다 —
  *       못 찍으면 학생이 나간 채로 기록이 남는다</li>
- *   <li>그날 교시가 없음 → {@code 113}. 주말·공휴일이라 자동판별이 불가하다</li>
- *   <li>문 열기 전 → {@code 122}</li>
+ *   <li>새벽(하루 시작 전) → {@code 122}</li>
  *   <li>오늘 첫 태깅 → 등원({@code S}) 또는 지각({@code A}).
- *       단 <b>운영 종료 후 첫 태깅</b>은 {@code 122}다 — 하루가 이미 끝났다</li>
+ *       <b>상한이 없다</b> — 밤늦게 와도 그날 등원이다(아래 참고).
+ *       <b>교시 확인보다 앞</b>이라 자율등원일에도 등원이 찍힌다</li>
+ *   <li>등원 상태인데 그날 교시가 없음 → {@code 113}. 하원·외출을 못 가려 되묻는다</li>
+ *   <li>마지막 교시 종료 후 → 하원({@code T}). <b>사유 선택지보다 앞</b>이다 —
+ *       그 시각엔 조퇴가 성립하지 않는다</li>
  *   <li>승인된 사유신청 있음 → {@code 126}/{@code 128}/{@code 129} 선택지</li>
- *   <li>마지막 교시 종료 후 → 하원({@code T})</li>
  *   <li>그 외 → {@code 130} <b>"승인 내역이 없습니다"</b></li>
  * </ol>
  *
- * <h2>운영 종료 시각이 하원을 막으면 안 된다</h2>
- * <p>하원은 <b>마지막 교시가 끝난 뒤에</b> 찍는다. 그래서 종료 시각을 일괄로
- * "운영시간 밖"으로 잘라내면 <b>하원 태깅이 영원히 불가능해진다</b> —
- * 종료 전엔 애매해서 되묻고(8번), 종료 후엔 거부되기 때문이다.
- * 상한 판정을 <b>그날 첫 태깅에만</b> 적용하는 이유다.
+ * <h2>★ 첫 태깅에 상한이 없다</h2>
+ * <p>한때 "마지막 교시 종료 후 첫 태깅"을 {@code 122}로 막았으나, 학원 운영상
+ * <b>밤늦게 온 학생도 그날 등원으로 인정</b>해야 한다(동탄 21:50 이후 사례).
+ * 자정을 넘기면 {@code attendance_date}가 다음 날로 바뀌므로 <b>자정이 자연 경계</b>이고,
+ * 별도 마감 시각을 둘 필요가 없다.
+ *
+ * <p>하한은 {@link #DAY_START}(새벽)만 남는다. 한때 "첫 교시 시작 전"으로 잡았으나
+ * <b>학원 문은 첫 교시보다 일찍 열어서</b> 일찍 온 학생이 거부됐다.
+ *
+ * <p>상한은 원래도 첫 태깅에만 걸려 있었다. 전체에 걸면 <b>하원 태깅이
+ * 영원히 불가능해지기</b> 때문이다 — 하원은 마지막 교시가 끝난 뒤에 찍는다.
  *
  * <h2>애매하면 되묻는다</h2>
  * <p>수업 중간에 찍은 재태깅은 하원인지 외출인지 알 수 없다.
@@ -41,6 +49,23 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class AttendancePolicy {
+
+    /**
+     * 하루의 시작. 이 시각 전 태깅은 {@code 122}로 거부한다.
+     *
+     * <p><b>막으려는 건 하나다</b> — 자정을 넘겨 남아 있던 학생이 새벽에 찍었을 때
+     * 그게 <b>새 날의 등원</b>으로 기록되는 것. 실제로는 어제를 끝내는 태깅인데
+     * {@code attendance_date}가 이미 다음 날이라 "오늘 첫 태깅 = 등원"이 돼버린다.
+     * 그대로 두면 순공시간이 새벽부터 계산돼 랭킹이 어긋난다.
+     *
+     * <p><b>첫 교시 시작을 경계로 쓰지 않는 이유</b>: 학원 문은 첫 교시보다 일찍 연다.
+     * 첫 교시가 08:00인데 07:30에 온 학생이 거부되면, 늦게 온 학생을 막던 것과
+     * 대칭인 문제가 생긴다.
+     *
+     * <p>지점별 설정으로 두지 않는다 — 어느 지점이든 새벽 3시 태깅은 정상이 아니고
+     * 아침 6시 태깅은 정상이다. 지점마다 다를 이유가 없다.
+     */
+    private static final LocalTime DAY_START = LocalTime.of(5, 0);
 
     /**
      * 자동 판별.
@@ -70,46 +95,74 @@ public class AttendancePolicy {
             return AttendanceDecision.of(AttendanceEventType.RETURN);
         }
 
-        // 3. 그날 교시가 아예 없다(일요일·공휴일) → 자동판별 불가
+        // 3. 하루가 시작되기 전(새벽)
+        if (at.isBefore(DAY_START)) {
+            return AttendanceDecision.reject(DsaCode.OUTSIDE_STUDY_HOURS);
+        }
+
+        // 4. 오늘 첫 태깅 — ★ 교시 확인보다 먼저다.
+        //    등원 기록이 없으면 등원인 게 명백해서 시간표를 볼 필요가 없다.
+        //    뒤에 두면 자율등원일(주말)에 온 학생이 113을 받는데,
+        //    키오스크가 띄우는 선택지는 하원·외출 둘뿐이라 등원할 방법이 사라진다
+        if (last == null) {
+            return firstTag(at, lateAfter, excused, periods.isEmpty());
+        }
+
+        // 5. 등원 상태인데 그날 교시가 없다(자율등원일) → 하원인지 외출인지 못 가린다
         if (periods.isEmpty()) {
             return AttendanceDecision.reject(DsaCode.NO_TIMETABLE);
         }
 
-        LocalTime open = periods.get(0).getStartTime();
-        LocalTime close = periods.get(periods.size() - 1).getEndTime();
-
-        // 4. 문 열기 전
-        if (at.isBefore(open)) {
-            return AttendanceDecision.reject(DsaCode.OUTSIDE_STUDY_HOURS);
+        // 6. ★ 마지막 교시가 끝났으면 하원이 확실하다 — 사유 선택지보다 앞이다.
+        //    조퇴는 정의상 "수업 중에 일찍 나가는 것"이라 마지막 교시가 끝난 뒤엔 성립하지 않는다.
+        //    뒤에 두면 조퇴 승인이 살아 있는 학생에게 하원 시각에도 "조퇴를 선택해 주세요"가 떠서
+        //    정상 하원이 조퇴로 기록된다. 조퇴 후 재등원하면 C가 D로 정정되면서
+        //    "오늘 이미 썼다" 판정이 신청을 못 찾아 승인이 되살아나기 때문에 실제로 발생한다
+        if (!at.isBefore(lastClassEnd(periods))) {
+            return AttendanceDecision.of(AttendanceEventType.CHECK_OUT);
         }
 
-        // 5. 오늘 첫 태깅
-        if (last == null) {
-            //    ★ 종료 후 첫 태깅은 등원이 아니다. 하루가 이미 끝났다
-            if (!at.isBefore(close)) {
-                return AttendanceDecision.reject(DsaCode.OUTSIDE_STUDY_HOURS);
-            }
-            return AttendanceDecision.of(at.isAfter(lateAfter)
-                    ? AttendanceEventType.LATE
-                    : AttendanceEventType.CHECK_IN);
-        }
-
-        // 6. 승인된 사유신청이 있으면 선택지를 띄운다.
+        // 7. 승인된 사유신청이 있으면 선택지를 띄운다.
         //    자동으로 조퇴 처리해버리면 학생이 의도하지 않은 조퇴가 기록된다
         DsaCode prompt = excused.promptCode();
         if (prompt != null) {
             return AttendanceDecision.reject(prompt);
         }
 
-        // 7. 마지막 교시가 끝났으면 하원이 확실하다
-        if (!at.isBefore(lastClassEnd(periods))) {
-            return AttendanceDecision.of(AttendanceEventType.CHECK_OUT);
-        }
-
         // 8. 승인 없이 나가려 한다 — 거절한다.
         //    등원 상태에서 재태깅은 조퇴 아니면 외출인데 둘 다 사전 승인이 필요하다.
         return AttendanceDecision.reject(DsaCode.NO_APPROVAL,
                 "사전조퇴/사전외출 승인 내역이 없습니다. 데스크로 문의해주세요.");
+    }
+
+    /**
+     * 오늘 첫 태깅.
+     *
+     * <h2>★ 늦게 와도 등원이다 — 상한을 두지 않는다</h2>
+     * 한때 "마지막 교시 종료 후 첫 태깅"을 {@code 122}로 막았으나, 학원 운영상
+     * <b>밤늦게 온 학생도 그날 등원으로 인정</b>해야 한다(동탄 21:50 이후 사례).
+     * 자정을 넘기면 {@code attendance_date}가 다음 날로 바뀌어 <b>자정이 자연 경계</b>가
+     * 되므로 별도 마감 시각을 둘 필요가 없다.
+     *
+     * <p>잃는 것: 밤늦게 카드만 찍고 가는 출석 인정을 막을 수 없다. 학원이 이를 감수한다.
+     *
+     * <h2>사유지각은 등원으로 응답한다</h2>
+     * <b>원장에는 지각({@code A})으로 남기고 키오스크에만 등원({@code S})으로 내린다</b> —
+     * 사유가 있어도 늦게 온 건 사실이라 지각 이력을 지우면 안 되고, 화면에는 학원 요청대로
+     * 등원으로 떠야 한다. 무단/사유 구분은 일자 확정 배치가 {@code excused} 플래그로 이미 한다.
+     */
+    private AttendanceDecision firstTag(LocalTime at, LocalTime lateAfter,
+                                        ExcusedOptions excused, boolean freeDay) {
+        // ★ 자율등원일에는 지각이 없다. 교시가 없다는 건 운영일이 아니라는 뜻이고,
+        //   평일 기준 등원시각을 그대로 적용하면 주말에 11시에 온 학생이 지각으로 남는다.
+        //   결석 확정 배치도 교시 없는 날을 건너뛰므로(자율등원일엔 결석이 없다) 규칙이 일관된다
+        if (freeDay || !at.isAfter(lateAfter)) {
+            return AttendanceDecision.of(AttendanceEventType.CHECK_IN);
+        }
+        // 지각 시각이다. 승인된 사유지각이 있으면 화면에만 등원으로 보인다
+        return excused.late()
+                ? AttendanceDecision.of(AttendanceEventType.LATE, AttendanceEventType.CHECK_IN)
+                : AttendanceDecision.of(AttendanceEventType.LATE);
     }
 
     /**
@@ -127,11 +180,18 @@ public class AttendancePolicy {
      * 그날 승인된 사유신청 조합 → 선택지 코드.
      *
      * <p>{@code 126} 조퇴+사유외출 / {@code 128} 조퇴만 / {@code 129} 사유외출만.
+     *
+     * <p><b>{@code late}는 선택지가 아니다.</b> 조퇴·외출은 "지금 나가는가"를 학생에게
+     * 되묻지만, 지각은 이미 늦게 온 사실이라 물어볼 것이 없다 — 첫 태깅 판정에서만 쓰인다.
      */
-    public record ExcusedOptions(boolean earlyLeave, boolean outing) {
+    public record ExcusedOptions(boolean earlyLeave, boolean outing, boolean late) {
+
+        public ExcusedOptions(boolean earlyLeave, boolean outing) {
+            this(earlyLeave, outing, false);
+        }
 
         public static ExcusedOptions none() {
-            return new ExcusedOptions(false, false);
+            return new ExcusedOptions(false, false, false);
         }
 
         public DsaCode promptCode() {

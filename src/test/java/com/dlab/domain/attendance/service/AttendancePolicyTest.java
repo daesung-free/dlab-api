@@ -70,9 +70,9 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("★ 그날 교시가 없으면 113 — 일요일·공휴일이라 자동판별이 불가하다")
+    @DisplayName("★ 등원 상태인데 교시가 없으면 113 — 하원인지 외출인지 못 가린다")
     void noTimetableAsksUser() {
-        var decision = policy.decide(List.of(), List.of(), LocalTime.of(10, 0),
+        var decision = policy.decide(List.of(CHECK_IN), List.of(), LocalTime.of(15, 0),
                 LATE_AFTER, ExcusedOptions.none());
 
         assertThat(decision.code()).isEqualTo(DsaCode.NO_TIMETABLE);
@@ -80,12 +80,49 @@ class AttendancePolicyTest {
     }
 
     @Test
-    @DisplayName("운영시간 밖이면 122")
-    void outsideOperatingHoursIsRejected() {
-        assertThat(decide(List.of(), LocalTime.of(7, 0)).code())
+    @DisplayName("★★ 자율등원일(주말) 첫 태깅은 등원이다 — 113을 주면 등원할 방법이 없다")
+    void firstTagOnFreeDayIsCheckIn() {
+        // 키오스크가 113에 띄우는 선택지는 하원·외출 둘뿐이다
+        var decision = policy.decide(List.of(), List.of(), LocalTime.of(10, 0),
+                LATE_AFTER, ExcusedOptions.none());
+
+        assertThat(decision.event()).isEqualTo(CHECK_IN);
+    }
+
+    @Test
+    @DisplayName("★★ 자율등원일에는 지각이 없다 — 주말은 학생이 알아서 온다")
+    void noLatenessOnFreeDay() {
+        // 평일이면 지각인 시각(11시)인데 교시가 없으면 그냥 등원이다
+        var decision = policy.decide(List.of(), List.of(), LocalTime.of(11, 0),
+                LATE_AFTER, ExcusedOptions.none());
+
+        assertThat(decision.event()).isEqualTo(CHECK_IN);
+    }
+
+    @Test
+    @DisplayName("★ 새벽 태깅은 122 — 자정 넘겨 남아 있던 학생이 새 날 등원으로 찍히면 안 된다")
+    void beforeDayStartIsRejected() {
+        assertThat(decide(List.of(), LocalTime.of(1, 0)).code())
                 .isEqualTo(DsaCode.OUTSIDE_STUDY_HOURS);
-        assertThat(decide(List.of(), LocalTime.of(22, 30)).code())
+        assertThat(decide(List.of(), LocalTime.of(4, 59)).code())
                 .isEqualTo(DsaCode.OUTSIDE_STUDY_HOURS);
+    }
+
+    @Test
+    @DisplayName("★★ 첫 교시 전에 일찍 와도 등원이다 — 학원 문은 첫 교시보다 일찍 연다")
+    void earlyArrivalBeforeFirstPeriodIsCheckIn() {
+        // 첫 교시는 08:00인데 07:00 도착. 예전엔 122로 거부했다
+        assertThat(decide(List.of(), LocalTime.of(7, 0)).event()).isEqualTo(CHECK_IN);
+        assertThat(decide(List.of(), LocalTime.of(5, 0)).event()).isEqualTo(CHECK_IN);
+    }
+
+    @Test
+    @DisplayName("★★ 밤늦게 온 첫 태깅도 등원이다 — 마지막 교시가 끝났어도 지각으로 받는다")
+    void firstTagAfterClosingIsStillLate() {
+        // 동탄 사례: 21:50(마지막 교시 종료) 이후 첫 태깅.
+        // 예전엔 122로 거부했는데 학원은 그날 등원으로 인정하길 원한다
+        assertThat(decide(List.of(), LocalTime.of(22, 30)).event()).isEqualTo(LATE);
+        assertThat(decide(List.of(), LocalTime.of(23, 50)).event()).isEqualTo(LATE);
     }
 
     @Test
@@ -105,9 +142,40 @@ class AttendancePolicyTest {
         // 등원한 학생: 종료 후에도 하원이 찍혀야 한다
         assertThat(decide(List.of(CHECK_IN), LocalTime.of(22, 10)).isAccepted()).isTrue();
 
-        // 반면 등원한 적 없는 학생의 종료 후 첫 태깅은 등원이 아니다
-        assertThat(decide(List.of(), LocalTime.of(22, 10)).code())
-                .isEqualTo(DsaCode.OUTSIDE_STUDY_HOURS);
+        // 등원한 적 없는 학생의 같은 시각 태깅은 하원이 아니라 지각이다 —
+        // 하루가 시작도 안 됐는데 끝낼 수 없다
+        assertThat(decide(List.of(), LocalTime.of(22, 10)).event()).isEqualTo(LATE);
+    }
+
+    @Test
+    @DisplayName("★★ 사유지각은 원장엔 지각, 키오스크엔 등원 — 지각 이력을 지우면 안 된다")
+    void excusedLateIsRecordedAsLateButReportedAsCheckIn() {
+        AttendanceDecision decision = policy.decide(
+                List.of(), weekday(), LocalTime.of(22, 30), LATE_AFTER,
+                new ExcusedOptions(false, false, true));
+
+        assertThat(decision.event()).isEqualTo(LATE);          // 원장
+        assertThat(decision.reportedAs()).isEqualTo(CHECK_IN); // 키오스크 화면
+    }
+
+    @Test
+    @DisplayName("사유지각 신청이 없으면 그냥 지각 — 응답도 지각이다")
+    void unexcusedLateIsReportedAsLate() {
+        AttendanceDecision decision = decide(List.of(), LocalTime.of(22, 30));
+
+        assertThat(decision.event()).isEqualTo(LATE);
+        assertThat(decision.reportedAs()).isEqualTo(LATE);
+    }
+
+    @Test
+    @DisplayName("★ 사유지각이 있어도 정시 등원이면 그냥 등원이다")
+    void onTimeArrivalIsNotAffectedByExcusedLate() {
+        AttendanceDecision decision = policy.decide(
+                List.of(), weekday(), LocalTime.of(8, 30), LATE_AFTER,
+                new ExcusedOptions(false, false, true));
+
+        assertThat(decision.event()).isEqualTo(CHECK_IN);
+        assertThat(decision.reportedAs()).isEqualTo(CHECK_IN);
     }
 
     @Test
@@ -145,6 +213,25 @@ class AttendancePolicyTest {
 
         assertThat(decision.isAccepted()).isFalse();
         assertThat(decision.event()).isNull();
+    }
+
+    @Test
+    @DisplayName("★★ 마지막 교시 종료 후엔 조퇴 승인이 있어도 하원이다 — 그 시각엔 조퇴가 성립하지 않는다")
+    void checkOutWinsOverPromptAfterLastPeriod() {
+        // 조퇴 후 재등원하면 C가 D로 정정돼 "이미 썼다" 판정이 신청을 못 찾는다.
+        // 그 상태로 하원 시각에 찍으면 예전엔 128이 떠서 정상 하원이 조퇴로 기록됐다
+        var decision = policy.decide(List.of(CHECK_IN), weekday(), LocalTime.of(22, 0),
+                LATE_AFTER, new ExcusedOptions(true, false));
+
+        assertThat(decision.event()).isEqualTo(CHECK_OUT);
+    }
+
+    @Test
+    @DisplayName("마지막 교시 전이면 선택지가 그대로 뜬다")
+    void promptStillShownBeforeLastPeriodEnds() {
+        assertThat(policy.decide(List.of(CHECK_IN), weekday(), LocalTime.of(21, 59),
+                LATE_AFTER, new ExcusedOptions(true, false)).code())
+                .isEqualTo(DsaCode.CHOICE_EARLY_LEAVE);
     }
 
     @Test
