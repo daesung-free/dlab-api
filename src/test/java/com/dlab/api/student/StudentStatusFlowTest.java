@@ -118,7 +118,7 @@ class StudentStatusFlowTest {
     void expelledIsSupported() throws Exception {
         change("EXPELLED", "규정 위반")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.enrollmentStatus").value("EXPELLED"));
+                .andExpect(jsonPath("$.data.student.enrollmentStatus").value("EXPELLED"));
     }
 
     @Test

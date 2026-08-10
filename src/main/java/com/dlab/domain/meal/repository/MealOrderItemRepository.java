@@ -62,4 +62,24 @@ public interface MealOrderItemRepository extends JpaRepository<MealOrderItem, Lo
             """)
     List<MealOrderItem> findActiveByAcademyAndDate(@Param("academyId") Long academyId,
                                                    @Param("date") LocalDate date);
+
+    /**
+     * 그 학생의 <b>지정일 이후</b> 살아 있는 신청.
+     *
+     * <p>퇴원 후속처리가 쓴다. <b>지난 날짜는 건드리지 않는다</b> — 이미 먹은 급식이라
+     * 취소하면 정산이 어긋난다.
+     */
+    @Query("""
+            SELECT i FROM MealOrderItem i
+            JOIN FETCH i.order o
+            WHERE o.enrollment.id = :enrollmentId
+              AND i.mealDate >= :from
+              AND i.canceledAt IS NULL
+              AND i.deleted = false
+              AND o.status <> com.dlab.domain.meal.entity.MealOrderStatus.CANCELLED
+              AND o.deleted = false
+            ORDER BY i.mealDate ASC, i.mealType ASC
+            """)
+    List<MealOrderItem> findActiveByEnrollmentFrom(@Param("enrollmentId") Long enrollmentId,
+                                                   @Param("from") LocalDate from);
 }
