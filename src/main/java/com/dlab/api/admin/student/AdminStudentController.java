@@ -92,16 +92,42 @@ public class AdminStudentController {
 
     /**
      * 재적 상태 전이. 상태만 바꾸는 게 아니라 <b>후속처리까지 한 트랜잭션</b>에 묶는다 —
-     * 퇴원·제적·수료면 반·좌석·사물함 배정을 비우고 앱 계정을 막는다.
+     * 퇴원·제적·수료면 반·좌석·사물함 배정을 비우고 앱 계정을 막고, 도메인별 정리
+     * (급식 신청 취소·미납 확인)가 이어서 돈다.
      *
      * <p>휴원은 정리하지 않는다. 돌아올 학생의 자리를 비우면 복귀 때 잃는다.
+     *
+     * <p><b>{@code followUps}를 함께 내린다.</b> 처리한 사람이 그 자리에서 봐야
+     * "미납이 남았다"를 안다 — 로그로만 남기면 화면을 닫는 순간 아무도 모른다.
      */
     @PostMapping("/{enrollmentId}/status")
-    public ApiResponse<StudentResponse> changeStatus(
+    public ApiResponse<StatusChangeResponse> changeStatus(
             @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId,
             @Valid @RequestBody StudentRequests.ChangeStatus request) {
-        return ApiResponse.success(StudentResponse.from(studentStatusService.changeStatus(
-                enrollmentId, request.status(), request.reason(), me)));
+        var result = studentStatusService.changeStatus(
+                enrollmentId, request.status(), request.reason(), me);
+        return ApiResponse.success(StatusChangeResponse.from(result));
+    }
+
+    /**
+     * 상태 전이 결과.
+     *
+     * @param followUps 도메인별 후속처리 결과. {@code blocking}이 붙은 건
+     *                  <b>사람이 이어서 처리해야 하는 것</b>이라 화면이 눈에 띄게 표시한다
+     */
+    public record StatusChangeResponse(StudentResponse student, List<FollowUpNote> followUps) {
+
+        static StatusChangeResponse from(
+                com.dlab.domain.user.service.StudentStatusService.StatusChangeResult result) {
+            return new StatusChangeResponse(
+                    StudentResponse.from(result.enrollment()),
+                    result.followUps().stream()
+                            .map(n -> new FollowUpNote(n.area(), n.message(), n.blocking()))
+                            .toList());
+        }
+    }
+
+    public record FollowUpNote(String area, String message, boolean blocking) {
     }
 
     /** 상태 변경 이력. "퇴원 처리가 언제 누구에 의해 됐나"에 답하는 화면용. */

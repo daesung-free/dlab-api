@@ -32,8 +32,10 @@ import java.util.List;
  * <p><b>휴원은 정리 대상이 아니다.</b> 돌아올 학생의 좌석·사물함을 비우면 복귀 때 다시
  * 배정해야 하고 그 사이 다른 학생이 들어가 자리를 잃는다.
  *
- * <p><b>아직 못 하는 후속처리</b>(도메인 자체가 없다) — 급식 정기신청 중단, 미납 채권 이관.
- * 해당 도메인이 생기면 여기에 붙인다. 지금 임시로 흉내 내면 나중에 이중 처리가 된다.
+ * <p><b>도메인별 후속처리는 {@link EnrollmentStatusFollowUp} 빈으로 확장한다.</b>
+ * 여기에 직접 박으면 새 도메인을 만드는 사람이 이 파일을 알아채야만 추가되고,
+ * 못 알아채면 조용히 빠진다 — 실제로 급식이 그랬다. 반·좌석·사물함·계정처럼
+ * <b>어느 도메인에도 속하지 않는 정리</b>만 이 클래스가 직접 한다.
  */
 @Slf4j
 @Service
@@ -46,6 +48,7 @@ public class StudentStatusService {
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final LockerMasterRepository lockerRepository;
     private final AccountRepository accountRepository;
+    private final List<EnrollmentStatusFollowUp> followUps;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -61,8 +64,8 @@ public class StudentStatusService {
      * @param reason 사유. 제적처럼 다툼이 생길 수 있는 전이는 사유가 남아야 한다
      */
     @Transactional
-    public StudentEnrollment changeStatus(Long enrollmentId, EnrollmentStatus to, String reason,
-                                          AuthPrincipal principal) {
+    public StatusChangeResult changeStatus(Long enrollmentId, EnrollmentStatus to, String reason,
+                                           AuthPrincipal principal) {
         StudentEnrollment enrollment = load(enrollmentId, principal);
         EnrollmentStatus from = enrollment.getEnrollmentStatus();
 
@@ -79,11 +82,36 @@ public class StudentStatusService {
         enrollment.updateEnrollment(null, null, to);
         statusLogRepository.save(new StudentStatusLog(enrollment, from, to, reason, now));
 
+        List<EnrollmentStatusFollowUp.Note> notes = List.of();
         if (to.requiresCleanup()) {
             cleanup(enrollment, to, now);
+            notes = runFollowUps(enrollment, to, now);
         }
         log.info("학생 상태 변경: enrollmentId={}, {} → {}", enrollmentId, from, to);
-        return enrollment;
+        return new StatusChangeResult(enrollment, notes);
+    }
+
+    /**
+     * 도메인별 후속처리.
+     *
+     * <p><b>같은 트랜잭션에서 돈다.</b> 하나라도 실패하면 상태 변경까지 되돌아간다 —
+     * 상태는 퇴원인데 급식은 그대로인 어중간한 상태를 만들지 않기 위해서다.
+     */
+    private List<EnrollmentStatusFollowUp.Note> runFollowUps(StudentEnrollment enrollment,
+                                                             EnrollmentStatus to, Instant now) {
+        return followUps.stream()
+                .flatMap(f -> f.onEnrollmentEnded(enrollment, to, now).stream())
+                .toList();
+    }
+
+    /**
+     * 상태 변경 결과.
+     *
+     * <p>후속처리 결과를 함께 돌려준다 — <b>퇴원 처리한 사람이 그 자리에서 봐야</b>
+     * 미납이 남았다는 걸 안다. 로그로만 남기면 화면을 닫는 순간 아무도 모른다.
+     */
+    public record StatusChangeResult(StudentEnrollment enrollment,
+                                     List<EnrollmentStatusFollowUp.Note> followUps) {
     }
 
     /**

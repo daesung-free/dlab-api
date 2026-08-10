@@ -141,6 +141,32 @@ public class MealOrderService {
         return items.size();
     }
 
+    /**
+     * 퇴원·제적·수료 정리 — <b>그날 이후</b> 신청 일괄 취소.
+     *
+     * <p>지난 날짜는 건드리지 않는다. 이미 먹은 급식이라 취소하면 정산이 어긋난다.
+     *
+     * <p><b>마감(D-n)을 보지 않는다.</b> 퇴원은 학생 사정이 아니라 등록 자체가 끝난
+     * 것이라, 마감이 지났다고 남겨두면 <b>학교에 오지 않는 학생의 급식이 계속 나간다.</b>
+     *
+     * <p>환불은 여기서 하지 않는다 — {@link CancelPath#WITHDRAWAL}로 남기고,
+     * payment가 붙을 때 이 경로가 곧 환불 대상 조회 지점이 된다.
+     *
+     * @return 취소된 건수. 관리자 화면이 "N건 정리됨"으로 표시한다
+     */
+    @Transactional
+    public int cancelByWithdrawal(Long enrollmentId, LocalDate from) {
+        List<MealOrderItem> items =
+                itemRepository.findActiveByEnrollmentFrom(enrollmentId, from);
+        items.forEach(i -> cancel(i, CancelPath.WITHDRAWAL));
+
+        if (!items.isEmpty()) {
+            log.warn("퇴원 정리로 급식 신청 취소: enrollmentId={}, 기준일={}, 건수={} (환불 대상)",
+                    enrollmentId, from, items.size());
+        }
+        return items.size();
+    }
+
     @Transactional(readOnly = true)
     public List<MealOrder> findByMonth(Long academyId, YearMonth month) {
         return orderRepository.findByAcademyAndMonth(academyId, month.atDay(1));
