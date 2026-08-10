@@ -7,11 +7,9 @@ import com.dlab.domain.approval.entity.RequestType;
 import com.dlab.domain.approval.service.ApprovalService;
 import com.dlab.domain.firewall.entity.FirewallRequest;
 import com.dlab.domain.firewall.repository.FirewallRequestRepository;
-import com.dlab.domain.user.entity.Account;
-import com.dlab.domain.user.entity.AccountType;
 import com.dlab.domain.user.entity.StudentEnrollment;
-import com.dlab.domain.user.repository.AccountRepository;
 import com.dlab.domain.user.repository.StudentEnrollmentRepository;
+import com.dlab.domain.user.service.AppScopeResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,7 +26,7 @@ public class FirewallRequestService {
 
     private final FirewallRequestRepository firewallRequestRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
-    private final AccountRepository accountRepository;
+    private final AppScopeResolver scopeResolver;
     private final ApprovalService approvalService;
 
     /**
@@ -39,15 +37,7 @@ public class FirewallRequestService {
      */
     @Transactional
     public FirewallRequest createForAccount(Long accountId, int requestedMinutes, String reason) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        if (account.getAccountType() != AccountType.STUDENT || account.getStudent() == null) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "학생만 신청할 수 있습니다.");
-        }
-        StudentEnrollment enrollment = enrollmentRepository
-                .findCurrentByStudentId(account.getStudent().getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
-
+        StudentEnrollment enrollment = scopeResolver.requireStudent(accountId, "방화벽 해제 신청");
         return create(enrollment.getId(), requestedMinutes, reason);
     }
 

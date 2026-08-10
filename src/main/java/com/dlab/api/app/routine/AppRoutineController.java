@@ -1,18 +1,11 @@
 package com.dlab.api.app.routine;
 
 import com.dlab.api.admin.routine.RoutineResponse;
-import com.dlab.common.exception.BusinessException;
-import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.routine.service.DailyRoutineService;
-import com.dlab.domain.user.entity.Account;
-import com.dlab.domain.user.entity.AccountType;
-import com.dlab.domain.user.entity.StudentEnrollment;
-import com.dlab.domain.user.repository.AccountRepository;
-import com.dlab.domain.user.repository.StudentEnrollmentRepository;
-import com.dlab.domain.user.service.ParentSignupService;
+import com.dlab.domain.user.service.AppScopeResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -36,9 +29,7 @@ import java.util.List;
 public class AppRoutineController {
 
     private final DailyRoutineService routineService;
-    private final ParentSignupService parentSignupService;
-    private final AccountRepository accountRepository;
-    private final StudentEnrollmentRepository enrollmentRepository;
+    private final AppScopeResolver scopeResolver;
     private final Clock clock;
 
     /** 오늘의 루틴. 날짜를 안 주면 오늘이다. */
@@ -49,7 +40,7 @@ public class AppRoutineController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         LocalDate target = date == null ? LocalDate.now(clock) : date;
-        Long enrollmentId = resolveEnrollment(me, studentId).getId();
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(routineService.today(enrollmentId, target).stream()
                 .map(RoutineResponse.Today::from).toList());
     }
@@ -61,27 +52,9 @@ public class AppRoutineController {
             @RequestParam(required = false) Long studentId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        Long enrollmentId = resolveEnrollment(me, studentId).getId();
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(
                 routineService.studentResults(enrollmentId, from, to).stream()
                         .map(RoutineResponse.History::from).toList());
-    }
-
-    /** 학생은 본인 것, 학부모는 자녀 것만. 검증은 {@code requireMyChild}가 한다. */
-    private StudentEnrollment resolveEnrollment(AuthPrincipal me, Long studentId) {
-        Account account = accountRepository.findById(me.accountId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-
-        if (account.getAccountType() == AccountType.STUDENT && account.getStudent() != null) {
-            return enrollmentRepository.findCurrentByStudentId(account.getStudent().getId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
-        }
-        if (account.getAccountType() == AccountType.PARENT && account.getGuardian() != null) {
-            if (studentId == null) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "조회할 자녀를 지정해 주세요.");
-            }
-            return parentSignupService.requireMyChild(account.getGuardian().getId(), studentId);
-        }
-        throw new BusinessException(ErrorCode.FORBIDDEN, "학생·학부모만 조회할 수 있습니다.");
     }
 }

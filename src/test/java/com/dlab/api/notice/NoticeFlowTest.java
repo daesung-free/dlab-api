@@ -47,6 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 class NoticeFlowTest {
 
     @Autowired NoticeService noticeService;
+    @Autowired com.dlab.domain.user.service.AppScopeResolver scopeResolver;
     @Autowired EntityManager em;
     @Autowired Clock clock;
 
@@ -358,10 +359,11 @@ class NoticeFlowTest {
         Account account = account(Account.forGuardian(guardian, "p1", "x"));
         em.flush();
 
-        assertThatThrownBy(() -> noticeService.resolveEnrollment(account.getId(), null))
+        assertThatThrownBy(() -> scopeResolver.resolve(account.getId(), null))
                 .isInstanceOf(BusinessException.class);
 
-        assertThat(noticeService.resolveEnrollment(account.getId(), minji.getId()))
+        // ★ 학생 id를 넘긴다 — 등록 건 id가 아니다. 앱 API 전체가 같은 값을 쓴다
+        assertThat(scopeResolver.resolve(account.getId(), minji.getStudent().getId()).getId())
                 .isEqualTo(minji.getId());
     }
 
@@ -374,7 +376,8 @@ class NoticeFlowTest {
         Account account = account(Account.forGuardian(guardian, "p1", "x"));
         em.flush();
 
-        assertThatThrownBy(() -> noticeService.resolveEnrollment(account.getId(), seojun.getId()))
+        assertThatThrownBy(() ->
+                scopeResolver.resolve(account.getId(), seojun.getStudent().getId()))
                 .isInstanceOf(BusinessException.class);
     }
 }

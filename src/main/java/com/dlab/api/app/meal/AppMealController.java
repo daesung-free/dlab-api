@@ -1,18 +1,12 @@
 package com.dlab.api.app.meal;
 
-import com.dlab.common.exception.BusinessException;
-import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.meal.service.MealOrderService;
 import com.dlab.domain.meal.service.MealScheduleService;
-import com.dlab.domain.user.entity.Account;
-import com.dlab.domain.user.entity.AccountType;
 import com.dlab.domain.user.entity.StudentEnrollment;
-import com.dlab.domain.user.repository.AccountRepository;
-import com.dlab.domain.user.repository.StudentEnrollmentRepository;
-import com.dlab.domain.user.service.ParentSignupService;
+import com.dlab.domain.user.service.AppScopeResolver;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -42,9 +36,7 @@ public class AppMealController {
 
     private final MealOrderService mealOrderService;
     private final MealScheduleService mealScheduleService;
-    private final ParentSignupService parentSignupService;
-    private final AccountRepository accountRepository;
-    private final StudentEnrollmentRepository enrollmentRepository;
+    private final AppScopeResolver scopeResolver;
 
     /**
      * 신청 화면에 필요한 것 전부 — 가능일·접수기간·마감일수·중단일.
@@ -57,7 +49,7 @@ public class AppMealController {
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long studentId,
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        StudentEnrollment enrollment = resolveEnrollment(me, studentId);
+        StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         Long academyId = enrollment.getAcademy().getId();
 
         return ApiResponse.success(MealResponse.Menu.of(
@@ -80,7 +72,7 @@ public class AppMealController {
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long studentId,
             @Valid @RequestBody MealRequests.Apply request) {
-        StudentEnrollment enrollment = resolveEnrollment(me, studentId);
+        StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         YearMonth month = YearMonth.from(request.selections().get(0).date());
 
         mealOrderService.apply(enrollment.getId(), month,
@@ -105,7 +97,7 @@ public class AppMealController {
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long studentId,
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
-        StudentEnrollment enrollment = resolveEnrollment(me, studentId);
+        StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         var order = mealOrderService.findMine(enrollment.getId(), month);
         if (order == null) {
             return ApiResponse.success(null);
@@ -127,26 +119,8 @@ public class AppMealController {
     public ApiResponse<Void> cancel(@CurrentAccount AuthPrincipal me,
                                     @RequestParam(required = false) Long studentId,
                                     @PathVariable Long itemId) {
-        StudentEnrollment enrollment = resolveEnrollment(me, studentId);
+        StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         mealOrderService.cancelByStudent(enrollment.getId(), itemId);
         return ApiResponse.empty();
-    }
-
-    /** 학생은 본인 것, 학부모는 자녀 것만. 검증은 {@code requireMyChild}가 한다. */
-    private StudentEnrollment resolveEnrollment(AuthPrincipal me, Long studentId) {
-        Account account = accountRepository.findById(me.accountId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-
-        if (account.getAccountType() == AccountType.STUDENT && account.getStudent() != null) {
-            return enrollmentRepository.findCurrentByStudentId(account.getStudent().getId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
-        }
-        if (account.getAccountType() == AccountType.PARENT && account.getGuardian() != null) {
-            if (studentId == null) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "신청할 자녀를 지정해 주세요.");
-            }
-            return parentSignupService.requireMyChild(account.getGuardian().getId(), studentId);
-        }
-        throw new BusinessException(ErrorCode.FORBIDDEN, "학생·학부모만 이용할 수 있습니다.");
     }
 }

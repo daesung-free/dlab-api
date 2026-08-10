@@ -6,6 +6,7 @@ import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.notice.entity.Notice;
 import com.dlab.domain.notice.entity.NoticeScope;
 import com.dlab.domain.notice.service.NoticeService;
+import com.dlab.domain.user.service.AppScopeResolver;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -30,17 +31,19 @@ import org.springframework.web.bind.annotation.RestController;
 public class AppNoticeController {
 
     private final NoticeService noticeService;
+    private final AppScopeResolver scopeResolver;
 
     /**
-     * @param childEnrollmentId <b>학부모만</b> 쓴다. 계정 하나에 자녀가 여럿이라
-     *                          누구 기준으로 볼지 서버가 정할 수 없다
+     * @param studentId <b>학부모만</b> 쓴다. 계정 하나에 자녀가 여럿이라
+     *                  누구 기준으로 볼지 서버가 정할 수 없다.
+     *                  <b>등록 건 id가 아니라 학생 id다</b> — 다른 앱 API와 같은 값을 쓴다
      */
     @GetMapping
     public ApiResponse<List<AppNoticeResponse>> feed(
             @CurrentAccount AuthPrincipal me,
-            @RequestParam(required = false) Long childEnrollmentId) {
+            @RequestParam(required = false) Long studentId) {
 
-        Long enrollmentId = noticeService.resolveEnrollment(me.accountId(), childEnrollmentId);
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(noticeService.feed(enrollmentId).stream()
                 .map(AppNoticeResponse::from).toList());
     }
@@ -49,9 +52,9 @@ public class AppNoticeController {
     @GetMapping("/banners")
     public ApiResponse<List<AppNoticeResponse>> banners(
             @CurrentAccount AuthPrincipal me,
-            @RequestParam(required = false) Long childEnrollmentId) {
+            @RequestParam(required = false) Long studentId) {
 
-        Long enrollmentId = noticeService.resolveEnrollment(me.accountId(), childEnrollmentId);
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(noticeService.banners(enrollmentId).stream()
                 .map(AppNoticeResponse::from).toList());
     }
@@ -66,9 +69,9 @@ public class AppNoticeController {
     public ApiResponse<AppNoticeResponse> readOne(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long id,
-            @RequestParam(required = false) Long childEnrollmentId) {
+            @RequestParam(required = false) Long studentId) {
 
-        Long enrollmentId = noticeService.resolveEnrollment(me.accountId(), childEnrollmentId);
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(
                 AppNoticeResponse.from(noticeService.readOne(enrollmentId, id)));
     }

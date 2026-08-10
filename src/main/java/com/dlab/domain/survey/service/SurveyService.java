@@ -25,7 +25,6 @@ import com.dlab.domain.user.repository.AccountRepository;
 import com.dlab.domain.user.repository.ClassAssignmentRepository;
 import com.dlab.domain.user.repository.ClassMasterRepository;
 import com.dlab.domain.user.repository.StudentEnrollmentRepository;
-import com.dlab.domain.user.service.ParentSignupService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -69,7 +68,6 @@ public class SurveyService {
     private final ClassMasterRepository classMasterRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
-    private final ParentSignupService parentSignupService;
     private final Clock clock;
 
     // ── 관리자: 생성·관리 ──────────────────────────────────
@@ -327,33 +325,6 @@ public class SurveyService {
         return responseRepository.findMine(surveyId, enrollmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SURVEY_NOT_FOUND,
                         "아직 응답하지 않았습니다."));
-    }
-
-    /**
-     * 앱 계정 기준 대상 등록 건.
-     *
-     * <p>학생은 본인, <b>학부모는 자녀를 지정</b>한다 — 계정 하나에 자녀가 여럿이라
-     * 서버가 고를 수 없다. 연결 확인은 {@code ParentSignupService.requireMyChild}가 한다.
-     */
-    @Transactional(readOnly = true)
-    public Long resolveEnrollment(Long accountId, Long childStudentId) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-
-        if (account.getStudent() != null) {
-            return enrollmentRepository.findCurrentByStudentId(account.getStudent().getId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND))
-                    .getId();
-        }
-        if (account.getGuardian() != null) {
-            if (childStudentId == null) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "자녀를 지정해야 합니다.");
-            }
-            return parentSignupService
-                    .requireMyChild(account.getGuardian().getId(), childStudentId)
-                    .getId();
-        }
-        throw new BusinessException(ErrorCode.FORBIDDEN, "학생·학부모 계정만 조회할 수 있습니다.");
     }
 
     // ── 답 검증 ──────────────────────────────────────────
