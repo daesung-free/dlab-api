@@ -128,6 +128,20 @@ public enum ErrorCode {
     /** 범위마다 쓸 수 있는 사람이 다르다 — 전체는 본사, 지점은 지점관리자, 반은 담임이다. */
     NOTICE_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN, "이 범위의 공지를 작성할 권한이 없습니다."),
 
+    // 설문 (F-4.11-3 · A-14)
+    SURVEY_NOT_FOUND(HttpStatus.NOT_FOUND, "설문을 찾을 수 없습니다."),
+    SURVEY_QUESTION_NOT_FOUND(HttpStatus.NOT_FOUND, "설문 문항을 찾을 수 없습니다."),
+    SURVEY_OPTION_NOT_FOUND(HttpStatus.NOT_FOUND, "선택지를 찾을 수 없습니다."),
+    /** 기간 판정은 서버만 한다 — 앱이 시각을 비교하면 기기 시계에 좌우된다. */
+    SURVEY_CLOSED(HttpStatus.CONFLICT, "지금은 설문 응답 기간이 아닙니다."),
+    SURVEY_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "이미 응답한 설문입니다."),
+    SURVEY_REQUIRED_ANSWER_MISSING(HttpStatus.BAD_REQUEST, "필수 문항에 답하지 않았습니다."),
+    SURVEY_ANSWER_INVALID(HttpStatus.BAD_REQUEST, "문항 유형에 맞지 않는 답입니다."),
+    SURVEY_QUESTION_EMPTY(HttpStatus.BAD_REQUEST, "문항이 없는 설문은 만들 수 없습니다."),
+    SURVEY_OPTION_EMPTY(HttpStatus.BAD_REQUEST, "선택형 문항에는 선택지가 필요합니다."),
+    /** 범위마다 낼 수 있는 사람이 다르다 — 전 지점은 본사, 반은 담임이다. */
+    SURVEY_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN, "이 범위의 설문을 낼 권한이 없습니다."),
+
     // 공휴일
     HOLIDAY_NOT_FOUND(HttpStatus.NOT_FOUND, "공휴일을 찾을 수 없습니다."),
     HOLIDAY_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 날짜입니다."),
