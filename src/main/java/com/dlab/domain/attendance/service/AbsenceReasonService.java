@@ -82,6 +82,91 @@ public class AbsenceReasonService {
     }
 
     /**
+     * 앱 제출 — <b>학생 본인</b>.
+     *
+     * <p>관리자 등록({@link #register})과 <b>같은 라우팅을 탄다.</b> 제출 경로만 다르고
+     * 승인 주체·타임아웃·에스컬레이션은 하나의 엔진이 처리한다.
+     *
+     * <p><b>지점 검사를 하지 않는다</b> — 관리자 경로와 달리 남의 등록 건을 지목할 방법이
+     * 없다. 컨트롤러가 로그인한 학생의 등록 건을 직접 넘긴다.
+     *
+     * <p><b>날짜는 과거·미래를 모두 받는다.</b> 사전 제출(내일 결석 예고)은 미등원 알림
+     * 제외에 필요하고, 사후 제출(아파서 결석한 다음 날)은 실제로 가장 흔한 흐름이다.
+     */
+    @Transactional
+    public AbsenceReason submitByStudent(Long enrollmentId, LocalDate date,
+                                         AbsenceReasonType type, String reasonText,
+                                         LocalTime startTime, LocalTime endTime) {
+        StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .filter(e -> !e.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+        validatePeriod(type, startTime, endTime);
+        rejectDuplicate(enrollmentId, date, type);
+
+        AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
+                enrollment.getAcademy(), enrollment, date, type, reasonText, startTime, endTime));
+
+        ApprovalRequest approval = approvalService.create(enrollment, RequestType.ABSENCE_REASON);
+        reason.linkApproval(approval);
+
+        log.info("사유신청 제출(앱): enrollmentId={}, 유형={}, 일자={}", enrollmentId, type, date);
+        return reason;
+    }
+
+    /**
+     * 앱 취소 — <b>승인 전까지만</b>.
+     *
+     * <p>승인·반려된 건은 이력이라 지우지 않는다. 되돌릴 일이면 관리자가 정정한다 —
+     * 학생이 지울 수 있으면 <b>"승인받고 나서 없던 일로 만드는" 경로</b>가 열린다.
+     *
+     * <p>승인 요청 취소는 {@code ApprovalService}가 조건부 UPDATE로 처리한다.
+     * 학생이 취소하는 순간 학부모가 승인할 수 있어, 먼저 도착한 쪽만 성공해야 한다.
+     */
+    @Transactional
+    public void cancelByStudent(Long enrollmentId, Long reasonId) {
+        AbsenceReason reason = absenceReasonRepository.findById(reasonId)
+                .filter(r -> !r.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ABSENCE_REASON_NOT_FOUND));
+
+        if (!reason.getEnrollment().getId().equals(enrollmentId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "본인 신청만 취소할 수 있습니다.");
+        }
+        if (statusOf(reason) != ApprovalStatus.PENDING) {
+            throw new BusinessException(ErrorCode.ABSENCE_REASON_NOT_CANCELABLE);
+        }
+
+        // ★ 순서가 중요하다. 승인 취소는 조건부 UPDATE라 영속성 컨텍스트를 비우는데,
+        //   그 뒤에 markDeleted를 부르면 이미 준영속이 된 엔티티라 아무 일도 일어나지 않는다
+        //   — 승인만 취소되고 신청은 그대로 남는다. 취소가 실패하면 트랜잭션이 함께 되돌아간다
+        reason.markDeleted();
+        if (reason.getApprovalRequest() != null) {
+            approvalService.cancelByRequester(reason.getApprovalRequest().getId());
+        }
+
+        log.info("사유신청 취소(앱): reasonId={}, enrollmentId={}", reasonId, enrollmentId);
+    }
+
+    /**
+     * 같은 날 같은 유형 중복 방지.
+     *
+     * <p><b>취소·반려된 건은 세지 않는다</b> — 반려당한 학생이 사유를 고쳐 다시 내는 게
+     * 정상 흐름인데, 여기서 막으면 그 날짜는 영영 다시 신청할 수 없게 된다.
+     */
+    private void rejectDuplicate(Long enrollmentId, LocalDate date, AbsenceReasonType type) {
+        boolean exists = absenceReasonRepository
+                .findByEnrollmentIdAndAttendanceDate(enrollmentId, date).stream()
+                .filter(r -> !r.isDeleted())
+                .filter(r -> r.getReasonType() == type)
+                .anyMatch(r -> {
+                    ApprovalStatus status = statusOf(r);
+                    return status == ApprovalStatus.PENDING || status == ApprovalStatus.APPROVED;
+                });
+        if (exists) {
+            throw new BusinessException(ErrorCode.ABSENCE_REASON_DUPLICATED);
+        }
+    }
+
+    /**
      * 시간 범위 검증.
      *
      * <p><b>외출은 종료가 있어야 한다.</b> 없으면 언제 돌아오는지 알 수 없어

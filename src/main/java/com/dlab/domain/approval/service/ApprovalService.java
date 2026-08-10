@@ -130,6 +130,29 @@ public class ApprovalService {
         return resolved;
     }
 
+    /**
+     * 신청자 취소.
+     *
+     * <p>승인자가 처리하는 것과 <b>같은 조건부 UPDATE</b>를 탄다 — 학생이 취소하는 순간
+     * 학부모가 승인 버튼을 누를 수 있는데, 두 경로가 다른 방식으로 상태를 바꾸면
+     * <b>취소된 신청이 승인된 것으로 남는다.</b> 여기서는 먼저 도착한 쪽만 성공한다.
+     *
+     * <p>{@code resolverType}·{@code resolver}를 비워 둔다 — 취소는 승인 행위가 아니라
+     * 신청 철회다. 신청자를 승인자 자리에 적으면 통계에서 "학생이 승인했다"로 집계된다.
+     *
+     * <p>알림은 보내지 않는다. 낸 사람이 스스로 거둔 것이라 알릴 상대가 없다.
+     */
+    @Transactional
+    public void cancelByRequester(Long requestId) {
+        int updated = approvalRequestRepository.resolveIfPending(
+                requestId, ApprovalStatus.CANCELED, Instant.now(clock),
+                null, null, null, null);
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.APPROVAL_ALREADY_PROCESSED);
+        }
+        log.info("승인 요청 신청자 취소: requestId={}", requestId);
+    }
+
     /** 담당선생님은 반 배정 → 반 담임으로 자동 결정된다. 미배정이거나 담임 미지정이면 null. */
     private Teacher resolveEscalationTarget(StudentEnrollment enrollment) {
         return classAssignmentRepository.findActiveFixedByEnrollmentId(enrollment.getId())
