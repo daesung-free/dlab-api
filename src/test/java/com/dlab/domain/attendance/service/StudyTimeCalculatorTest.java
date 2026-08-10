@@ -141,8 +141,36 @@ class StudyTimeCalculatorTest {
     @DisplayName("기록이 없으면 0")
     void noLogsIsZero() {
         assertThat(calc(List.of())).isZero();
-        assertThat(calculator.calculate(List.of(log(CHECK_IN, 9, 0)), List.of(),
-                LocalTime.of(18, 0))).isZero();
+    }
+
+    @Test
+    @DisplayName("★★ 자율등원일(교시 없음)은 재실시간이 곧 순공 — 0을 주면 주말이 랭킹에서 빠진다")
+    void freeDayCountsWholePresence() {
+        Duration result = calculator.calculate(
+                List.of(log(CHECK_IN, 9, 0), log(CHECK_OUT, 18, 0)),
+                List.of(), LocalTime.of(23, 59));
+
+        assertThat(result).isEqualTo(Duration.ofHours(9));
+    }
+
+    @Test
+    @DisplayName("자율등원일에도 외출은 빠진다 — 재실 구간이 이미 걸러낸다")
+    void freeDayStillExcludesOuting() {
+        Duration result = calculator.calculate(
+                List.of(log(CHECK_IN, 9, 0), log(OUTING, 12, 0),
+                        log(RETURN, 13, 0), log(CHECK_OUT, 18, 0)),
+                List.of(), LocalTime.of(23, 59));
+
+        assertThat(result).isEqualTo(Duration.ofHours(8));
+    }
+
+    @Test
+    @DisplayName("자율등원일에 하원을 안 찍었으면 조회 시점까지")
+    void freeDayOpenIntervalClosesAtQueryTime() {
+        Duration result = calculator.calculate(
+                List.of(log(CHECK_IN, 9, 0)), List.of(), LocalTime.of(15, 0));
+
+        assertThat(result).isEqualTo(Duration.ofHours(6));
     }
 
     @Test

@@ -3,9 +3,9 @@ package com.dlab.domain.kiosk.service;
 import com.dlab.api.kiosk.DsaApiException;
 import com.dlab.api.kiosk.DsaCode;
 import com.dlab.common.privacy.Masking;
-import com.dlab.domain.meal.entity.MealApplication;
+import com.dlab.domain.meal.entity.MealOrderItem;
 import com.dlab.domain.meal.entity.MealType;
-import com.dlab.domain.meal.repository.MealApplicationRepository;
+import com.dlab.domain.meal.repository.MealOrderItemRepository;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import java.time.Clock;
@@ -33,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class KioskMealQueryService {
 
-    private final MealApplicationRepository mealApplicationRepository;
+    private final MealOrderItemRepository mealOrderItemRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final Clock clock;
 
@@ -50,7 +50,7 @@ public class KioskMealQueryService {
         }
         StudentEnrollment enrollment = requireEnrollment(academyId, rfidNo);
 
-        return mealApplicationRepository.isApplied(
+        return mealOrderItemRepository.isApplied(
                 enrollment.getId(), LocalDate.now(clock), mealType);
     }
 
@@ -64,17 +64,17 @@ public class KioskMealQueryService {
     public List<MealApplyRow> monthlyApplications(Long academyId, String month) {
         YearMonth target = parseMonth(month);
 
-        return mealApplicationRepository.findActiveByAcademyAndPeriod(
+        return mealOrderItemRepository.findActiveByAcademyAndPeriod(
                         academyId, target.atDay(1), target.atEndOfMonth()).stream()
                 .map(this::toRow)
                 .toList();
     }
 
-    private MealApplyRow toRow(MealApplication m) {
+    private MealApplyRow toRow(MealOrderItem m) {
         return new MealApplyRow(
                 // 공용 화면에 뜨는 목록이라 이름은 마스킹한다(§ getStdInfoList와 같은 기준)
-                Masking.name(m.getEnrollment().getStudent().getName()),
-                m.getEnrollment().getStudentNo(),
+                Masking.name(m.getOrder().getEnrollment().getStudent().getName()),
+                m.getOrder().getEnrollment().getStudentNo(),
                 String.valueOf(m.getMealDate().getDayOfMonth()),
                 m.getMealType().responseLabel());
     }

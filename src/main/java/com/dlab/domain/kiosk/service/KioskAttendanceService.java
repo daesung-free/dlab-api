@@ -115,11 +115,13 @@ public class KioskAttendanceService {
             return TagResult.rejected(enrollment, decision.code(), decision.message());
         }
 
+        // ★ 원장은 decision.event(), 응답은 decision.reportedAs()다.
+        //   보통 같지만 사유지각은 갈린다 — 원장엔 지각, 화면엔 등원
         taggingLogRepository.save(new AttendanceTaggingLog(
                 enrollment.getAcademy(), enrollment, decision.event(),
                 AttendanceSource.KIOSK_NFC, at.atZone(clock.getZone()).toInstant(), date));
 
-        return TagResult.accepted(enrollment, decision.event());
+        return TagResult.accepted(enrollment, decision.reportedAs());
     }
 
     /** 서버 자동 판별. */
@@ -237,8 +239,18 @@ public class KioskAttendanceService {
 
         boolean earlyLeave = false;
         boolean outing = false;
+        boolean late = false;
         for (AbsenceReason r : reasons) {
-            if (!isApproved(r) || !isUsableAt(r, at.toLocalTime())) {
+            if (!isApproved(r)) {
+                continue;
+            }
+            // ★ 지각은 30분 창을 타지 않는다. 조퇴·외출은 "예정 시각에 나가는가"라
+            //   시각 대조가 의미 있지만, 지각은 이미 늦게 온 사실이라 대조할 예정이 없다
+            if (r.getReasonType() == AbsenceReasonType.LATE) {
+                late = true;
+                continue;
+            }
+            if (!isUsableAt(r, at.toLocalTime())) {
                 continue;
             }
             if (r.getReasonType() == AbsenceReasonType.EARLY_LEAVE && !usedEarlyLeave) {
@@ -247,7 +259,7 @@ public class KioskAttendanceService {
                 outing = true;
             }
         }
-        return new AttendancePolicy.ExcusedOptions(earlyLeave, outing);
+        return new AttendancePolicy.ExcusedOptions(earlyLeave, outing, late);
     }
 
     /** 예정 시각 {@code -30분} 이후인가. */

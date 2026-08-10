@@ -35,6 +35,8 @@ public enum ErrorCode {
     CHILD_ALREADY_LINKED(HttpStatus.CONFLICT, "이미 연결된 자녀입니다."),
     PHONE_ALREADY_REGISTERED(HttpStatus.CONFLICT, "이미 가입된 휴대폰 번호입니다."),
     NOT_MY_CHILD(HttpStatus.FORBIDDEN, "본인의 자녀가 아닙니다."),
+    NOT_FOUND(HttpStatus.NOT_FOUND, "요청하신 경로를 찾을 수 없습니다."),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "허용되지 않은 요청 방식입니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 오류가 발생했습니다."),
 
     // 지점 / 조직
@@ -88,6 +90,12 @@ public enum ErrorCode {
     QNA_SLOT_PAST(HttpStatus.BAD_REQUEST, "이미 지난 시간입니다."),
     QNA_ALREADY_RESERVED(HttpStatus.CONFLICT, "이미 예약한 시간입니다."),
     QNA_ALREADY_CANCELED(HttpStatus.CONFLICT, "이미 취소된 예약입니다."),
+    // 데일리 루틴 (F-4.11-1 · A-11)
+    ROUTINE_NOT_FOUND(HttpStatus.NOT_FOUND, "루틴을 찾을 수 없습니다."),
+    ROUTINE_TARGET_MONTH_NOT_EMPTY(HttpStatus.CONFLICT,
+            "복사 대상 월에 이미 루틴이 있습니다. 덮어쓰지 않습니다."),
+    ROUTINE_SOURCE_MONTH_EMPTY(HttpStatus.NOT_FOUND, "전월에 복사할 루틴이 없습니다."),
+    ROUTINE_SCORE_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "점수가 만점 범위를 벗어났습니다."),
 
     // 알림
     NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "알림 템플릿을 찾을 수 없습니다."),
@@ -97,6 +105,17 @@ public enum ErrorCode {
             "문구가 비어 있어 확정할 수 없습니다."),
     NOTIFICATION_REVIEW_NOT_APPLICABLE(HttpStatus.BAD_REQUEST,
             "카카오 알림톡 템플릿만 심사 대상입니다."),
+
+    // 급식 (F-4.5 · A-9)
+    MEAL_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "급식 주문을 찾을 수 없습니다."),
+    MEAL_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "급식 신청 내역을 찾을 수 없습니다."),
+    /** 기간 밖에는 신청 화면이 열리지 않는다. 미등록도 닫힘이다. */
+    MEAL_WINDOW_CLOSED(HttpStatus.CONFLICT, "지금은 급식 신청 기간이 아닙니다."),
+    /** 주말·공휴일·중단일. */
+    MEAL_DATE_NOT_AVAILABLE(HttpStatus.CONFLICT, "급식을 신청할 수 없는 날짜입니다."),
+    MEAL_DEADLINE_PASSED(HttpStatus.CONFLICT, "신청·취소 마감이 지났습니다."),
+    MEAL_ALREADY_APPLIED(HttpStatus.CONFLICT, "이미 신청한 끼니입니다."),
+    MEAL_CLOSURE_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 급식 중단일입니다."),
 
     // 공지 (F-4.11-3)
     NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지를 찾을 수 없습니다."),

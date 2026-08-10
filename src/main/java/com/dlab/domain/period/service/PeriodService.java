@@ -60,7 +60,8 @@ public class PeriodService {
     @Transactional
     public PeriodMaster create(AuthPrincipal me, Long academyId, short year, DayType dayType,
                                short periodNo, String name, PeriodType periodType,
-                               LocalTime startTime, LocalTime endTime, boolean planable) {
+                               LocalTime startTime, LocalTime endTime,
+                               boolean planable, boolean mandatory) {
 
         Long resolvedAcademyId = requireAcademyAccess(me, academyId);
         validateTimeRange(startTime, endTime);
@@ -75,7 +76,7 @@ public class PeriodService {
 
         PeriodMaster saved = periodRepository.save(new PeriodMaster(
                 academy, year, periodNo, name, dayType, periodType,
-                startTime, endTime, planable));
+                startTime, endTime, planable, mandatory));
 
         log.info("교시 등록: 지점={}, 연도={}, 요일={}, {}교시 {}~{}",
                 resolvedAcademyId, year, dayType, periodNo, startTime, endTime);
@@ -85,7 +86,7 @@ public class PeriodService {
     @Transactional
     public PeriodMaster update(AuthPrincipal me, Long id, short periodNo, String name,
                                PeriodType periodType, LocalTime startTime, LocalTime endTime,
-                               boolean planable) {
+                               boolean planable, boolean mandatory) {
 
         PeriodMaster period = requirePeriod(me, id);
         validateTimeRange(startTime, endTime);
@@ -95,7 +96,7 @@ public class PeriodService {
         requireNoDuplicatedNo(siblings, periodNo, id);
         requireNoOverlap(siblings, startTime, endTime, id);
 
-        period.update(periodNo, name, periodType, startTime, endTime, planable);
+        period.update(periodNo, name, periodType, startTime, endTime, planable, mandatory);
 
         log.info("교시 수정: id={}, {}교시 {}~{}", id, periodNo, startTime, endTime);
         return period;

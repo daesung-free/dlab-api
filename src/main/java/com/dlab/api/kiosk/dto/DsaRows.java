@@ -152,6 +152,20 @@ public final class DsaRows {
      * 지점 전체를 내린다(학생 단건 아님).
      */
     @JsonInclude(JsonInclude.Include.ALWAYS)
+    /**
+     * 3.29 {@code getReceiptInfo} — 수납 내역.
+     *
+     * <p><b>금액이 전부 문자열이다.</b> 상벌점 {@code point}와 같은 규약이라 맞춘다 —
+     * 키오스크가 {@code getStringValue}로 읽는다.
+     */
+    public record ReceiptRow(
+            @JsonProperty("rcv_nm") String rcvNm,
+            @JsonProperty("supp_amt") String suppAmt,
+            @JsonProperty("rec_amt") String recAmt,
+            @JsonProperty("mi_amt") String miAmt
+    ) {
+    }
+
     public record PointRow(
             @JsonProperty("point_dt") String pointDt,
             @JsonProperty("std_nm") String stdNm,

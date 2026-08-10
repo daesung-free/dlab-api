@@ -6,7 +6,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -42,6 +45,26 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AuthorizationDeniedException e) {
         return ResponseEntity.status(ErrorCode.FORBIDDEN.getStatus())
                 .body(ApiResponse.fail(ErrorCode.FORBIDDEN));
+    }
+
+    /**
+     * 없는 경로 · 허용 안 된 메서드.
+     *
+     * <p><b>이걸 처리하지 않으면 아래 catch-all이 잡아 500으로 나간다.</b>
+     * URL 오타 하나가 "서버 오류"로 보이면, 앱 개발자가 서버를 의심하며 시간을 쓴다.
+     * 실제로 테스트에서 이 경로로 드러났다.
+     */
+    @ExceptionHandler({NoResourceFoundException.class, NoHandlerFoundException.class})
+    public ResponseEntity<ApiResponse<Void>> handleNotFound(Exception e) {
+        return ResponseEntity.status(ErrorCode.NOT_FOUND.getStatus())
+                .body(ApiResponse.fail(ErrorCode.NOT_FOUND));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotAllowed(
+            HttpRequestMethodNotSupportedException e) {
+        return ResponseEntity.status(ErrorCode.METHOD_NOT_ALLOWED.getStatus())
+                .body(ApiResponse.fail(ErrorCode.METHOD_NOT_ALLOWED, e.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)
