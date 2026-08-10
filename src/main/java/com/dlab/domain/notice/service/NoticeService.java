@@ -58,7 +58,6 @@ public class NoticeService {
     private final com.dlab.domain.user.repository.AcademyRepository academyRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
-    private final com.dlab.domain.user.repository.StudentGuardianLinkRepository guardianLinkRepository;
     private final Clock clock;
 
     /** 관리자 목록. 전 지점 공지가 함께 나온다. */
@@ -181,48 +180,6 @@ public class NoticeService {
                 .stream()
                 .filter(n -> n.isVisibleAt(now))
                 .toList();
-    }
-
-    /**
-     * 앱 계정 기준 대상 등록 건.
-     *
-     * <p>학생은 본인, <b>학부모는 자녀를 지정</b>한다 — 계정 하나에 자녀가 여럿이라
-     * (계정 1개 + 자녀 N 구조) 누구 기준으로 볼지를 서버가 정할 수 없다.
-     *
-     * @param childEnrollmentId 학부모일 때만 쓴다. 학생 계정이면 무시된다
-     */
-    @Transactional(readOnly = true)
-    public Long resolveEnrollment(Long accountId, Long childEnrollmentId) {
-        Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-
-        if (account.getStudent() != null) {
-            return enrollmentRepository.findCurrentByStudentId(account.getStudent().getId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND))
-                    .getId();
-        }
-
-        if (account.getGuardian() != null) {
-            if (childEnrollmentId == null) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "자녀를 지정해야 합니다.");
-            }
-            StudentEnrollment child = enrollmentRepository.findById(childEnrollmentId)
-                    .filter(e -> !e.isDeleted())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
-
-            // 연결된 자녀인지 반드시 확인한다 — id만 받고 열어주면
-            // 번호를 바꿔가며 남의 자녀 공지를 읽을 수 있다
-            boolean linked = guardianLinkRepository.findChildrenOf(account.getGuardian().getId())
-                    .stream()
-                    .anyMatch(link -> link.getStudent().getId()
-                            .equals(child.getStudent().getId()));
-            if (!linked) {
-                throw new BusinessException(ErrorCode.NOT_MY_CHILD);
-            }
-            return child.getId();
-        }
-
-        throw new BusinessException(ErrorCode.FORBIDDEN, "학생·학부모 계정만 조회할 수 있습니다.");
     }
 
     /** 앱 홈 배너. 피드 중 배너 표시분만. */

@@ -40,7 +40,7 @@ public class LectureService {
     private final LectureAttendanceRepository attendanceRepository;
     private final AcademyRepository academyRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
-    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
+    private final com.dlab.domain.user.service.AppScopeResolver scopeResolver;
     private final Clock clock;
 
     /**
@@ -152,14 +152,7 @@ public class LectureService {
      */
     @Transactional(readOnly = true)
     public StudentEnrollment currentEnrollmentOf(Long accountId) {
-        com.dlab.domain.user.entity.Account account = accountRepository.findById(accountId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        if (account.getAccountType() != com.dlab.domain.user.entity.AccountType.STUDENT
-                || account.getStudent() == null) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "학생만 신청할 수 있습니다.");
-        }
-        return enrollmentRepository.findCurrentByStudentId(account.getStudent().getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+        return scopeResolver.requireStudent(accountId, "특강 신청");
     }
 
     /**

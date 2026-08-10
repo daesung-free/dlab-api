@@ -2,17 +2,12 @@ package com.dlab.api.app.qna;
 
 import com.dlab.api.admin.qna.QnaRequests;
 import com.dlab.api.admin.qna.QnaResponse;
-import com.dlab.common.exception.BusinessException;
-import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.qna.service.QnaOfflineService;
-import com.dlab.domain.user.entity.Account;
-import com.dlab.domain.user.entity.AccountType;
 import com.dlab.domain.user.entity.StudentEnrollment;
-import com.dlab.domain.user.repository.AccountRepository;
-import com.dlab.domain.user.repository.StudentEnrollmentRepository;
+import com.dlab.domain.user.service.AppScopeResolver;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -35,8 +30,7 @@ import java.util.List;
 public class AppQnaOfflineController {
 
     private final QnaOfflineService qnaOfflineService;
-    private final AccountRepository accountRepository;
-    private final StudentEnrollmentRepository enrollmentRepository;
+    private final AppScopeResolver scopeResolver;
 
     /**
      * 그날 가능 타임.
@@ -48,7 +42,7 @@ public class AppQnaOfflineController {
     public ApiResponse<List<QnaResponse.Slot>> slots(
             @CurrentAccount AuthPrincipal me,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        StudentEnrollment enrollment = currentEnrollment(me);
+        StudentEnrollment enrollment = scopeResolver.requireStudent(me.accountId(), "대면 예약");
         return ApiResponse.success(
                 qnaOfflineService.availableSlots(enrollment.getAcademy().getId(), date).stream()
                         .map(QnaResponse.Slot::from).toList());
@@ -60,7 +54,7 @@ public class AppQnaOfflineController {
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long slotId,
             @Valid @RequestBody(required = false) QnaRequests.Reserve request) {
-        StudentEnrollment enrollment = currentEnrollment(me);
+        StudentEnrollment enrollment = scopeResolver.requireStudent(me.accountId(), "대면 예약");
         return ApiResponse.success(QnaResponse.MyReservation.from(qnaOfflineService.reserve(
                 slotId, enrollment.getId(), request == null ? null : request.question())));
     }
@@ -69,7 +63,8 @@ public class AppQnaOfflineController {
     @DeleteMapping("/reservations/{reservationId}")
     public ApiResponse<Void> cancel(@CurrentAccount AuthPrincipal me,
                                     @PathVariable Long reservationId) {
-        qnaOfflineService.cancel(reservationId, currentEnrollment(me).getId());
+        qnaOfflineService.cancel(reservationId,
+                scopeResolver.requireStudent(me.accountId(), "대면 예약").getId());
         return ApiResponse.empty();
     }
 
@@ -80,17 +75,9 @@ public class AppQnaOfflineController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ApiResponse.success(
-                qnaOfflineService.myReservations(currentEnrollment(me).getId(), from, to).stream()
+                qnaOfflineService.myReservations(
+                                scopeResolver.requireStudent(me.accountId(), "대면 예약").getId(),
+                                from, to).stream()
                         .map(QnaResponse.MyReservation::from).toList());
-    }
-
-    private StudentEnrollment currentEnrollment(AuthPrincipal me) {
-        Account account = accountRepository.findById(me.accountId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
-        if (account.getAccountType() != AccountType.STUDENT || account.getStudent() == null) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "학생만 예약할 수 있습니다.");
-        }
-        return enrollmentRepository.findCurrentByStudentId(account.getStudent().getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
     }
 }

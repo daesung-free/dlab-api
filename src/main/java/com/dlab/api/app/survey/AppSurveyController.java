@@ -4,6 +4,7 @@ import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.survey.service.SurveyService;
+import com.dlab.domain.user.service.AppScopeResolver;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AppSurveyController {
 
     private final SurveyService surveyService;
+    private final AppScopeResolver scopeResolver;
 
     /**
      * 내게 배포된 설문 목록.
@@ -42,7 +44,7 @@ public class AppSurveyController {
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long studentId) {
 
-        Long enrollmentId = surveyService.resolveEnrollment(me.accountId(), studentId);
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(surveyService.feed(enrollmentId).stream()
                 .map(SurveyResponses.Summary::from).toList());
     }
@@ -54,7 +56,7 @@ public class AppSurveyController {
             @PathVariable Long surveyId,
             @RequestParam(required = false) Long studentId) {
 
-        Long enrollmentId = surveyService.resolveEnrollment(me.accountId(), studentId);
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(
                 SurveyResponses.Detail.from(surveyService.detail(enrollmentId, surveyId)));
     }
@@ -67,7 +69,7 @@ public class AppSurveyController {
             @RequestParam(required = false) Long studentId,
             @Valid @RequestBody SurveyRequests.Submit request) {
 
-        Long enrollmentId = surveyService.resolveEnrollment(me.accountId(), studentId);
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         var response = surveyService.submit(enrollmentId, surveyId, request.toCommands());
         return ApiResponse.success(SurveyResponses.Submitted.from(response));
     }
@@ -79,7 +81,7 @@ public class AppSurveyController {
             @PathVariable Long surveyId,
             @RequestParam(required = false) Long studentId) {
 
-        Long enrollmentId = surveyService.resolveEnrollment(me.accountId(), studentId);
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(SurveyResponses.MyResponse.from(
                 surveyService.myResponse(enrollmentId, surveyId)));
     }

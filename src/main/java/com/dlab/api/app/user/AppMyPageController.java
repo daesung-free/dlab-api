@@ -8,7 +8,6 @@ import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.user.entity.Account;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.repository.ClassAssignmentRepository;
-import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import com.dlab.domain.user.service.AppScopeResolver;
 import com.dlab.domain.user.service.ParentSignupService;
 import lombok.RequiredArgsConstructor;
@@ -36,7 +35,6 @@ public class AppMyPageController {
 
     private final AppScopeResolver scopeResolver;
     private final ParentSignupService parentSignupService;
-    private final StudentEnrollmentRepository enrollmentRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
 
     /**
@@ -50,9 +48,7 @@ public class AppMyPageController {
         Account account = scopeResolver.account(me.accountId());
 
         if (account.getStudent() != null) {
-            StudentEnrollment enrollment = enrollmentRepository
-                    .findCurrentByStudentId(account.getStudent().getId())
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+            StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), null);
             String className = classAssignmentRepository
                     .findActiveFixedByEnrollmentId(enrollment.getId())
                     .map(a -> a.getClassMaster().getName())
