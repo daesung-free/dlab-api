@@ -5,7 +5,9 @@ import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
+import com.dlab.domain.attendance.service.AbsenceReasonService;
 import com.dlab.domain.attendance.service.AttendanceQueryService;
+import jakarta.validation.Valid;
 import com.dlab.domain.user.entity.Account;
 import com.dlab.domain.user.entity.AccountType;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -37,6 +39,7 @@ import java.util.List;
 public class AppAttendanceController {
 
     private final AttendanceQueryService attendanceQueryService;
+    private final AbsenceReasonService absenceReasonService;
     private final ParentSignupService parentSignupService;
     private final AccountRepository accountRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
@@ -78,6 +81,54 @@ public class AppAttendanceController {
         return ApiResponse.success(
                 attendanceQueryService.absenceReasons(enrollmentId, from, to).stream()
                         .map(AttendanceResponse.AbsenceReasonRow::from).toList());
+    }
+
+    /**
+     * 사유 제출 (P1-08 · S-6).
+     *
+     * <p><b>★ 학생 본인만 낼 수 있다.</b> 학부모는 이 신청의 <b>승인자</b>다 —
+     * 학부모가 내고 학부모가 승인하면 승인 절차 자체가 무의미해진다. 그래서 조회와 달리
+     * {@code studentId}를 받지 않는다.
+     *
+     * <p>제출하면 <b>관리자 직접 등록과 같은 승인 라우팅</b>을 탄다(승인 주체·타임아웃·
+     * 에스컬레이션). 승인 로직을 여기서 다시 만들지 않는다.
+     */
+    @PostMapping("/absence-reasons")
+    public ApiResponse<AttendanceResponse.AbsenceReasonRow> submitAbsenceReason(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody AbsenceReasonRequests.Submit request) {
+
+        Long enrollmentId = requireStudentEnrollment(me).getId();
+        return ApiResponse.success(AttendanceResponse.AbsenceReasonRow.from(
+                absenceReasonService.submitByStudent(enrollmentId, request.date(),
+                        request.type(), request.reasonText(),
+                        request.startTime(), request.endTime())));
+    }
+
+    /** 사유 취소 — 승인 전까지만. 승인·반려된 건은 이력이라 관리자가 정정한다. */
+    @DeleteMapping("/absence-reasons/{reasonId}")
+    public ApiResponse<Void> cancelAbsenceReason(@CurrentAccount AuthPrincipal me,
+                                                 @PathVariable Long reasonId) {
+        absenceReasonService.cancelByStudent(requireStudentEnrollment(me).getId(), reasonId);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * 학생 본인 등록 건.
+     *
+     * <p>조회용 {@link #resolveEnrollment}와 달리 <b>학부모를 받지 않는다</b> —
+     * 위 제출 규칙 때문이다.
+     */
+    private StudentEnrollment requireStudentEnrollment(AuthPrincipal me) {
+        Account account = accountRepository.findById(me.accountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+
+        if (account.getAccountType() != AccountType.STUDENT || account.getStudent() == null) {
+            throw new BusinessException(ErrorCode.FORBIDDEN,
+                    "사유 신청은 학생 본인만 할 수 있습니다.");
+        }
+        return enrollmentRepository.findCurrentByStudentId(account.getStudent().getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
     }
 
     /**

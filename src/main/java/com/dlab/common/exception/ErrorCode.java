@@ -65,6 +65,12 @@ public enum ErrorCode {
     APPROVAL_ALREADY_PROCESSED(HttpStatus.CONFLICT, "이미 처리된 신청입니다."),
     NOT_AN_APPROVER(HttpStatus.FORBIDDEN, "이 신청의 승인자가 아닙니다."),
 
+    // 사유 신청 (F-4.1-6 · 앱 제출)
+    ABSENCE_REASON_NOT_FOUND(HttpStatus.NOT_FOUND, "사유 신청을 찾을 수 없습니다."),
+    ABSENCE_REASON_DUPLICATED(HttpStatus.CONFLICT, "같은 날짜에 이미 신청한 유형입니다."),
+    /** 승인·반려된 건은 이력이라 지우지 않는다. 되돌릴 일이면 관리자가 정정한다. */
+    ABSENCE_REASON_NOT_CANCELABLE(HttpStatus.CONFLICT, "이미 처리된 신청은 취소할 수 없습니다."),
+
     // 앱 설정 · 약관 (A-21 · F-4.12-3)
     TERMS_NOT_FOUND(HttpStatus.NOT_FOUND, "약관을 찾을 수 없습니다."),
     TERMS_VERSION_DUPLICATED(HttpStatus.CONFLICT,
