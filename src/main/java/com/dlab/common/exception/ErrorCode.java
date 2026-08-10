@@ -82,6 +82,14 @@ public enum ErrorCode {
     LECTURE_ALREADY_CANCELED(HttpStatus.CONFLICT, "이미 취소된 신청입니다."),
     LECTURE_CAPACITY_BELOW_CONFIRMED(HttpStatus.BAD_REQUEST, "확정 인원보다 적은 정원으로 줄일 수 없습니다."),
 
+    // 질의응답 대면 (F-4.11-7 · A-13)
+    QNA_SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "상담 타임을 찾을 수 없습니다."),
+    QNA_RESERVATION_NOT_FOUND(HttpStatus.NOT_FOUND, "예약을 찾을 수 없습니다."),
+    QNA_SLOT_CLOSED(HttpStatus.BAD_REQUEST, "예약이 마감된 시간입니다."),
+    QNA_SLOT_FULL(HttpStatus.CONFLICT, "정원이 찼습니다."),
+    QNA_SLOT_PAST(HttpStatus.BAD_REQUEST, "이미 지난 시간입니다."),
+    QNA_ALREADY_RESERVED(HttpStatus.CONFLICT, "이미 예약한 시간입니다."),
+    QNA_ALREADY_CANCELED(HttpStatus.CONFLICT, "이미 취소된 예약입니다."),
     // 데일리 루틴 (F-4.11-1 · A-11)
     ROUTINE_NOT_FOUND(HttpStatus.NOT_FOUND, "루틴을 찾을 수 없습니다."),
     ROUTINE_TARGET_MONTH_NOT_EMPTY(HttpStatus.CONFLICT,
