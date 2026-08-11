@@ -15,5 +15,11 @@ public enum NotificationEvent {
     APPROVAL_APPROVED_AFTER_TIMEOUT,
     /** 타임아웃 전 담당선생님이 먼저 승인 — "시간이 남았지만 담임이 먼저 승인" (위와 다른 문구) */
     APPROVAL_APPROVED_BEFORE_TIMEOUT,
+    /** 학부모 무응답 → 1회 자동 재승인 요청 (0803 답변서) */
+    APPROVAL_REMINDER,
+    /** 재요청 후에도 무응답 → 직원에게 승인권 이양 */
+    APPROVAL_HANDED_OVER,
+    /** 우선 승인자가 직원이라 직원이 승인함 — 학부모에겐 통지만 나간다 */
+    APPROVAL_APPROVED_BY_STAFF_PRIMARY,
     APPROVAL_REJECTED
 }

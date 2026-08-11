@@ -428,7 +428,7 @@ class KioskAttendanceIntegrationTest {
         em.persist(item);
 
         ApprovalRequest approval = new ApprovalRequest(
-                bundang, item, minji, null, Instant.now(clock));
+                bundang, item, minji, null, com.dlab.domain.approval.entity.ApproverType.PARENT, Instant.now(clock));
         ReflectionTestUtils.setField(approval, "status", ApprovalStatus.APPROVED);
         em.persist(approval);
 

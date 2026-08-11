@@ -95,7 +95,7 @@ class DailyAttendanceConfirmServiceTest {
                 RequestType.ABSENCE_REASON, ApproverType.TEACHER, null, null);
         em.persist(item);
         ApprovalRequest approval = new ApprovalRequest(
-                bundang, item, enrollment, null, Instant.now(clock));
+                bundang, item, enrollment, null, com.dlab.domain.approval.entity.ApproverType.PARENT, Instant.now(clock));
         ReflectionTestUtils.setField(approval, "status", ApprovalStatus.APPROVED);
         em.persist(approval);
 

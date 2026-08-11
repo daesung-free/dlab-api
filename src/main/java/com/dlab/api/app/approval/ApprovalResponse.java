@@ -2,6 +2,7 @@ package com.dlab.api.app.approval;
 
 import com.dlab.domain.approval.entity.ApprovalRequest;
 import com.dlab.domain.approval.entity.ApprovalStatus;
+import com.dlab.domain.approval.entity.ApproverType;
 import com.dlab.domain.approval.entity.RequestType;
 import com.dlab.domain.approval.entity.ResolutionCase;
 
@@ -23,6 +24,12 @@ public record ApprovalResponse(
         Instant requestedAt,
         Instant escalationAt,
         short timeoutMinutes,
+        /** 이 건의 우선 승인자. 화면이 "누가 처리해야 하는지"를 이걸로 표시한다 */
+        ApproverType primaryApprover,
+        /** 자동 재요청 발송 시각. null이면 아직 안 나갔다 */
+        Instant reminderSentAt,
+        /** 직원에게 넘어간 시각. null이면 아직 학부모 차례다 */
+        Instant handedOverAt,
         Instant resolvedAt,
         ResolutionCase resolutionCase,
         String rejectReason
@@ -37,6 +44,9 @@ public record ApprovalResponse(
                 r.getRequestedAt(),
                 r.getEscalationAt(),
                 r.getTimeoutMinutes(),
+                r.getPrimaryApprover(),
+                r.getReminderSentAt(),
+                r.getHandedOverAt(),
                 r.getResolvedAt(),
                 r.getResolutionCase(),
                 r.getRejectReason());

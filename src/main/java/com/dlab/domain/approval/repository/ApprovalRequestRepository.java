@@ -81,4 +81,43 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
                          Account resolver,
                          ResolutionCase resolutionCase,
                          String rejectReason);
+
+    /**
+     * 자동 재승인 요청 대상 — 학부모 우선인데 타임아웃이 지나도록 무응답이고 아직 안 보낸 건.
+     *
+     * <p>{@code reminder_sent_at IS NULL}이 <b>"1회만"의 실제 보장</b>이다.
+     * 스케줄러가 두 번 돌아도 두 번째엔 안 걸린다.
+     */
+    @Query("""
+            SELECT r FROM ApprovalRequest r
+            JOIN FETCH r.enrollment e
+            JOIN FETCH e.student
+            WHERE r.status = com.dlab.domain.approval.entity.ApprovalStatus.PENDING
+              AND r.deleted = false
+              AND r.primaryApprover = com.dlab.domain.approval.entity.ApproverType.PARENT
+              AND r.reminderSentAt IS NULL
+              AND r.escalationAt <= :now
+            ORDER BY r.escalationAt ASC
+            """)
+    List<ApprovalRequest> findReminderTargets(Instant now);
+
+    /**
+     * 직원 이양 대상 — 재요청을 보낸 뒤 같은 대기시간이 또 지나도록 무응답인 건.
+     *
+     * <p>대기시간 비교는 조회로 좁히고 최종 판정은 엔티티가 한다 —
+     * {@code timeout_minutes}가 건마다 다르라 SQL 한 줄로 정확히 거르기 어렵다.
+     */
+    @Query("""
+            SELECT r FROM ApprovalRequest r
+            JOIN FETCH r.enrollment e
+            JOIN FETCH e.student
+            WHERE r.status = com.dlab.domain.approval.entity.ApprovalStatus.PENDING
+              AND r.deleted = false
+              AND r.primaryApprover = com.dlab.domain.approval.entity.ApproverType.PARENT
+              AND r.reminderSentAt IS NOT NULL
+              AND r.handedOverAt IS NULL
+              AND r.reminderSentAt <= :now
+            ORDER BY r.reminderSentAt ASC
+            """)
+    List<ApprovalRequest> findHandoverCandidates(Instant now);
 }
