@@ -5,6 +5,7 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.domain.approval.entity.*;
 import com.dlab.domain.approval.repository.ApprovalItemRepository;
+import com.dlab.domain.approval.repository.ApproverPreferenceRepository;
 import com.dlab.domain.approval.repository.ApprovalRequestRepository;
 import com.dlab.domain.notification.entity.NotificationEvent;
 import com.dlab.domain.notification.service.NotificationCommand;
@@ -47,6 +48,7 @@ public class ApprovalService {
             DateTimeFormatter.ofPattern("M월 d일 HH:mm").withZone(TimeConfig.KST);
 
     private final ApprovalItemRepository approvalItemRepository;
+    private final ApproverPreferenceRepository preferenceRepository;
     private final ApprovalRequestRepository approvalRequestRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
     private final AccountRepository accountRepository;
@@ -79,11 +81,126 @@ public class ApprovalService {
                     enrollment.getId());
         }
 
-        ApprovalRequest request = approvalRequestRepository.save(
-                new ApprovalRequest(academy, item, enrollment, escalationTarget, Instant.now(clock)));
+        ApproverType primary = resolvePrimaryApprover(enrollment, item);
+
+        ApprovalRequest request = approvalRequestRepository.save(new ApprovalRequest(
+                academy, item, enrollment, escalationTarget, primary, Instant.now(clock)));
 
         notifyRequestCreated(request, escalationTarget);
         return request;
+    }
+
+    /**
+     * 우선 승인자 결정 — <b>학생 선택 &gt; 지점 정책</b> 순 (0803 답변서).
+     *
+     * <p>학생이 등록 시 고른 값이 있으면 그것이 우선이고, 없으면 지점 정책값을 쓴다.
+     * <b>선택을 강제하지 않는 이유</b>는 이미 등록된 학생들이 있기 때문이다 —
+     * 선택이 없다고 신청을 막으면 그 학생들은 아무것도 신청할 수 없게 된다.
+     *
+     * <p>{@link ApproverType#AUTO}는 학생이 고를 수 없으므로 정책값이 AUTO면 그대로 둔다.
+     */
+    private ApproverType resolvePrimaryApprover(StudentEnrollment enrollment, ApprovalItem item) {
+        if (item.getApproverType() == ApproverType.AUTO) {
+            return ApproverType.AUTO;
+        }
+        return preferenceRepository.findCurrent(enrollment.getId())
+                .map(ApproverPreference::getPreferred)
+                .orElse(item.getApproverType());
+    }
+
+    /**
+     * 우선 승인자 선택 + 동의 기록.
+     *
+     * <p><b>덮어쓰지 않고 행을 쌓는다</b> — 설정이 아니라 동의라서, 바꿨다고 이전 기록을
+     * 지우면 그 기간에 무엇에 동의했는지 답할 수 없다.
+     *
+     * @param terms 동의한 안내 문구. 문구가 미확정이라 지금은 {@code null}로 들어온다
+     */
+    @Transactional
+    public ApproverPreference choosePrimaryApprover(StudentEnrollment enrollment,
+                                                    ApproverType preferred,
+                                                    com.dlab.domain.appconfig.entity.Terms terms) {
+        if (preferred != ApproverType.PARENT && preferred != ApproverType.TEACHER) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "우선 승인자는 학부모 또는 직원만 선택할 수 있습니다.");
+        }
+        ApproverPreference saved = preferenceRepository.save(
+                new ApproverPreference(enrollment, preferred, Instant.now(clock), terms));
+
+        log.info("우선 승인자 선택: enrollmentId={}, 선택={}", enrollment.getId(), preferred);
+        return saved;
+    }
+
+    /** 현재 우선 승인자 선택값. 없으면 아직 안 골랐다는 뜻이다. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<ApproverPreference> findPrimaryApprover(Long enrollmentId) {
+        return preferenceRepository.findCurrent(enrollmentId);
+    }
+
+    /**
+     * 자동 재승인 요청 — <b>1회만</b>.
+     *
+     * <p>학부모가 타임아웃까지 응답하지 않은 건에 한 번 더 알린다.
+     * {@code reminderSentAt}이 곧 "보냈다"는 표시라 두 번 돌아도 두 번 나가지 않는다.
+     *
+     * @return 실제로 보낸 건수
+     */
+    @Transactional
+    public int sendReminders() {
+        Instant now = Instant.now(clock);
+        List<ApprovalRequest> targets = approvalRequestRepository.findReminderTargets(now);
+
+        for (ApprovalRequest request : targets) {
+            request.markReminderSent(now);
+            notifyAll(NotificationEvent.APPROVAL_REMINDER, request, reminderVariables(request));
+        }
+        if (!targets.isEmpty()) {
+            log.info("승인 자동 재요청 발송: {}건", targets.size());
+        }
+        return targets.size();
+    }
+
+    /**
+     * 직원 이양 — 재요청 후에도 무응답인 건.
+     *
+     * <p><b>담당선생님이 원래 타임아웃 후에도 승인할 수 있었다.</b> 여기서 바뀌는 건
+     * 권한이 아니라 <b>"이제 당신 차례"라고 알리는 것</b>이다 — 알림이 없으면 담당선생님은
+     * 대기 목록을 직접 열어보기 전까지 모른다.
+     *
+     * @return 이양 처리된 건수
+     */
+    @Transactional
+    public int handOverToStaff() {
+        Instant now = Instant.now(clock);
+        List<ApprovalRequest> handed = approvalRequestRepository.findHandoverCandidates(now).stream()
+                .filter(r -> r.needsHandover(now))
+                .toList();
+
+        for (ApprovalRequest request : handed) {
+            request.markHandedOver(now);
+
+            Teacher target = request.getEscalationTeacher();
+            if (target == null) {
+                // 반 미배정이거나 담임 미지정. 넘길 사람이 없으면 요청은 계속 대기한다
+                log.warn("이양할 담당선생님이 없다: requestId={}", request.getId());
+                continue;
+            }
+            accountRepository.findByTeacherId(target.getId()).ifPresent(account ->
+                    notify(NotificationEvent.APPROVAL_HANDED_OVER, account, request,
+                            reminderVariables(request)));
+            notifyAll(NotificationEvent.APPROVAL_HANDED_OVER, request, reminderVariables(request));
+        }
+        if (!handed.isEmpty()) {
+            log.info("승인 직원 이양: {}건", handed.size());
+        }
+        return handed.size();
+    }
+
+    private Map<String, String> reminderVariables(ApprovalRequest request) {
+        Map<String, String> variables = new LinkedHashMap<>();
+        variables.put("requestedAt", TIME_FORMAT.format(request.getRequestedAt()));
+        variables.put("timeoutMinutes", String.valueOf(request.getTimeoutMinutes()));
+        return variables;
     }
 
     /**
@@ -229,6 +346,7 @@ public class ApprovalService {
             case PARENT_IN_TIME -> NotificationEvent.APPROVAL_APPROVED_BY_PARENT;
             case STAFF_AFTER_TIMEOUT -> NotificationEvent.APPROVAL_APPROVED_AFTER_TIMEOUT;
             case STAFF_BEFORE_TIMEOUT -> NotificationEvent.APPROVAL_APPROVED_BEFORE_TIMEOUT;
+            case STAFF_PRIMARY -> NotificationEvent.APPROVAL_APPROVED_BY_STAFF_PRIMARY;
         };
         notifyAll(event, request, resolvedVariables(request));
     }
