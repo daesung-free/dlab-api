@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -122,6 +123,54 @@ public class AttendanceQueryService {
      * 상점/벌점을 구분한다 — 절댓값으로 바꾸면 상쇄가 사라진다.
      */
     @Transactional(readOnly = true)
+    /**
+     * 기간 집계 — 순공시간 합계 · 출석률 · 확정 일수.
+     *
+     * <p><b>앱 홈과 관리자 대시보드가 같은 값을 봐야 한다.</b> 계산이 표현 계층에 있으면
+     * 화면마다 조금씩 갈리는데, 출석률은 학생·학부모가 직접 보는 숫자라
+     * 두 화면이 다른 값을 내면 신뢰가 깨진다.
+     */
+    public PeriodSummary summarize(Long enrollmentId, LocalDate from, LocalDate to) {
+        return summarize(daily(enrollmentId, from, to));
+    }
+
+    /** 이미 뽑아둔 일자 목록으로 집계한다 — 같은 구간을 두 번 조회하지 않게. */
+    public PeriodSummary summarize(List<DailySummary> days) {
+        int studyMinutes = days.stream()
+                .map(DailySummary::studyMinutes)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+
+        List<DailyStatus> confirmed = days.stream()
+                .map(DailySummary::finalStatus)
+                .filter(Objects::nonNull)
+                .toList();
+
+        Integer rate = null;
+        if (!confirmed.isEmpty()) {
+            long present = confirmed.stream().filter(s -> s != DailyStatus.ABSENT).count();
+            rate = (int) Math.round(present * 100.0 / confirmed.size());
+        }
+        return new PeriodSummary(studyMinutes, rate, confirmed.size());
+    }
+
+    /**
+     * 기간 집계 결과.
+     *
+     * <p><b>확정된 날만 센다.</b> 순공은 다음날 새벽 배치가 계산하므로 오늘 몫을 0으로
+     * 채우면 "오늘 하나도 안 했다"로 읽혀 어제까지의 합보다 작아 보인다. 출석률도
+     * 미확정인 오늘을 분모에 넣으면 매일 아침 떨어졌다가 새벽에 회복되는 것처럼 보인다.
+     *
+     * <p><b>지각·조퇴는 출석으로 센다</b> — 결석만 결석이다. 둘까지 빼면 출석률이
+     * 사실상 "무지각률"이 되는데 화면 이름과 다른 값이 나온다.
+     *
+     * @param attendanceRate 확정된 날이 하나도 없으면 {@code null}. 0%로 내리면
+     *                       아무 일도 없었는데 결석한 것처럼 보인다
+     */
+    public record PeriodSummary(int studyMinutes, Integer attendanceRate, int confirmedDays) {
+    }
+
     public PenaltySummary penalties(Long enrollmentId) {
         return new PenaltySummary(
                 penaltyPointRepository.sumPointsByEnrollment(enrollmentId),
