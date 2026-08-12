@@ -28,6 +28,7 @@ public class FirewallRequestService {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final AppScopeResolver scopeResolver;
     private final ApprovalService approvalService;
+    private final FirewallAdminService firewallAdminService;
 
     /**
      * 로그인한 학생 본인의 신청.
@@ -50,6 +51,13 @@ public class FirewallRequestService {
 
         StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.STUDENT_NOT_FOUND));
+
+        // ★ 제재를 승인 큐보다 먼저 본다. 막힌 학생의 신청이 큐까지 올라가면
+        //   학부모가 승인했는데 거절되는 상황이 생긴다
+        firewallAdminService.activeRestriction(enrollmentId).ifPresent(restriction -> {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "위반 적발로 해제 신청이 제한된 상태입니다.");
+        });
 
         ApprovalRequest approval = approvalService.create(enrollment, RequestType.FIREWALL_UNLOCK);
 
