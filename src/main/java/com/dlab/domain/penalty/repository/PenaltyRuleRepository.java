@@ -38,4 +38,7 @@ public interface PenaltyRuleRepository extends JpaRepository<PenaltyRule, Long> 
               AND r.year = :year
             """)
     List<PenaltyRule> findAllOfYear(@Param("academyId") Long academyId, @Param("year") short year);
+
+    /** 이 항목을 쓰는 규칙. 항목 삭제 전에 확인한다 — 지우면 규칙이 없는 항목을 가리킨다. */
+    List<PenaltyRule> findByPenaltyItemIdAndDeletedFalse(Long penaltyItemId);
 }
