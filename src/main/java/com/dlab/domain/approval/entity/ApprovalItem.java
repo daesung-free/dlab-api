@@ -61,6 +61,20 @@ public class ApprovalItem extends BaseEntity {
         this.escalationApproverType = escalationApproverType;
     }
 
+    /**
+     * 정책 변경.
+     *
+     * <p><b>이미 대기중인 신청에는 소급되지 않는다</b> — {@link ApprovalRequest}가 생성
+     * 시점에 타임아웃을 복사해 갖는다. 학부모가 10분 안내를 받았는데 정책이 5분으로
+     * 바뀌었다고 이미 지난 것으로 처리되면 안 된다.
+     */
+    public void changePolicy(ApproverType approverType, Short timeoutMinutes,
+                             ApproverType escalationApproverType) {
+        this.approverType = approverType;
+        this.timeoutMinutes = timeoutMinutes;
+        this.escalationApproverType = escalationApproverType;
+    }
+
     public boolean hasEscalation() {
         return timeoutMinutes != null && escalationApproverType != null;
     }

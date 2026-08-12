@@ -65,7 +65,7 @@ public class ApprovalService {
         short year = enrollment.getYear();
 
         ApprovalItem item = approvalItemRepository
-                .findByAcademyIdAndYearAndRequestType(academy.getId(), year, requestType)
+                .findByAcademyIdAndYearAndRequestTypeAndDeletedFalse(academy.getId(), year, requestType)
                 .orElseThrow(() -> new BusinessException(ErrorCode.APPROVAL_ITEM_NOT_FOUND,
                         "승인 정책이 없습니다: " + requestType));
 
