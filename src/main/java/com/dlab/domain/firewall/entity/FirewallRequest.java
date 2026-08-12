@@ -60,6 +60,13 @@ public class FirewallRequest extends BaseEntity {
     @Column(name = "zyxel_site_id", length = 32)
     private String zyxelSiteId;
 
+    /**
+     * 해제 상태. <b>승인 상태와 별개다</b> — 승인됐어도 시간이 지나면 닫혀야 한다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "unlock_status", nullable = false, length = 20)
+    private UnlockStatus unlockStatus = UnlockStatus.WAITING;
+
     public FirewallRequest(Academy academy, StudentEnrollment enrollment,
                            ApprovalRequest approvalRequest, short requestedMinutes, String reason) {
         this.academy = academy;
@@ -73,5 +80,19 @@ public class FirewallRequest extends BaseEntity {
     public void activate(Instant startAt) {
         this.unlockStartAt = startAt;
         this.unlockEndAt = startAt.plusSeconds(requestedMinutes * 60L);
+        this.unlockStatus = UnlockStatus.ACTIVE;
+    }
+
+    /** 만료 차단 완료. 스케줄러가 Nebula 차단을 보낸 뒤 호출한다. */
+    public void expire() {
+        this.unlockStatus = UnlockStatus.EXPIRED;
+    }
+
+    public void cancel() {
+        this.unlockStatus = UnlockStatus.CANCELED;
+    }
+
+    public boolean isActive() {
+        return unlockStatus == UnlockStatus.ACTIVE;
     }
 }
