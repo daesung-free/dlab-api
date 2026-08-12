@@ -71,6 +71,14 @@ public class PenaltyRule extends BaseEntity {
         this.active = false;
     }
 
+    /** 규칙 수정. 트리거·조건·연결 항목을 바꾼다. */
+    public void change(PenaltyTriggerType triggerType, String triggerCondition,
+                       PenaltyItem penaltyItem) {
+        this.triggerType = triggerType;
+        this.triggerCondition = triggerCondition;
+        this.penaltyItem = penaltyItem;
+    }
+
     public void activate() {
         this.active = true;
     }

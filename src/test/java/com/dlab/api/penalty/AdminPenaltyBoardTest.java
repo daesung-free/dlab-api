@@ -103,8 +103,9 @@ class AdminPenaltyBoardTest {
         penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
         em.flush();
 
+        // 벌점은 음수로 저장된다 — 항목에 2로 넣어도 -2다. 통계가 부호로 상점·벌점을 가른다
         assertThat(board().rows()).first()
-                .satisfies(p -> assertThat(p.getPoints()).isEqualTo(2));
+                .satisfies(p -> assertThat(p.getPoints()).isEqualTo(-2));
     }
 
     @Test
