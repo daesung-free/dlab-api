@@ -41,7 +41,11 @@ public class PenaltyRuleEngine {
      * <p>부모 트랜잭션과 분리한다({@code REQUIRES_NEW}) — 상벌점 부여가 실패해도
      * 출결 기록 자체는 남아야 한다. 태깅이 롤백되면 학생이 등원한 사실이 사라진다.
      *
-     * @param condition 트리거 조건값. 출결이면 {@code att_gn}(S/T/A/D/N/C/R), 루틴이면 결과 상태
+     * @param condition 트리거 조건값.
+     *                  <b>출결</b>이면 {@code att_gn}(S/T/A/D/N/C/R) 또는 {@code ABSENT} —
+     *                  결석은 태깅 이벤트가 아니라 코드가 없어서 확정 배치가 이 값으로 건다.
+     *                  <b>루틴</b>이면 결과 상태({@code NOT_SUBMITTED}·{@code ABSENT} 등),
+     *                  <b>정기일정</b>이면 {@code NOT_RECOGNIZED}
      * @param occurredOn 발생 일자. 멱등키 구성에 쓴다 — 같은 날 같은 규칙은 한 번만 부여된다
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)

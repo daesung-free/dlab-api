@@ -7,6 +7,8 @@ import com.dlab.domain.attendance.entity.AbsenceReason;
 import com.dlab.domain.attendance.entity.AbsenceReasonType;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceSource;
+import com.dlab.domain.penalty.entity.PenaltyTriggerType;
+import com.dlab.domain.penalty.service.PenaltyRuleEngine;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.attendance.repository.AbsenceReasonRepository;
 import com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository;
@@ -71,6 +73,7 @@ public class KioskAttendanceService {
     private final AbsenceReasonRepository absenceReasonRepository;
     private final PeriodMasterRepository periodMasterRepository;
     private final AttendancePolicy attendancePolicy;
+    private final PenaltyRuleEngine penaltyRuleEngine;
     private final Clock clock;
 
     /**
@@ -120,6 +123,13 @@ public class KioskAttendanceService {
         taggingLogRepository.save(new AttendanceTaggingLog(
                 enrollment.getAcademy(), enrollment, decision.event(),
                 AttendanceSource.KIOSK_NFC, at.atZone(clock.getZone()).toInstant(), date));
+
+        // ★ 자동 상벌점은 원장에 남은 이벤트 기준이다(decision.event()) — 화면 표시값이
+        //   아니다. 사유지각은 화면엔 등원으로 뜨지만 원장은 지각이고, 벌점은 원장을 따른다.
+        //   엔진이 REQUIRES_NEW라 부여가 실패해도 태깅은 남는다 —
+        //   롤백되면 학생이 등원한 사실 자체가 사라진다
+        penaltyRuleEngine.apply(enrollment, PenaltyTriggerType.ATTENDANCE,
+                decision.event().getCode(), date);
 
         return TagResult.accepted(enrollment, decision.reportedAs());
     }

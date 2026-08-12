@@ -5,6 +5,8 @@ import com.dlab.domain.attendance.entity.AbsenceReason;
 import com.dlab.domain.attendance.entity.AttendanceDailyStatus;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
+import com.dlab.domain.penalty.entity.PenaltyTriggerType;
+import com.dlab.domain.penalty.service.PenaltyRuleEngine;
 import com.dlab.domain.attendance.entity.DailyStatus;
 import com.dlab.domain.attendance.repository.AbsenceReasonRepository;
 import com.dlab.domain.attendance.repository.AttendanceDailyStatusRepository;
@@ -57,6 +59,15 @@ import org.springframework.transaction.annotation.Transactional;
 public class DailyAttendanceConfirmService {
 
     /** 등원으로 인정하는 이벤트. 이게 하나도 없으면 결석이다. */
+    /**
+     * 결석 조건값.
+     *
+     * <p>DSA {@code att_gn}에는 결석 코드가 없다 — 결석은 <b>태깅 이벤트가 아니라</b>
+     * "안 찍은 것"이라 원장에 남을 수 없기 때문이다. 그래서 규칙 조건값으로만 쓰는
+     * 값을 하나 둔다. 관리자 화면은 이 값을 조건으로 넣는다.
+     */
+    public static final String ABSENT_CONDITION = "ABSENT";
+
     private static final Set<AttendanceEventType> ARRIVAL = Set.of(
             AttendanceEventType.CHECK_IN, AttendanceEventType.LATE);
 
@@ -66,6 +77,7 @@ public class DailyAttendanceConfirmService {
     private final AbsenceReasonRepository absenceReasonRepository;
     private final PeriodMasterRepository periodMasterRepository;
     private final StudyTimeCalculator studyTimeCalculator;
+    private final PenaltyRuleEngine penaltyRuleEngine;
     private final Clock clock;
 
     /**
@@ -164,6 +176,14 @@ public class DailyAttendanceConfirmService {
         // 순공시간은 정정분에도 갱신한다 — 태깅 보정으로 원장이 늘었을 수 있고,
         // 이건 관리자가 고른 값이 아니라 원장에서 파생되는 값이다
         confirmed.recordStudyMinutes(studyMinutes, now);
+
+        // ★ 배치는 결석만 부여한다. 지각·조퇴는 태깅 시점에 이미 부여됐고,
+        //   결석은 "태깅이 없었다"라 태깅 경로가 알 수 없는 유일한 상태다.
+        //   멱등키가 (학생:일자:규칙)이라 배치를 다시 돌려도 늘지 않는다
+        if (status == DailyStatus.ABSENT && !excused) {
+            penaltyRuleEngine.apply(enrollment, PenaltyTriggerType.ATTENDANCE,
+                    ABSENT_CONDITION, date);
+        }
     }
 
     /**

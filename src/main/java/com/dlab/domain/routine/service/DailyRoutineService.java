@@ -5,6 +5,8 @@ import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.routine.entity.DailyRoutine;
 import com.dlab.domain.routine.entity.DailyRoutineResult;
+import com.dlab.domain.penalty.entity.PenaltyTriggerType;
+import com.dlab.domain.penalty.service.PenaltyRuleEngine;
 import com.dlab.domain.routine.entity.RoutineResultStatus;
 import com.dlab.domain.routine.repository.DailyRoutineRepository;
 import com.dlab.domain.routine.repository.DailyRoutineResultRepository;
@@ -46,6 +48,7 @@ public class DailyRoutineService {
     private final AcademyRepository academyRepository;
     private final ClassMasterRepository classMasterRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final PenaltyRuleEngine penaltyRuleEngine;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final Clock clock;
 
@@ -201,6 +204,14 @@ public class DailyRoutineService {
                 .findByRoutineIdAndResultDateAndStatusAndDeletedFalse(
                         routineId, date, RoutineResultStatus.REVIEWED);
         reviewed.forEach(DailyRoutineResult::publish);
+
+        // ★ 자동 상벌점은 공개 시점에 건다 — 검수 중인 결과로 벌점을 주면
+        //   교사가 점수를 고치는 동안 학생에게 먼저 벌점이 보인다.
+        //   조건값은 결과 상태(NOT_SUBMITTED·ABSENT 등)이고, 멱등키가
+        //   (학생:일자:규칙)이라 다시 공개해도 늘지 않는다
+        reviewed.forEach(result -> penaltyRuleEngine.apply(result.getEnrollment(),
+                PenaltyTriggerType.DAILY_ROUTINE, result.getStatus().name(), date));
+
         log.info("데일리루틴 일괄 공개: routineId={}, date={}, {}건", routineId, date, reviewed.size());
         return reviewed.size();
     }
