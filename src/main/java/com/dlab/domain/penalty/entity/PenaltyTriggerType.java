@@ -13,5 +13,13 @@ public enum PenaltyTriggerType {
     ATTENDANCE,
 
     /** 데일리 루틴 결과(미제출·결시 등). */
-    DAILY_ROUTINE
+    DAILY_ROUTINE,
+
+    /**
+     * 정기일정 미인정 (F-4.1-7).
+     *
+     * <p>등록 시각과 실제 출입이 30분 이상 어긋난 경우다. 조건값은
+     * {@code NOT_RECOGNIZED} 하나뿐이라 규칙에서 조건을 비워두면 전부 걸린다.
+     */
+    REGULAR_SCHEDULE
 }
