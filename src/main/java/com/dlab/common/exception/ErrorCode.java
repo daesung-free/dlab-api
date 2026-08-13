@@ -96,6 +96,17 @@ public enum ErrorCode {
     QNA_SLOT_PAST(HttpStatus.BAD_REQUEST, "이미 지난 시간입니다."),
     QNA_ALREADY_RESERVED(HttpStatus.CONFLICT, "이미 예약한 시간입니다."),
     QNA_ALREADY_CANCELED(HttpStatus.CONFLICT, "이미 취소된 예약입니다."),
+    // 상담 예약 (F-4.11-4, 0803 답변서)
+    CONSULT_SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "상담 일정을 찾을 수 없습니다."),
+    CONSULT_RESERVATION_NOT_FOUND(HttpStatus.NOT_FOUND, "상담 예약을 찾을 수 없습니다."),
+    CONSULT_SLOT_NOT_OPEN(HttpStatus.BAD_REQUEST, "아직 예약을 받지 않는 일정입니다."),
+    CONSULT_SLOT_FULL(HttpStatus.CONFLICT, "정원이 찼습니다."),
+    CONSULT_SLOT_PAST(HttpStatus.BAD_REQUEST, "이미 지난 시간입니다."),
+    CONSULT_ALREADY_RESERVED(HttpStatus.CONFLICT, "이미 예약한 시간입니다."),
+    CONSULT_ALREADY_CANCELED(HttpStatus.CONFLICT, "이미 취소된 예약입니다."),
+    /** 반 배정이 없거나 그 반에 담임이 지정되지 않았다 — 상담을 잡을 대상이 없다. */
+    CONSULT_NO_HOMEROOM(HttpStatus.BAD_REQUEST, "담당선생님이 배정되지 않아 상담을 예약할 수 없습니다."),
+    CONSULT_NOT_MY_HOMEROOM(HttpStatus.FORBIDDEN, "담당선생님의 일정만 예약할 수 있습니다."),
     // 데일리 루틴 (F-4.11-1 · A-11)
     ROUTINE_NOT_FOUND(HttpStatus.NOT_FOUND, "루틴을 찾을 수 없습니다."),
     ROUTINE_TARGET_MONTH_NOT_EMPTY(HttpStatus.CONFLICT,
