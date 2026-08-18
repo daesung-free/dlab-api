@@ -82,6 +82,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/app/app-config").permitAll()
                         // 외부 시스템 수신(키오스크 제외)은 자체 서명검증을 한다
                         .requestMatchers("/api/v1/webhook/**").permitAll()
+                        // ★ 키오스크 신규 구획. 우리 JWT가 아니라 DSA 호환 토큰으로 인증한다 —
+                        //   키오스크가 이미 그 토큰을 갖고 있고, JWT를 쓰게 하면 키오스크에
+                        //   로그인 흐름을 새로 만들어야 한다. 검증은 컨트롤러가
+                        //   DsaTokenService.resolveAcademyId로 직접 하므로 무인증이 아니다
+                        .requestMatchers("/api/v1/kiosk/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new JwtAuthenticationFilter(jwtProvider, tokenBlacklist),

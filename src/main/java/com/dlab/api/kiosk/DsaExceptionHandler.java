@@ -10,15 +10,33 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 /**
  * DSA 호환 구획 전용 예외 핸들러.
  *
- * <p>{@code basePackages}로 이 패키지에만 적용한다 — 범위를 안 좁히면
- * {@code GlobalExceptionHandler}와 충돌해서 어느 쪽이 잡을지가 스캔 순서에 좌우된다.
+ * <p>범위를 안 좁히면 {@code GlobalExceptionHandler}와 충돌해서 어느 쪽이 잡을지가
+ * 스캔 순서에 좌우된다.
  *
  * <p><b>실패해도 HTTP 200으로 내려간다.</b> 키오스크는 상태코드를 안 보고
  * 본문의 {@code code}로만 판정한다. 4xx/5xx를 주면 클라이언트가 본문을 파싱하기 전에
  * 예외로 처리해버려서 {@code code 113}(선택 요구) 같은 정상 분기가 통째로 유실된다.
+ *
+ * <h2>★ 하위 패키지를 하나씩 적는 이유</h2>
+ * {@code com.dlab.api.kiosk} 통째로 잡으면 <b>DSA 호환이 아닌 신규 구획까지 덮는다</b>
+ * ({@code seatleave} 등 {@code /api/v1/kiosk/**}). 그러면 신규 엔드포인트의 오류가
+ * HTTP 200 + {@code code} 형식으로 나가 <b>정상 응답과 구분되지 않는다.</b>
+ *
+ * <p><b>새 DSA 컨트롤러를 다른 하위 패키지에 만들면 여기에 추가해야 한다.</b>
+ * 빠뜨리면 그 엔드포인트만 우리 형식으로 응답해 키오스크 파싱이 깨진다 —
+ * {@code DsaHandlerCoverageTest}가 이 누락을 잡는다.
  */
 @Slf4j
-@RestControllerAdvice(basePackages = "com.dlab.api.kiosk")
+@RestControllerAdvice(basePackages = {
+        "com.dlab.api.kiosk.attendance",
+        "com.dlab.api.kiosk.auth",
+        "com.dlab.api.kiosk.meal",
+        "com.dlab.api.kiosk.penalty",
+        "com.dlab.api.kiosk.receipt",
+        "com.dlab.api.kiosk.seat",
+        "com.dlab.api.kiosk.stats",
+        "com.dlab.api.kiosk.student"
+})
 public class DsaExceptionHandler {
 
     @ExceptionHandler(DsaApiException.class)
