@@ -32,6 +32,19 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
     Optional<StudentEnrollment> findCurrentByRfidNo(String rfidNo);
 
     /**
+     * 학번으로 현재 등록 건.
+     *
+     * <p>학번은 <b>매년 초기화</b>되므로 현재 등록 건({@code current})만 봐야 한다 —
+     * 조건을 빼면 작년 학생이 같은 학번으로 걸린다.
+     */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            WHERE e.studentNo = :studentNo AND e.current = true AND e.deleted = false
+            """)
+    Optional<StudentEnrollment> findCurrentByStudentNo(String studentNo);
+
+    /**
      * 해당 지점·연도의 학번 최대 일련번호. 채번의 다음 값 계산에 쓴다.
      *
      * <p>학번 형식이 {@code yyyy-NNNN}이라 뒤 4자리만 잘라 숫자로 본다.
