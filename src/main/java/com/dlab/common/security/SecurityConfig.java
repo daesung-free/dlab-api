@@ -100,6 +100,16 @@ public class SecurityConfig {
     /**
      * 그 외 경로(액추에이터·정적자원·문서). 기본 잠금을 풀어두지 않으면
      * springdoc 붙일 때 문서 페이지까지 막힌다.
+     *
+     * <h2>★ 액추에이터는 예외다 — health만 연다</h2>
+     * 이 체인이 {@code permitAll}이라 <b>액추에이터가 그대로 인터넷에 노출된다.</b>
+     * 노출 목록({@code management.endpoints.web.exposure.include})으로도 막고 있지만,
+     * 설정 한 줄이 바뀌면 그대로 뚫리는 구조라 <b>여기서도 막는다</b> — 설정과 코드
+     * 양쪽이 같이 틀려야 열리게 한다.
+     *
+     * <p>{@code /actuator/health/kiosk}는 열어야 한다. 키오스크는 우리 장애를 알려주지
+     * 않으므로(그쪽 폴백이 가린다) <b>바깥 모니터가 주기적으로 찔러야</b> 하는데,
+     * 인증을 걸면 그 모니터에 자격증명을 심어야 한다.
      */
     @Bean
     @Order(3)
@@ -109,7 +119,12 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .authorizeHttpRequests(auth -> auth
+                        // 외부 모니터가 찔러볼 창구. 상세 노출 범위는 프로필이 정한다
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // env·beans·heapdump 등. 열리면 DB 접속정보까지 나간다
+                        .requestMatchers("/actuator/**").denyAll()
+                        .anyRequest().permitAll())
                 .build();
     }
 
