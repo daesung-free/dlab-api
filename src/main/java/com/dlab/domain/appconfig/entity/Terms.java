@@ -24,9 +24,25 @@ public class Terms extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** SERVICE 이용약관 / PRIVACY 개인정보 / MARKETING 광고성 정보 수신 등 */
+    /**
+     * SERVICE 이용약관 / PRIVACY 개인정보 / MARKETING 광고성 정보 수신 /
+     * MEAL_THIRD_PARTY 급식업체 제3자 제공 / SCHOLARSHIP_* 장학 동의 등.
+     *
+     * <p><b>enum이 아닌 이유</b> — 장학 동의서만 해도 정규시즌·반수시즌·환급반 셋이고
+     * 앞으로 더 늘 수 있다. 문자열이라 <b>관리자 화면에서 행만 넣으면</b> 된다.
+     */
     @Column(nullable = false, length = 30)
     private String code;
+
+    /**
+     * 지점 전용 약관이면 그 지점. {@code null}이면 전 지점 공통이다.
+     *
+     * <p>장학 동의서 문구가 {@code DLab [지점]}으로 되어 있고 환급반은 지점명이 박혀 있어,
+     * 같은 {@code code}라도 지점마다 문구가 갈릴 수 있다. <b>지점 것이 공통을 이긴다.</b>
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "academy_id")
+    private com.dlab.domain.user.entity.Academy academy;
 
     @Column(nullable = false, length = 20)
     private String version;
@@ -47,6 +63,12 @@ public class Terms extends BaseEntity {
 
     public Terms(String code, String version, String title, String content,
                  boolean required, Instant effectiveAt) {
+        this(null, code, version, title, content, required, effectiveAt);
+    }
+
+    public Terms(com.dlab.domain.user.entity.Academy academy, String code, String version,
+                 String title, String content, boolean required, Instant effectiveAt) {
+        this.academy = academy;
         this.code = code;
         this.version = version;
         this.title = title;

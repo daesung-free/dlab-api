@@ -43,6 +43,7 @@ public class MealOrderService {
     private final MealOrderItemRepository itemRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final MealScheduleService scheduleService;
+    private final com.dlab.domain.appconfig.service.TermsService termsService;
     private final Clock clock;
 
     /**
@@ -53,6 +54,29 @@ public class MealOrderService {
      *
      * <p>이미 그 달 주문이 있으면 <b>항목만 더한다</b>. 주문을 또 만들면 결제가 쪼개진다.
      */
+    /**
+     * 앱에서 학생이 직접 신청 — <b>급식업체 제3자 제공 동의를 먼저 확인한다</b>.
+     *
+     * <p>동의서가 <i>"급식 신청 시에만 급식업체에 정보 제공"</i>이라, 동의 없이 신청을 받으면
+     * <b>제공 근거 없이 이름·좌석번호·연락처가 업체로 나간다.</b> 가입 때 미동의했더라도
+     * 여기서 동의하면 신청할 수 있으므로, 앱은 이 오류를 받으면 동의 화면을 띄우면 된다.
+     *
+     * <p><b>관리자 대행 신청({@link #apply})은 이 검사를 타지 않는다</b> — 서면으로 받은
+     * 동의를 관리자가 대신 반영하는 경우가 있어, 앱 동의가 없다고 막으면 그 업무가 멈춘다.
+     *
+     * <p><b>약관을 아직 등록하지 않았으면 막지 않는다</b>(문구가 미확정이다). 등록하는
+     * 순간부터 시행된다 — 자세한 것은 {@code TermsService.needsAgreement}.
+     */
+    @Transactional
+    public MealOrder applyByStudent(Long accountId, Long enrollmentId, YearMonth month,
+                                    List<MealSelection> selections) {
+        if (termsService.needsAgreement(accountId,
+                com.dlab.domain.appconfig.entity.TermsCode.MEAL_THIRD_PARTY)) {
+            throw new BusinessException(ErrorCode.MEAL_THIRD_PARTY_CONSENT_REQUIRED);
+        }
+        return apply(enrollmentId, month, selections);
+    }
+
     @Transactional
     public MealOrder apply(Long enrollmentId, YearMonth month, List<MealSelection> selections) {
         StudentEnrollment enrollment = requireEnrollment(enrollmentId);

@@ -58,9 +58,11 @@ public class AdminAppConfigController {
 
     // ── 약관 ─────────────────────────────────────────────────────
 
+    /** @param academyId 지정하면 그 지점 전용 약관까지 본다. 비우면 공통본만 */
     @GetMapping("/terms")
-    public ApiResponse<List<AdminTermsResponse>> terms() {
-        return ApiResponse.success(termsService.currentTerms().stream()
+    public ApiResponse<List<AdminTermsResponse>> terms(
+            @RequestParam(required = false) Long academyId) {
+        return ApiResponse.success(termsService.currentTerms(academyId).stream()
                 .map(AdminTermsResponse::from).toList());
     }
 
@@ -74,6 +76,7 @@ public class AdminAppConfigController {
     public ApiResponse<AdminTermsResponse> createTerms(
             @Valid @RequestBody AdminAppConfigRequests.CreateTerms request) {
         return ApiResponse.success(AdminTermsResponse.from(termsService.create(
+                request.academyId(),
                 request.code(), request.version(), request.title(), request.content(),
                 request.required() == null || request.required(), request.effectiveAt())));
     }
@@ -85,10 +88,12 @@ public class AdminAppConfigController {
                 .map(AgreementHistoryResponse::from).toList());
     }
 
-    public record AdminTermsResponse(Long id, String code, String version, String title,
-                                     boolean required, Instant effectiveAt) {
+    public record AdminTermsResponse(Long id, Long academyId, String code, String version,
+                                     String title, boolean required, Instant effectiveAt) {
         static AdminTermsResponse from(com.dlab.domain.appconfig.entity.Terms terms) {
-            return new AdminTermsResponse(terms.getId(), terms.getCode(), terms.getVersion(),
+            return new AdminTermsResponse(terms.getId(),
+                    terms.getAcademy() == null ? null : terms.getAcademy().getId(),
+                    terms.getCode(), terms.getVersion(),
                     terms.getTitle(), terms.isRequired(), terms.getEffectiveAt());
         }
     }

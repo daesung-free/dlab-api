@@ -133,6 +133,9 @@ public enum ErrorCode {
     MEAL_DEADLINE_PASSED(HttpStatus.CONFLICT, "신청·취소 마감이 지났습니다."),
     MEAL_ALREADY_APPLIED(HttpStatus.CONFLICT, "이미 신청한 끼니입니다."),
     MEAL_CLOSURE_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 급식 중단일입니다."),
+    /** 앱이 이 오류를 받으면 급식업체 제3자 제공 동의 화면을 띄운다. */
+    MEAL_THIRD_PARTY_CONSENT_REQUIRED(HttpStatus.BAD_REQUEST,
+            "급식업체 개인정보 제3자 제공에 동의해야 신청할 수 있습니다."),
 
     // 공지 (F-4.11-3)
     NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지를 찾을 수 없습니다."),

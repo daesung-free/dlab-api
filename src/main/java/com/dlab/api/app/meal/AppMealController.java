@@ -75,7 +75,9 @@ public class AppMealController {
         StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         YearMonth month = YearMonth.from(request.selections().get(0).date());
 
-        mealOrderService.apply(enrollment.getId(), month,
+        // 급식업체 제3자 제공 동의를 여기서 확인한다 — 동의가 없으면
+        // MEAL_THIRD_PARTY_CONSENT_REQUIRED가 나가고, 앱은 그때 동의 화면을 띄운다
+        mealOrderService.applyByStudent(me.accountId(), enrollment.getId(), month,
                 request.selections().stream()
                         .map(s -> new MealOrderService.MealSelection(s.date(), s.mealType()))
                         .toList());

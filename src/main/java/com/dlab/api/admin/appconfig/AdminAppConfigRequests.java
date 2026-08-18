@@ -31,6 +31,13 @@ public final class AdminAppConfigRequests {
     }
 
     public record CreateTerms(
+            /**
+             * 지점 전용 약관이면 지정한다. 비우면 전 지점 공통.
+             *
+             * <p>장학 동의서처럼 문구에 지점명이 들어가는 것이 있다 —
+             * 지점본이 있으면 같은 코드의 공통본을 대체한다.
+             */
+            Long academyId,
             @NotBlank(message = "약관 코드는 필수입니다.") @Size(max = 30) String code,
             @NotBlank(message = "버전은 필수입니다.") @Size(max = 20) String version,
             @NotBlank(message = "제목은 필수입니다.") @Size(max = 100) String title,
