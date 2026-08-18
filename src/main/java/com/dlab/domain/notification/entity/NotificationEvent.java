@@ -21,5 +21,9 @@ public enum NotificationEvent {
     APPROVAL_HANDED_OVER,
     /** 우선 승인자가 직원이라 직원이 승인함 — 학부모에겐 통지만 나간다 */
     APPROVAL_APPROVED_BY_STAFF_PRIMARY,
-    APPROVAL_REJECTED
+    APPROVAL_REJECTED,
+    /** 학생이 상담을 예약함 — 담임에게 (F-4.11-4 "선택한 일정에 알림 연동") */
+    CONSULT_RESERVED,
+    /** 상담 예약 취소 — 담임이 빈 자리를 알아야 그 시간을 다시 쓴다 */
+    CONSULT_CANCELED
 }
