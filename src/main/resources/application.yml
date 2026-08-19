@@ -46,3 +46,10 @@ management:
   endpoint:
     health:
       show-details: always
+      # ★ 그룹으로 고정한다. 컴포넌트 경로(/actuator/health/{이름})는 상세 노출 설정에
+      #   좌우돼서, 운영에서 루트 상세를 감추면 감시 창구까지 같이 사라진다.
+      #   그룹은 자기 show-details를 따로 가지므로 경로가 프로필과 무관하게 유지된다
+      group:
+        kiosk:
+          include: kioskCompat
+          show-details: always

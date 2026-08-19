@@ -1,0 +1,72 @@
+# ─────────────────────────────────────────────────────────────
+# 운영 프로필
+#
+# ★ 이 프로젝트는 dev/prod 서버를 따로 두지 않고 **같은 서버를 전환**한다(CLAUDE.md §3).
+#   그래서 이 파일은 "다른 서버의 설정"이 아니라 **전환 시점에 바뀌어야 하는 것들의 목록**이다.
+#   컷오버 체크리스트(§4)와 함께 본다.
+#
+# ★ 비밀값에 기본값을 두지 않는다. application.yml은 로컬 편의를 위해 기본값을 갖고 있는데
+#   (예: JWT_SECRET), 운영에서 그 값이 그대로 쓰이면 토큰을 누구나 위조할 수 있다.
+#   여기서 기본값 없이 다시 선언해 **환경변수가 없으면 기동이 실패**하게 한다 —
+#   조용히 약한 값으로 뜨는 것보다 안 뜨는 편이 낫다.
+# ─────────────────────────────────────────────────────────────
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate   # 스키마는 Flyway가 관리한다. 운영에서 JPA가 손대면 안 된다
+    show-sql: false        # SQL에 학생 식별자가 실려 로그에 남는다
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # ★ 반드시 false. 로컬은 true라 순서가 뒤집혀도 통과하는데(실제로 한 번 놓쳤다),
+    #   운영에서 켜두면 나중에 받은 과거 시각 마이그레이션이 뒤늦게 끼어들어
+    #   스키마가 다른 환경과 달라진다. 운영은 순차 배포라 켤 이유도 없다
+    out-of-order: false
+
+jwt:
+  # 기본값 없음 — 없으면 기동 실패한다
+  secret: ${JWT_SECRET}
+
+# ─────────────────────────────────────────────────────────────
+# 운영 감시
+#
+# ★ 키오스크는 우리 장애를 알려주지 않는다(그쪽 폴백이 가린다, CLAUDE.md §3).
+#   바깥에서 /actuator/health/kiosk 를 주기적으로 찔러야 한다.
+#
+# ★ 루트 health는 상세를 감춘다. DB·Redis 컴포넌트 상세에 접속 실패 사유·버전이 드러난다.
+#   반면 kiosk 그룹은 상세가 곧 목적이라(에러율·마지막 호출시각) 열어둔다 —
+#   여기 드러나는 것은 이미 공개된 키오스크 엔드포인트 경로뿐이다.
+#
+# ⚠️ 그래도 인터넷에 그대로 두지 말 것. 접근 자체를 보안그룹·VPC로 좁히는 것이 정석이고,
+#   아래 설정은 "열려 있어도 개인정보는 안 나간다" 수준의 방어다.
+# ─────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health   # env·beans·heapdump는 절대 열지 않는다
+  endpoint:
+    health:
+      show-details: never
+      group:
+        kiosk:
+          include: kioskCompat
+          show-details: always
+
+logging:
+  level:
+    root: INFO
+    com.dlab: INFO
+    # 쿼리 로그에 학생 식별자가 실린다
+    org.hibernate.SQL: WARN
