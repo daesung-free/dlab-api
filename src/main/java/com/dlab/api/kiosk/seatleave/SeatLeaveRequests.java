@@ -45,6 +45,12 @@ public final class SeatLeaveRequests {
             @Size(max = 20) String studentNo,
             @Size(max = 20) String areaCd,
             @Size(max = 20) String seatCd,
+            /**
+             * {@code LEAVE} / {@code RETURN} / {@code AUTO_CLOSE}.
+             *
+             * <p><b>00:30 일괄 마감은 {@code AUTO_CLOSE}로 보낸다.</b> {@code RETURN}으로
+             * 보내면 장시간 미복귀가 복귀로 닫혀 감지가 무의미해진다.
+             */
             @NotNull SeatLeaveEventType eventType,
             @NotNull Instant occurredAt) {}
 }

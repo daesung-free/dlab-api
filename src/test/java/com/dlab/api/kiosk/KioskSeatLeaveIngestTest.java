@@ -194,6 +194,55 @@ class KioskSeatLeaveIngestTest {
         assertThat(noSourceId).isNotBlank();   // 아래 검증에서 형식 참고용
     }
 
+    // ── 자동 마감 ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★ 00:30 일괄 마감은 AUTO_CLOSE로 들어온다 — RETURN으로 받으면 미복귀가 복귀로 닫힌다")
+    void autoCloseIsDistinctFromReturn() throws Exception {
+        send(event(1, "ABC001", "LEAVE"), event(2, "ABC001", "AUTO_CLOSE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[1].status").value("ACCEPTED"));
+        em.flush();
+
+        var logs = logRepository.findByEnrollment(minji.getId(),
+                now.minusSeconds(60), now.plusSeconds(60));
+
+        assertThat(logs).extracting(l -> l.getEventType().name())
+                .containsExactly("LEAVE", "AUTO_CLOSE");
+
+        // 이탈을 닫기는 하지만 실제 복귀는 아니다 — 판정하는 쪽이 이 둘을 갈라 본다
+        var autoClose = logs.get(1).getEventType();
+        assertThat(autoClose.closesLeave()).isTrue();
+        assertThat(autoClose.isRealReturn()).isFalse();
+    }
+
+    @Test
+    @DisplayName("★ 다른 지점 학생 카드는 연결하지 않는다 — 행 하나가 두 지점에 걸치면 집계가 어긋난다")
+    void crossAcademyCardIsNotLinked() throws Exception {
+        // 일산 학생. 분당 토큰으로 들어온다(키오스크가 배치를 지점별로 안 나눈 상황)
+        Academy ilsan = new Academy("32", "일산", LocalTime.of(9, 0));
+        em.persist(ilsan);
+        Student other = new Student("DL-2026-0500", "박서준", "010-3333-4444");
+        em.persist(other);
+        em.persist(new StudentEnrollment(other, ilsan, (short) 2026,
+                "2026-0002", "XYZ999", GradeType.HIGH3));
+        em.flush();
+
+        send(event(1, "XYZ999", "LEAVE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].status").value("ACCEPTED_UNRESOLVED"));
+        em.flush();
+
+        // 기록은 남되(원본 식별자 보관) 잘못된 학생에 붙지는 않는다
+        assertThat(logRepository.findUnresolved(bundang.getId()))
+                .singleElement()
+                .satisfies(l -> {
+                    assertThat(l.getEnrollment()).isNull();
+                    assertThat(l.getRfidNo()).isEqualTo("XYZ999");
+                    assertThat(l.getAcademy().getId()).isEqualTo(bundang.getId());
+                });
+    }
+
     // ── 인증 ─────────────────────────────────────────────────
 
     @Test
