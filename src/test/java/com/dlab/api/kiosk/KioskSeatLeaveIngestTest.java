@@ -194,6 +194,28 @@ class KioskSeatLeaveIngestTest {
         assertThat(noSourceId).isNotBlank();   // 아래 검증에서 형식 참고용
     }
 
+    // ── 자동 마감 ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★ 00:30 일괄 마감은 AUTO_CLOSE로 들어온다 — RETURN으로 받으면 미복귀가 복귀로 닫힌다")
+    void autoCloseIsDistinctFromReturn() throws Exception {
+        send(event(1, "ABC001", "LEAVE"), event(2, "ABC001", "AUTO_CLOSE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[1].status").value("ACCEPTED"));
+        em.flush();
+
+        var logs = logRepository.findByEnrollment(minji.getId(),
+                now.minusSeconds(60), now.plusSeconds(60));
+
+        assertThat(logs).extracting(l -> l.getEventType().name())
+                .containsExactly("LEAVE", "AUTO_CLOSE");
+
+        // 이탈을 닫기는 하지만 실제 복귀는 아니다 — 판정하는 쪽이 이 둘을 갈라 본다
+        var autoClose = logs.get(1).getEventType();
+        assertThat(autoClose.closesLeave()).isTrue();
+        assertThat(autoClose.isRealReturn()).isFalse();
+    }
+
     // ── 인증 ─────────────────────────────────────────────────
 
     @Test
