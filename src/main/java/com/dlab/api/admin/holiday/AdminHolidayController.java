@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 공휴일 관리 (기초설정).
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
  * "학과·전형·반·강의실·사물함·장학"이고 공휴일이 빠져 있다.
  * 급식 가능일 계산이 이 데이터에 의존하므로 수기 입력 경로로 추가한 것이다.
  */
+@Tag(name = "관리자 · 공휴일")
 @RestController
 @RequestMapping("/api/v1/admin/holidays")
 @RequiredArgsConstructor

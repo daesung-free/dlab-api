@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 — 설문 (A-14).
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><b>익명 설문은 응답 내용을 다시 볼 수 없다.</b> 응답 행에 응답자를 남기지 않기
  * 때문이고, 그게 익명의 정의다. 앱은 제출 완료 표시까지만 한다.
  */
+@Tag(name = "앱 · 설문 (A-14)")
 @RestController
 @RequestMapping("/api/v1/app/surveys")
 @RequiredArgsConstructor

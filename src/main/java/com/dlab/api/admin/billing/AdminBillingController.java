@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 청구·수납 (F-4.8-1) — <b>최소분</b>.
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
  *
  * <p>수납은 <b>수기 기록</b>이다. PG 연동은 없다.
  */
+@Tag(name = "관리자 · 청구·수납 (F-4.8)")
 @RestController
 @RequestMapping("/api/v1/admin/billings")
 @RequiredArgsConstructor

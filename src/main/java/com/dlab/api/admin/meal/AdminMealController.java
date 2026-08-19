@@ -30,6 +30,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 급식 관리 (F-4.5).
@@ -39,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><b>배식 체크 탭은 없다</b> — 식사체크 방식(I-18)이 미확정이고,
  * QR 1회용 토큰이 앱 동적 QR(D-2)과 같은 건이다.
  */
+@Tag(name = "관리자 · 급식 (F-4.5)")
 @RestController
 @RequestMapping("/api/v1/admin/meals")
 @RequiredArgsConstructor

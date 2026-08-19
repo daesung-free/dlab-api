@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 — 자녀 목록 · 자녀 추가 연결 (A-2 · A-20).
@@ -24,6 +25,7 @@ import java.util.List;
  * 서버 세션이 아니다. 그래서 <b>조회 API마다 "내 자녀가 맞는지"를 다시 검사</b>해야 한다
  * ({@code ParentSignupService.requireMyChild}).
  */
+@Tag(name = "앱 · 자녀 연결 (A-2 · A-20)")
 @RestController
 @RequestMapping("/api/v1/app/me/children")
 @RequiredArgsConstructor
@@ -32,6 +34,12 @@ public class AppChildrenController {
     private final ParentSignupService parentSignupService;
     private final AccountRepository accountRepository;
 
+    /**
+     * 연결된 자녀 목록 (A-2 · A-20).
+     *
+     * <p>학부모는 <b>계정 하나에 자녀 여럿</b>을 연결한다. 앱은 이 목록으로 자녀 전환 UI를
+     * 그리고, 다른 API에 {@code studentId}로 누구 기준인지 알려준다.
+     */
     @GetMapping
     public ApiResponse<List<ChildResponse>> children(@CurrentAccount AuthPrincipal me) {
         return ApiResponse.success(parentSignupService.children(guardianId(me)).stream()

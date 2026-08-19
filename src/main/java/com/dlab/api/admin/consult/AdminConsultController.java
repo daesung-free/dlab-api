@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 상담 (F-4.11-4) — <b>일지까지다</b>.
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.*;
  *   <li><b>담임 스티커·학부모 공유</b> — 리포트 발송이라 위 셋에 딸린다</li>
  * </ul>
  */
+@Tag(name = "관리자 · 상담 일지 (F-4.11-4)")
 @RestController
 @RequestMapping("/api/v1/admin/consults")
 @RequiredArgsConstructor

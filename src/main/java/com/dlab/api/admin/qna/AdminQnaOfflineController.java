@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 질의응답 대면(OFF) 관리 (F-4.11-7).
@@ -20,6 +21,7 @@ import java.util.List;
  *
  * <p><b>온라인(ON)은 없다</b> — 멘토 배정 규칙·답변 SLA·첨부 허용·채팅 경계가 전부 미확정이다.
  */
+@Tag(name = "관리자 · 질의응답 대면 (F-4.11-7)")
 @RestController
 @RequestMapping("/api/v1/admin/qna/offline")
 @RequiredArgsConstructor

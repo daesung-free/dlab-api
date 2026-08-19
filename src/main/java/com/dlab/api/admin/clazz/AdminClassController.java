@@ -11,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 반 관리.
@@ -21,6 +22,7 @@ import java.util.List;
  * <p>지점 스코프는 {@link SearchScope}가 인증 주체에서 뽑는다 — 요청 파라미터로 받으면
  * 값을 바꿔 보내는 것만으로 다른 지점 데이터가 새어나간다.
  */
+@Tag(name = "관리자 · 반 관리")
 @RestController
 @RequestMapping("/api/v1/admin/classes")
 @RequiredArgsConstructor

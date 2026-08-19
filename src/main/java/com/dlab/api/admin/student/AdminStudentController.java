@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 학생 검색·신규 접수.
@@ -34,6 +35,7 @@ import java.util.List;
  * <p>지점 스코프는 {@link SearchScope}가 인증 주체에서 뽑는다. 요청 파라미터로 받으면
  * 값을 바꿔 보내는 것만으로 다른 지점 학생이 조회된다(CLAUDE.md §7).
  */
+@Tag(name = "관리자 · 학생 관리 (F-4.1)")
 @RestController
 @RequestMapping("/api/v1/admin/students")
 @RequiredArgsConstructor

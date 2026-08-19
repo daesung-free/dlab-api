@@ -14,6 +14,7 @@ import com.dlab.common.security.CurrentAccount;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 학부모 앱 — 승인 처리.
@@ -21,6 +22,7 @@ import java.util.List;
  * <p>승인 대상은 클라이언트가 지정하지 않고 <b>토큰의 주체로 판단</b>한다.
  * 요청 본문으로 학생을 받으면 남의 자녀 건을 승인할 수 있다.
  */
+@Tag(name = "앱 · 승인 처리 (학부모)")
 @RestController
 @RequestMapping("/api/v1/app/approvals")
 @RequiredArgsConstructor
@@ -50,6 +52,11 @@ public class AppApprovalController {
                 ApprovalResponse.from(approvalService.approve(id, principal.accountId())));
     }
 
+    /**
+     * 반려.
+     *
+     * <p>승인과 같은 원자적 전이를 탄다 — 담당선생님이 같은 순간 처리하면 409가 나간다.
+     */
     @PostMapping("/{id}/reject")
     public ApiResponse<ApprovalResponse> reject(@CurrentAccount AuthPrincipal principal,
                                                 @PathVariable Long id,

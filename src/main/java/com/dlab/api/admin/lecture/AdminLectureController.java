@@ -11,12 +11,14 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 특강 기초 설정 · 명단 · 출석부 (F-4.10-4 · F-4.7).
  *
  * <p>결제는 붙어 있지 않다 — 0803 답변서가 *"신청+결제 검토 중"*이고 {@code payment} 도메인이 없다.
  */
+@Tag(name = "관리자 · 특강 (F-4.7)")
 @RestController
 @RequestMapping("/api/v1/admin/lectures")
 @RequiredArgsConstructor

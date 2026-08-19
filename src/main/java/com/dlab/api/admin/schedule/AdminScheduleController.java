@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 정기일정 관리 (F-4.1-7).
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.*;
  * 있으면 거절하고 사람이 판단하게 둔다 — 규칙 없이 하나를 덮으면 담임이 넣은 일정이
  * 학생 등록으로 조용히 사라진다.
  */
+@Tag(name = "관리자 · 정기일정 (F-4.1-7)")
 @RestController
 @RequestMapping("/api/v1/admin/schedules")
 @RequiredArgsConstructor

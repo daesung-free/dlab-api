@@ -6,6 +6,7 @@ import com.dlab.domain.user.service.ParentSignupService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 회원가입 — 휴대폰 인증 · 학부모 가입 (A-2).
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
  * 미확정</b>이라(§4 블로커), 임의로 정하면 확정 후 스키마와 화면을 다시 만들게 된다.
  * 학부모 가입은 내신과 무관해서 먼저 열었다.
  */
+@Tag(name = "앱 · 회원가입 (A-2)")
 @RestController
 @RequestMapping("/api/v1/app/signup")
 @RequiredArgsConstructor

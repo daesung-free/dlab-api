@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 상담 가능 일정 관리 (F-4.11-4).
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
  * <p><b>개설과 노출이 두 단계다.</b> 만들면 꺼진 상태이고, 명시적으로 켜야 학생에게 보인다 —
  * 일정을 짜는 중간 상태가 그대로 노출되지 않게 한다.
  */
+@Tag(name = "관리자 · 상담 가능 일정 (F-4.11-4)")
 @RestController
 @RequestMapping("/api/v1/admin/consults/slots")
 @RequiredArgsConstructor

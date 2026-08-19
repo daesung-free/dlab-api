@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 공지 조회.
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><b>예약 발행·만료는 서버가 거른다.</b> 앱이 시각을 비교하게 하면
  * 기기 시계가 틀어진 사용자에게 발표 전 공지가 보인다.
  */
+@Tag(name = "앱 · 공지 조회")
 @RestController
 @RequestMapping("/api/v1/app/notices")
 @RequiredArgsConstructor
@@ -34,6 +36,10 @@ public class AppNoticeController {
     private final AppScopeResolver scopeResolver;
 
     /**
+     * 공지 목록.
+     *
+     * <p><b>내게 보이는 것만 내린다</b> — 전체공지와 내 반 공지가 합쳐져 나온다.
+     *
      * @param studentId <b>학부모만</b> 쓴다. 계정 하나에 자녀가 여럿이라
      *                  누구 기준으로 볼지 서버가 정할 수 없다.
      *                  <b>등록 건 id가 아니라 학생 id다</b> — 다른 앱 API와 같은 값을 쓴다

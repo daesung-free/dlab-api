@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 지점 관리.
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>목록은 여러 화면(교시·공지·좌석·공휴일)이 "지점 고르기"에 쓴다.
  */
+@Tag(name = "관리자 · 지점")
 @RestController
 @RequestMapping("/api/v1/admin/academies")
 @RequiredArgsConstructor

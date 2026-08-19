@@ -14,6 +14,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 주·일 학습계획 (앱 A-12) — 순번 기반.
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
  * <p><b>교시 개념이 없다.</b> 서버가 교시·시간대를 내려주고 앱이 그리던 옛 그리드는
  * 폐기됐다 — 앱은 학생이 입력한 항목을 순번 순서로만 렌더한다.
  */
+@Tag(name = "앱 · 주·일 학습계획 (A-12)")
 @RestController
 @RequestMapping("/api/v1/app/learning-plans")
 @RequiredArgsConstructor

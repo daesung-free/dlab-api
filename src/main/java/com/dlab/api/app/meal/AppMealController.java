@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.YearMonth;
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 — 급식 신청 (A-9).
@@ -29,6 +30,7 @@ import java.util.List;
  * <p><b>학부모도 신청할 수 있다</b> — A-9 사용자가 "학생·학부모"다. 자녀 지정 시
  * {@code requireMyChild}로 검증한다.
  */
+@Tag(name = "앱 · 급식 신청 (A-9)")
 @RestController
 @RequestMapping("/api/v1/app/meals")
 @RequiredArgsConstructor

@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 홈 (A-3).
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p><b>퀵메뉴 8개도 서버가 내리지 않는다.</b> 화면 이동 경로일 뿐 서버 상태가 아니다.
  */
+@Tag(name = "앱 · 홈 (A-3)")
 @RestController
 @RequestMapping("/api/v1/app/home")
 @RequiredArgsConstructor
@@ -48,6 +50,11 @@ public class AppHomeController {
     private final Clock clock;
 
     /**
+     * 홈 화면 한 번에 (A-3).
+     *
+     * <p>순공시간·출석률·오늘 루틴·공지 배너를 <b>한 번에 내린다.</b> 나눠 부르면 앱이 여러 번
+     * 왕복하고 그 사이 값이 어긋난다.
+     *
      * @param studentId <b>학부모만</b> 쓴다. 계정 하나에 자녀가 여럿이라 서버가 고를 수 없다
      */
     @GetMapping
