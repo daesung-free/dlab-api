@@ -27,6 +27,15 @@ spring:
     # 개발 환경만 허용한다 — 운영은 순차 배포라 발생하지 않는다.
     out-of-order: true
 
+# CORS — 로컬 프론트(dlab-admin-web)가 여기로 붙는다.
+#
+# ★ 공통 설정(application.yml)은 비어 있다 = 전부 차단. 로컬 origin은 여기서만 연다.
+# ★ 와일드카드(http://localhost:*)도 동작하지만 쓰지 않는다 — 쓰는 포트만 나열한다.
+#   프론트 개발서버 포트가 다르면(Vite가 5173 대신 5174로 뜨는 경우 등) 여기에 추가한다.
+#   증상: 브라우저 콘솔에 CORS 오류, 서버 로그에는 아무것도 안 남는다.
+cors:
+  allowed-origins: http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000
+
 # --- 아래는 나중에 실제 연동 붙일 때 채울 것들 (지금은 비워둬도 앱 실행엔 지장 없음) ---
 
 # JWT — secret은 절대 커밋하지 않는다(CLAUDE.md §8). 운영은 환경변수로만 공급.

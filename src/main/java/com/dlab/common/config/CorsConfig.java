@@ -25,10 +25,19 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * 코드에 박으면 도메인이 정해질 때 <b>재배포</b>가 필요해진다 —
  * 서버 {@code .env}에 {@code CORS_ALLOWED_ORIGINS} 한 줄을 넣고 재기동하면 되게 한다.
  *
- * <h2>왜 allowedOriginPatterns 인가</h2>
- * {@code allowedOrigins}는 정확히 일치하는 문자열만 받는다. 그런데 Vite는 5173이 이미
- * 쓰이면 5174로 올라가고, 그때마다 서버 설정을 고쳐야 한다. 패턴이면
- * {@code http://localhost:*} 하나로 끝난다.
+ * <p><b>기본값은 비어 있다 = 전부 차단.</b> 로컬 origin은 {@code application-local.yml}이,
+ * 운영 origin은 서버 {@code .env}가 공급한다. 공통 설정에 열어두면
+ * <b>프로필 없이 뜬 서버가 조용히 열린 상태</b>가 된다.
+ *
+ * <h2>왜 와일드카드를 쓰지 않나</h2>
+ * {@code setAllowedOriginPatterns}는 {@code http://localhost:*} 같은 패턴을 실제로 받아준다
+ * ({@code setAllowedOrigins}는 정확히 일치하는 문자열만 받는다 — 흔히 여기서 "*가 안 된다"고
+ * 겪는다). 동작은 하지만 <b>쓰지 않기로 했다</b>: 필요한 origin만 콤마로 나열하면
+ * 그 목록이 곧 "누가 이 API를 부르는가"의 문서가 되고, 실수로 범위가 넓어질 여지가 없다.
+ *
+ * <p>패턴 API를 그대로 쓰는 이유는 <b>정확한 origin도 똑같이 받기 때문</b>이다.
+ * {@code setAllowedOrigins}로 바꿔두면 나중에 누군가 패턴을 적었을 때
+ * 예외 없이 <b>조용히 매칭에 실패</b>해 원인을 찾기 어려워진다.
  *
  * <h2>왜 allowCredentials 는 false 인가</h2>
  * 인증을 쿠키가 아니라 {@code Authorization: Bearer} 헤더로 한다. 쿠키를 안 쓰므로

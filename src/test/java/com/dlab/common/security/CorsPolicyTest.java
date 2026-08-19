@@ -27,7 +27,7 @@ import org.springframework.web.context.WebApplicationContext;
  * <p>그래서 상태코드가 아니라 <b>{@code Access-Control-Allow-Origin} 헤더의 유무</b>를 본다.
  */
 @SpringBootTest
-@TestPropertySource(properties = "cors.allowed-origins=http://localhost:*")
+@TestPropertySource(properties = "cors.allowed-origins=http://localhost:5173,http://localhost:3000")
 class CorsPolicyTest {
 
     @Autowired WebApplicationContext context;
@@ -52,18 +52,31 @@ class CorsPolicyTest {
                 .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
     }
 
+    @Test
+    @DisplayName("목록에 나열한 origin은 여러 개라도 각각 허용된다")
+    void eachListedOriginIsAllowed() throws Exception {
+        mvc.perform(options("/api/v1/app/auth/login")
+                        .header("Origin", "http://localhost:3000")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"));
+    }
+
     /**
-     * 포트를 정확히 박지 않고 패턴으로 둔 이유가 이것이다 — Vite는 5173이 쓰이는 중이면
-     * 5174로 올라간다. 포트가 바뀔 때마다 서버 설정을 고쳐야 하면 아무도 안 고치고
-     * CORS를 통째로 열어버리게 된다.
+     * <b>와일드카드를 쓰지 않기로 한 결과가 이것이다.</b> 목록에 없는 포트는 같은 localhost 라도
+     * 막힌다 — 범위가 실수로 넓어지지 않는 대신, 프론트 개발서버 포트가 바뀌면
+     * ({@code Vite}가 5173 대신 5174로 뜨는 경우 등) {@code application-local.yml}에
+     * 그 포트를 추가해야 한다.
+     *
+     * <p>이 테스트는 "불편함"을 고정한 것이 아니라 <b>목록 밖은 정말 막힌다</b>는 것을 고정한다.
+     * 이게 깨지면 명시 목록으로 바꾼 의미가 없어진다.
      */
     @Test
-    @DisplayName("★ 로컬 포트가 바뀌어도 통과한다 — 패턴으로 두는 이유")
-    void anyLocalPortIsAllowed() throws Exception {
+    @DisplayName("★ 목록에 없는 포트는 localhost라도 막힌다 — 명시 목록으로 둔 결과")
+    void unlistedLocalPortIsRejected() throws Exception {
         mvc.perform(options("/api/v1/app/auth/login")
                         .header("Origin", "http://localhost:5174")
                         .header("Access-Control-Request-Method", "POST"))
-                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5174"));
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
 
     @Test
