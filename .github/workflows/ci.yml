@@ -1,8 +1,12 @@
-# PR·develop 푸시마다 빌드와 테스트를 돌린다.
+# PR마다 빌드와 테스트를 돌린다 (develop 대상 · main 대상 둘 다).
 #
 # ★ 왜 필요한가 — 테스트가 로컬에서만 돌면 "각자 자기 브랜치에서는 통과"만 확인된다.
 #   여러 명이 같은 develop에 병렬로 밀어넣는 구조라, 머지하고 나서야 깨진 것을 알게 된다.
 #   실제로 설계 충돌(같은 테이블을 각자 다르게 제약)이 머지 시점에 발견된 적이 있다.
+#   그래서 PR 은 **머지 결과(base+head 합친 커밋)** 를 검증한다 — 머지 전에 충돌이 드러난다.
+#
+# ★ main 대상 PR 을 포함하는 이유: main 머지가 곧 배포다(deploy.yml).
+#   배포 직전에 한 번 더 거르는 관문이다.
 #
 # ★ 서비스 컨테이너로 진짜 PostgreSQL·Redis를 띄운다.
 #   H2로 대체할 수 없다 — jsonb·부분 유니크 인덱스를 쓰고, Flyway 마이그레이션 자체가
@@ -10,11 +14,18 @@
 
 name: CI
 
+# ★ PR 에서만 돈다. 예전에는 `push: branches: [develop]` 도 있었는데,
+#   develop 에 머지된 커밋이 곧 develop → main PR 의 head 라서
+#   **같은 커밋에 대해 push 실행과 pull_request 실행이 둘 다 붙었다.**
+#   릴리스 PR 화면에 잡이 4개(2 workflow run × 2 job)로 뜨고 러너 시간도 두 배로 들었다.
+#
+# ⚠️ 트레이드오프: develop 에 **직접 push** 하면 검증이 안 된다.
+#   브랜치 전략상(CLAUDE.md §7) develop 에는 PR 로만 들어와야 하므로 정상 경로에는 구멍이 없다.
+#   그리고 머지 후 통합 검증은 develop → main PR 에서 한 번 더 돈다 —
+#   그게 배포 직전이라 오히려 확인해야 할 시점에 맞다.
 on:
   pull_request:
     branches: [develop, main]
-  push:
-    branches: [develop]
 
 # 같은 브랜치에 연속으로 푸시하면 앞의 실행을 취소한다 — 오래된 결과를 기다릴 이유가 없다.
 concurrency:
