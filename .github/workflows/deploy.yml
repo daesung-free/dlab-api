@@ -1,18 +1,17 @@
-# 수동 실행 → 이미지 빌드 → GHCR 푸시 → EC2에서 pull + compose 재기동.
-#
-# ★ 자동 트리거(main 푸시)를 일부러 두지 않았다.
-#   원래는 `on: push: branches: [main]` 이었으나, 이 레포는 private + GitHub Free 라
-#   ruleset·branch protection 이 **적용되지 않는다**("Your rulesets won't be enforced on this
-#   private repository until you upgrade to GitHub Team"). 즉 main 을 아무나·아무렇게나
-#   밀 수 있는 상태다. 그 상태에서 머지가 곧 배포이면, 실수 한 번이 곧 운영 반영이 된다.
-#   막을 수단이 없으면 **트리거 자체를 없애는 것**이 가장 확실하다 —
-#   배포는 Actions 탭에서 의식적으로 실행해야만 나간다.
-#   ⚠️ Team 플랜으로 올려 main 을 보호하게 되면 자동 트리거를 되살려도 된다.
+# main 푸시 → 이미지 빌드 → GHCR 푸시 → EC2에서 pull + compose 재기동.
 #
 # ★ main은 배포 전용 브랜치다(CLAUDE.md §7). develop → main PR에서 CI(ci.yml)가
 #   테스트·마이그레이션 검증을 마친 상태를 전제하므로 여기서 테스트를 다시 돌리지 않는다.
-#   ⚠️ 그래서 **main 브랜치를 선택해 실행**해야 한다. Run workflow 의 브랜치 선택이
-#      기본값(develop)인 채로 돌리면 검증을 안 거친 코드가 배포된다.
+#
+# ★ 즉 **develop → main 머지가 곧 배포다.** 머지 버튼을 누르는 것이 배포 결정이다.
+#
+# ⚠️ 이 레포는 private + GitHub Free 라 ruleset·branch protection 이 **적용되지 않는다**
+#   ("Your rulesets won't be enforced ... until you upgrade to GitHub Team").
+#   즉 GitHub 쪽에서 main 직접 push 를 막아주지 않는다. 대신:
+#     - .githooks/pre-push 가 로컬에서 main 직접 push 를 막는다
+#       (각자 `git config core.hooksPath .githooks` 1회 설치 — 안 하면 안 걸린다)
+#     - 아래 첫 단계가 실행 브랜치를 확인한다 (수동 실행 시 기본값이 develop 이라 필요하다)
+#   Team 플랜으로 올리면 ruleset 으로 서버측에서도 막을 수 있다.
 #
 # ★ 빌드는 러너에서 한다. EC2에서 `docker compose build` 를 돌리면 Gradle 컴파일이
 #   메모리를 먹어 돌고 있는 컨테이너가 OOM으로 죽는다. EC2는 이미지를 받기만 한다.
@@ -28,8 +27,10 @@
 name: Deploy
 
 on:
-  # 수동 실행 전용이다. Actions → Deploy → Run workflow → 브랜치 main 선택.
-  # (자동 트리거를 뺀 이유는 위 머리말 참고)
+  push:
+    branches: [main]
+  # 코드 변경 없이 다시 배포해야 할 때(서버 .env 변경 후 재기동, 실패한 배포 재시도 등).
+  # 이때는 브랜치 선택을 main 으로 바꿔야 한다 — 기본값은 레포 기본 브랜치(develop)다.
   workflow_dispatch:
 
 # 배포는 겹치면 안 된다. 앞의 배포를 취소하지 않고 끝날 때까지 기다린다 —
@@ -56,10 +57,10 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # ★ 브랜치 보호를 못 거는 대신 여기서 막는다.
-      #   수동 실행은 브랜치를 자유롭게 고를 수 있고 기본값이 develop(레포 기본 브랜치)이라,
-      #   아무 생각 없이 Run workflow 를 누르면 검증 안 된 코드가 그대로 배포된다.
-      #   Free 플랜에서 "배포는 main 에서만"을 강제할 수 있는 유일한 지점이다.
+      # ★ 수동 실행(workflow_dispatch) 대비 가드다.
+      #   push 트리거는 main 으로 한정돼 있지만, 수동 실행은 브랜치를 자유롭게 고를 수 있고
+      #   기본값이 develop(레포 기본 브랜치)이라 아무 생각 없이 Run workflow 를 누르면
+      #   CI 검증을 안 거친 코드가 그대로 배포된다.
       - name: main 브랜치인지 확인
         if: github.ref_name != 'main'
         run: |
