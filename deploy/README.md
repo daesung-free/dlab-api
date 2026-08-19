@@ -1,7 +1,12 @@
 # 배포 (EC2 + Docker Compose + GitHub Actions)
 
-`main` 브랜치에 푸시하면 `.github/workflows/deploy.yml`이 이미지 빌드 → GHCR 푸시 → EC2에서 pull → 컨테이너 교체 → 헬스체크까지 자동으로 한다.
+Actions 탭에서 `Deploy` 워크플로를 **수동 실행**하면 이미지 빌드 → GHCR 푸시 → EC2에서 pull → 컨테이너 교체 → 헬스체크까지 자동으로 진행된다.
 이 문서는 **최초 1회 서버 셋업**과 **장애 시 대응**을 다룬다.
+
+> ★ **배포는 자동 트리거가 아니다.** `main` 푸시에 걸어두려 했으나, 이 레포는 private + GitHub Free라
+> ruleset·branch protection이 **적용되지 않는다**(Team 플랜부터 가능). `main`을 아무나 밀 수 있는 상태에서
+> 머지가 곧 배포이면 실수 한 번이 운영 반영이 되므로, **트리거 자체를 없앴다.**
+> Team 플랜으로 올려 `main`을 보호하게 되면 자동 트리거를 되살려도 된다.
 
 > ⚠️ 이 프로젝트는 dev/prod 서버를 따로 두지 않고 **같은 서버를 전환**한다(CLAUDE.md §3).
 > 지금 배포 대상은 개발용이며, 실사용 전환은 CLAUDE.md §4 "컷오버 체크리스트"를 의식적으로 거친다.
@@ -112,11 +117,25 @@ location / {
 
 ### 4. 첫 배포
 
-`main`에 푸시하거나 Actions 탭에서 `Deploy` → **Run workflow**.
+Actions 탭 → `Deploy` → **Run workflow** → **브랜치를 `main`으로 선택** → 실행.
+
+> ⚠️ 브랜치 선택 기본값은 레포 기본 브랜치인 `develop`이다. 그대로 누르면
+> **CI 검증을 안 거친 코드가 배포된다.** 워크플로 첫 단계가 `main`이 아니면 실패시키지만,
+> 실행 전에 확인하는 습관을 들일 것.
 
 첫 배포는 오래 걸린다 — 이미지 빌드(캐시 없음) + PostgreSQL initdb + Flyway 마이그레이션 전체 적용.
 
-### 5. DB 계정 확인
+### 5. 브랜치 훅 설치 (각 개발자 1회)
+
+`main` 직접 push를 로컬에서 막는다. 서버측 강제가 불가능한 대신이다.
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`git push --no-verify`로 우회되므로 **강제가 아니라 실수 방지**다. GitHub 웹에서 PR을 머지하는 것은 막히지 않는다 — 그게 정상 경로다.
+
+### 6. DB 계정 확인
 
 `POSTGRES_DB`/`POSTGRES_USER`/`POSTGRES_PASSWORD`는 **볼륨이 비어 있을 때 딱 한 번만 반영된다.** 첫 기동으로 `dlab_dev` DB와 `dlab_app` 계정이 만들어진다.
 
@@ -198,6 +217,7 @@ docker compose up -d --wait
 
 ## 남은 것
 
+- [ ] **`main` 브랜치 보호** — private + Free 플랜이라 ruleset이 적용되지 않는다. 지금은 ①배포 자동 트리거 제거 ②워크플로의 `main` 브랜치 확인 단계 ③로컬 pre-push 훅 셋으로 대신하고 있는데, ③은 설치한 사람에게만 걸리고 `--no-verify`로 우회된다. **Team 플랜(인당 월 $4)으로 올리면** ruleset으로 서버측 강제가 되고, 그때는 자동 트리거를 되살려도 된다.
 - [ ] **호스트 키 고정** — 지금은 `ssh-keyscan`으로 매번 받아온다(TOFU). 서버의 `/etc/ssh/ssh_host_ed25519_key.pub`를 `EC2_HOST_KEY` 시크릿에 넣고 그 값으로 `known_hosts`를 채우면 중간자 위험이 사라진다.
 - [ ] **Actuator 접근 제한** — `/actuator/health`가 Nginx를 통해 누구나 볼 수 있다. `location /actuator { allow 10.0.0.0/8; deny all; }`로 좁힌다. 컷오버 전 필수.
 - [ ] **DB 백업** — 컨테이너 볼륨에 데이터가 있을 뿐 백업은 없다. `pg_dump` cron → S3가 최소선이고, 컷오버 시점에는 RDS로 빼는 편이 낫다(CLAUDE.md §4 체크리스트).

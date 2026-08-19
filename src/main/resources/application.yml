@@ -19,6 +19,23 @@ springdoc:
     tags-sorter: alpha
     operations-sorter: alpha
 
+# ─────────────────────────────────────────────────────────────
+# CORS — 관리자 웹(dlab-admin-web)이 다른 origin에서 /api 를 호출한다.
+#
+# ★ 기본은 "전부 차단"이다. 여기에 값을 두지 않는다.
+#   로컬 개발용 origin은 application-local.yml 이, 운영 도메인은 서버 .env 의
+#   CORS_ALLOWED_ORIGINS 가 각각 공급한다. 공통 설정에 열어두면
+#   **프로필을 안 준 채 뜬 서버가 조용히 열린 상태**가 된다.
+#
+# ★ 와일드카드(http://localhost:*)도 기술적으로는 동작하지만(allowedOriginPatterns)
+#   쓰지 않는다 — 필요한 origin만 콤마로 나열한다. 목록이 곧 "누가 이 API를 부르는가"의
+#   문서가 되고, 실수로 범위가 넓어지는 일이 없다.
+#
+# ★ 앱(Flutter 네이티브)과 키오스크에는 해당 없다 — 브라우저가 아니라 CORS가 적용되지 않는다.
+# ─────────────────────────────────────────────────────────────
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+
 jwt:
   # 운영 값은 환경변수로 주입한다. 커밋 금지(CLAUDE.md §8).
   # HS256이 최소 256비트를 요구하므로 32바이트 이상이어야 하고, 짧으면 기동 시점에 막힌다.
