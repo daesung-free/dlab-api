@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# main 브랜치로의 직접 push 를 막는다.
+#
+# ★ 왜 훅인가 — 이 레포는 private + GitHub Free 라 ruleset·branch protection 이
+#   **적용되지 않는다**(Team 플랜부터 가능). 서버측에서 막을 방법이 없으므로
+#   각자 로컬에서 막는다.
+#
+# ⚠️ 한계를 알고 쓸 것:
+#   - 설치한 사람에게만 걸린다. `git config core.hooksPath .githooks` 를 안 하면 무효다.
+#   - `git push --no-verify` 로 우회된다. 강제가 아니라 **실수 방지**용이다.
+#   - GitHub 웹에서 PR 을 머지하는 것은 push 가 아니라 막히지 않는다 — 그게 정상 경로다.
+#
+# 설치 (각자 1회):
+#   git config core.hooksPath .githooks
+#
+# 해제:
+#   git config --unset core.hooksPath
+
+PROTECTED="main"
+
+# pre-push 는 stdin 으로 `<local ref> <local sha> <remote ref> <remote sha>` 를 받는다.
+# 한 번의 push 에 여러 ref 가 올 수 있어(예: --all) 줄 단위로 전부 검사한다.
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+    case "$remote_ref" in
+        "refs/heads/$PROTECTED")
+            echo "" >&2
+            echo "  ✋ $PROTECTED 브랜치에는 직접 push 할 수 없습니다." >&2
+            echo "" >&2
+            echo "  $PROTECTED 브랜치는 배포 전용입니다 (CLAUDE.md §7)." >&2
+            echo "  develop 에서 작업하고, 배포할 때는 develop → $PROTECTED PR 로 머지하세요." >&2
+            echo "" >&2
+            echo "  정말 필요하면: git push --no-verify" >&2
+            echo "" >&2
+            exit 1
+            ;;
+    esac
+done
+
+exit 0
