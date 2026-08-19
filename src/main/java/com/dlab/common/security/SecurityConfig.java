@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -67,6 +68,11 @@ public class SecurityConfig {
     public SecurityFilterChain apiFilterChain(HttpSecurity http) throws Exception {
         return http
                 .securityMatcher("/api/**")
+                // ★ 이 체인에서만 CORS를 켠다. 허용 origin은 CorsConfig가 설정에서 읽는다.
+                //   이 줄이 없으면 preflight(OPTIONS)를 permitAll로 통과시켜도
+                //   Access-Control-* 응답 헤더가 붙지 않아 브라우저가 그대로 차단한다 —
+                //   "설정했는데 왜 안 되지"로 헤매기 쉬운 지점이다.
+                .cors(Customizer.withDefaults())
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(basic -> basic.disable())
