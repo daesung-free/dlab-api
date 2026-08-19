@@ -85,6 +85,14 @@ services:
         condition: service_healthy
     environment:
       # application-prod.yml 이 참조하는 이름과 1:1로 맞춰져 있다. 바꾸려면 양쪽을 같이 고친다.
+      #
+      # ★ .env 에 값을 넣는 것만으로는 컨테이너에 전달되지 않는다.
+      #   compose 의 .env 는 **이 파일 안의 ${...} 치환**에만 쓰이고,
+      #   여기 나열되지 않은 변수는 앱이 볼 수 없다.
+      #   실제로 CORS_ALLOWED_ORIGINS 를 .env 에만 넣고 여기 빠뜨려서,
+      #   설정을 했는데도 브라우저 요청이 계속 차단된 적이 있다 —
+      #   앱 로그에도 아무 흔적이 없어 원인을 찾기 어려웠다.
+      #   ⚠️ 앞으로 새 환경변수를 쓸 때마다 이 목록에 한 줄 추가할 것.
       SPRING_PROFILES_ACTIVE: prod
       # 호스트명이 localhost 가 아니라 서비스명 `db` 다. 컨테이너 안의 localhost 는 자기 자신이다.
       DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
@@ -93,6 +101,9 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       JWT_SECRET: ${JWT_SECRET}
+      # 관리자 웹이 다른 origin 에서 /api 를 호출한다. 비면 브라우저 요청이 전부 차단된다
+      # (차단이 기본, 필요한 origin 만 연다 — application-prod.yml 참고).
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=70 -Dfile.encoding=UTF-8 -Duser.timezone=Asia/Seoul}
     ports:
       # ★ 여기도 127.0.0.1 이다. Nginx가 같은 호스트에서 프록시하므로 외부 공개가 필요 없고,
