@@ -102,7 +102,7 @@ public class SeatLeaveIngestService {
             return new Result(event.sourceRowId(), Result.Status.DUPLICATE, null);
         }
 
-        StudentEnrollment enrollment = resolveStudent(event);
+        StudentEnrollment enrollment = resolveStudent(academy, event);
         short year = enrollment != null
                 ? enrollment.getYear()
                 : (short) LocalDate.ofInstant(event.occurredAt(), KST).getYear();
@@ -131,8 +131,33 @@ public class SeatLeaveIngestService {
      * 카드번호 우선, 없으면 학번.
      *
      * <p>카드는 {@code current} 등록 건만 본다 — 빠뜨리면 퇴원생 카드가 통과한다.
+     *
+     * <h2>★ 토큰 지점과 학생 지점이 다르면 연결하지 않는다</h2>
+     * 지점은 <b>토큰</b>이 정하는데 학생은 카드번호로 <b>전 지점</b>에서 찾는다. 그래서
+     * 32번 지점 학생의 카드가 31번 토큰으로 들어오면 <b>행 하나가 두 지점에 걸친다</b> —
+     * {@code academy_id}는 31, 연결된 학생은 32번 소속. 저장은 성공하고 응답도 정상이라
+     * <b>지점별 집계가 어긋난 뒤에야 발견되고 원인을 찾기 어렵다.</b>
+     *
+     * <p>키오스크가 배치를 지점별로 나누지 않으면 실제로 발생한다. 그래서 어긋나면
+     * <b>연결하지 않고 미해결로 떨군다</b> — 기록은 남되(원본 식별자 보관) 잘못된 학생에
+     * 붙지는 않게 한다. 거절하지 않는 이유는 다른 미해결과 같다(영원한 재전송 방지).
      */
-    private StudentEnrollment resolveStudent(Event event) {
+    private StudentEnrollment resolveStudent(Academy academy, Event event) {
+        StudentEnrollment found = lookup(event);
+        if (found == null) {
+            return null;
+        }
+        if (!found.getAcademy().getId().equals(academy.getId())) {
+            log.warn("좌석이탈 로그 지점 불일치 — 연결하지 않는다: 토큰지점={}, 학생지점={}, "
+                            + "sourceRowId={}, rfidNo={}",
+                    academy.getId(), found.getAcademy().getId(), event.sourceRowId(),
+                    event.rfidNo());
+            return null;
+        }
+        return found;
+    }
+
+    private StudentEnrollment lookup(Event event) {
         if (event.rfidNo() != null && !event.rfidNo().isBlank()) {
             var found = enrollmentRepository.findCurrentByRfidNo(event.rfidNo());
             if (found.isPresent()) {

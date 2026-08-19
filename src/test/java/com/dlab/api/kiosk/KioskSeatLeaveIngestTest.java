@@ -216,6 +216,33 @@ class KioskSeatLeaveIngestTest {
         assertThat(autoClose.isRealReturn()).isFalse();
     }
 
+    @Test
+    @DisplayName("★ 다른 지점 학생 카드는 연결하지 않는다 — 행 하나가 두 지점에 걸치면 집계가 어긋난다")
+    void crossAcademyCardIsNotLinked() throws Exception {
+        // 일산 학생. 분당 토큰으로 들어온다(키오스크가 배치를 지점별로 안 나눈 상황)
+        Academy ilsan = new Academy("32", "일산", LocalTime.of(9, 0));
+        em.persist(ilsan);
+        Student other = new Student("DL-2026-0500", "박서준", "010-3333-4444");
+        em.persist(other);
+        em.persist(new StudentEnrollment(other, ilsan, (short) 2026,
+                "2026-0002", "XYZ999", GradeType.HIGH3));
+        em.flush();
+
+        send(event(1, "XYZ999", "LEAVE"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].status").value("ACCEPTED_UNRESOLVED"));
+        em.flush();
+
+        // 기록은 남되(원본 식별자 보관) 잘못된 학생에 붙지는 않는다
+        assertThat(logRepository.findUnresolved(bundang.getId()))
+                .singleElement()
+                .satisfies(l -> {
+                    assertThat(l.getEnrollment()).isNull();
+                    assertThat(l.getRfidNo()).isEqualTo("XYZ999");
+                    assertThat(l.getAcademy().getId()).isEqualTo(bundang.getId());
+                });
+    }
+
     // ── 인증 ─────────────────────────────────────────────────
 
     @Test
