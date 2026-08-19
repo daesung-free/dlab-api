@@ -116,9 +116,31 @@ location / {
 
 > ★ `X-Forwarded-*`가 없으면 앱이 보는 클라이언트 IP가 전부 `127.0.0.1`이 된다. 로그인 실패 5회 잠금(A-1)처럼 IP 기준 로직이 들어가면 전 사용자가 한 덩어리로 취급된다.
 
-### 4. 첫 배포
+### 4. GHCR 로그인 (서버에서 1회)
 
-**이 셋업(1~3, 5)을 마친 뒤에** develop → main PR을 머지한다. 머지가 곧 배포다.
+이미지가 private 레포의 패키지라 **서버에 자격증명이 있어야 받을 수 있다.**
+
+```bash
+echo <PAT> | docker login ghcr.io -u <github-id> --password-stdin
+```
+
+- PAT는 GitHub → Settings → Developer settings → Personal access tokens에서 발급한다.
+- **권한은 `read:packages` 하나만** 준다. 그 토큰으로 할 수 있는 일이 이미지 받기로 제한돼, 유출돼도 코드 push나 레포 변경은 되지 않는다.
+- **만료를 길게 잡는다.** 만료되면 배포가 `GHCR pull 실패`로 멈춘다(워크플로가 안내 문구를 출력한다). 서비스가 죽는 건 아니고 새 배포만 안 나간다.
+
+> ★ **서버에 한 번만 하면 된다. 팀원 각자가 할 일이 아니다.** 자격증명은 서버의
+> `~/.docker/config.json`에 저장되고, 이후 누가 배포를 돌리든 서버에 저장된 것을 쓴다.
+>
+> ⚠️ 토큰은 발급한 사람 계정에 묶인다. 그 사람이 토큰을 지우거나 계정이 빠지면 갱신이 필요하다.
+> 장기적으로는 조직 공용 계정이나 GitHub App으로 빼는 것이 맞다.
+
+> ⚠️ **워크플로는 서버에서 `docker login`/`docker logout`을 하지 않는다.** `docker logout`이
+> `config.json`의 해당 레지스트리 항목을 지워 **여기서 저장한 로그인까지 같이 날리기 때문**이다.
+> 배포가 이 자격증명에 의존한다는 뜻이므로, 만료되면 배포도 함께 멈춘다.
+
+### 5. 첫 배포
+
+**이 셋업(1~4, 6)을 마친 뒤에** develop → main PR을 머지한다. 머지가 곧 배포다.
 
 셋업 전에 머지하면 워크플로가 `.env 가 없습니다`에서 멈춘다 — 이미지는 GHCR에 올라가고 서버는 그대로다. 셋업을 끝낸 뒤 Actions → `Deploy` → **Run workflow**(브랜치 `main`)로 다시 돌리면 된다.
 
@@ -128,7 +150,7 @@ location / {
 
 첫 배포는 오래 걸린다 — 이미지 빌드(캐시 없음) + PostgreSQL initdb + Flyway 마이그레이션 전체 적용.
 
-### 5. 브랜치 훅 설치 (각 개발자 1회, ★ 중요)
+### 6. 브랜치 훅 설치 (각 개발자 1회, ★ 중요)
 
 ```bash
 git config core.hooksPath .githooks
@@ -138,7 +160,7 @@ git config core.hooksPath .githooks
 
 `git push --no-verify`로 우회되므로 **강제가 아니라 실수 방지**다. GitHub 웹에서 PR을 머지하는 것은 막히지 않는다 — 그게 배포하는 정상 경로다.
 
-### 6. DB 계정 확인
+### 7. DB 계정 확인
 
 `POSTGRES_DB`/`POSTGRES_USER`/`POSTGRES_PASSWORD`는 **볼륨이 비어 있을 때 딱 한 번만 반영된다.** 첫 기동으로 `dlab_dev` DB와 `dlab_app` 계정이 만들어진다.
 
@@ -202,7 +224,7 @@ APP_IMAGE=ghcr.io/daesung-free/dlab-api:<이전SHA> docker compose up -d --wait
 | `Validate failed: Migration checksum mismatch` | 이미 적용된 마이그레이션 파일을 수정했다. 되돌리고 새 마이그레이션을 추가한다 |
 | `Found more than one migration with version` | 두 사람이 같은 타임스탬프로 파일을 만들었다 (CLAUDE.md §7 — 실제로 있었던 사고) |
 | `Schema-validation: missing column` | 엔티티는 바뀌었는데 마이그레이션을 안 썼다 |
-| GHCR pull에서 `denied` | 서버의 `docker login`이 만료됐다. 워크플로가 매번 새로 로그인하므로 수동 실행 시에만 발생 |
+| GHCR pull에서 `unauthorized`/`denied` | 서버의 `docker login`이 만료됐거나 안 되어 있다. 최초 셋업 4번 재실행. **배포도 같이 멈춘다** |
 | 재부팅 후 안 뜸 | `systemctl is-enabled docker` 확인 |
 | 502 (Nginx는 살아있음) | app 컨테이너가 죽었거나 아직 healthy 전. `docker compose ps` |
 

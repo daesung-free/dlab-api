@@ -132,18 +132,8 @@ jobs:
             "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
             "REMOTE_DIR='${{ env.REMOTE_DIR }}' \
              APP_IMAGE='${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}' \
-             REGISTRY='${{ env.REGISTRY }}' \
-             GH_ACTOR='${{ github.actor }}' \
              bash -s" <<'REMOTE'
           set -euo pipefail
-
-          # ★ 토큰만 명령줄이 아니라 stdin(이 heredoc)으로 넘긴다.
-          #   ssh 뒤에 붙이면 EC2에서 `ps` 로 값이 그대로 보인다. heredoc 본문은 안 보인다.
-          #   (heredoc 을 'REMOTE' 로 따옴표 쳐도 Actions 표현식은 먼저 치환되므로 값이 들어간다.
-          #    ⚠️ 이 주석에 빈 표현식 기호를 그대로 쓰면 워크플로 파일 전체가 파싱에 실패한다 —
-          #       Actions 는 주석까지 스캔한다. 실제로 한 번 걸렸다.)
-          GH_TOKEN='${{ secrets.GITHUB_TOKEN }}'
-
           cd "$REMOTE_DIR"
 
           if [ ! -f .env ]; then
@@ -151,17 +141,24 @@ jobs:
             exit 1
           fi
 
-          # ★ 이 배포 동안만 유효한 토큰으로 로그인한다.
-          #   서버에 장기 PAT를 저장해두면 그게 유출 표면이 된다 — 끝나면 로그아웃한다.
-          echo "$GH_TOKEN" | docker login "$REGISTRY" -u "$GH_ACTOR" --password-stdin
-          trap 'docker logout "$REGISTRY" > /dev/null 2>&1 || true' EXIT
-
           echo "배포 이미지: $APP_IMAGE"
           # APP_IMAGE 를 셸 환경으로 넘긴다. compose 는 .env 파일보다 셸 환경변수를 우선하므로
           # .env 를 건드리지 않고도 이번 배포만 SHA 태그로 고정된다.
+          # (.env 의 APP_IMAGE=:latest 는 서버에서 손으로 재기동할 때 쓰인다)
           export APP_IMAGE
 
-          docker compose pull
+          # ★ 여기서 docker login 을 하지 않는다.
+          #   서버에 PAT 로 한 번 로그인해두고 그 자격증명을 쓴다(deploy/README.md 최초 셋업).
+          #
+          #   전에는 배포마다 임시 토큰으로 로그인하고 끝나면서 logout 했는데,
+          #   docker logout 이 ~/.docker/config.json 에서 해당 레지스트리 항목을 지우므로
+          #   **서버에 저장해둔 PAT 로그인까지 같이 날아간다.** 그래서 지웠다.
+          if ! docker compose pull; then
+            echo "::error::GHCR pull 실패. 서버의 docker login 이 만료됐을 수 있습니다."
+            echo "서버에서 재로그인: echo <PAT> | docker login ghcr.io -u <github-id> --password-stdin"
+            echo "(PAT 권한은 read:packages 만 있으면 됩니다 — deploy/README.md 참고)"
+            exit 1
+          fi
 
           # --wait 가 핵심이다. 이게 없으면 컨테이너를 "만들었다"에서 성공으로 끝나,
           # 마이그레이션 실패로 죽은 배포가 초록불이 된다.
