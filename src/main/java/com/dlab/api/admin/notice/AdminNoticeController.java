@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 공지 (F-4.11-3).
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 대상 필드(반·학생)가 범위마다 달라 <b>어느 조합이 유효한지가 요청마다 흔들린다.</b>
  * 경로가 갈리면 필요한 값이 무엇인지 명확하다.
  */
+@Tag(name = "관리자 · 공지 (F-4.11-3)")
 @RestController
 @RequestMapping("/api/v1/admin/notices")
 @RequiredArgsConstructor

@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 출결 현황 (F-4.3-1).
@@ -43,6 +44,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>승인·반려는 여기 없다 — 사유신청 화면(F-4.1-6)이 맡는다. 여기 있는 쓰기는
  * <b>정정</b>뿐이고, 태깅 보정과 상태 정정 두 가지로 갈린다.
  */
+@Tag(name = "관리자 · 출결 관리 (F-4.3-1)")
 @RestController
 @RequestMapping("/api/v1/admin/attendance")
 @RequiredArgsConstructor

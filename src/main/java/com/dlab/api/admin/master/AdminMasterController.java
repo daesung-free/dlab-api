@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 기초 관리 (학과 · 계열 · 사물함 · 장학).
@@ -19,6 +20,7 @@ import java.util.List;
  * <p>학과는 지점·연도 단위라 전년도 복사 대상이고, 계열은 전 지점 공통이라
  * <b>상위 관리자만</b> 수정할 수 있다.
  */
+@Tag(name = "관리자 · 기초 마스터")
 @RestController
 @RequestMapping("/api/v1/admin/masters")
 @RequiredArgsConstructor

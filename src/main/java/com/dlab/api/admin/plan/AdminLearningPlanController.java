@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 학습계획 관리 (F-4.11).
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.*;
  * <p>관리자가 손대는 것은 <b>드롭다운 마스터</b>뿐이다(과목·학습형태). 탐구1/2 분리와
  * 과목 커스터마이즈가 요구사항이라 지점·연도마다 달라진다.
  */
+@Tag(name = "관리자 · 학습계획 (F-4.11)")
 @RestController
 @RequestMapping("/api/v1/admin/learning-plans")
 @RequiredArgsConstructor

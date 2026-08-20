@@ -21,6 +21,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 사유 신청 관리 (F-4.1-6).
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
  * 이미 한다. 목록이 {@code approvalRequestId}를 실어 보내므로 화면이 그걸 부르면 된다.
  * 승인 로직을 두 벌 만들면 타임아웃·에스컬레이션 처리가 갈린다.
  */
+@Tag(name = "관리자 · 사유 신청 (F-4.1-6)")
 @RestController
 @RequestMapping("/api/v1/admin/absence-requests")
 @RequiredArgsConstructor

@@ -13,6 +13,7 @@ import com.dlab.common.security.CurrentAccount;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 담당선생님(사감) 승인 처리.
@@ -20,6 +21,7 @@ import java.util.List;
  * <p>타임아웃(10분) 전에도 승인할 수 있다. 다만 그 경우 학부모에게 나가는 문구가
  * 달라야 하므로({@code STAFF_BEFORE_TIMEOUT}) 서비스가 케이스를 판별해 기록한다.
  */
+@Tag(name = "관리자 · 승인 처리 (F-4.11-5)")
 @RestController
 @RequestMapping("/api/v1/admin/approvals")
 @RequiredArgsConstructor

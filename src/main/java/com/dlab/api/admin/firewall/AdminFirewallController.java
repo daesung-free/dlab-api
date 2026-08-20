@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 방화벽 해제 관리 (F-4.11-10).
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
  * <p>⚠️ <b>Nebula 실제 제어는 아직 목업이다</b>(E-1 제어 단위 미확정). 상태는 정확히
  * 바뀌지만 와이파이가 실제로 열리고 닫히지는 않는다.
  */
+@Tag(name = "관리자 · 방화벽 해제 (F-4.11-10)")
 @RestController
 @RequestMapping("/api/v1/admin/firewall-requests")
 @RequiredArgsConstructor

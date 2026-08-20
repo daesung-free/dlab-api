@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Set;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 직원·선생님 계정과 권한 관리 (F-4.10-2).
@@ -18,6 +19,7 @@ import java.util.Set;
  * <p>선생님과 직원을 경로부터 나눈다 — 담임·승인 에스컬레이션 자격이 선생님에게만 있고,
  * 그 구분이 API 표면에서도 드러나야 잘못 등록하는 일이 줄어든다.
  */
+@Tag(name = "관리자 · 직원·강사")
 @RestController
 @RequestMapping("/api/v1/admin/staff")
 @RequiredArgsConstructor

@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 통계·관리자 대시보드 (F-4.11-11).
@@ -30,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p><b>실적 통계는 아직 없다</b> — 실적 관리(F-4.10-6)가 미구현이다.
  */
+@Tag(name = "관리자 · 통계·대시보드 (F-4.11-11)")
 @RestController
 @RequestMapping("/api/v1/admin/statistics")
 @RequiredArgsConstructor

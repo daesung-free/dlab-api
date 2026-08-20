@@ -12,6 +12,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 승인 라우팅 정책 관리 (F-4.11-5).
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
  * <p><b>승인 주체는 아직 확정되지 않았다(I-12).</b> 방화벽(학부모 → 10분 후 담당선생님)만
  * 확정이고 나머지는 비워두면 된다 — 비어 있으면 그 신청이 막힌다는 것을 화면이 알려야 한다.
  */
+@Tag(name = "관리자 · 승인 정책 (F-4.11-5)")
 @RestController
 @RequestMapping("/api/v1/admin/approval-items")
 @RequiredArgsConstructor

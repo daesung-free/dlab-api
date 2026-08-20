@@ -13,6 +13,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 상담 예약 (앱, F-4.11-4).
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
  * <p><b>예약·취소는 학생 본인만 한다.</b> 조회는 학부모도 본다 — 자녀가 언제 상담을
  * 잡았는지는 알아야 한다.
  */
+@Tag(name = "앱 · 상담 예약 (F-4.11-4)")
 @RestController
 @RequestMapping("/api/v1/app/consults")
 @RequiredArgsConstructor

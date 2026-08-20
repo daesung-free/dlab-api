@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import com.dlab.common.security.CurrentAccount;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 인증.
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
  * <p>앱과 로직은 같지만 경로를 나눈다 — 클라이언트별로 인증 정책이 갈릴 수 있고
  * (예: 앱만 기기 등록 요구), 로그도 분리해서 봐야 한다.
  */
+@Tag(name = "관리자 · 인증")
 @RestController
 @RequestMapping("/api/v1/admin/auth")
 @RequiredArgsConstructor

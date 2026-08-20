@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 데일리 루틴 관리 (F-4.11-1).
@@ -20,6 +21,7 @@ import java.util.Map;
  * <p><b>결과 입력은 반 단위 그리드뿐이다.</b> 시트가 *"반 단위 그리드 일괄 입력 필수
  * (개별 폼 금지)"*를 요구해서, 한 건씩 저장하는 엔드포인트를 두지 않았다.
  */
+@Tag(name = "관리자 · 데일리 루틴 (F-4.11-1)")
 @RestController
 @RequestMapping("/api/v1/admin/routines")
 @RequiredArgsConstructor

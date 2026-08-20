@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * Daily Report (F-4.11-6, 앱 A-3).
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
  *
  * <p><b>셀프 피드백은 학생만 쓴다.</b> 학부모가 자녀 회고를 대신 쓰면 회고가 아니다.
  */
+@Tag(name = "앱 · Daily Report (A-3)")
 @RestController
 @RequestMapping("/api/v1/app/daily-reports")
 @RequiredArgsConstructor

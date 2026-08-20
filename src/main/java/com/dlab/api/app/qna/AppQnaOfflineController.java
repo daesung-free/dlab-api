@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 학생 앱 — 대면 상담 예약 (A-13 OFF).
@@ -24,6 +25,7 @@ import java.util.List;
  * <p><b>학생 본인만 쓴다.</b> 상담은 학생이 직접 잡는 것이라 학부모 경로를 두지 않았다 —
  * 시트도 사용자를 "학생"으로만 적었다.
  */
+@Tag(name = "앱 · 질의응답 대면 예약 (A-13)")
 @RestController
 @RequestMapping("/api/v1/app/qna/offline")
 @RequiredArgsConstructor

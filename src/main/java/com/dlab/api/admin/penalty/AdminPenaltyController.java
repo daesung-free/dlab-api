@@ -24,6 +24,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 상벌점 관리 (F-4.1-2).
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
  * <p>DSA에는 <b>수기 일괄 부여만</b> 있었고 자동 규칙이 없었다. 규칙엔진은
  * I-5(트리거→점수 매핑) 확정이 블로커라, 화면도 <i>"수기 부여 우선 + 자동규칙 UI는 자리만"</i>이다.
  */
+@Tag(name = "관리자 · 상벌점 부여·조회")
 @RestController
 @RequestMapping("/api/v1/admin/penalties")
 @RequiredArgsConstructor

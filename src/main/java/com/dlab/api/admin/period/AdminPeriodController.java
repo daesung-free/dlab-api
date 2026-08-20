@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 교시·시간 편집 (F-4.10-1).
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>이 마스터를 출결 판정·순공시간·학습계획이 함께 쓴다. 그래서 겹치는 교시를 만들 수 없고,
  * 마지막 하나를 지울 수 없다 — 교시가 0개인 날은 "운영일 아님"이 돼 태깅이 전원 거부된다.
  */
+@Tag(name = "관리자 · 교시 (F-4.10-1)")
 @RestController
 @RequestMapping("/api/v1/admin/periods")
 @RequiredArgsConstructor

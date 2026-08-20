@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 — 설문 개설·마감·집계 (F-4.11-3 · F-4.6).
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 다른 질문에 답한 결과가 한 집계에 섞인다 — 고칠 일이 생기면 마감하고 새로 낸다.
  * 바꿀 수 있는 건 기간·안내문뿐이다.
  */
+@Tag(name = "관리자 · 설문 (F-4.11-3)")
 @RestController
 @RequestMapping("/api/v1/admin/surveys")
 @RequiredArgsConstructor

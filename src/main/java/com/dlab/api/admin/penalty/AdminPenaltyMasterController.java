@@ -16,6 +16,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 상벌점 항목·규칙 관리 (F-4.1-3, I-5).
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
  * <p><b>항목만 만들면 자동부여는 안 돈다</b> — 규칙(어떤 상황에 그 항목을 준다)까지
  * 만들고 켜야 한다. 화면에서 이 순서를 안내할 것.
  */
+@Tag(name = "관리자 · 상벌점 항목·규칙 (F-4.1-3)")
 @RestController
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor

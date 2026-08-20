@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 앱 버전·점검 모드·약관 관리 (F-4.12-3).
@@ -19,6 +20,7 @@ import java.util.List;
  * <p><b>전 지점 공통 설정이라 최상위 관리자만 만진다.</b> 지점 관리자가 점검 모드를 켜면
  * 다른 지점 앱까지 전부 멈춘다 — 공휴일 등록에서 전 지점 공통을 본사만 넣게 한 것과 같은 이유다.
  */
+@Tag(name = "관리자 · 앱 설정·약관 (F-4.12-3)")
 @RestController
 @RequestMapping("/api/v1/admin/app-config")
 @RequiredArgsConstructor

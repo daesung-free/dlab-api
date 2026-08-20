@@ -12,6 +12,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 지점 설정 관리 (F-4.10-7).
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
  *
  * <p><b>시크릿 원문은 재발급 응답에만 담긴다.</b> 조회는 언제나 마스킹이다.
  */
+@Tag(name = "관리자 · 지점 설정")
 @RestController
 @RequestMapping("/api/v1/admin/branch-configs")
 @RequiredArgsConstructor

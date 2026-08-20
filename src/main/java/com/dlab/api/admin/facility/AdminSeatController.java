@@ -12,6 +12,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 좌석 배정.
@@ -19,6 +20,7 @@ import java.util.List;
  * <p>스키마(V2)와 <b>키오스크 좌석 조회는 다른 담당자</b> 영역이다. 여기는 배정·반납만 한다
  * (도메인 서비스에서 조회는 Phase 1, 생성·수정은 Phase 2로 나누기로 합의).
  */
+@Tag(name = "관리자 · 좌석·좌석배치도 (F-4.10-3)")
 @RestController
 @RequestMapping("/api/v1/admin/seats")
 @RequiredArgsConstructor
