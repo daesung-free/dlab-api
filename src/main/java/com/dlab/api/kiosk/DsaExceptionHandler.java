@@ -4,6 +4,8 @@ import com.dlab.api.kiosk.dto.DsaResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -27,6 +29,11 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * {@code DsaHandlerCoverageTest}가 이 누락을 잡는다.
  */
 @Slf4j
+// ★ 우선순위를 명시한다. 패키지를 좁혀도 GlobalExceptionHandler와 "어느 쪽이 더 구체적인
+//   예외를 잡는가"로 갈릴 수 있다 — 저쪽에 HttpMessageNotReadableException 같은 정확한
+//   매치가 생기면, 스캔 순서에 따라 키오스크 응답이 ApiResponse 형식으로 나갈 수 있다.
+//   그러면 키오스크가 본문을 못 읽는다.
+@Order(Ordered.HIGHEST_PRECEDENCE)
 @RestControllerAdvice(basePackages = {
         "com.dlab.api.kiosk.attendance",
         "com.dlab.api.kiosk.auth",
