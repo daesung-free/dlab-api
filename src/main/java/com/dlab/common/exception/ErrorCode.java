@@ -136,6 +136,11 @@ public enum ErrorCode {
     /** 앱이 이 오류를 받으면 급식업체 제3자 제공 동의 화면을 띄운다. */
     MEAL_THIRD_PARTY_CONSENT_REQUIRED(HttpStatus.BAD_REQUEST,
             "급식업체 개인정보 제3자 제공에 동의해야 신청할 수 있습니다."),
+    // 급식업체·단가 (0820 규정)
+    MEAL_VENDOR_NOT_FOUND(HttpStatus.NOT_FOUND, "급식업체를 찾을 수 없습니다."),
+    /** 같은 업체가 두 벌이면 연락처를 고칠 때 어느 쪽이 진짜인지 알 수 없다. */
+    MEAL_VENDOR_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 급식업체입니다."),
+    MEAL_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "지점 급식 설정이 없습니다."),
 
     // 공지 (F-4.11-3)
     NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지를 찾을 수 없습니다."),
