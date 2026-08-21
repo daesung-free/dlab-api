@@ -68,7 +68,25 @@ public class MealOrder extends BaseEntity {
     }
 
     public void addItem(LocalDate mealDate, MealType mealType) {
-        items.add(new MealOrderItem(this, mealDate, mealType));
+        addItem(mealDate, mealType, null);
+    }
+
+    /**
+     * @param unitPrice <b>신청 시점 단가 스냅샷</b>. 나중에 마스터를 다시 읽어 계산하면
+     *                  단가 인상이 과거 주문에 소급된다({@link MealOrderItem#getUnitPrice()})
+     */
+    public void addItem(LocalDate mealDate, MealType mealType, Integer unitPrice) {
+        items.add(new MealOrderItem(this, mealDate, mealType, unitPrice));
+    }
+
+    /**
+     * 살아 있는 항목의 금액 합계.
+     *
+     * <p>주문에 총액 컬럼을 두지 않는 이유는 청구와 같다 — 취소가 항목 단위로 들어오는데
+     * 컬럼으로 두면 항목 합계와 어긋났을 때 <b>어느 쪽이 맞는지 알 수 없다.</b>
+     */
+    public int totalAmount() {
+        return activeItems().stream().mapToInt(MealOrderItem::amount).sum();
     }
 
     public YearMonth month() {
