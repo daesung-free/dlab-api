@@ -76,3 +76,18 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+// ★ ./gradlew bootRun 만 쳐도 local 프로필로 뜨게 한다.
+//
+//   DB 접속정보를 application.yml 이 아니라 application-local.yml 에만 둔 것은
+//   의도적이다 — 그 파일이 .gitignore 에 걸려 있어 접속정보가 git 에 올라가지 않는다.
+//   대신 프로필을 빼먹으면 "Failed to determine a suitable driver class" 로 기동이
+//   실패한다. 레포를 새로 받은 사람은 이 오류부터 만나게 된다.
+//
+//   시스템 프로퍼티라 --args 가 항상 이긴다. CI 의
+//   `bootRun --args='--spring.profiles.active=ci'` 는 그대로 동작한다.
+//   빌드된 jar 에는 영향이 없다 — gradle bootRun 한정이다.
+tasks.named('bootRun') {
+    systemProperty 'spring.profiles.active',
+            providers.systemProperty('spring.profiles.active').getOrElse('local')
+}
