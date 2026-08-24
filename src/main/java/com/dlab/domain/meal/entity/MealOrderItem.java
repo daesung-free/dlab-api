@@ -52,14 +52,38 @@ public class MealOrderItem extends BaseEntity {
     @Column(name = "cancel_path", length = 10)
     private CancelPath cancelPath;
 
+    /**
+     * ★ <b>신청 시점 단가 스냅샷</b>이다. 마스터({@code meal_policy.unit_price})를
+     * 다시 읽어 계산하면, 단가를 올리는 순간 <b>과거 주문 금액이 소급해서 바뀐다</b> —
+     * 이미 결제·정산이 끝난 달의 금액이 달라지면 맞출 방법이 없다.
+     * 청구({@code billing.billed_amount})에서 같은 판단을 했다.
+     *
+     * <p>단가가 등록되기 전에 만들어진 주문은 비어 있다.
+     */
+    @Column(name = "unit_price")
+    private Integer unitPrice;
+
     MealOrderItem(MealOrder order, LocalDate mealDate, MealType mealType) {
+        this(order, mealDate, mealType, null);
+    }
+
+    MealOrderItem(MealOrder order, LocalDate mealDate, MealType mealType, Integer unitPrice) {
         this.order = order;
         this.mealDate = mealDate;
         this.mealType = mealType;
+        this.unitPrice = unitPrice;
     }
 
     public boolean isActive() {
         return canceledAt == null && !isDeleted();
+    }
+
+    /**
+     * 이 끼니의 금액. 단가가 없으면 0이다 — <b>금액을 아는 것처럼 굴지 않는다.</b>
+     * 청구를 만들 때는 {@code MealPolicy.isPriced()}로 먼저 걸러야 한다.
+     */
+    public int amount() {
+        return unitPrice == null ? 0 : unitPrice;
     }
 
     /**

@@ -95,12 +95,22 @@ public class MealOrderService {
                 .map(MealOrderService::key)
                 .collect(Collectors.toSet());
 
+        // ★ 지금 단가를 항목에 박아 둔다. 나중에 마스터를 다시 읽어 계산하면
+        //   단가를 올리는 순간 과거 주문 금액이 소급해서 바뀐다.
+        //   단가 미등록 지점은 null이 들어가고, 그 주문은 청구를 만들 수 없다 —
+        //   신청 자체를 막지는 않는다(업체 연결 전에도 운영이 돌아야 한다).
+        Integer unitPrice = scheduleService.unitPrice(academyId, enrollment.getYear());
+        if (unitPrice == null) {
+            log.warn("급식 단가 미등록 — 청구를 만들 수 없다: academyId={}, year={}",
+                    academyId, enrollment.getYear());
+        }
+
         for (MealSelection s : selections) {
             if (existing.contains(key(s.date(), s.mealType()))) {
                 throw new BusinessException(ErrorCode.MEAL_ALREADY_APPLIED,
                         "%s %s은 이미 신청했습니다.".formatted(s.date(), s.mealType()));
             }
-            order.addItem(s.date(), s.mealType());
+            order.addItem(s.date(), s.mealType(), unitPrice);
         }
 
         log.info("급식 신청: enrollmentId={}, 대상월={}, 건수={}",

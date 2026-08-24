@@ -45,4 +45,32 @@ public class MealPolicy extends BaseEntity {
     public void changeDeadlineDays(short deadlineDays) {
         this.deadlineDays = deadlineDays;
     }
+
+    /**
+     * 이 지점 급식업체. 지점마다 다르다 — 디온푸드 7곳 / 니즈푸드·한샘푸드·한끼애·성림푸드 각 1곳.
+     *
+     * <p>업체·단가를 별도 테이블로 빼지 않은 이유는, 여기가 이미 (지점 × 연도)로
+     * 급식 설정을 들고 있기 때문이다. <b>두 군데로 갈리면 한쪽만 등록된 지점이 생긴다.</b>
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vendor_id")
+    private MealVendor vendor;
+
+    /**
+     * 한 끼 단가. 점심·저녁이 같다(0820 기준). <b>지점별로 다르다</b> — 대구만 8,000원.
+     *
+     * <p>비어 있을 수 있다 — 업체 연결 전 지점이다. 그때는 신청 금액을 계산할 수 없다.
+     */
+    @Column(name = "unit_price")
+    private Integer unitPrice;
+
+    public void assignVendor(MealVendor vendor, Integer unitPrice) {
+        this.vendor = vendor;
+        this.unitPrice = unitPrice;
+    }
+
+    /** 금액 계산이 가능한 상태인가. 업체·단가가 없으면 신청은 되지만 청구를 못 만든다. */
+    public boolean isPriced() {
+        return unitPrice != null && unitPrice > 0;
+    }
 }

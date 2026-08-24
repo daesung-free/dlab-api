@@ -79,6 +79,21 @@ public class MealScheduleService {
     }
 
     /**
+     * 그 지점 한 끼 단가.
+     *
+     * <p><b>없으면 {@code null}이다 — 기본값을 만들지 않는다.</b> 단가는 지점마다 다르고
+     * (대구만 8,000원) 바뀔 수 있어서, 임의값을 쓰면 <b>틀린 금액이 주문에 스냅샷으로
+     * 박힌다.</b> 마감일수(D-n)에 기본값 3일을 두는 것과는 성격이 다르다 —
+     * 그건 틀려도 신청 기간만 어긋나지만 이건 돈이다.
+     */
+    public Integer unitPrice(Long academyId, short year) {
+        return policyRepository.find(academyId, year)
+                .filter(MealPolicy::isPriced)
+                .map(MealPolicy::getUnitPrice)
+                .orElse(null);
+    }
+
+    /**
      * 마감 전인가.
      *
      * <p>화면: <i>"앱 신청·취소 모두 이용일 D-n일 전 23:59까지"</i>.

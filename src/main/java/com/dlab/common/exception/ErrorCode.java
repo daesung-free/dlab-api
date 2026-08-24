@@ -136,6 +136,21 @@ public enum ErrorCode {
     /** 앱이 이 오류를 받으면 급식업체 제3자 제공 동의 화면을 띄운다. */
     MEAL_THIRD_PARTY_CONSENT_REQUIRED(HttpStatus.BAD_REQUEST,
             "급식업체 개인정보 제3자 제공에 동의해야 신청할 수 있습니다."),
+    // 급식업체·단가 (0820 규정)
+    MEAL_VENDOR_NOT_FOUND(HttpStatus.NOT_FOUND, "급식업체를 찾을 수 없습니다."),
+    /** 같은 업체가 두 벌이면 연락처를 고칠 때 어느 쪽이 진짜인지 알 수 없다. */
+    MEAL_VENDOR_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 급식업체입니다."),
+    MEAL_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "지점 급식 설정이 없습니다."),
+
+    // 교습비 가격 (F-4.10-5 · 0820 규정)
+    TUITION_PRICE_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 조건의 교습비가 등록되지 않았습니다."),
+    /** 지점 관리자가 공통 가격을 고치면 나머지 지점 청구가 같이 바뀐다. */
+    TUITION_PRICE_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN, "전 지점 공통 교습비는 본사만 다룰 수 있습니다."),
+    /**
+     * ★ 달력 일수로 대신 계산하지 않는다. 표가 2월 27일·9월 29일이라
+     * 달력(28·30)으로 떨어뜨리면 조용히 틀린 금액이 청구된다.
+     */
+    TEACHING_DAYS_NOT_REGISTERED(HttpStatus.NOT_FOUND, "그 달의 교습일수가 등록되지 않았습니다."),
 
     // 공지 (F-4.11-3)
     NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지를 찾을 수 없습니다."),

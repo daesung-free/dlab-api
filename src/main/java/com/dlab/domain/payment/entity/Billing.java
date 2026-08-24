@@ -65,12 +65,36 @@ public class Billing extends BaseEntity {
     @Column(name = "due_date")
     private LocalDate dueDate;
 
+    /**
+     * 이용 연·월. <b>환불 계산이 이 값으로 교습일수를 찾는다.</b>
+     *
+     * <p>청구 1건 = 한 달분이다. 최초 입학 때 다음 달까지 함께 받는 경우는 청구를 2건
+     * 만든다 — 한 건에 두 달을 담으면 <b>그중 한 달만 환불하는 계산이 성립하지 않는다.</b>
+     *
+     * <p>급식·특강은 달 단위가 아니라 비어 있을 수 있다.
+     */
+    @Column(name = "service_year")
+    private Short serviceYear;
+
+    @Column(name = "service_month")
+    private Short serviceMonth;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private BillingStatus status = BillingStatus.PENDING;
 
     @OneToMany(mappedBy = "billing", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PaymentTransaction> transactions = new ArrayList<>();
+
+    /**
+     * 항목(교습비·독서실비). <b>환불 산식이 항목마다 달라서</b> 나눠 든다.
+     *
+     * <p>비어 있을 수 있다 — 급식·특강처럼 나눌 것이 없는 청구다.
+     * 그때는 청구 금액이 곧 단일 항목이라 봐도 된다.
+     */
+    @OneToMany(mappedBy = "billing", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC, id ASC")
+    private List<BillingItem> items = new ArrayList<>();
 
     public Billing(StudentEnrollment enrollment, String name, BillingType billingType,
                    int suppliedAmount, int discountAmount, LocalDate dueDate) {
@@ -84,6 +108,40 @@ public class Billing extends BaseEntity {
         this.billedAmount = Math.max(0, suppliedAmount - discountAmount);
         this.dueDate = dueDate;
         this.status = BillingStatus.PENDING;
+    }
+
+    /** 이용 월 지정. 환불 계산이 교습일수를 찾을 때 쓴다. */
+    public void assignServicePeriod(short serviceYear, int serviceMonth) {
+        this.serviceYear = serviceYear;
+        this.serviceMonth = (short) serviceMonth;
+    }
+
+    /**
+     * 항목 추가.
+     *
+     * <p><b>항목 합계가 청구 금액과 맞는지는 호출자가 보장한다.</b> 여기서 청구 금액을
+     * 항목에서 다시 계산하지 않는 이유는, 이미 발행된 청구의 금액이 항목을 고칠 때마다
+     * 흔들리면 <b>키오스크 영수증이 조용히 바뀌기</b> 때문이다.
+     */
+    public BillingItem addItem(BillingItemType itemType, int suppliedAmount, int discountAmount) {
+        BillingItem item = new BillingItem(this, itemType, suppliedAmount, discountAmount,
+                items.size() + 1);
+        items.add(item);
+        return item;
+    }
+
+    public List<BillingItem> activeItems() {
+        return items.stream().filter(i -> !i.isDeleted()).toList();
+    }
+
+    /**
+     * 항목 합계가 청구액과 맞는가. <b>어긋나면 환불 계산이 틀린다</b> —
+     * 항목 기준으로 차감하는데 실제로 받은 돈은 청구액이기 때문이다.
+     */
+    public boolean itemsMatchBilledAmount() {
+        List<BillingItem> active = activeItems();
+        return active.isEmpty()
+                || active.stream().mapToInt(BillingItem::getBilledAmount).sum() == billedAmount;
     }
 
     /** 수납 합계. 취소된 거래는 빼고 센다. */
