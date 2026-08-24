@@ -184,7 +184,20 @@ public enum ErrorCode {
     PERIOD_TIME_OVERLAPPED(HttpStatus.CONFLICT, "다른 교시와 시간이 겹칩니다."),
     /** 교시가 하나도 없는 날은 "운영일 아님"이 돼 태깅이 전부 거부된다. */
     PERIOD_LAST_ONE(HttpStatus.CONFLICT,
-            "마지막 교시는 삭제할 수 없습니다. 새 교시를 먼저 등록하세요.");
+            "마지막 교시는 삭제할 수 없습니다. 새 교시를 먼저 등록하세요."),
+
+    // 성적
+    /** 마스터 데이터를 안 넣은 것과 "낼 성적이 없음"을 구분해야 한다. */
+    EXAM_FORM_NOT_FOUND(HttpStatus.NOT_FOUND, "이 학년의 성적 입력 양식이 등록되지 않았습니다."),
+    EXAM_MASTER_NOT_FOUND(HttpStatus.NOT_FOUND, "시험 회차를 찾을 수 없습니다."),
+    EXAM_MASTER_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 시험 회차입니다."),
+    /** 지점 관리자가 공통 행을 고치면 나머지 8개 지점의 가입 화면이 같이 바뀐다. */
+    EXAM_FORM_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN, "전 지점 공통 성적 양식은 본사만 다룰 수 있습니다."),
+    /** 검사하지 않으면 남의 학년 과목이 학년 통계에 섞인다. */
+    EXAM_SUBJECT_NOT_IN_FORM(HttpStatus.BAD_REQUEST, "이 학생의 성적 입력 양식에 없는 과목입니다."),
+    GRADE_SUBMISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "제출된 성적이 없습니다."),
+    /** 0으로 채우게 두면 진짜 0점과 구분되지 않는다. 사유를 남기고 건너뛴다. */
+    GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요.");
 
     private final HttpStatus status;
     private final String message;

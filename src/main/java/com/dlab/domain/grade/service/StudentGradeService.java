@@ -1,0 +1,137 @@
+package com.dlab.domain.grade.service;
+
+import com.dlab.common.exception.BusinessException;
+import com.dlab.common.exception.ErrorCode;
+import com.dlab.domain.grade.entity.ExamSubject;
+import com.dlab.domain.grade.entity.StudentExamScore;
+import com.dlab.domain.grade.entity.StudentGradeSubmission;
+import com.dlab.domain.grade.repository.StudentGradeSubmissionRepository;
+import com.dlab.domain.user.entity.StudentEnrollment;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/**
+ * 학생 성적 제출·조회 (앱 A-2 · 상담 기초자료).
+ *
+ * <h2>가입과 분리돼 있다</h2>
+ * 가입 트랜잭션에 묶지 않는다. 성적은 시험 3회차 × 과목 6개까지 되는 긴 입력이라,
+ * 한 번에 받으면 중간에 실패했을 때 <b>휴대폰 인증부터 다시</b> 해야 한다.
+ *
+ * <h2>덮어쓰기가 기본이다</h2>
+ * 학생이 화면에서 표를 통째로 다시 채워 보내는 흐름이라 <b>제출 = 그 회차 전체 교체</b>다.
+ * 부분 갱신으로 두면 "지웠는데 남아 있는" 칸이 생긴다. 학습계획에서 같은 판단을 했다.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class StudentGradeService {
+
+    private final StudentGradeSubmissionRepository submissionRepository;
+    private final ExamFormService examFormService;
+    private final Clock clock;
+
+    /** 내 성적. 아직 낸 적 없으면 빈 제출을 만들어 돌려준다 — 화면이 분기하지 않게. */
+    @Transactional
+    public StudentGradeSubmission mine(StudentEnrollment enrollment) {
+        return submissionRepository.findByEnrollmentId(enrollment.getId())
+                .orElseGet(() -> submissionRepository.save(new StudentGradeSubmission(enrollment)));
+    }
+
+    @Transactional(readOnly = true)
+    public StudentGradeSubmission of(StudentEnrollment enrollment) {
+        return submissionRepository.findByEnrollmentId(enrollment.getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.GRADE_SUBMISSION_NOT_FOUND));
+    }
+
+    /** 내신 주요교과평균. 값 하나뿐이라 별도 흐름을 두지 않는다. */
+    @Transactional
+    public StudentGradeSubmission saveSchoolRecord(StudentEnrollment enrollment,
+                                                   BigDecimal mainSubjectAverage) {
+        StudentGradeSubmission submission = mine(enrollment);
+        submission.updateSchoolRecord(mainSubjectAverage);
+        submission.markSubmitted(Instant.now(clock));
+        return submission;
+    }
+
+    /**
+     * 모의고사 성적 제출. <b>보낸 회차만</b> 교체하고 나머지 회차는 건드리지 않는다.
+     *
+     * <p>회차별로 나눠 낼 수 있어야 한다 — 6월 성적만 아는 학생이 9월·10월까지 채워야
+     * 저장되는 구조면 아무것도 못 낸다.
+     */
+    @Transactional
+    public StudentGradeSubmission saveExamScores(StudentEnrollment enrollment,
+                                                 List<ScoreInput> inputs) {
+        StudentGradeSubmission submission = mine(enrollment);
+        List<ExamFormService.Form> forms = examFormService.formOf(enrollment);
+
+        // ★ 과목 검증을 먼저 전부 끝낸다. 지우면서 검증하면 중간에 거절됐을 때
+        //   앞 회차만 지워진 채로 롤백 경계가 애매해진다
+        Map<Long, ExamSubject> subjects = inputs.stream()
+                .map(in -> examFormService.requireSubject(forms, in.examSubjectId()))
+                .collect(Collectors.toMap(ExamSubject::getId, Function.identity(), (a, b) -> a));
+
+        // 값이 하나라도 들어왔으면 "모른다" 상태를 푼다
+        if (inputs.stream().anyMatch(ScoreInput::hasValue)) {
+            submission.unskipExams();
+        }
+
+        inputs.stream()
+                .map(in -> subjects.get(in.examSubjectId()).getExamMaster().getId())
+                .distinct()
+                .forEach(submission::clearScoresOf);
+
+        for (ScoreInput input : inputs) {
+            if (!input.hasValue()) {
+                // 빈 줄은 저장하지 않는다. 저장하면 "입력했는데 세 칸이 다 빈" 행이
+                // 남아 미입력과 구분되지 않는다
+                continue;
+            }
+            StudentExamScore score = submission.addScore(subjects.get(input.examSubjectId()),
+                    input.standardScore(), input.percentile(), input.gradeLevel());
+            if (score.isBlank()) {
+                // 양식에 없는 칸만 채워 보낸 경우(한국사 표준점수 등) — 전부 걸러졌다
+                score.markDeleted();
+            }
+        }
+        submission.markSubmitted(Instant.now(clock));
+        log.info("성적 제출: enrollmentId={}, 과목수={}", enrollment.getId(), inputs.size());
+        return submission;
+    }
+
+    /**
+     * 모의고사 성적을 모른다고 체크.
+     *
+     * <p>0으로 채우게 두면 통계에서 진짜 0점과 구분되지 않는다. 사유를 남기고 건너뛴다 —
+     * 나중에 상담 교사가 "왜 없는지"를 물어볼 수 있어야 한다.
+     */
+    @Transactional
+    public StudentGradeSubmission skipExams(StudentEnrollment enrollment, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException(ErrorCode.GRADE_SKIP_REASON_REQUIRED);
+        }
+        StudentGradeSubmission submission = mine(enrollment);
+        submission.skipExams(reason);
+        submission.markSubmitted(Instant.now(clock));
+        return submission;
+    }
+
+    /** 과목 한 칸. 세 값 모두 {@code null}일 수 있다 — 미응시·절대평가·기억 안 남. */
+    public record ScoreInput(Long examSubjectId, Short standardScore, Short percentile,
+                             Short gradeLevel) {
+
+        boolean hasValue() {
+            return standardScore != null || percentile != null || gradeLevel != null;
+        }
+    }
+}
