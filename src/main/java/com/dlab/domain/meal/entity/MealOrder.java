@@ -109,4 +109,37 @@ public class MealOrder extends BaseEntity {
             this.status = MealOrderStatus.CANCELLED;
         }
     }
+
+    /**
+     * 발행된 청구.
+     *
+     * <p><b>발행 후 취소</b> 때문에 연결해 둔다. 급식은 날짜·끼니 단위로 취소되는데,
+     * 청구를 낸 뒤 취소되면 <b>청구액과 실제 이용액이 어긋난다.</b> 그 차액이 곧
+     * 환불 대상이고, 연결이 없으면 되짚을 방법이 없다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "billing_id")
+    private com.dlab.domain.payment.entity.Billing billing;
+
+    public void assignBilling(com.dlab.domain.payment.entity.Billing billing) {
+        this.billing = billing;
+        this.status = MealOrderStatus.ISSUED;
+    }
+
+    public boolean isBilled() {
+        return billing != null;
+    }
+
+    /**
+     * 발행 후 취소된 만큼의 <b>환불 대상 금액</b>.
+     *
+     * <p>청구액에서 지금 살아 있는 금액을 뺀다. 청구 전이면 0이다 —
+     * 아직 받은 돈이 없으니 돌려줄 것도 없다.
+     *
+     * <p>⚠️ <b>실제 환불(PG 취소)은 아직 없다.</b> 여기까지는 "얼마가 환불 대상인가"다.
+     * 급식은 날짜·끼니 단위 취소라 교습비의 구간·일할 환불을 타지 않는다.
+     */
+    public int refundableAmount() {
+        return billing == null ? 0 : Math.max(0, billing.getBilledAmount() - totalAmount());
+    }
 }
