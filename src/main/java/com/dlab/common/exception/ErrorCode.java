@@ -144,10 +144,10 @@ public enum ErrorCode {
     /** 0원으로 청구하면 학생이 공짜로 먹고 나중에 아무도 못 찾는다. */
     MEAL_UNIT_PRICE_NOT_REGISTERED(HttpStatus.CONFLICT,
             "급식 단가가 등록되지 않아 청구할 수 없습니다. 업체·단가를 먼저 등록해 주세요."),
-    /** 두 번 발행되면 학생이 두 번 낸다. */
-    BILLING_ALREADY_ISSUED(HttpStatus.CONFLICT, "해당 월 청구가 이미 발행되었습니다."),
-
-    /** 두 번 발행되면 미납액이 두 배로 잡힌 채 독촉이 나간다. */
+    /**
+     * 교습비는 두 번 발행되면 <b>미납액이 두 배</b>로 잡힌 채 독촉이 나가고,
+     * 급식은 <b>학생이 두 번 낸다</b>. 두 도메인이 같은 코드를 쓴다.
+     */
     BILLING_ALREADY_ISSUED(HttpStatus.CONFLICT, "해당 월 청구가 이미 발행되었습니다."),
 
     // 교습비 가격 (F-4.10-5 · 0820 규정)
