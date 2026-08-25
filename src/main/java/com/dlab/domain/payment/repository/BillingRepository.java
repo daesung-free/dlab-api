@@ -24,6 +24,24 @@ public interface BillingRepository extends JpaRepository<Billing, Long> {
             """)
     List<Billing> findByEnrollment(@Param("enrollmentId") Long enrollmentId);
 
+    /**
+     * 그 학생의 그 달 교습비 청구가 이미 있는가.
+     *
+     * <p><b>중복 발행을 막는다.</b> 데스크가 두 번 누르거나 입학 처리를 다시 태우면
+     * 같은 달 청구가 두 건 생기고, 그러면 미납액이 두 배로 잡힌 채 독촉이 나간다.
+     * 취소된 건은 다시 발행해야 하므로 뺀다.
+     */
+    @Query("""
+            SELECT COUNT(b) > 0 FROM Billing b
+            WHERE b.enrollment.id = :enrollmentId
+              AND b.serviceYear = :year AND b.serviceMonth = :month
+              AND b.billingType = com.dlab.domain.payment.entity.BillingType.TUITION
+              AND b.status <> com.dlab.domain.payment.entity.BillingStatus.CANCELLED
+              AND b.deleted = false
+            """)
+    boolean existsTuitionFor(@Param("enrollmentId") Long enrollmentId,
+                             @Param("year") Short year, @Param("month") Short month);
+
     /** 지점·연도 청구 전체. 수납현황·미납자 추출이 쓴다. */
     @Query("""
             SELECT b FROM Billing b

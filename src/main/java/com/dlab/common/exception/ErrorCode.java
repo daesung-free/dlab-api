@@ -142,6 +142,9 @@ public enum ErrorCode {
     MEAL_VENDOR_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 급식업체입니다."),
     MEAL_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "지점 급식 설정이 없습니다."),
 
+    /** 두 번 발행되면 미납액이 두 배로 잡힌 채 독촉이 나간다. */
+    BILLING_ALREADY_ISSUED(HttpStatus.CONFLICT, "해당 월 청구가 이미 발행되었습니다."),
+
     // 교습비 가격 (F-4.10-5 · 0820 규정)
     TUITION_PRICE_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 조건의 교습비가 등록되지 않았습니다."),
     /** 지점 관리자가 공통 가격을 고치면 나머지 지점 청구가 같이 바뀐다. */
