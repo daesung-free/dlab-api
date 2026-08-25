@@ -141,6 +141,11 @@ public enum ErrorCode {
     /** 같은 업체가 두 벌이면 연락처를 고칠 때 어느 쪽이 진짜인지 알 수 없다. */
     MEAL_VENDOR_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 급식업체입니다."),
     MEAL_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "지점 급식 설정이 없습니다."),
+    /** 0원으로 청구하면 학생이 공짜로 먹고 나중에 아무도 못 찾는다. */
+    MEAL_UNIT_PRICE_NOT_REGISTERED(HttpStatus.CONFLICT,
+            "급식 단가가 등록되지 않아 청구할 수 없습니다. 업체·단가를 먼저 등록해 주세요."),
+    /** 두 번 발행되면 학생이 두 번 낸다. */
+    BILLING_ALREADY_ISSUED(HttpStatus.CONFLICT, "해당 월 청구가 이미 발행되었습니다."),
 
     /** 두 번 발행되면 미납액이 두 배로 잡힌 채 독촉이 나간다. */
     BILLING_ALREADY_ISSUED(HttpStatus.CONFLICT, "해당 월 청구가 이미 발행되었습니다."),
