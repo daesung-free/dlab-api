@@ -49,11 +49,15 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
      *
      * <p>학번 형식이 {@code yyyy-NNNN}이라 뒤 4자리만 잘라 숫자로 본다.
      * 행이 없으면 0 — 그 해 첫 학생이다.
+     *
+     * <p>★ <b>직원은 뺀다.</b> 직원 학번이 9000번대라 같이 세면 다음 학생이
+     * {@code 0011}이 아니라 {@code 9004}가 되어 대역을 나눈 의미가 사라진다.
      */
     @Query(value = """
             SELECT COALESCE(MAX(CAST(SPLIT_PART(student_no, '-', 2) AS INTEGER)), 0)
             FROM student_enrollment
             WHERE academy_id = :academyId AND year = :year AND student_no IS NOT NULL
+              AND grade <> 'STAFF'
             """, nativeQuery = true)
     int findMaxSequence(Long academyId, short year);
 

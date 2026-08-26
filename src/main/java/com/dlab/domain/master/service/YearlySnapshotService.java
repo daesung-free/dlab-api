@@ -217,11 +217,28 @@ public class YearlySnapshotService {
      * 갈아끼울 FK가 없다. 그래서 엔티티를 먼저 만들어 작업이 겹치는 대신 표만 그대로 복사한다.
      * 엔티티가 생기면 위 학과·반과 같은 형태로 옮기면 된다.
      */
+    /**
+     * 교시 복사.
+     *
+     * <p>★ <b>나중에 추가된 컬럼을 빠뜨리면 조용히 틀린다.</b> 실제로 {@code day_type}·
+     * {@code period_type}·{@code planable}·{@code mandatory}가 빠져 있었다.
+     * <ul>
+     *   <li>{@code day_type} — 평일·토·일 세 벌이 같은 값으로 들어가 유니크가 깨진다.
+     *       <b>이건 터지기라도 한다</b></li>
+     *   <li>{@code period_type} — 급식·쉬는시간이 {@code CLASS}가 된다. 순공시간이
+     *       재실에서 급식·쉬는시간을 빼는 근거라 <b>다음 해 순공이 통째로 부풀려진다</b></li>
+     *   <li>{@code mandatory} — 자율교시가 의무가 되어 하원 판정 경계가 밀린다</li>
+     * </ul>
+     * 뒤의 둘은 예외도 안 나고 화면도 정상으로 보인다. 교시에 컬럼을 더하면
+     * <b>여기를 같이 고쳐야 한다.</b>
+     */
     private int copyPeriods(Long academyId, short fromYear, short toYear) {
         return em.createNativeQuery("""
                         INSERT INTO period_master
-                            (academy_id, year, period_no, name, start_time, end_time, copied_from_id)
-                        SELECT academy_id, :toYear, period_no, name, start_time, end_time, id
+                            (academy_id, year, period_no, name, start_time, end_time,
+                             day_type, period_type, planable, mandatory, copied_from_id)
+                        SELECT academy_id, :toYear, period_no, name, start_time, end_time,
+                               day_type, period_type, planable, mandatory, id
                         FROM period_master
                         WHERE academy_id = :academyId AND year = :fromYear AND is_deleted = FALSE
                         """)

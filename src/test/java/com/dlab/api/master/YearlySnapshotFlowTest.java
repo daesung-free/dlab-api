@@ -13,6 +13,7 @@ import com.dlab.domain.penalty.entity.PenaltyRule;
 import com.dlab.domain.penalty.entity.PenaltyTriggerType;
 import com.dlab.domain.user.entity.*;
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -115,9 +116,19 @@ class YearlySnapshotFlowTest {
         rule.activate();
         em.persist(rule);
 
+        // ★ 교시는 day_type·period_type·mandatory가 섞여 있어야 복사 누락이 드러난다.
+        //   한 벌만 넣으면 컬럼이 빠져도 기본값으로 통과해버린다
         em.createNativeQuery("""
-                        INSERT INTO period_master (academy_id, year, period_no, name, start_time, end_time)
-                        VALUES (:academyId, :year, 1, '1교시', TIME '09:00', TIME '10:00')
+                        INSERT INTO period_master
+                            (academy_id, year, period_no, name, start_time, end_time,
+                             day_type, period_type, planable, mandatory)
+                        VALUES
+                            (:academyId, :year, 1, '1교시', TIME '09:00', TIME '10:00',
+                             'WEEKDAY', 'CLASS', TRUE, TRUE),
+                            (:academyId, :year, 2, '점심', TIME '12:00', TIME '13:00',
+                             'WEEKDAY', 'MEAL', FALSE, FALSE),
+                            (:academyId, :year, 1, '토1교시', TIME '10:00', TIME '11:00',
+                             'SATURDAY', 'SELF_STUDY', TRUE, FALSE)
                         """)
                 .setParameter("academyId", academy.getId()).setParameter("year", FROM)
                 .executeUpdate();
@@ -162,11 +173,36 @@ class YearlySnapshotFlowTest {
                 .andExpect(jsonPath("$.data.copied.tuition").value(1))
                 .andExpect(jsonPath("$.data.copied.courseType").value(1))
                 .andExpect(jsonPath("$.data.copied.curriculum").value(1))
-                .andExpect(jsonPath("$.data.copied.period").value(1))
+                .andExpect(jsonPath("$.data.copied.period").value(3))
                 .andExpect(jsonPath("$.data.copied.class").value(2))
                 .andExpect(jsonPath("$.data.copied.approvalItem").value(1))
                 .andExpect(jsonPath("$.data.copied.penaltyItem").value(1))
                 .andExpect(jsonPath("$.data.copied.penaltyRule").value(1));
+    }
+
+    @Test
+    @DisplayName("★★ 교시는 요일·유형·의무 여부까지 그대로 넘어간다 — 빠지면 순공시간이 부풀려진다")
+    void periodCopiesEveryColumn() throws Exception {
+        copy(FROM, TO).andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = em.createNativeQuery("""
+                        SELECT day_type, period_type, planable, mandatory
+                        FROM period_master
+                        WHERE academy_id = :academyId AND year = :year
+                        ORDER BY day_type, period_no
+                        """)
+                .setParameter("academyId", academyId).setParameter("year", TO)
+                .getResultList();
+
+        // 급식이 CLASS로 넘어가면 순공시간에서 안 빠진다 — 예외도 안 나고 화면도 정상이다
+        assertThat(rows).extracting(r -> r[0] + "/" + r[1] + "/" + r[2] + "/" + r[3])
+                .containsExactly(
+                        "SATURDAY/SELF_STUDY/true/false",
+                        "WEEKDAY/CLASS/true/true",
+                        "WEEKDAY/MEAL/false/false");
     }
 
     @Test

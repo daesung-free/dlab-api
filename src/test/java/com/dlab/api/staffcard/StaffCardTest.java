@@ -102,13 +102,14 @@ class StaffCardTest {
     }
 
     @Test
-    @DisplayName("학생 채번은 직원 대역에 영향받지 않는다")
+    @DisplayName("★★ 직원 학번이 학생 채번을 밀지 않는다 — 같이 세면 다음 학생이 9002가 된다")
     void studentNumberingIsUnaffected() {
         staff("박행정", "RF9001");
         em.flush();
 
+        // 학생 채번의 기준값. 직원 9001이 섞이면 다음 학생이 2026-9002로 나간다
         assertThat(enrollmentRepository.findMaxSequence(bundang.getId(), (short) today.getYear()))
-                .isEqualTo(9001);   // 학생 채번은 이 값을 쓰지 않는다 — 직원 대역 조회와 분리돼 있다
+                .isEqualTo(1);      // 김민지 2026-0001까지만
     }
 
     // ── 격리 ──────────────────────────────────────────────────
