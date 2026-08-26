@@ -14,18 +14,31 @@
 
 name: CI
 
-# ★ PR 에서만 돈다. 예전에는 `push: branches: [develop]` 도 있었는데,
-#   develop 에 머지된 커밋이 곧 develop → main PR 의 head 라서
-#   **같은 커밋에 대해 push 실행과 pull_request 실행이 둘 다 붙었다.**
-#   릴리스 PR 화면에 잡이 4개(2 workflow run × 2 job)로 뜨고 러너 시간도 두 배로 들었다.
+# ★ PR 과 develop 푸시 양쪽에서 돈다.
 #
-# ⚠️ 트레이드오프: develop 에 **직접 push** 하면 검증이 안 된다.
-#   브랜치 전략상(CLAUDE.md §7) develop 에는 PR 로만 들어와야 하므로 정상 경로에는 구멍이 없다.
-#   그리고 머지 후 통합 검증은 develop → main PR 에서 한 번 더 돈다 —
-#   그게 배포 직전이라 오히려 확인해야 할 시점에 맞다.
+#   한때 `push: branches: [develop]` 를 뺀 적이 있다 — develop 에 머지된 커밋이 곧
+#   develop → main PR 의 head 라서 릴리스 PR 화면에 잡이 두 배로 떴기 때문이다.
+#   **그 판단을 되돌린다.** 러너 시간보다 "develop 이 깨진 채 방치되는 것"이 비싸다.
+#
+# ★ 되돌린 이유 — PR 검증만으로는 못 잡는 구멍이 실제로 터졌다 (2026-08-25).
+#   PR #42(교습비 청구)와 #43(급식 청구)이 `ErrorCode` 에 **같은 상수를 각자 추가**했다.
+#   파일 안 위치가 달라 git 이 충돌로 보지 않았고, 두 PR 은 각각 통과했다.
+#   그런데 #43 은 #42 가 머지되기 **전에** 만들어져서 낡은 base 로 검증됐고,
+#   #42 가 머지된 뒤에도 새 푸시가 없어 CI 가 다시 돌지 않았다.
+#   9초 간격으로 둘 다 머지되자 **develop 이 컴파일되지 않는 상태**가 됐다.
+#
+#   표준 해법은 브랜치 보호의 "Require branches to be up to date before merging" 인데,
+#   **비공개 레포 무료 플랜이라 브랜치 보호를 켤 수 없다**(API 403).
+#   그래서 "머지된 결과를 사후에라도 검증"하는 쪽으로 막는다.
+#
+# ⚠️ 여전히 남는 것: 깨진 것을 **머지 후에** 알게 된다. 막지는 못하고 빨리 알 뿐이다.
+#   연달아 머지할 때는 앞 PR 이 들어간 뒤 뒤 PR 브랜치에 develop 을 한 번 머지해
+#   CI 를 다시 돌리는 편이 안전하다.
 on:
   pull_request:
     branches: [develop, main]
+  push:
+    branches: [develop]
 
 # 같은 브랜치에 연속으로 푸시하면 앞의 실행을 취소한다 — 오래된 결과를 기다릴 이유가 없다.
 concurrency:
