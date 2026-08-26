@@ -70,14 +70,13 @@ class AdminAcademyTest {
                 .contains("('34', '김포', 'D.Lab 김포', 'DS-004')")
                 .contains("('42', '부천', 'D.Lab 부천', 'DS-005')")
                 .contains("('46', '송파', 'D.Lab 송파', 'DS-009')");
-        // 기존 9개는 store_code가 키오스크와 1:1로 맞는다
-        assertThat(sql.lines().filter(l -> l.contains("'DS-")).count()).isEqualTo(9);
-
-        // ★ 대전·대구(2026-08-26 추가)는 store_code를 아직 모른다 — NULL이어야 한다.
-        //   추측해서 DS-010·DS-011을 넣으면 "설정은 됐는데 연동이 안 되는" 상태가 되어
-        //   원인을 찾기가 더 어려워진다
-        assertThat(sql).contains("('47', '대전', 'D.Lab 대전', NULL)")
-                .contains("('48', '대구', 'D.Lab 대구', NULL)");
+        // ★ 대전·대구는 2026-08-26에 추가됐다. store_code 는 키오스크 어드민에서
+        //   확인한 값이고, 추측이 아니다 — 어긋난 값이 들어가면 "설정은 됐는데
+        //   연동이 안 되는" 상태가 되어 원인을 찾기가 더 어려워진다
+        assertThat(sql).contains("('47', '대전', 'D.Lab 대전', 'DS-010')")
+                .contains("('48', '대구', 'D.Lab 대구', 'DS-011')");
+        // 11개 전부 store_code 를 갖는다 — 하나라도 비면 그 지점만 조용히 연동이 끊긴다
+        assertThat(sql.lines().filter(l -> l.contains("'DS-")).count()).isEqualTo(11);
     }
 
     @Test
