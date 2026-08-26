@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 전년도 복사 (요구사항 F-4.10-1).
@@ -140,23 +141,35 @@ public class YearlySnapshotService {
      * <p>이전 해 등록 건은 그대로 둔다 — 근태 이력이 거기 붙어 있다.
      */
     private int copyStaffEnrollments(Academy academy, short fromYear, short toYear) {
-        List<StudentEnrollment> sources = enrollmentRepository.findCurrentStaff(academy.getId())
-                .stream()
-                .filter(e -> e.getYear() == fromYear)
-                .toList();
+        List<StudentEnrollment> staff = enrollmentRepository.findCurrentStaff(academy.getId());
 
-        for (StudentEnrollment source : sources) {
-            // 카드는 새 행으로 옮긴다. 두 행이 같은 카드를 들고 있으면
-            // findCurrentByRfidNo가 어느 쪽을 줄지 정해지지 않는다
+        // 새 해에 직접 등록된 직원. 복사가 같은 사람을 한 번 더 만들면
+        // findCurrentByRfidNo가 어느 행을 줄지 정해지지 않는다
+        Set<Long> alreadyInTarget = staff.stream()
+                .filter(e -> e.getYear() == toYear)
+                .map(e -> e.getStudent().getId())
+                .collect(java.util.stream.Collectors.toSet());
+
+        int created = 0;
+        for (StudentEnrollment source : staff) {
+            if (source.getYear() != fromYear) {
+                continue;
+            }
+            // 지난 해 행은 어느 경우든 닫는다. 카드도 새 행으로 넘긴다 —
+            // 두 행이 같은 카드를 들고 있으면 태깅이 어느 쪽인지 정해지지 않는다
             String rfidNo = source.getRfidNo();
             source.assignCard(null);
             source.expire();
 
+            if (alreadyInTarget.contains(source.getStudent().getId())) {
+                continue;
+            }
             enrollmentRepository.save(new StudentEnrollment(
                     source.getStudent(), academy, toYear,
                     source.getStudentNo(), rfidNo, GradeType.STAFF));
+            created++;
         }
-        return sources.size();
+        return created;
     }
 
     /**

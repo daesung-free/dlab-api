@@ -46,6 +46,7 @@ class StaffCardTest {
     @Autowired StaffAttendanceService staffAttendanceService;
     @Autowired DailyAttendanceConfirmService confirmService;
     @Autowired StudentEnrollmentRepository enrollmentRepository;
+    @Autowired com.dlab.domain.master.service.YearlySnapshotService snapshotService;
     @Autowired EntityManager em;
     @Autowired Clock clock;
 
@@ -227,6 +228,62 @@ class StaffCardTest {
     }
 
     // ── 퇴사 ──────────────────────────────────────────────────
+
+    // ── 연도 이월 ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 해가 바뀌어도 직원은 학번·카드를 그대로 갖고 넘어간다 — 4자리를 외워서 찍는다")
+    void staffCarriesOverToNextYear() {
+        StudentEnrollment staff = staff("박행정", "RF9001");
+        em.flush();
+
+        short thisYear = (short) today.getYear();
+        snapshotService.copy(bundang.getId(), thisYear, (short) (thisYear + 1), superAdmin);
+        em.flush();
+        em.clear();
+
+        var carried = enrollmentRepository.findCurrentStaff(bundang.getId());
+
+        assertThat(carried).singleElement().satisfies(e -> {
+            assertThat(e.getYear()).isEqualTo((short) (thisYear + 1));
+            assertThat(e.getStudentNo()).isEqualTo(staff.getStudentNo());   // 학번 유지
+            assertThat(e.getRfidNo()).isEqualTo("RF9001");                  // 카드 유지
+        });
+    }
+
+    @Test
+    @DisplayName("★ 카드는 새 행으로 옮겨진다 — 두 행이 같은 카드를 들면 태깅이 어느 쪽인지 모른다")
+    void cardMovesToNewRow() {
+        StudentEnrollment staff = staff("박행정", "RF9001");
+        em.flush();
+
+        short thisYear = (short) today.getYear();
+        snapshotService.copy(bundang.getId(), thisYear, (short) (thisYear + 1), superAdmin);
+        em.flush();
+        em.clear();
+
+        assertThat(em.find(StudentEnrollment.class, staff.getId()).getRfidNo()).isNull();
+        assertThat(enrollmentRepository.findCurrentByRfidNo("RF9001")).isPresent();
+    }
+
+    @Test
+    @DisplayName("★ 새 해에 이미 등록된 직원은 복사가 건드리지 않는다 — 같은 사람이 두 행이 된다")
+    void alreadyRegisteredStaffIsNotDuplicated() {
+        StudentEnrollment staff = staff("박행정", "RF9001");
+        em.flush();
+
+        short thisYear = (short) today.getYear();
+        // 새 해 행을 손으로 먼저 만들어둔 상황
+        em.persist(new StudentEnrollment(staff.getStudent(), bundang,
+                (short) (thisYear + 1), "2027-9001", "RF9001", GradeType.STAFF));
+        em.flush();
+
+        snapshotService.copy(bundang.getId(), thisYear, (short) (thisYear + 1), superAdmin);
+        em.flush();
+        em.clear();
+
+        assertThat(enrollmentRepository.findCurrentStaff(bundang.getId())).hasSize(1);
+    }
 
     @Test
     @DisplayName("★ 퇴사하면 동기화에서 빠진다 — 다음 동기화에 키오스크가 비활성 처리한다")
