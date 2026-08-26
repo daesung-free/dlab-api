@@ -49,6 +49,8 @@ public class StudentSearchRepository {
                         e.deleted.isFalse(),
                         // 과거 기수 행이 섞이지 않게 현재 등록 건만
                         e.current.isTrue(),
+                        // ★ 직원은 학생 명단에 나오지 않는다. 직원 목록은 별도 화면이다
+                        e.grade.ne(GradeType.STAFF),
                         keywordMatches(keyword),
                         SearchPredicates.eq(e.grade, grade),
                         SearchPredicates.eq(e.track, track),
@@ -67,6 +69,7 @@ public class StudentSearchRepository {
                         SearchPredicates.scope(e.academy.id, e.year, scope),
                         e.deleted.isFalse(),
                         e.current.isTrue(),
+                        e.grade.ne(GradeType.STAFF),
                         keywordMatches(keyword),
                         SearchPredicates.eq(e.grade, grade),
                         SearchPredicates.eq(e.track, track),

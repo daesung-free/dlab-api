@@ -64,7 +64,9 @@ public class KioskStudentQueryService {
                 .forEach(sa -> seatByEnrollment.put(
                         sa.getEnrollment().getId(), sa.getSeat().getSeatCd()));
 
-        return enrollmentRepository.findCurrentByAcademyId(academyId).stream()
+        // ★ 직원까지 내려보낸다 — 카드를 인식해야 키오스크에서 출퇴근을 찍는다.
+        //   여기가 직원을 포함하는 유일한 경로다
+        return enrollmentRepository.findCurrentIncludingStaff(academyId).stream()
                 .map(e -> new DsaRows.StudentRow(
                         Masking.name(e.getStudent().getName()),
                         e.getStudentNo(),

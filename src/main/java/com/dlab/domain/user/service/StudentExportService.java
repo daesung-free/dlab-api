@@ -83,6 +83,8 @@ public class StudentExportService {
             case HIGH2 -> "고2";
             case HIGH3 -> "고3";
             case N_SU -> "N수생";
+            // 직원은 학생 명단에 안 나오지만(조회에서 제외) enum이 닫혀 있어야 한다
+            case STAFF -> "직원";
         };
     }
 

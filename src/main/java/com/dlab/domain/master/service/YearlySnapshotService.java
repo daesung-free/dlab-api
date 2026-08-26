@@ -20,7 +20,10 @@ import com.dlab.domain.penalty.repository.PenaltyRuleRepository;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.ClassMaster;
 import com.dlab.domain.user.entity.Teacher;
+import com.dlab.domain.user.entity.GradeType;
+import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.repository.AcademyRepository;
+import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import com.dlab.domain.user.repository.ClassMasterRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -64,6 +67,7 @@ import java.util.Map;
 public class YearlySnapshotService {
 
     private final AcademyRepository academyRepository;
+    private final StudentEnrollmentRepository enrollmentRepository;
     private final DepartmentMasterRepository departmentRepository;
     private final CourseTypeRepository courseTypeRepository;
     private final CurriculumRepository curriculumRepository;
@@ -115,11 +119,44 @@ public class YearlySnapshotService {
         copied.put("penaltyItem", itemMapping.size());
         copied.put("penaltyRule", copyPenaltyRules(academy, fromYear, toYear, itemMapping));
         copied.put("tuition", copyTuitions(academy, fromYear, toYear));
+        copied.put("staff", copyStaffEnrollments(academy, fromYear, toYear));
 
         SnapshotResult result = new SnapshotResult(fromYear, toYear, copied);
         log.info("전년도 복사 완료: academy={}, {} → {}, 합계 {}건 {}",
                 academyId, fromYear, toYear, result.total(), copied);
         return result;
+    }
+
+    /**
+     * 직원 등록 건 이월.
+     *
+     * <p><b>학생 등록 건은 복사하지 않는다</b> — 매년 새로 등록하는 게 맞다. 직원은 다르다.
+     * {@code student_enrollment}가 1년짜리라 새 해에 행이 없으면 {@code current=false}가
+     * 되고, 그러면 <b>다음 동기화에서 키오스크가 비활성 처리해 직원 카드가 먹통이 된다.</b>
+     *
+     * <p><b>학번·카드를 그대로 유지한다.</b> 직원은 4자리 학번을 외워서 찍는데 매년 바뀌면
+     * 쓸 수 없다. 학생 학번이 매년 초기화되는 것과 반대다.
+     *
+     * <p>이전 해 등록 건은 그대로 둔다 — 근태 이력이 거기 붙어 있다.
+     */
+    private int copyStaffEnrollments(Academy academy, short fromYear, short toYear) {
+        List<StudentEnrollment> sources = enrollmentRepository.findCurrentStaff(academy.getId())
+                .stream()
+                .filter(e -> e.getYear() == fromYear)
+                .toList();
+
+        for (StudentEnrollment source : sources) {
+            // 카드는 새 행으로 옮긴다. 두 행이 같은 카드를 들고 있으면
+            // findCurrentByRfidNo가 어느 쪽을 줄지 정해지지 않는다
+            String rfidNo = source.getRfidNo();
+            source.assignCard(null);
+            source.expire();
+
+            enrollmentRepository.save(new StudentEnrollment(
+                    source.getStudent(), academy, toYear,
+                    source.getStudentNo(), rfidNo, GradeType.STAFF));
+        }
+        return sources.size();
     }
 
     /**
