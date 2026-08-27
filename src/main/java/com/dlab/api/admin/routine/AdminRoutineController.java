@@ -32,6 +32,7 @@ public class AdminRoutineController {
 
     // ── 세팅 ─────────────────────────────────────────────────────
 
+    /** 그 달 루틴 목록. */
     @GetMapping
     public ApiResponse<List<RoutineResponse.Detail>> list(
             @CurrentAccount AuthPrincipal me,
@@ -43,6 +44,7 @@ public class AdminRoutineController {
                 .map(RoutineResponse.Detail::from).toList());
     }
 
+    /** 루틴 등록. */
     @PostMapping
     public ApiResponse<RoutineResponse.Detail> create(
             @CurrentAccount AuthPrincipal me,
@@ -55,6 +57,7 @@ public class AdminRoutineController {
                 request.sortOrder() == null ? 0 : request.sortOrder().shortValue(), me)));
     }
 
+    /** 루틴 수정. */
     @PatchMapping("/{routineId}")
     public ApiResponse<RoutineResponse.Detail> update(
             @CurrentAccount AuthPrincipal me,
@@ -67,6 +70,7 @@ public class AdminRoutineController {
                 request.sortOrder() == null ? null : request.sortOrder().shortValue(), me)));
     }
 
+    /** 루틴 삭제(soft). 이미 입력된 결과는 남는다. */
     @DeleteMapping("/{routineId}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me,
                                     @PathVariable Long routineId) {

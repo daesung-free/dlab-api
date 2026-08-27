@@ -26,12 +26,18 @@ public class AdminAuthController {
 
     private final AuthService authService;
 
+    /**
+     * 관리자 로그인.
+     *
+     * <p>실패가 5회 쌓이면 계정이 잠긴다 — <b>자동 해제는 없고</b> 관리자가 풀어야 한다.
+     */
     @PostMapping("/login")
     public ApiResponse<AuthResponse> login(@Valid @RequestBody AuthRequests.Login request) {
         return ApiResponse.success(AuthResponse.from(
                 authService.login(request.loginId(), request.password())));
     }
 
+    /** 액세스 토큰 재발급. Refresh Token은 Redis에 있다. */
     @PostMapping("/refresh")
     public ApiResponse<AuthResponse> refresh(@Valid @RequestBody AuthRequests.Refresh request) {
         return ApiResponse.success(AuthResponse.from(
@@ -47,6 +53,11 @@ public class AdminAuthController {
                 principal.accountId(), request.currentPassword(), request.newPassword())));
     }
 
+    /**
+     * 로그아웃.
+     *
+     * <p>Access Token을 블랙리스트에 올린다 — <b>안 그러면 만료까지 계속 쓸 수 있다</b>.
+     */
     @PostMapping("/logout")
     public ApiResponse<Void> logout(@CurrentAccount AuthPrincipal principal,
                                     @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String header) {

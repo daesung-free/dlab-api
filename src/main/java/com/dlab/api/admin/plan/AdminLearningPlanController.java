@@ -46,7 +46,14 @@ public class AdminLearningPlanController {
     // 학생별 조회 — 이행 여부·통계만
     // ─────────────────────────────────────────────────────────────
 
-    /** @param date 그 주 아무 날짜나 */
+    /**
+     * 그 학생의 주간 계획.
+     *
+     * <p><b>조회만 한다</b> — 관리자 편집 API가 없다. 과목별 시간 배분의 주도권이
+     * 학생이라는 것이 0803 답변서의 전제다.
+     *
+     * @param date 그 주 아무 날짜나
+     */
     @GetMapping("/students/{enrollmentId}/weeks")
     public ApiResponse<PlanResponse.Week> week(
             @CurrentAccount AuthPrincipal me,
@@ -59,6 +66,7 @@ public class AdminLearningPlanController {
                 planService.findWeek(enrollment.getId(), date)));
     }
 
+    /** 이행률·과목별 비율. 이행은 O/X 2단계라 부분이행이 없다(I-19). */
     @GetMapping("/students/{enrollmentId}/statistics")
     public ApiResponse<PlanResponse.Statistics> statistics(
             @CurrentAccount AuthPrincipal me,
@@ -75,6 +83,7 @@ public class AdminLearningPlanController {
     // 드롭다운 마스터
     // ─────────────────────────────────────────────────────────────
 
+    /** 드롭다운 마스터(과목·학습형태). */
     @GetMapping("/options")
     public ApiResponse<List<PlanResponse.Option>> options(
             @CurrentAccount AuthPrincipal me,
@@ -85,6 +94,12 @@ public class AdminLearningPlanController {
                 .stream().map(PlanResponse.Option::from).toList());
     }
 
+    /**
+     * 선택지 추가.
+     *
+     * <p>과목을 코드에 박지 않는 이유는 탐구 과목이 <b>학생 선택에 따라 갈리고</b>
+     * 지점·연도마다 다를 수 있어서다.
+     */
     @PostMapping("/options")
     public ApiResponse<PlanResponse.Option> createOption(
             @CurrentAccount AuthPrincipal me,
@@ -99,6 +114,7 @@ public class AdminLearningPlanController {
                 academy, year, request.optionType(), request.label(), request.sortOrder())));
     }
 
+    /** 선택지 이름 변경. 이미 그 선택지를 쓴 계획도 같이 바뀐다. */
     @PutMapping("/options/{optionId}")
     public ApiResponse<PlanResponse.Option> updateOption(
             @CurrentAccount AuthPrincipal me,

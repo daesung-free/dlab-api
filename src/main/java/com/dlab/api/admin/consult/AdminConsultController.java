@@ -65,6 +65,7 @@ public class AdminConsultController {
                 .map(LogResponse::from).toList());
     }
 
+    /** 상담 일지 작성. */
     @PostMapping
     public ApiResponse<LogResponse> write(@CurrentAccount AuthPrincipal me,
                                           @Valid @RequestBody WriteRequest request) {
@@ -75,6 +76,7 @@ public class AdminConsultController {
                 request.tagIds())));
     }
 
+    /** 상담 일지 수정. */
     @PutMapping("/{logId}")
     public ApiResponse<LogResponse> update(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long logId,
@@ -109,6 +111,7 @@ public class AdminConsultController {
 
     // ── 태그 마스터 ────────────────────────────────────────────
 
+    /** 상담 태그 목록. */
     @GetMapping("/tags")
     public ApiResponse<List<TagResponse>> tags(@CurrentAccount AuthPrincipal me,
                                                @RequestParam short year,
@@ -118,6 +121,7 @@ public class AdminConsultController {
                 .map(TagResponse::from).toList());
     }
 
+    /** 상담 태그 등록. */
     @PostMapping("/tags")
     public ApiResponse<TagResponse> createTag(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody TagRequest request) {
@@ -126,6 +130,7 @@ public class AdminConsultController {
                 request.sortOrderOrZero())));
     }
 
+    /** 상담 태그 수정. 이미 붙은 일지의 태그도 같이 바뀐다. */
     @PutMapping("/tags/{tagId}")
     public ApiResponse<TagResponse> updateTag(@CurrentAccount AuthPrincipal me,
                                               @PathVariable Long tagId,

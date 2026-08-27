@@ -64,6 +64,12 @@ public class AdminPeriodController {
         return ApiResponse.success(periods.stream().map(PeriodResponse::from).toList());
     }
 
+    /**
+     * 교시 등록.
+     *
+     * <p>시간이 겹치면 거부된다 — 한 시각이 두 교시에 걸리면
+     * <b>출결 판정과 순공시간이 흔들린다.</b>
+     */
     @PostMapping
     public ApiResponse<PeriodResponse> create(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody PeriodRequest request) {
@@ -85,6 +91,12 @@ public class AdminPeriodController {
                 request.planable(), request.mandatory())));
     }
 
+    /**
+     * 교시 삭제.
+     *
+     * <p><b>마지막 교시는 지울 수 없다</b> — 교시가 하나도 없는 날은 "운영일 아님"이 돼서
+     * 그날 태깅이 전부 거부된다.
+     */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me, @PathVariable Long id) {
         periodService.delete(me, id);

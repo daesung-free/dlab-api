@@ -50,6 +50,15 @@ public class AdminHolidayController {
         return ApiResponse.success(holidays);
     }
 
+    /**
+     * 공휴일 등록.
+     *
+     * <p><b>전 지점 공통 휴일은 본사만</b> 넣을 수 있다 — 지점 관리자가 넣으면
+     * 다른 지점 급식까지 막힌다. 지점은 자기 지점 유형만 등록한다.
+     *
+     * <p>⚠️ 이 데이터는 <b>급식 가능일</b>용이다. 교습비 일수는 별개다 —
+     * 학원은 삼일절·어린이날에도 운영한다.
+     */
     @PostMapping
     public ApiResponse<HolidayResponse> register(
             @CurrentAccount AuthPrincipal me,
@@ -69,6 +78,7 @@ public class AdminHolidayController {
                 HolidayResponse.from(holidayService.rename(me, holidayId, request.name())));
     }
 
+    /** 공휴일 삭제(soft). 물리 삭제하면 과거 급식 신청이 어느 규칙으로 계산됐는지 추적이 끊긴다. */
     @DeleteMapping("/{holidayId}")
     public ApiResponse<Void> remove(
             @CurrentAccount AuthPrincipal me,

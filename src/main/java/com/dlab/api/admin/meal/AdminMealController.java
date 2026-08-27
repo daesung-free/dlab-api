@@ -62,6 +62,7 @@ public class AdminMealController {
 
     // ── 급식 일정 관리 ─────────────────────────────────────────
 
+    /** 급식 중단일 목록. */
     @GetMapping("/closures")
     public ApiResponse<List<ClosureResponse>> closures(
             @CurrentAccount AuthPrincipal me,
@@ -112,6 +113,12 @@ public class AdminMealController {
                 .map(WindowResponse::from).toList());
     }
 
+    /**
+     * 월 접수기간 설정.
+     *
+     * <p>대상월마다 다르다(5/18~27에 6월분을 받는다). <b>기간 밖에는 신청 화면이
+     * 열리지 않고, 미등록도 닫힘</b>으로 본다.
+     */
     @PutMapping("/order-windows")
     public ApiResponse<WindowResponse> saveWindow(@CurrentAccount AuthPrincipal me,
                                                   @Valid @RequestBody WindowRequest request) {
@@ -122,6 +129,7 @@ public class AdminMealController {
 
     // ── 결제·취소 내역 ────────────────────────────────────────
 
+    /** 급식 신청 현황. 취소된 끼니는 빠진다. */
     @GetMapping("/orders")
     public ApiResponse<List<OrderResponse>> orders(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Long academyId,

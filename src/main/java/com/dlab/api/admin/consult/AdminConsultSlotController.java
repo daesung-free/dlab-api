@@ -87,6 +87,7 @@ public class AdminConsultSlotController {
                         0, List.of())));
     }
 
+    /** 상담 가능 일정 수정. <b>이미 예약된 인원보다 적은 정원으로는 줄일 수 없다.</b> */
     @PatchMapping("/{slotId}")
     public ApiResponse<ConsultResponse.Slot> update(
             @CurrentAccount AuthPrincipal me,
