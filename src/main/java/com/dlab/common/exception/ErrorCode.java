@@ -150,6 +150,12 @@ public enum ErrorCode {
      */
     BILLING_ALREADY_ISSUED(HttpStatus.CONFLICT, "해당 월 청구가 이미 발행되었습니다."),
 
+    // 장학 취소 판정 (0820 규정)
+    SCHOLARSHIP_REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "검토 대상을 찾을 수 없습니다."),
+    SCHOLARSHIP_REVIEW_ALREADY_DECIDED(HttpStatus.CONFLICT, "이미 처리된 검토 건입니다."),
+    /** 사유가 없으면 나중에 "왜 살려뒀나"에 답할 수 없다. */
+    SCHOLARSHIP_EXCEPTION_NOTE_REQUIRED(HttpStatus.BAD_REQUEST, "예외 인정 사유를 적어주세요."),
+
     // 교습비 가격 (F-4.10-5 · 0820 규정)
     TUITION_PRICE_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 조건의 교습비가 등록되지 않았습니다."),
     /** 지점 관리자가 공통 가격을 고치면 나머지 지점 청구가 같이 바뀐다. */
