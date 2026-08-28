@@ -81,8 +81,8 @@ public class AdmissionReservationService {
                 .year(year)
                 .rsvCd(newRsvCd())
                 .studentName(command.rsvNm())
-                .studentTel(command.stdTel())
-                .parentTel(command.parTel())
+                .studentTel(normalizeTel(command.stdTel()))
+                .parentTel(normalizeTel(command.parTel()))
                 .gender(command.genderGb())
                 .birth(command.birth())
                 .geyulGb(command.geyulGb())
@@ -117,7 +117,8 @@ public class AdmissionReservationService {
     public List<AdmissionReservation> search(String acid, Integer preTest, String rsvNm,
                                              String birth, String stdTel) {
         Academy academy = requireAcademy(acid);
-        return reservationRepository.search(academy.getId(), preTest, rsvNm, birth, stdTel);
+        return reservationRepository.search(
+                academy.getId(), preTest, rsvNm, birth, normalizeTel(stdTel));
     }
 
     // ── 3.5 · 3.6 코드 조회 ───────────────────────────────────
@@ -251,6 +252,30 @@ public class AdmissionReservationService {
         } catch (NumberFormatException | NullPointerException e) {
             throw new DsaApiException(DsaCode.INVALID_PARAMETER);
         }
+    }
+
+    /**
+     * 휴대폰번호 앞의 {@code 0}을 되살린다.
+     *
+     * <p>★ <b>규격서가 {@code std_tel}·{@code par_tel}을 {@code Int}로 적어놨고 샘플도
+     * 따옴표가 없다</b>({@code "std_tel": 01012345678}). 홈페이지가 실제로 숫자로 보내면
+     * 앞의 {@code 0}이 사라져 {@code 1012345678}로 들어온다.
+     *
+     * <p>그러면 저장은 되는데 <b>조회(3.4)가 연락처로 찾을 때 안 맞아서 못 찾는다</b> —
+     * 저장·조회 양쪽에서 같은 규칙을 태워야 왕복이 성립한다.
+     *
+     * <p>국내 휴대폰은 {@code 0}으로 시작하는 10~11자리라, 숫자만 남겼을 때 그 길이이면서
+     * {@code 0}으로 시작하지 않으면 잃어버린 것으로 본다.
+     */
+    private String normalizeTel(String tel) {
+        if (tel == null || tel.isBlank()) {
+            return tel;
+        }
+        String digits = tel.replaceAll("[^0-9]", "");
+        if (digits.length() >= 9 && digits.length() <= 10 && !digits.startsWith("0")) {
+            return "0" + digits;
+        }
+        return digits.isEmpty() ? tel : digits;
     }
 
     private boolean isBlank(String value) {

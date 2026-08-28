@@ -201,6 +201,41 @@ class HomepageAdmissionTest {
                 .andExpect(jsonPath("$.data[0].gender_gb_nm").value("남"));
     }
 
+    @Test
+    @DisplayName("★★ 연락처를 숫자로 보내도 앞의 0이 살아난다 — 규격서가 std_tel을 Int로 적어놨다")
+    void phoneKeepsLeadingZero() throws Exception {
+        // 홈페이지가 JSON 숫자로 보내면 01012345678 → 1012345678 로 들어온다
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","reg_yyyy":"2026","rsv_nm":"김숫자",
+                 "std_tel":1012345678,"par_tel":1098765432,"gender_gb":"M",
+                 "birth":"20081106","std_grade":"N"}""".formatted(token))
+                .andExpect(jsonPath("$.code").value(0));
+        em.flush();
+        em.clear();
+
+        String tel = em.createQuery("""
+                SELECT r.studentTel FROM AdmissionReservation r WHERE r.studentName = '김숫자'
+                """, String.class).getSingleResult();
+
+        assertThat(tel).isEqualTo("01012345678");
+    }
+
+    @Test
+    @DisplayName("★ 숫자로 저장된 건도 조회로 찾힌다 — 저장·조회가 같은 규칙을 타야 왕복이 된다")
+    void searchFindsNumericPhone() throws Exception {
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","reg_yyyy":"2026","rsv_nm":"김숫자",
+                 "std_tel":1012345678,"par_tel":1098765432,"gender_gb":"M",
+                 "birth":"20081106","std_grade":"N"}""".formatted(token));
+        em.flush();
+        em.clear();
+
+        call("/dlab/getStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"김숫자","birth":"20081106",
+                 "std_tel":1012345678}""".formatted(token))
+                .andExpect(jsonPath("$.data.length()").value(1));
+    }
+
     // ── 성적·파일 ─────────────────────────────────────────────
 
     @Test
