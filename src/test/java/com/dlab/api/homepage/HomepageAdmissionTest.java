@@ -75,6 +75,8 @@ class HomepageAdmissionTest {
 
         em.persist(new CommonCode(CommonCode.GRP_SUBJECT, "10", "화법과작문",
                 (short) 1, null, (short) 1));
+        em.persist(new CommonCode(CommonCode.GRP_EXAM, "1229", "윈터스쿨",
+                null, "2026", null, (short) 1));
         em.flush();
 
         token = tokenService.issue("dsisa1", secretOf("test-secret"), "dlab").token();
@@ -243,17 +245,6 @@ class HomepageAdmissionTest {
         assertThat(row[2]).asString().startsWith("admission/" + rsvCd);
     }
 
-    @Test
-    @DisplayName("깨진 Base64는 거부한다")
-    void brokenBase64IsRejected() throws Exception {
-        String rsvCd = saveOne();
-
-        call("/dlab/setStdFile", """
-                {"token":"%s","rsv_cd":"%s","file":"data:image/png;base64,!!!not-base64!!!"}"""
-                .formatted(token, rsvCd))
-                .andExpect(jsonPath("$.code").value(901));
-    }
-
     // ── 코드 조회 ─────────────────────────────────────────────
 
     @Test
@@ -268,12 +259,25 @@ class HomepageAdmissionTest {
     }
 
     @Test
-    @DisplayName("⚠️ 공통코드는 아직 비어 있다 — 값 목록 미수령이라 홈페이지 드롭다운이 빈 채로 뜬다")
-    void commonCodesAreEmptyForNow() throws Exception {
+    @DisplayName("★ 공통코드는 comm_cd·comm_nm·att1로 나간다(규격서 3.5) — 이름이 다르면 홈페이지가 못 읽는다")
+    void commonCodeRowShape() throws Exception {
         call("/dlab/getComInfo", """
                 {"token":"%s","acid":"F","grp3":"EXAM"}""".formatted(token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.length()").value(0));
+                .andExpect(jsonPath("$.data[0].comm_cd").value("1229"))
+                .andExpect(jsonPath("$.data[0].comm_nm").value("윈터스쿨"))
+                .andExpect(jsonPath("$.data[0].att1").value("2026"));
+    }
+
+    @Test
+    @DisplayName("★ 성적표 업로드 실패는 103이다(규격서 3.8) — 901과 구분된다")
+    void fileFailureUsesOwnCode() throws Exception {
+        String rsvCd = saveOne();
+
+        call("/dlab/setStdFile", """
+                {"token":"%s","rsv_cd":"%s","file":"data:image/png;base64,!!!not-base64!!!"}"""
+                .formatted(token, rsvCd))
+                .andExpect(jsonPath("$.code").value(103));
     }
 }

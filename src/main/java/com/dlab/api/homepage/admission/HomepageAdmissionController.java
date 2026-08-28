@@ -129,10 +129,12 @@ public class HomepageAdmissionController {
         return row;
     }
 
+    /** 규격서 3.5 응답 — {@code comm_cd}·{@code comm_nm}·{@code att1}. */
     private Map<String, Object> toCodeRow(CommonCode c) {
         Map<String, Object> row = new LinkedHashMap<>();
-        row.put("cd", c.getCode());
-        row.put("nm", c.getName());
+        row.put("comm_cd", c.getCode());
+        row.put("comm_nm", c.getName());
+        row.put("att1", c.getAtt1());
         return row;
     }
 

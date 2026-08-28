@@ -203,3 +203,7 @@ CREATE INDEX idx_common_code_group
 
 COMMENT ON TABLE common_code IS
     '홈페이지 입학예약 드롭다운 코드(3.5·3.6). 실제 값 목록은 대성전산 수령 대기';
+
+-- 규격서 3.5 응답의 att1. 예시가 전형 코드에 연도("2026")를 싣는다 —
+-- 무엇이 들어가는지 항목마다 달라 해석하지 않고 그대로 내보낸다
+ALTER TABLE common_code ADD COLUMN att1 VARCHAR(100);

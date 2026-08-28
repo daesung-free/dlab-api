@@ -190,10 +190,10 @@ public class AdmissionReservationService {
             bytes = Base64.getDecoder().decode(base64.replaceAll("\\s", ""));
         } catch (IllegalArgumentException e) {
             log.warn("성적표 디코딩 실패: rsvCd={}", rsvCd);
-            throw new DsaApiException(DsaCode.INVALID_PARAMETER);
+            throw new DsaApiException(DsaCode.FILE_UPLOAD_FAILURE);
         }
         if (bytes.length == 0 || bytes.length > MAX_FILE_BYTES) {
-            throw new DsaApiException(DsaCode.INVALID_PARAMETER);
+            throw new DsaApiException(DsaCode.FILE_UPLOAD_FAILURE);
         }
 
         String key = "admission/%s/%d".formatted(rsvCd, System.nanoTime());

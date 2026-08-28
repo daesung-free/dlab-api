@@ -44,6 +44,15 @@ public class CommonCode extends BaseEntity {
     @Column(name = "idx")
     private Short idx;
 
+    /**
+     * 규격서 3.5 응답의 {@code att1}.
+     *
+     * <p>예시가 전형 코드에 연도({@code "2026"})를 실어 보낸다. 무엇이 들어가는지
+     * 항목마다 다를 수 있어 <b>해석하지 않고 그대로 내보낸다.</b>
+     */
+    @Column(name = "att1", length = 100)
+    private String att1;
+
     /** {@code null}이면 전 지점 공통. 지점마다 다른 항목이 있으면 값이 붙는다. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "academy_id")
@@ -57,10 +66,16 @@ public class CommonCode extends BaseEntity {
 
     public CommonCode(String grp, String code, String name, Short idx,
                       Academy academy, short sortOrder) {
+        this(grp, code, name, idx, null, academy, sortOrder);
+    }
+
+    public CommonCode(String grp, String code, String name, Short idx, String att1,
+                      Academy academy, short sortOrder) {
         this.grp = grp;
         this.code = code;
         this.name = name;
         this.idx = idx;
+        this.att1 = att1;
         this.academy = academy;
         this.sortOrder = sortOrder;
     }
