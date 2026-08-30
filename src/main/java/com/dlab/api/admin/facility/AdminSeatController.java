@@ -100,12 +100,6 @@ public class AdminSeatController {
         }
     }
 
-    /**
-     * 좌석 배정.
-     *
-     * <p>이미 배정된 좌석이면 거부된다 — 한 자리에 두 명이 들어가면
-     * <b>키오스크 좌석표가 실제와 어긋난다.</b>
-     */
     @PostMapping
     public ApiResponse<SeatAssignmentResponse> assign(@CurrentAccount AuthPrincipal me,
                                                       @Valid @RequestBody SeatRequests.Assign request) {
@@ -113,7 +107,6 @@ public class AdminSeatController {
                 seatAssignmentService.assign(request.seatId(), request.enrollmentId(), me)));
     }
 
-    /** 좌석 배정 해제. 좌석 자체는 남는다. */
     @DeleteMapping("/students/{enrollmentId}")
     public ApiResponse<Void> release(@CurrentAccount AuthPrincipal me,
                                      @PathVariable Long enrollmentId) {

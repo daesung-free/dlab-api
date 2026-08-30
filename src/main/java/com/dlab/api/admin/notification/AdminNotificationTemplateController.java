@@ -39,12 +39,6 @@ public class AdminNotificationTemplateController {
                 .map(NotificationTemplateResponse::from).toList());
     }
 
-    /**
-     * 알림 템플릿 등록.
-     *
-     * <p>⚠️ <b>학생명 변수가 필수다</b> — 다자녀 학부모가 "이거 누구 얘기지" 하고
-     * 헷갈리지 않아야 한다. 빠지면 등록이 거부된다.
-     */
     @PostMapping
     public ApiResponse<NotificationTemplateResponse> create(
             @Valid @RequestBody NotificationTemplateRequests.Create request) {
@@ -78,12 +72,6 @@ public class AdminNotificationTemplateController {
                 templateService.updateMapping(id, request.channel(), request.recipientType())));
     }
 
-    /**
-     * 템플릿 사용 여부.
-     *
-     * <p>문구 확정({@code content_confirmed})과 <b>카카오 심사 상태는 다른 축</b>이다 —
-     * 문구가 확정돼도 심사를 못 넘으면 못 나간다.
-     */
     @PutMapping("/{id}/active")
     public ApiResponse<NotificationTemplateResponse> changeActive(
             @PathVariable Long id,

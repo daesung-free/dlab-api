@@ -37,7 +37,6 @@ public class AdminPenaltyMasterController {
 
     // ── 항목 ──────────────────────────────────────────────────
 
-    /** 상벌점 항목 목록. */
     @GetMapping("/penalty-items")
     public ApiResponse<List<ItemRow>> items(@CurrentAccount AuthPrincipal me,
                                             @RequestParam(required = false) Long academyId,
@@ -68,7 +67,6 @@ public class AdminPenaltyMasterController {
                 me, itemId, request.itemName(), request.point(), request.category())));
     }
 
-    /** 상벌점 항목 삭제(soft). 과거 부여 이력이 참조한다. */
     @DeleteMapping("/penalty-items/{itemId}")
     public ApiResponse<Void> deleteItem(@CurrentAccount AuthPrincipal me,
                                         @PathVariable Long itemId) {
@@ -96,7 +94,6 @@ public class AdminPenaltyMasterController {
                 request.triggerCondition(), request.penaltyItemId())));
     }
 
-    /** 규칙 수정. */
     @PutMapping("/penalty-rules/{ruleId}")
     public ApiResponse<RuleRow> updateRule(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long ruleId,
@@ -114,7 +111,6 @@ public class AdminPenaltyMasterController {
         return ApiResponse.success(RuleRow.from(masterService.toggleRule(me, ruleId, active)));
     }
 
-    /** 규칙 삭제(soft). */
     @DeleteMapping("/penalty-rules/{ruleId}")
     public ApiResponse<Void> deleteRule(@CurrentAccount AuthPrincipal me,
                                         @PathVariable Long ruleId) {

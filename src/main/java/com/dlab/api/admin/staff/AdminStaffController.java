@@ -28,7 +28,6 @@ public class AdminStaffController {
 
     private final StaffAccountService staffAccountService;
 
-    /** 담당선생님(사감) 목록. 반 담임·승인 에스컬레이션 대상이 여기서 나온다. */
     @GetMapping("/teachers")
     public ApiResponse<List<StaffResponse>> teachers(@CurrentAccount AuthPrincipal me,
                                                      @RequestParam Long academyId) {
@@ -36,7 +35,6 @@ public class AdminStaffController {
                 .map(StaffResponse::from).toList());
     }
 
-    /** 행정선생님 목록. 학생 가입 승인·전체공지 작성이 이쪽이다. */
     @GetMapping("/employees")
     public ApiResponse<List<StaffResponse>> employees(@CurrentAccount AuthPrincipal me,
                                                       @RequestParam Long academyId) {
@@ -44,12 +42,6 @@ public class AdminStaffController {
                 .map(StaffResponse::from).toList());
     }
 
-    /**
-     * 담당선생님 등록.
-     *
-     * <p>행정선생님과 <b>테이블이 나뉘어 있다</b> — 그래서 반 담임·승인자 FK가
-     * 곧 "담당선생님 보장"이 된다. 합치면 배정할 때마다 역할을 검사해야 한다.
-     */
     @PostMapping("/teachers")
     public ApiResponse<StaffResponse> createTeacher(@CurrentAccount AuthPrincipal me,
                                                     @Valid @RequestBody StaffRequests.CreateTeacher request) {
@@ -58,7 +50,6 @@ public class AdminStaffController {
                 request.loginId(), request.password(), request.roles(), me)));
     }
 
-    /** 행정선생님 등록. */
     @PostMapping("/employees")
     public ApiResponse<StaffResponse> createEmployee(@CurrentAccount AuthPrincipal me,
                                                      @Valid @RequestBody StaffRequests.CreateEmployee request) {

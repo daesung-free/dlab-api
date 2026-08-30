@@ -19,7 +19,6 @@ public class KioskPenaltyController {
     private final KioskPenaltyQueryService penaltyQueryService;
     private final DsaTokenService tokenService;
 
-    /** 상벌점 내역 (규격서 3.28). 키오스크 화면이 학생에게 그대로 보여준다. */
     @PostMapping("/getPointStdList")
     public DsaResponse points(@RequestBody DateRangeRequest request) {
         Long academyId = tokenService.resolveAcademyId(request.token());

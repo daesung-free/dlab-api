@@ -38,13 +38,7 @@ public class AdminAcademyController {
 
     private final AcademyService academyService;
 
-    /**
-     * 지점 목록.
-     *
-     * <p>지점 관리자에게는 <b>자기 지점만</b> 보인다.
-     *
-     * @param includeInactive 비활성 지점 포함. 기본은 활성만 — 셀렉트에 죽은 지점이 뜨면 안 된다
-     */
+    /** @param includeInactive 비활성 지점 포함. 기본은 활성만 — 셀렉트에 죽은 지점이 뜨면 안 된다 */
     @GetMapping
     public ApiResponse<List<AcademyResponse>> list(
             @CurrentAccount AuthPrincipal me,
@@ -53,7 +47,6 @@ public class AdminAcademyController {
                 .map(AcademyResponse::from).toList());
     }
 
-    /** 지점 상세. <b>지점코드·연동코드는 수정 대상이 아니다</b> — 키오스크가 이 값으로 인증한다. */
     @GetMapping("/{academyId}")
     public ApiResponse<AcademyResponse> detail(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long academyId) {

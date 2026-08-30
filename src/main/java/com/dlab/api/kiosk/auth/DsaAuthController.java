@@ -24,23 +24,12 @@ public class DsaAuthController {
 
     private final DsaTokenService dsaTokenService;
 
-    /**
-     * DSA 호환 토큰 발급 (규격서 3.1).
-     *
-     * <p>키오스크가 <b>본문에</b> 자격증명을 실어 보낸다 — 헤더가 아니다.
-     * 실패도 401이 아니라 {@code code:910}으로 내려간다.
-     */
     @PostMapping("/token")
     public DsaTokenResponse issue(@RequestBody DsaTokenRequest request) {
         var issued = dsaTokenService.issue(request.acadCd(), request.clientId(), request.secretId());
         return DsaTokenResponse.of(issued.token(), issued.refreshToken());
     }
 
-    /**
-     * 토큰 재발급 (규격서 3.2).
-     *
-     * <p>만료는 <b>정상 흐름</b>이다 — 키오스크가 이걸 부르고 재시도한다.
-     */
     @PostMapping("/refreshToken")
     public DsaTokenResponse refresh(@RequestBody DsaRefreshRequest request) {
         var issued = dsaTokenService.refresh(request.clientId(), request.refreshToken());

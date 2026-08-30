@@ -30,7 +30,6 @@ public class AdminAppConfigController {
     private final AppConfigService appConfigService;
     private final TermsService termsService;
 
-    /** 앱 설정 목록(최소 지원 버전·점검 모드). 앱이 부팅할 때 첫 번째로 읽는 값이다. */
     @GetMapping
     public ApiResponse<List<AppConfigResponse.Detail>> list() {
         return ApiResponse.success(appConfigService.findAll().stream()
@@ -61,14 +60,7 @@ public class AdminAppConfigController {
 
     // ── 약관 ─────────────────────────────────────────────────────
 
-    /**
-     * 약관 목록.
-     *
-     * <p>문구를 고치는 게 아니라 <b>버전을 올려 새 행을 추가한다</b> — 덮어쓰면
-     * 이미 동의한 사람들의 근거가 사라진다.
-     *
-     * @param academyId 지정하면 그 지점 전용 약관까지 본다. 비우면 공통본만
-     */
+    /** @param academyId 지정하면 그 지점 전용 약관까지 본다. 비우면 공통본만 */
     @GetMapping("/terms")
     public ApiResponse<List<AdminTermsResponse>> terms(
             @RequestParam(required = false) Long academyId) {

@@ -41,7 +41,6 @@ public class AdminBillingController {
 
     private final BillingService billingService;
 
-    /** 지점·연도 청구 목록. 미납자 추출은 {@code /admin/receipt-status}가 담당한다. */
     @GetMapping
     public ApiResponse<List<BillingResponse>> list(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Long academyId,
@@ -50,7 +49,6 @@ public class AdminBillingController {
                 .map(BillingResponse::from).toList());
     }
 
-    /** 그 학생의 청구 전체. <b>완납 건도 내린다</b> — 미납만 주면 "낸 것"이 화면에서 사라진다. */
     @GetMapping("/students/{enrollmentId}")
     public ApiResponse<List<BillingResponse>> byStudent(@CurrentAccount AuthPrincipal me,
                                                         @PathVariable Long enrollmentId) {
@@ -85,12 +83,6 @@ public class AdminBillingController {
         return ApiResponse.empty();
     }
 
-    /**
-     * 청구 취소.
-     *
-     * <p>환불 산출은 하지 않는다 — 퇴원 정산은 {@code RefundCalculator}가
-     * 구간·일할로 따로 계산한다.
-     */
     @DeleteMapping("/{billingId}")
     public ApiResponse<Void> cancel(@CurrentAccount AuthPrincipal me,
                                     @PathVariable Long billingId) {

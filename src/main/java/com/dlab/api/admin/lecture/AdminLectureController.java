@@ -29,7 +29,6 @@ public class AdminLectureController {
 
     // ── 기초 설정 (F-4.10-4) ─────────────────────────────────────
 
-    /** 특강 목록. 지점·연도 범위가 걸린다. */
     @GetMapping
     public ApiResponse<List<LectureResponse.Detail>> list(
             @CurrentAccount AuthPrincipal me,
@@ -43,7 +42,6 @@ public class AdminLectureController {
                         .toList());
     }
 
-    /** 특강 등록. 회차는 따로 추가한다 — 회차 없는 특강은 신청을 받을 수 없다. */
     @PostMapping
     public ApiResponse<LectureResponse.Detail> create(
             @CurrentAccount AuthPrincipal me,
@@ -53,7 +51,6 @@ public class AdminLectureController {
                 request.lectureType(), request.name(), me)));
     }
 
-    /** 특강 수정. 비운 항목은 변경하지 않는다. */
     @PatchMapping("/{lectureId}")
     public ApiResponse<LectureResponse.Detail> update(
             @CurrentAccount AuthPrincipal me,
@@ -65,12 +62,6 @@ public class AdminLectureController {
                 request.fee(), me)));
     }
 
-    /**
-     * 접수 상태 변경.
-     *
-     * <p>닫으면 앱에서 신청이 막힌다. <b>이미 신청한 건은 그대로 남는다</b> —
-     * 상태는 "지금 받는가"이지 "누가 신청했는가"가 아니다.
-     */
     @PutMapping("/{lectureId}/status")
     public ApiResponse<LectureResponse.Detail> changeStatus(
             @CurrentAccount AuthPrincipal me,
@@ -92,7 +83,6 @@ public class AdminLectureController {
 
     // ── 회차 ─────────────────────────────────────────────────────
 
-    /** 회차 목록. */
     @GetMapping("/{lectureId}/sessions")
     public ApiResponse<List<LectureResponse.Session>> sessions(
             @CurrentAccount AuthPrincipal me, @PathVariable Long lectureId) {
@@ -100,7 +90,6 @@ public class AdminLectureController {
                 .map(LectureResponse.Session::from).toList());
     }
 
-    /** 회차 추가. 출석부가 회차 단위로 만들어진다. */
     @PostMapping("/{lectureId}/sessions")
     public ApiResponse<LectureResponse.Session> addSession(
             @CurrentAccount AuthPrincipal me,
@@ -146,7 +135,6 @@ public class AdminLectureController {
                 .map(LectureResponse.RosterRow::from).toList());
     }
 
-    /** 회차 출석부. */
     @GetMapping("/sessions/{sessionId}/attendances")
     public ApiResponse<List<LectureResponse.Attendance>> attendances(@PathVariable Long sessionId) {
         return ApiResponse.success(lectureService.attendances(sessionId).stream()

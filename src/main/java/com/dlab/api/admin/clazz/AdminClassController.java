@@ -31,7 +31,6 @@ public class AdminClassController {
 
     private final ClassService classService;
 
-    /** 반 목록. */
     @GetMapping
     public ApiResponse<List<ClassResponse>> search(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Integer year) {
@@ -40,7 +39,6 @@ public class AdminClassController {
                 .toList());
     }
 
-    /** 그 반 학생 명단. */
     @GetMapping("/{classId}/students")
     public ApiResponse<List<ClassResponse.Member>> students(@CurrentAccount AuthPrincipal me,
                                                             @PathVariable Long classId) {
@@ -49,7 +47,6 @@ public class AdminClassController {
                 .toList());
     }
 
-    /** 반 생성. */
     @PostMapping
     public ApiResponse<ClassResponse> create(@CurrentAccount AuthPrincipal me,
                                              @Valid @RequestBody ClassRequests.Create request) {

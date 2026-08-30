@@ -42,7 +42,6 @@ public class AdminNoticeController {
 
     private final NoticeService noticeService;
 
-    /** 공지 목록. <b>조회는 관리자 전체 공유</b>이고 작성만 역할별로 갈린다. */
     @GetMapping
     public ApiResponse<List<NoticeResponse>> list(@CurrentAccount AuthPrincipal me,
                                                   @RequestParam(required = false) Short year) {
@@ -98,7 +97,6 @@ public class AdminNoticeController {
                 request.publishedAt(), request.expiresAt())));
     }
 
-    /** 공지 삭제(soft). */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me, @PathVariable Long id) {
         noticeService.delete(me, id);

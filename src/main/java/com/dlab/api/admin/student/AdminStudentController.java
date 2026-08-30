@@ -48,7 +48,6 @@ public class AdminStudentController {
     private final SavedSearchService savedSearchService;
     private final StudentStatusService studentStatusService;
 
-    /** 학생 검색. 조건이 12개라 {@code SearchPredicates}로 조합한다 — 값이 없으면 그 조건이 빠진다. */
     @GetMapping
     public ApiResponse<Page<StudentResponse>> search(
             @CurrentAccount AuthPrincipal me,
@@ -65,7 +64,6 @@ public class AdminStudentController {
                 .map(StudentResponse::from));
     }
 
-    /** 학생 상세. */
     @GetMapping("/{enrollmentId}")
     public ApiResponse<StudentResponse> get(@CurrentAccount AuthPrincipal me,
                                             @PathVariable Long enrollmentId) {
@@ -191,7 +189,6 @@ public class AdminStudentController {
                 SearchType.STUDENT, request.name(), request.conditions(), me)));
     }
 
-    /** 저장한 검색 삭제. */
     @DeleteMapping("/saved-searches/{id}")
     public ApiResponse<Void> deleteSavedSearch(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long id) {
