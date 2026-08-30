@@ -151,6 +151,7 @@ public enum ErrorCode {
     BILLING_ALREADY_ISSUED(HttpStatus.CONFLICT, "해당 월 청구가 이미 발행되었습니다."),
 
     // 장학 취소 판정 (0820 규정)
+    SCHOLARSHIP_RULE_NOT_FOUND(HttpStatus.NOT_FOUND, "장학 취소 기준을 찾을 수 없습니다."),
     SCHOLARSHIP_REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "검토 대상을 찾을 수 없습니다."),
     SCHOLARSHIP_REVIEW_ALREADY_DECIDED(HttpStatus.CONFLICT, "이미 처리된 검토 건입니다."),
     /** 사유가 없으면 나중에 "왜 살려뒀나"에 답할 수 없다. */
