@@ -60,7 +60,10 @@ class AppMealFlowTest {
     String studentPhone = "010-6000-0001";
     String parentPhone = "010-6000-0002";
 
-    /** 다음 달 — 접수기간·마감 검사에 안 걸리게 넉넉히 띄운다. */
+    /** 마감 D-n. 아래 {@link MealPolicy}에 넣는 값과 같아야 한다. */
+    static final int DEADLINE_DAYS = 3;
+
+    /** 대상 월(다음 달). ⚠️ 달만 띄운다고 마감을 피할 수 있는 게 아니다 — 아래 참고. */
     YearMonth targetMonth;
     LocalDate weekday1;
     LocalDate weekday2;
@@ -90,7 +93,7 @@ class AppMealFlowTest {
         em.persist(Account.forGuardian(guardian, parentPhone, passwordEncoder.encode(PASSWORD)));
 
         // 마감 3일
-        em.persist(new MealPolicy(academy, YEAR, (short) 3));
+        em.persist(new MealPolicy(academy, YEAR, (short) DEADLINE_DAYS));
 
         // 다음 달을 대상으로 하고 접수기간은 오늘을 포함하게 연다
         targetMonth = YearMonth.from(LocalDate.now(clock)).plusMonths(1);
@@ -102,9 +105,20 @@ class AppMealFlowTest {
         em.flush();
     }
 
-    /** 그 달의 n번째 평일. 주말은 급식 가능일에서 빠지므로 평일만 고른다. */
+    /**
+     * 그 달의 n번째 <b>신청 가능한</b> 평일. 주말은 급식 가능일에서 빠지므로 평일만 고른다.
+     *
+     * <p>★ <b>마감(D-n)이 지난 날은 건너뛴다.</b> "다음 달이니 넉넉하다"가 성립하지 않는다 —
+     * 월말에 돌리면 다음 달 초가 이미 마감이다(8/30에 9/1은 D-1). 실제로 8월 말에
+     * CI가 이 이유로 6건 깨졌다. {@code isBeforeDeadline}이
+     * <i>오늘 ≤ 이용일 − n</i>이므로 <b>오늘 + n</b>부터 신청할 수 있고, 하루 여유를 둔다.
+     */
     private LocalDate firstWeekdaysOf(YearMonth month, int skip) {
+        LocalDate earliest = LocalDate.now(clock).plusDays(DEADLINE_DAYS + 1L);
         LocalDate date = month.atDay(1);
+        if (date.isBefore(earliest)) {
+            date = earliest;
+        }
         int found = 0;
         while (true) {
             if (date.getDayOfWeek().getValue() <= 5) {
