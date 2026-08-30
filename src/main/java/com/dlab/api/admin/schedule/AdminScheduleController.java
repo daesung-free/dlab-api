@@ -69,6 +69,7 @@ public class AdminScheduleController {
                 .registerByAdmin(me, enrollmentId, request.month(), request.toInputs())));
     }
 
+    /** 정기일정 항목 교체. <b>통째로 갈아끼운다</b> — 병합하면 지운 항목을 지울 방법이 없다. */
     @PutMapping("/{scheduleId}/items")
     public ApiResponse<ScheduleResponse.Month> replaceItems(
             @PathVariable Long scheduleId,
@@ -77,6 +78,7 @@ public class AdminScheduleController {
                 scheduleService.replaceItems(scheduleId, request.toInputs())));
     }
 
+    /** 정기일정 삭제(soft). */
     @DeleteMapping("/{scheduleId}")
     public ApiResponse<Void> delete(@PathVariable Long scheduleId) {
         scheduleService.delete(scheduleId);

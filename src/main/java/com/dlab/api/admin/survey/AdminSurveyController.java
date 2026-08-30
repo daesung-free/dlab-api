@@ -75,6 +75,12 @@ public class AdminSurveyController {
                 AdminSurveyResponses.Summary.from(surveyService.closeNow(me, surveyId)));
     }
 
+    /**
+     * 설문 삭제(soft).
+     *
+     * <p>응답이 들어온 뒤에는 <b>문항을 고치지 말고</b> 마감하고 새로 낸다 —
+     * 앞사람과 뒷사람이 다른 질문에 답한 결과가 한 집계에 섞인다.
+     */
     @DeleteMapping("/{surveyId}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me,
                                     @PathVariable Long surveyId) {
