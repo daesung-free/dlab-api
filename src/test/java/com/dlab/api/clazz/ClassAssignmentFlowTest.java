@@ -1,7 +1,16 @@
 package com.dlab.api.clazz;
 
 import com.dlab.domain.approval.entity.*;
+import com.dlab.domain.facility.entity.SeatAssignment;
+import com.dlab.domain.facility.entity.SeatMaster;
+import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.user.entity.*;
+import com.dlab.domain.user.service.ClassService;
+import com.dlab.api.admin.clazz.ClassResponse;
+import com.dlab.common.security.AuthPrincipal;
+import com.dlab.common.security.Role;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +49,7 @@ class ClassAssignmentFlowTest {
     @Autowired EntityManager em;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired ObjectMapper objectMapper;
+    @Autowired ClassService classService;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
@@ -47,12 +57,15 @@ class ClassAssignmentFlowTest {
     Long academyId;
     Long teacherId;
     Long enrollmentId;
+    Academy academy;
+    AuthPrincipal principal;
+    int seq;
 
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
 
-        Academy academy = new Academy("CL01", "반테스트지점", LocalTime.of(9, 0));
+        academy = new Academy("CL01", "반테스트지점", LocalTime.of(9, 0));
         em.persist(academy);
 
         Teacher teacher = new Teacher(academy, "담임쌤", "010-1000-0000");
@@ -83,6 +96,30 @@ class ClassAssignmentFlowTest {
         academyId = academy.getId();
         teacherId = teacher.getId();
         enrollmentId = enrollment.getId();
+        principal = AuthPrincipal.of(0L, "EMPLOYEE", academyId, java.util.List.of(Role.BRANCH_ADMIN), false);
+    }
+
+    /** 학생 한 명(사람 + 등록 건)을 만든다. 학번·고유코드는 겹치면 안 되므로 순번을 붙인다. */
+    private StudentEnrollment newEnrollment(String name, GradeType grade, TrackType track,
+                                            String schoolName) {
+        seq++;
+        Student student = new Student("CLX%03d".formatted(seq), name, "010-3000-%04d".formatted(seq));
+        student.updateProfile(null, null, null, null, schoolName, null);
+        em.persist(student);
+        StudentEnrollment enrollment = new StudentEnrollment(
+                student, academy, (short) 2026, "10%02d".formatted(seq), "RFX%03d".formatted(seq), grade);
+        enrollment.changeTrack(track);
+        em.persist(enrollment);
+        return enrollment;
+    }
+
+    /** 좌석을 만들어 배정한다. */
+    private void assignSeat(StudentEnrollment enrollment, String seatCd) {
+        StudyArea area = new StudyArea(academy, "A", "A구역", (short) 1);
+        em.persist(area);
+        SeatMaster seat = new SeatMaster(academy, area, seatCd, seatCd + "번", 0, 0);
+        em.persist(seat);
+        em.persist(new SeatAssignment(academy, seat, enrollment));
     }
 
     private void grantRole(Long accountId, String roleName) {
@@ -242,5 +279,88 @@ class ClassAssignmentFlowTest {
                                 {"academyId":%d,"year":2026,"name":"몰래반","classType":"FIXED","homeroomTeacherId":null}"""
                                 .formatted(academyId)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("★ 명단에 계열·출신학교·학년·좌석·지점명이 실린다 — 좌석 미배정은 null")
+    void memberCarriesScreenFields() throws Exception {
+        long classId = createClass(teacherId);
+
+        StudentEnrollment seated = newEnrollment("좌석있음", GradeType.N_SU, TrackType.SCIENCE, "대성고");
+        StudentEnrollment unseated = newEnrollment("좌석없음", GradeType.HIGH3, TrackType.HUMANITIES, "분당고");
+        assignSeat(seated, "A-01");
+        em.flush();
+
+        classService.assignStudent(classId, seated.getId(), principal);
+        classService.assignStudent(classId, unseated.getId(), principal);
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/v1/admin/classes/{id}/students", classId)
+                        .header("Authorization", token("CLADM")))
+                .andExpect(status().isOk())
+                // 학번 오름차순이라 먼저 만든 쪽이 앞이다
+                .andExpect(jsonPath("$.data[0].studentName").value("좌석있음"))
+                .andExpect(jsonPath("$.data[0].grade").value("N_SU"))
+                .andExpect(jsonPath("$.data[0].track").value("SCIENCE"))
+                .andExpect(jsonPath("$.data[0].schoolName").value("대성고"))
+                .andExpect(jsonPath("$.data[0].seatCd").value("A-01"))
+                .andExpect(jsonPath("$.data[0].academyName").value("반테스트지점"))
+                .andExpect(jsonPath("$.data[0].academyId").value(academyId))
+                // 좌석이 없으면 빈 문자열이 아니라 null이다
+                .andExpect(jsonPath("$.data[1].studentName").value("좌석없음"))
+                .andExpect(jsonPath("$.data[1].track").value("HUMANITIES"))
+                .andExpect(jsonPath("$.data[1].seatCd").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("★ 명단 쿼리 수가 학생 수에 비례하지 않는다 (N+1 방지)")
+    void memberListDoesNotScaleWithStudentCount() throws Exception {
+        long small = createClass(null);
+        long large = createClass2("3반");
+
+        StudentEnrollment one = newEnrollment("한명", GradeType.N_SU, TrackType.SCIENCE, "가고");
+        assignSeat(one, "B-01");
+        classService.assignStudent(small, one.getId(), principal);
+
+        for (int i = 0; i < 5; i++) {
+            StudentEnrollment e = newEnrollment("여럿" + i, GradeType.N_SU, TrackType.SCIENCE, "나고");
+            assignSeat(e, "C-0" + i);
+            classService.assignStudent(large, e.getId(), principal);
+        }
+        em.flush();
+
+        Statistics stats = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        stats.setStatisticsEnabled(true);
+
+        em.clear();
+        stats.clear();
+        classService.studentsOf(small, principal).forEach(v -> touch(v));
+        long oneStudent = stats.getPrepareStatementCount();
+
+        em.clear();
+        stats.clear();
+        classService.studentsOf(large, principal).forEach(v -> touch(v));
+        long fiveStudents = stats.getPrepareStatementCount();
+
+        // 학생이 5배가 돼도 쿼리 수는 그대로다 — 좌석을 행마다 조회하면 여기서 벌어진다
+        org.assertj.core.api.Assertions.assertThat(fiveStudents).isEqualTo(oneStudent);
+    }
+
+    /** 응답 조립과 같은 접근을 해서 지연 로딩이 숨어 있지 않은지 함께 본다. */
+    private void touch(ClassService.ClassMemberView view) {
+        ClassResponse.Member.from(view);
+    }
+
+    private long createClass2(String name) throws Exception {
+        String body = mvc.perform(post("/api/v1/admin/classes")
+                        .header("Authorization", token("CLADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"year":2026,"name":"%s","classType":"FIXED","homeroomTeacherId":null}"""
+                                .formatted(academyId, name)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body).path("data").path("id").asLong();
     }
 }
