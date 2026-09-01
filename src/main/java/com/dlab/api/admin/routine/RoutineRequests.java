@@ -4,18 +4,24 @@ import com.dlab.domain.routine.entity.RoutineResultStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
+import java.time.YearMonth;
 import java.util.List;
 
 /** 데일리 루틴 요청 DTO. */
 public final class RoutineRequests {
 
+    /** {@code yyyy-MM}. 전 엔드포인트가 같은 형식을 쓴다. */
+    static final String MONTH_PATTERN = "\\d{4}-(0[1-9]|1[0-2])";
+    static final String MONTH_MESSAGE = "월은 yyyy-MM 형식이어야 합니다.";
+
     private RoutineRequests() {
     }
 
+    /** @param month 대상 월. {@code yyyy-MM} */
     public record RoutineCreate(
             @NotNull(message = "지점은 필수입니다.") Long academyId,
-            @NotNull(message = "연도는 필수입니다.") Integer year,
-            @NotNull(message = "월은 필수입니다.") @Min(1) @Max(12) Integer month,
+            @NotBlank(message = "월은 필수입니다.")
+            @Pattern(regexp = MONTH_PATTERN, message = MONTH_MESSAGE) String month,
             /** {@code null}이면 지점 공통 루틴이다. */
             Long classId,
             @NotBlank(message = "루틴명은 필수입니다.") @Size(max = 100) String name,
@@ -24,6 +30,10 @@ public final class RoutineRequests {
             @PositiveOrZero Integer maxScore,
             Boolean recommended,
             Integer sortOrder) {
+
+        public YearMonth yearMonth() {
+            return YearMonth.parse(month);
+        }
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
@@ -35,10 +45,15 @@ public final class RoutineRequests {
             Integer sortOrder) {
     }
 
+    /** @param month 복사해 넣을 <b>대상</b> 월. {@code yyyy-MM} */
     public record CopyFromPreviousMonth(
             @NotNull Long academyId,
-            @NotNull Integer year,
-            @NotNull @Min(1) @Max(12) Integer month) {
+            @NotBlank(message = "월은 필수입니다.")
+            @Pattern(regexp = MONTH_PATTERN, message = MONTH_MESSAGE) String month) {
+
+        public YearMonth yearMonth() {
+            return YearMonth.parse(month);
+        }
     }
 
     /**

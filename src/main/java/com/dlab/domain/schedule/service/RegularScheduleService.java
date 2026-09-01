@@ -16,6 +16,7 @@ import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -61,6 +62,12 @@ public class RegularScheduleService {
      * 이미 지난 날의 외출을 사후에 인정받는 통로가 되면 안 된다. 사후 처리는 사유신청이다.
      */
     @Transactional
+    public RegularSchedule submitByStudent(StudentEnrollment enrollment, YearMonth month,
+                                           List<ItemInput> items) {
+        return submitByStudent(enrollment, verifyYear(enrollment, month), items);
+    }
+
+    @Transactional
     public RegularSchedule submitByStudent(StudentEnrollment enrollment, short month,
                                            List<ItemInput> items) {
         RegularSchedule schedule = create(enrollment, month, ScheduleSource.STUDENT, items);
@@ -69,6 +76,14 @@ public class RegularScheduleService {
                 approvalService.create(enrollment, RequestType.REGULAR_SCHEDULE);
         schedule.linkApproval(approval);
         return schedule;
+    }
+
+    /** 담임 대신 등록 — 자동 승인이라 승인 요청을 만들지 않는다. */
+    @Transactional
+    public RegularSchedule registerByAdmin(AuthPrincipal me, Long enrollmentId, YearMonth month,
+                                           List<ItemInput> items) {
+        StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
+        return create(enrollment, verifyYear(enrollment, month), ScheduleSource.ADMIN, items);
     }
 
     /** 담임 대신 등록 — 자동 승인이라 승인 요청을 만들지 않는다. */
@@ -176,6 +191,21 @@ public class RegularScheduleService {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
         return enrollment;
+    }
+
+    /**
+     * 요청한 연도가 그 학생의 <b>등록 기수</b>와 같은지 본다.
+     *
+     * <p>일정의 연도는 등록 건에서 나오므로, 다른 해를 보내면 그 값이 조용히 무시되고
+     * 기수 연도로 저장된다 — 어긋나면 거절해서 드러낸다.
+     */
+    private short verifyYear(StudentEnrollment enrollment, YearMonth month) {
+        if (month.getYear() != enrollment.getYear()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "%d년도 학생의 일정은 %d년으로 등록할 수 없습니다."
+                            .formatted(enrollment.getYear(), month.getYear()));
+        }
+        return (short) month.getMonthValue();
     }
 
     /** 지난 달은 막는다. 사후 인정 통로가 되면 사유신청이 존재할 이유가 없어진다. */

@@ -10,6 +10,7 @@ import com.dlab.domain.user.service.AppScopeResolver;
 import jakarta.validation.Valid;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -41,19 +42,22 @@ public class AppScheduleController {
      * <p>현강·과외처럼 <b>매주 같은 요일에 나갔다 오는 일정</b>을 월 단위로 등록해 둔 것이다.
      * 승인되면 그 시간의 외출이 무단이 아니게 되어 벌점을 받지 않는다.
      *
-     * @param month 비우면 이번 달
+     * @param month {@code yyyy-MM}. 비우면 이번 달
      */
     @GetMapping
     public ApiResponse<ScheduleResponse.ScheduleMonth> month(
             @CurrentAccount AuthPrincipal me,
-            @RequestParam(required = false) Short month,
+            @RequestParam(required = false)
+            @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
             @RequestParam(required = false) Long studentId) {
 
         StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
-        short target = month == null ? (short) LocalDate.now(clock).getMonthValue() : month;
+        YearMonth target = month != null ? month
+                : YearMonth.of(enrollment.getYear(), LocalDate.now(clock).getMonthValue());
 
         return ApiResponse.success(scheduleService
-                .findMonth(enrollment.getId(), enrollment.getYear(), target)
+                .findMonth(enrollment.getId(), (short) target.getYear(),
+                        (short) target.getMonthValue())
                 .map(ScheduleResponse.ScheduleMonth::from)
                 .orElse(null));
     }
@@ -74,7 +78,7 @@ public class AppScheduleController {
         StudentEnrollment enrollment =
                 scopeResolver.requireStudent(me.accountId(), "정기일정 등록");
         return ApiResponse.success(ScheduleResponse.ScheduleMonth.from(scheduleService
-                .submitByStudent(enrollment, request.month(), request.toInputs())));
+                .submitByStudent(enrollment, request.yearMonth(), request.toInputs())));
     }
 
     /** 줄을 통째로 갈아끼운다. <b>학생이 고치면 승인을 다시 받는다.</b> */

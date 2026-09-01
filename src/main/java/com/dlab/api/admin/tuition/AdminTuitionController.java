@@ -9,9 +9,11 @@ import com.dlab.domain.user.entity.GradeType;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.YearMonth;
 import java.util.List;
 
 /**
@@ -97,9 +99,10 @@ public class AdminTuitionController {
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody TuitionRequests.SaveMonth request) {
 
+        YearMonth month = request.yearMonth();
         return ApiResponse.success(TuitionRequests.MonthView.from(
-                pricingService.saveMonth(me, request.academyId(), request.year(),
-                        request.month(), request.teachingDays())));
+                pricingService.saveMonth(me, request.academyId(), (short) month.getYear(),
+                        month.getMonthValue(), request.teachingDays())));
     }
 
     /**
@@ -107,13 +110,14 @@ public class AdminTuitionController {
      *
      * <p>화면이 그대로 그리면 된다. <b>독서실비 열에는 할인이 적용되지 않는다</b> —
      * 어느 줄이든 정가 그대로다.
+     *
+     * @param month 대상 월. {@code yyyy-MM} — 그 달 교습일수로 1일 단가가 나온다
      */
     @GetMapping("/fee-table")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     public ApiResponse<List<TuitionRequests.FeeRow>> feeTable(
             @CurrentAccount AuthPrincipal me,
-            @RequestParam short year,
-            @RequestParam int month,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
             @RequestParam GradeType gradeType,
             @RequestParam SeatType seatType,
             @RequestParam(required = false) Long academyId) {
@@ -122,7 +126,8 @@ public class AdminTuitionController {
         // 요청 값은 반드시 권한 검사를 거친다 — 그냥 믿으면 남의 지점 가격이 보인다
         Long scope = me.resolveAcademyScope(academyId);
         return ApiResponse.success(
-                pricingService.feeTable(year, month, gradeType, seatType, scope).stream()
+                pricingService.feeTable((short) month.getYear(), month.getMonthValue(),
+                                gradeType, seatType, scope).stream()
                         .map(TuitionRequests.FeeRow::from).toList());
     }
 }
