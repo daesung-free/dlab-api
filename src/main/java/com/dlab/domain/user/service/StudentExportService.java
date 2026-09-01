@@ -7,6 +7,7 @@ import com.dlab.domain.user.entity.EnrollmentStatus;
 import com.dlab.domain.user.entity.GradeType;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.entity.TrackType;
+import com.dlab.domain.user.repository.StudentSearchCondition;
 import com.dlab.domain.user.repository.StudentSearchRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -45,11 +46,10 @@ public class StudentExportService {
     private final ExcelExporter excelExporter;
 
     @Transactional(readOnly = true)
-    public byte[] export(SearchScope scope, String keyword, GradeType grade, TrackType track,
-                         EnrollmentStatus status, Long classId) {
+    public byte[] export(SearchScope scope, StudentSearchCondition condition) {
 
         List<StudentEnrollment> rows = searchRepository
-                .search(scope, keyword, grade, track, status, classId, PageRequest.of(0, MAX_ROWS))
+                .search(scope, condition, PageRequest.of(0, MAX_ROWS))
                 .getContent();
 
         return excelExporter.export("학생명단", StudentImportService.MAPPING, rows, this::toRow);

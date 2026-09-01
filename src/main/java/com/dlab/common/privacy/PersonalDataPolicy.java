@@ -29,4 +29,20 @@ public final class PersonalDataPolicy {
     public static String phone(AuthPrincipal principal, String phone) {
         return canViewRaw(principal) ? phone : Masking.phone(phone);
     }
+
+    /** 주소. 권한이 없으면 행정구역까지만 보인다. */
+    public static String address(AuthPrincipal principal, String address) {
+        return canViewRaw(principal) ? address : Masking.address(address);
+    }
+
+    /**
+     * 생년월일. <b>문자열로 내린다</b> — 마스킹하면 {@code 2007-**-**}이라 날짜 타입에 담기지
+     * 않는다. 원본일 때도 같은 타입이어야 화면이 분기하지 않는다.
+     */
+    public static String birthDate(AuthPrincipal principal, java.time.LocalDate birthDate) {
+        if (birthDate == null) {
+            return null;
+        }
+        return canViewRaw(principal) ? birthDate.toString() : Masking.birthDate(birthDate);
+    }
 }
