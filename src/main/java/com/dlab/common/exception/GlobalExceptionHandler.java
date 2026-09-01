@@ -9,13 +9,18 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /** 응답 메시지에 실을 사용자 입력값의 최대 길이. */
+    private static final int VALUE_MAX_LENGTH = 50;
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException e) {
@@ -84,6 +89,52 @@ public class GlobalExceptionHandler {
         log.warn("요청 본문을 읽을 수 없음: {}", e.getMessage());
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
                 .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST, "요청 본문 형식이 올바르지 않습니다."));
+    }
+
+    /**
+     * 쿼리 파라미터·경로변수의 타입 불일치 — {@code ?year=abc}, {@code ?academyId=xyz},
+     * <b>enum에 없는 값</b>.
+     *
+     * <p><b>처리하지 않으면 아래 catch-all이 잡아 500으로 나간다.</b> 값 하나를 잘못 보낸
+     * 클라이언트 잘못인데 응답이 "서버 오류"면, 앱·웹 개발자가 서버를 의심하며 시간을 쓴다.
+     *
+     * <p>메시지에는 <b>어느 파라미터가 문제인지</b>({@code e.getName()})와 enum이면
+     * <b>허용값 목록</b>까지 담는다 — 화면이 원인을 바로 안다. 다만 사용자가 보낸 값은
+     * 길 수 있어 잘라서 싣고, <b>원문 예외 메시지는 싣지 않는다</b>(내부 타입·패키지 경로가
+     * 그대로 노출된다). 상세는 서버 로그에서 확인한다.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
+        log.warn("파라미터 타입 불일치: {} = {}", e.getName(), e.getValue());
+
+        StringBuilder message = new StringBuilder()
+                .append("파라미터 '").append(e.getName()).append("' 값이 올바르지 않습니다");
+
+        String value = abbreviate(e.getValue());
+        if (value != null) {
+            message.append(": ").append(value);
+        }
+
+        Class<?> required = e.getRequiredType();
+        if (required != null && required.isEnum()) {
+            message.append(" (허용값: ")
+                    .append(Arrays.stream(required.getEnumConstants())
+                            .map(String::valueOf)
+                            .collect(Collectors.joining(", ")))
+                    .append(")");
+        }
+
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
+                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST, message.toString()));
+    }
+
+    /** 사용자가 보낸 값을 메시지에 실을 수 있는 길이로 자른다. */
+    private static String abbreviate(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value);
+        return text.length() <= VALUE_MAX_LENGTH ? text : text.substring(0, VALUE_MAX_LENGTH) + "...";
     }
 
     @ExceptionHandler(Exception.class)

@@ -1,0 +1,83 @@
+package com.dlab.common.exception;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * 쿼리 파라미터 타입 불일치가 400으로 나가는지.
+ *
+ * <p><b>왜 테스트로 고정하나</b> — 이건 처리하지 않으면 조용히 <b>500</b>이 된다.
+ * {@code ?year=abc} 같은 클라이언트 오타 하나에 "서버 오류"가 돌아오면, 앱·웹 개발자가
+ * 자기 요청이 아니라 서버를 의심하며 시간을 쓴다. 핸들러가 지워지거나 catch-all보다
+ * 아래로 밀려도 컴파일은 통과하므로, 상태코드를 테스트로 못박아 둔다.
+ *
+ * <p>enum은 <b>허용값 목록이 응답에 보이는지</b>까지 본다 — 그게 없으면 화면은
+ * "값이 올바르지 않다"는 것만 알고 무엇이 올바른지는 모른다.
+ */
+class TypeMismatchHandlingTest {
+
+    enum Track { SCIENCE, LIBERAL_ARTS }
+
+    @RestController
+    static class StubController {
+
+        @GetMapping("/api/v1/test/type-mismatch")
+        String byYear(@RequestParam short year) {
+            return "ok";
+        }
+
+        @GetMapping("/api/v1/test/enum-mismatch")
+        String byTrack(@RequestParam Track track) {
+            return "ok";
+        }
+    }
+
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new StubController())
+            .setControllerAdvice(new GlobalExceptionHandler())
+            .build();
+
+    @Test
+    @DisplayName("숫자 파라미터에 문자열을 넣으면 500이 아니라 400이고, 어느 파라미터인지 응답에 담긴다")
+    void nonNumericValueForNumericParamIsBadRequest() throws Exception {
+        mvc.perform(get("/api/v1/test/type-mismatch").param("year", "abc")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers.containsString("year")));
+    }
+
+    @Test
+    @DisplayName("enum에 없는 값을 넣으면 400이고, 응답에 허용값 목록이 보인다")
+    void unknownEnumValueIsBadRequestAndListsAllowedValues() throws Exception {
+        mvc.perform(get("/api/v1/test/enum-mismatch").param("track", "NATURAL")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers.containsString("track")))
+                .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers.containsString("SCIENCE")))
+                .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers.containsString("LIBERAL_ARTS")));
+    }
+
+    @Test
+    @DisplayName("긴 입력값은 잘라서 싣는다 — 응답 메시지가 사용자 입력으로 도배되지 않는다")
+    void longValueIsAbbreviated() throws Exception {
+        String longValue = "x".repeat(300);
+        mvc.perform(get("/api/v1/test/type-mismatch").param("year", longValue)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers.containsString("...")))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(longValue))));
+    }
+}
