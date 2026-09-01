@@ -59,3 +59,7 @@ docs/*
 # 공유용 문서만 예외로 추적
 !docs/roadmap.md
 !docs/entity-design.md
+
+# macOS Finder 메타파일. 폴더를 열기만 해도 바뀌고 바이너리라 머지가 안 된다 —
+# 두 사람의 Finder 설정이 다르면 매번 충돌한다
+.DS_Store
