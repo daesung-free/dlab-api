@@ -12,6 +12,7 @@ import com.dlab.domain.meal.service.MealAdminService;
 import com.dlab.domain.meal.service.MealOrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -55,9 +56,8 @@ public class AdminMealController {
     public ApiResponse<List<MealAdminService.DayStatus>> monthly(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
-            @RequestParam String month) {
-        return ApiResponse.success(
-                mealAdminService.monthly(me, academyId, YearMonth.parse(month)));
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
+        return ApiResponse.success(mealAdminService.monthly(me, academyId, month));
     }
 
     // ── 급식 일정 관리 ─────────────────────────────────────────
@@ -67,9 +67,9 @@ public class AdminMealController {
     public ApiResponse<List<ClosureResponse>> closures(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
-            @RequestParam String month) {
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
         return ApiResponse.success(
-                mealAdminService.closures(me, academyId, YearMonth.parse(month)).stream()
+                mealAdminService.closures(me, academyId, month).stream()
                         .map(ClosureResponse::from).toList());
     }
 
@@ -122,6 +122,7 @@ public class AdminMealController {
     @PutMapping("/order-windows")
     public ApiResponse<WindowResponse> saveWindow(@CurrentAccount AuthPrincipal me,
                                                   @Valid @RequestBody WindowRequest request) {
+        // 형식은 WindowRequest 의 @Pattern 이 이미 막는다 — 여기 parse 는 실패하지 않는다
         return ApiResponse.success(WindowResponse.from(mealAdminService.saveWindow(
                 me, request.academyId(), YearMonth.parse(request.targetMonth()),
                 request.startsOn(), request.endsOn())));
@@ -138,10 +139,12 @@ public class AdminMealController {
     @GetMapping("/orders")
     public ApiResponse<List<OrderResponse>> orders(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Long academyId,
-                                                   @RequestParam String month) {
+                                                   @RequestParam
+                                                   @DateTimeFormat(pattern = "yyyy-MM")
+                                                   YearMonth month) {
         Long resolved = me.requireAcademyScope(academyId);
         return ApiResponse.success(
-                mealOrderService.findByMonth(resolved, YearMonth.parse(month)).stream()
+                mealOrderService.findByMonth(resolved, month).stream()
                         .map(OrderResponse::from).toList());
     }
 
@@ -182,7 +185,9 @@ public class AdminMealController {
 
     public record WindowRequest(
             Long academyId,
-            @NotBlank(message = "대상 월은 필수입니다.") String targetMonth,
+            @NotBlank(message = "대상 월은 필수입니다.")
+            @Pattern(regexp = "\\d{4}-\\d{2}", message = "대상 월은 yyyy-MM 형식입니다.")
+            String targetMonth,
             @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startsOn,
             @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endsOn) {
     }

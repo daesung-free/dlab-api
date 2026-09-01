@@ -128,6 +128,27 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST, message.toString()));
     }
 
+    /**
+     * 날짜·시각 형식 오류 — <b>바인딩을 통과한 뒤 본문에서 파싱하다 터진 경우</b>.
+     *
+     * <p>파라미터를 {@code String}으로 받아 메서드 안에서 {@code YearMonth.parse()} 같은 것을
+     * 부르면 위 핸들러에 <b>안 걸린다</b> — 바인딩은 성공했기 때문이다. 그대로 두면 catch-all이
+     * 잡아 <b>500</b>으로 나간다. 실제로 {@code /admin/meals/monthly?month=9}가 그랬다.
+     *
+     * <p><b>근본 해법은 파라미터 타입을 {@code YearMonth}로 직접 받는 것</b>이고 그렇게 고쳤다.
+     * 이 핸들러는 <b>같은 실수가 또 나와도 500으로는 새어나가지 않게</b> 하는 안전망이다.
+     *
+     * <p>원문 메시지({@code "Text '9' could not be parsed at index 0"})는 싣지 않는다 —
+     * 내부 구현이 드러나고 화면에 그대로 노출하기도 어렵다.
+     */
+    @ExceptionHandler(java.time.format.DateTimeParseException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDateParse(java.time.format.DateTimeParseException e) {
+        log.warn("날짜 형식 오류: {}", e.getMessage());
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
+                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST,
+                        "날짜 형식이 올바르지 않습니다: " + abbreviate(e.getParsedString())));
+    }
+
     /** 사용자가 보낸 값을 메시지에 실을 수 있는 길이로 자른다. */
     private static String abbreviate(Object value) {
         if (value == null) {

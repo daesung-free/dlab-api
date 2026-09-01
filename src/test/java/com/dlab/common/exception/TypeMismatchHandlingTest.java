@@ -36,6 +36,20 @@ class TypeMismatchHandlingTest {
             return "ok";
         }
 
+        /** 올바른 방식 — 바인딩 단계에서 형식을 본다. */
+        @GetMapping("/api/v1/test/year-month")
+        String byMonth(@RequestParam
+                       @org.springframework.format.annotation.DateTimeFormat(pattern = "yyyy-MM")
+                       java.time.YearMonth month) {
+            return "ok";
+        }
+
+        /** 예전 방식 — String 으로 받아 본문에서 파싱한다. 안전망 확인용이다. */
+        @GetMapping("/api/v1/test/parsed-in-body")
+        String parsedInBody(@RequestParam String month) {
+            return java.time.YearMonth.parse(month).toString();
+        }
+
         @GetMapping("/api/v1/test/enum-mismatch")
         String byTrack(@RequestParam Track track) {
             return "ok";
@@ -79,5 +93,30 @@ class TypeMismatchHandlingTest {
                 .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers.containsString("...")))
                 .andExpect(jsonPath("$.error.message")
                         .value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString(longValue))));
+    }
+
+    @Test
+    @DisplayName("★ yyyy-MM 이 아닌 month 는 400이다 — /admin/meals/monthly?month=9 가 500이었다")
+    void yearMonthBindingFails() throws Exception {
+        mvc.perform(get("/api/v1/test/year-month").param("month", "9"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message").value(
+                        org.hamcrest.Matchers.containsString("month")));
+    }
+
+    @Test
+    @DisplayName("★★ 본문에서 파싱하다 터져도 500으로 새어나가지 않는다 — 안전망")
+    void parsedInBodyStillReturns400() throws Exception {
+        mvc.perform(get("/api/v1/test/parsed-in-body").param("month", "9"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
+    @DisplayName("올바른 형식은 통과한다")
+    void validYearMonthPasses() throws Exception {
+        mvc.perform(get("/api/v1/test/year-month").param("month", "2026-09"))
+                .andExpect(status().isOk());
     }
 }
