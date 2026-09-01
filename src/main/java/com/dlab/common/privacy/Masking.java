@@ -1,5 +1,6 @@
 package com.dlab.common.privacy;
 
+import java.time.LocalDate;
 import java.util.regex.Pattern;
 
 /**
@@ -55,6 +56,37 @@ public final class Masking {
             return name.charAt(0) + "*";
         }
         return name.charAt(0) + "*".repeat(name.length() - 2) + name.charAt(name.length() - 1);
+    }
+
+    /**
+     * 생년월일 → <b>연도만</b>. {@code 2007-03-15} → {@code 2007-**-**}.
+     *
+     * <p>월일까지 남기면 <b>주민번호 앞자리가 그대로 복원된다</b>(CLAUDE.md §7).
+     * 학년·나이를 확인하는 업무는 연도만으로 성립하므로 연도까지만 남긴다.
+     *
+     * <p>{@code *}가 들어가므로 {@link #isMasked}가 참이 되고, 업로드에서
+     * "이 칸은 안 건드렸다"로 읽혀 왕복해도 원래 날짜가 날아가지 않는다.
+     */
+    public static String birthDate(LocalDate birthDate) {
+        return birthDate == null ? null : birthDate.getYear() + "-**-**";
+    }
+
+    /**
+     * 주소 → 행정구역까지만. {@code 서울시 강남구 역삼동 12-3} → {@code 서울시 강남구 ****}.
+     *
+     * <p>통째로 가리지 않는 이유는 <b>지점 배정·통학거리 확인이 시·구 단위로 이뤄지기</b>
+     * 때문이다. 반면 동·번지는 그 자체로 집을 특정하므로 남기지 않는다.
+     * 토막이 둘 이하면(이미 구 단위) 그대로 둔다.
+     */
+    public static String address(String address) {
+        if (address == null || address.isBlank()) {
+            return address;
+        }
+        String[] parts = address.trim().split("\\s+");
+        if (parts.length <= 2) {
+            return address;
+        }
+        return parts[0] + " " + parts[1] + " " + MASK;
     }
 
     /**

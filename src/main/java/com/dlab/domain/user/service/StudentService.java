@@ -42,12 +42,12 @@ public class StudentService {
     private final StudentSearchRepository studentSearchRepository;
     private final AcademyRepository academyRepository;
     private final TransactionTemplate transactionTemplate;
+    private final java.time.Clock clock;
 
     @Transactional(readOnly = true)
-    public Page<StudentEnrollment> search(SearchScope scope, String keyword, GradeType grade,
-                                          TrackType track, EnrollmentStatus status,
-                                          Long classId, Pageable pageable) {
-        return studentSearchRepository.search(scope, keyword, grade, track, status, classId, pageable);
+    public Page<StudentEnrollment> search(SearchScope scope, StudentSearchCondition condition,
+                                          Pageable pageable) {
+        return studentSearchRepository.search(scope, condition, pageable);
     }
 
     @Transactional(readOnly = true)
@@ -180,6 +180,9 @@ public class StudentService {
         StudentEnrollment enrollment = enrollmentRepository.save(
                 new StudentEnrollment(student, academy, year, studentNo, null, grade));
         enrollment.changeTrack(track);
+        // ★ 채우지 않으면 등원일 검색·재원기간 산정이 전부 빈 값을 보게 된다.
+        //   소급 입력(며칠 뒤 등록)은 아직 경로가 없다 — 필요해지면 수정 API에 열어준다
+        enrollment.recordAdmission(LocalDate.now(clock));
         enrollmentRepository.flush();
         return enrollment;
     }

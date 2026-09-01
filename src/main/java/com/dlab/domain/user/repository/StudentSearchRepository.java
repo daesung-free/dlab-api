@@ -72,18 +72,13 @@ public class StudentSearchRepository {
     private final JPAQueryFactory queryFactory;
 
     /**
-     * @param scope      지점·연도 범위. 인증 주체에서만 나온다 — 요청 파라미터로 받지 않는다
-     * @param keyword    이름·학번 통합 검색어
-     * @param grade      학년(고2/고3/N수생)
-     * @param track      계열
-     * @param status     재원 상태
-     * @param classId    반. null이면 전체(미배정 포함)
-     * @param pageable   페이징 + 정렬. 정렬 가능 필드는 {@link #SORTABLE} 참고 —
-     *                   목록에 없는 필드는 무시되고 기본 정렬(학번 오름차순)로 떨어진다
+     * @param scope     지점·연도 범위. 인증 주체에서만 나온다 — 요청 파라미터로 받지 않는다
+     * @param condition 나머지 검색 조건. 값이 없는 항목은 조건에서 자동으로 빠진다
+     * @param pageable  페이징 + 정렬. 정렬 가능 필드는 {@link #SORTABLE} 참고 —
+     *                  목록에 없는 필드는 무시되고 기본 정렬(학번 오름차순)로 떨어진다
      */
-    public Page<StudentEnrollment> search(SearchScope scope, String keyword, GradeType grade,
-                                          TrackType track, EnrollmentStatus status,
-                                          Long classId, Pageable pageable) {
+    public Page<StudentEnrollment> search(SearchScope scope, StudentSearchCondition condition,
+                                          Pageable pageable) {
         QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
         QStudent s = QStudent.student;
 
@@ -91,18 +86,7 @@ public class StudentSearchRepository {
                 .selectFrom(e)
                 .join(e.student, s).fetchJoin()
                 .join(e.academy).fetchJoin()
-                .where(
-                        SearchPredicates.scope(e.academy.id, e.year, scope),
-                        e.deleted.isFalse(),
-                        // 과거 기수 행이 섞이지 않게 현재 등록 건만
-                        e.current.isTrue(),
-                        // ★ 직원은 학생 명단에 나오지 않는다. 직원 목록은 별도 화면이다
-                        e.grade.ne(GradeType.STAFF),
-                        keywordMatches(keyword),
-                        SearchPredicates.eq(e.grade, grade),
-                        SearchPredicates.eq(e.track, track),
-                        SearchPredicates.eq(e.enrollmentStatus, status),
-                        assignedToClass(classId))
+                .where(conditions(scope, condition))
                 .orderBy(toOrders(pageable.getSort()))
                 .offset(pageable.getOffset())
                 .limit(pageable.getPageSize())
@@ -112,16 +96,7 @@ public class StudentSearchRepository {
                 .select(e.count())
                 .from(e)
                 .join(e.student, s)
-                .where(
-                        SearchPredicates.scope(e.academy.id, e.year, scope),
-                        e.deleted.isFalse(),
-                        e.current.isTrue(),
-                        e.grade.ne(GradeType.STAFF),
-                        keywordMatches(keyword),
-                        SearchPredicates.eq(e.grade, grade),
-                        SearchPredicates.eq(e.track, track),
-                        SearchPredicates.eq(e.enrollmentStatus, status),
-                        assignedToClass(classId))
+                .where(conditions(scope, condition))
                 .fetchOne());
     }
 
@@ -161,6 +136,32 @@ public class StudentSearchRepository {
                 .toList());
     }
 
+    /**
+     * 본문과 count가 <b>같은 조건</b>을 써야 한다 — 두 벌로 두면 조건이 늘 때 한쪽만 고쳐지고
+     * 목록은 3건인데 총계가 5건인 상태가 조용히 생긴다.
+     */
+    private BooleanExpression[] conditions(SearchScope scope, StudentSearchCondition c) {
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        StudentSearchCondition cond = c == null ? StudentSearchCondition.none() : c;
+
+        return new BooleanExpression[]{
+                SearchPredicates.scope(e.academy.id, e.year, scope),
+                e.deleted.isFalse(),
+                // 과거 기수 행이 섞이지 않게 현재 등록 건만
+                e.current.isTrue(),
+                // ★ 직원은 학생 명단에 나오지 않는다. 직원 목록은 별도 화면이다
+                e.grade.ne(GradeType.STAFF),
+                keywordMatches(cond.keyword()),
+                SearchPredicates.eq(e.grade, cond.grade()),
+                SearchPredicates.eq(e.track, cond.track()),
+                SearchPredicates.eq(e.enrollmentStatus, cond.status()),
+                SearchPredicates.contains(e.student.schoolName, cond.schoolName()),
+                SearchPredicates.between(e.admissionDate, cond.admittedFrom(), cond.admittedTo()),
+                assignedToClass(cond.classId()),
+                assignedToTeacher(cond.teacherId())
+        };
+    }
+
     /** 이름 또는 학번. 운영에서 둘을 구분해 입력하지 않으므로 한 칸으로 받는다. */
     private BooleanExpression keywordMatches(String keyword) {
         if (keyword == null || keyword.isBlank()) {
@@ -182,6 +183,29 @@ public class StudentSearchRepository {
                 .selectOne()
                 .from(a)
                 .where(a.enrollment.eq(e), a.classMaster.id.eq(classId), a.active.isTrue())
+                .exists();
+    }
+
+    /**
+     * 담임 검색.
+     *
+     * <p><b>담임은 학생이 아니라 반에 붙는다</b>(CLAUDE.md §2 — 반배정 시 자동 연동).
+     * 그래서 학생 컬럼으로는 걸 수 없고 배정 → 반 → 담임 순으로 타야 한다.
+     * 고정반만 본다 — 이동수업반에는 담임 개념이 없다.
+     */
+    private BooleanExpression assignedToTeacher(Long teacherId) {
+        if (teacherId == null) {
+            return null;
+        }
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        QClassAssignment a = QClassAssignment.classAssignment;
+        return com.querydsl.jpa.JPAExpressions
+                .selectOne()
+                .from(a)
+                .where(a.enrollment.eq(e),
+                        a.classType.eq(ClassType.FIXED),
+                        a.active.isTrue(),
+                        a.classMaster.homeroomTeacher.id.eq(teacherId))
                 .exists();
     }
 }

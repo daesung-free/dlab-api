@@ -102,9 +102,9 @@ class StudentSearchSortTest {
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026").param("sort", "name,asc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].name").value("가정렬"))
-                .andExpect(jsonPath("$.data.content[1].name").value("나정렬"))
-                .andExpect(jsonPath("$.data.content[2].name").value("다정렬"));
+                .andExpect(jsonPath("$.data[0].name").value("가정렬"))
+                .andExpect(jsonPath("$.data[1].name").value("나정렬"))
+                .andExpect(jsonPath("$.data[2].name").value("다정렬"));
     }
 
     @Test
@@ -113,9 +113,9 @@ class StudentSearchSortTest {
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026").param("sort", "name,desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].name").value("다정렬"))
-                .andExpect(jsonPath("$.data.content[1].name").value("나정렬"))
-                .andExpect(jsonPath("$.data.content[2].name").value("가정렬"));
+                .andExpect(jsonPath("$.data[0].name").value("다정렬"))
+                .andExpect(jsonPath("$.data[1].name").value("나정렬"))
+                .andExpect(jsonPath("$.data[2].name").value("가정렬"));
     }
 
     @Test
@@ -124,7 +124,7 @@ class StudentSearchSortTest {
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026").param("sort", "student.name,asc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].name").value("가정렬"));
+                .andExpect(jsonPath("$.data[0].name").value("가정렬"));
     }
 
     @Test
@@ -133,9 +133,9 @@ class StudentSearchSortTest {
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026").param("sort", "password,desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].studentNo").value("2026-0001"))
-                .andExpect(jsonPath("$.data.content[1].studentNo").value("2026-0002"))
-                .andExpect(jsonPath("$.data.content[2].studentNo").value("2026-0003"));
+                .andExpect(jsonPath("$.data[0].studentNo").value("2026-0001"))
+                .andExpect(jsonPath("$.data[1].studentNo").value("2026-0002"))
+                .andExpect(jsonPath("$.data[2].studentNo").value("2026-0003"));
     }
 
     @Test
@@ -144,8 +144,8 @@ class StudentSearchSortTest {
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].studentNo").value("2026-0001"))
-                .andExpect(jsonPath("$.data.content[2].studentNo").value("2026-0003"));
+                .andExpect(jsonPath("$.data[0].studentNo").value("2026-0001"))
+                .andExpect(jsonPath("$.data[2].studentNo").value("2026-0003"));
     }
 
     @Test
@@ -156,9 +156,9 @@ class StudentSearchSortTest {
             mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                             .param("year", "2026").param("sort", "grade,asc"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data.content[0].studentNo").value("2026-0001"))
-                    .andExpect(jsonPath("$.data.content[1].studentNo").value("2026-0002"))
-                    .andExpect(jsonPath("$.data.content[2].studentNo").value("2026-0003"));
+                    .andExpect(jsonPath("$.data[0].studentNo").value("2026-0001"))
+                    .andExpect(jsonPath("$.data[1].studentNo").value("2026-0002"))
+                    .andExpect(jsonPath("$.data[2].studentNo").value("2026-0003"));
         }
     }
 }

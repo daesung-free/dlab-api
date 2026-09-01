@@ -123,11 +123,11 @@ class StudentAdmissionFlowTest {
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026").param("keyword", "검색될"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.content[0].name").value("검색될학생"));
+                .andExpect(jsonPath("$.data[0].name").value("검색될학생"));
 
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026").param("keyword", "0001"))
-                .andExpect(jsonPath("$.data.content[0].studentNo").value("2026-0001"));
+                .andExpect(jsonPath("$.data[0].studentNo").value("2026-0001"));
     }
 
     @Test
@@ -184,11 +184,11 @@ class StudentAdmissionFlowTest {
         // 2026 기수로 검색하면 안 나와야 한다 (그 등록 건은 이력으로 내려갔다)
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026").param("keyword", "이월"))
-                .andExpect(jsonPath("$.data.content").isEmpty());
+                .andExpect(jsonPath("$.data").isEmpty());
 
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2027").param("keyword", "이월"))
-                .andExpect(jsonPath("$.data.content[0].name").value("이월학생"));
+                .andExpect(jsonPath("$.data[0].name").value("이월학생"));
     }
 
     @Test

@@ -7,7 +7,9 @@ import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.user.entity.*;
 import com.dlab.domain.search.entity.SearchType;
 import com.dlab.domain.search.service.SavedSearchService;
+import com.dlab.domain.user.repository.StudentSearchCondition;
 import com.dlab.domain.user.service.StudentExportService;
+import com.dlab.domain.user.service.StudentListEnricher;
 import com.dlab.domain.user.service.StudentImportService;
 import com.dlab.domain.user.service.StudentStatusService;
 import com.dlab.domain.user.service.StudentService;
@@ -16,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpHeaders;
@@ -24,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -47,6 +51,7 @@ public class AdminStudentController {
     private final StudentExportService studentExportService;
     private final SavedSearchService savedSearchService;
     private final StudentStatusService studentStatusService;
+    private final StudentListEnricher studentListEnricher;
 
     /**
      * 학생 검색. 조건이 12개라 {@code SearchPredicates}로 조합한다 — 값이 없으면 그 조건이 빠진다.
@@ -67,9 +72,16 @@ public class AdminStudentController {
      * <p>정렬을 보내지 않으면 <b>학번 오름차순</b>이고, 어떤 정렬을 보내든 마지막에 학번이
      * tie-breaker로 붙는다 — 동점 구간의 순서가 매 요청마다 달라지면 페이징에서 학생이
      * 중복되거나 누락된다. 반(class)으로는 정렬할 수 없다(배정이 별도 테이블이다).
+     *
+     * <p><b>응답은 {@code ApiResponse.from(page)} 형태다</b> — {@code { data: [...], meta: {...} }}.
+     * 다른 목록 엔드포인트와 같은 규약이라 클라이언트가 엔드포인트마다 형태를 확인하지 않아도 된다
+     * (Spring의 {@code PageImpl} 직렬화 경고도 이걸로 사라진다).
+     *
+     * <p>반·담임·좌석·장학은 {@link StudentListEnricher}가 <b>페이지 전체를 IN 조회 3번</b>으로
+     * 모아 붙인다. 응답을 만들면서 행마다 꺼내면 쿼리가 학생 수만큼 나간다.
      */
     @GetMapping
-    public ApiResponse<Page<StudentResponse>> search(
+    public ApiResponse<List<StudentResponse>> search(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String keyword,
@@ -77,27 +89,51 @@ public class AdminStudentController {
             @RequestParam(required = false) TrackType track,
             @RequestParam(required = false) EnrollmentStatus status,
             @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) Long teacherId,
+            @RequestParam(required = false) String schoolName,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedFrom,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedTo,
             @PageableDefault(size = 20) Pageable pageable) {
 
-        return ApiResponse.success(studentService
-                .search(SearchScope.of(me, year), keyword, grade, track, status, classId, pageable)
-                .map(StudentResponse::from));
+        Page<StudentEnrollment> page = studentService.search(
+                SearchScope.of(me, year),
+                condition(keyword, grade, track, status, classId, teacherId, schoolName,
+                        admittedFrom, admittedTo),
+                pageable);
+
+        var extras = studentListEnricher.of(page.getContent());
+        return ApiResponse.from(page.map(e -> StudentResponse.from(e, extras, me)));
     }
 
-    /** 학생 상세. */
+    private StudentSearchCondition condition(String keyword, GradeType grade, TrackType track,
+                                             EnrollmentStatus status, Long classId, Long teacherId,
+                                             String schoolName, LocalDate admittedFrom,
+                                             LocalDate admittedTo) {
+        return new StudentSearchCondition(keyword, grade, track, status, classId, teacherId,
+                schoolName, admittedFrom, admittedTo);
+    }
+
+    /** 학생 상세. 목록과 <b>같은 필드</b>를 내린다 — 화면이 목록에서 상세로 넘어갈 때 값이 사라지면 안 된다. */
     @GetMapping("/{enrollmentId}")
     public ApiResponse<StudentResponse> get(@CurrentAccount AuthPrincipal me,
                                             @PathVariable Long enrollmentId) {
-        return ApiResponse.success(StudentResponse.from(studentService.get(enrollmentId, me)));
+        return ApiResponse.success(single(studentService.get(enrollmentId, me), me));
+    }
+
+    /** 단건 응답. 반·좌석·장학을 목록과 같은 경로로 붙인다. */
+    private StudentResponse single(StudentEnrollment enrollment, AuthPrincipal me) {
+        return StudentResponse.from(enrollment, studentListEnricher.of(enrollment), me);
     }
 
     /** 신규 접수. 학번은 서버가 채번한다. */
     @PostMapping
     public ApiResponse<StudentResponse> admit(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody StudentRequests.Admit request) {
-        return ApiResponse.success(StudentResponse.from(studentService.admit(
+        return ApiResponse.success(single(studentService.admit(
                 request.academyId(), request.year().shortValue(), request.name(),
-                request.phone(), request.grade(), request.track(), me)));
+                request.phone(), request.grade(), request.track(), me), me));
     }
 
     /** 학생 정보 수정. 보내지 않은 필드는 그대로 둔다 — 부분 수정이라 {@code PATCH}다. */
@@ -105,10 +141,10 @@ public class AdminStudentController {
     public ApiResponse<StudentResponse> update(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long enrollmentId,
                                                @Valid @RequestBody StudentRequests.StudentUpdate request) {
-        return ApiResponse.success(StudentResponse.from(studentService.update(
+        return ApiResponse.success(single(studentService.update(
                 enrollmentId, request.name(), request.phone(), request.birthDate(),
                 request.gender(), request.schoolName(), request.address(), request.grade(),
-                request.track(), request.status(), me)));
+                request.track(), request.status(), me), me));
     }
 
     // ── 상태 관리 (F-4.1-8) ──
@@ -129,7 +165,11 @@ public class AdminStudentController {
             @Valid @RequestBody StudentRequests.StudentChangeStatus request) {
         var result = studentStatusService.changeStatus(
                 enrollmentId, request.status(), request.reason(), me);
-        return ApiResponse.success(StatusChangeResponse.from(result));
+        return ApiResponse.success(new StatusChangeResponse(
+                single(result.enrollment(), me),
+                result.followUps().stream()
+                        .map(n -> new FollowUpNote(n.area(), n.message(), n.blocking()))
+                        .toList()));
     }
 
     /**
@@ -139,15 +179,6 @@ public class AdminStudentController {
      *                  <b>사람이 이어서 처리해야 하는 것</b>이라 화면이 눈에 띄게 표시한다
      */
     public record StatusChangeResponse(StudentResponse student, List<FollowUpNote> followUps) {
-
-        static StatusChangeResponse from(
-                com.dlab.domain.user.service.StudentStatusService.StatusChangeResult result) {
-            return new StatusChangeResponse(
-                    StudentResponse.from(result.enrollment()),
-                    result.followUps().stream()
-                            .map(n -> new FollowUpNote(n.area(), n.message(), n.blocking()))
-                            .toList());
-        }
     }
 
     public record FollowUpNote(String area, String message, boolean blocking) {
@@ -179,10 +210,17 @@ public class AdminStudentController {
             @RequestParam(required = false) GradeType grade,
             @RequestParam(required = false) TrackType track,
             @RequestParam(required = false) EnrollmentStatus status,
-            @RequestParam(required = false) Long classId) {
+            @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) Long teacherId,
+            @RequestParam(required = false) String schoolName,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedFrom,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedTo) {
 
-        byte[] file = studentExportService.export(
-                SearchScope.of(me, year), keyword, grade, track, status, classId);
+        byte[] file = studentExportService.export(SearchScope.of(me, year),
+                condition(keyword, grade, track, status, classId, teacherId, schoolName,
+                        admittedFrom, admittedTo));
 
         String filename = URLEncoder.encode("학생명단.xlsx", StandardCharsets.UTF_8);
         return ResponseEntity.ok()
@@ -252,8 +290,8 @@ public class AdminStudentController {
     public ApiResponse<StudentResponse> reEnroll(@CurrentAccount AuthPrincipal me,
                                                  @PathVariable Long studentId,
                                                  @Valid @RequestBody StudentRequests.ReEnroll request) {
-        return ApiResponse.success(StudentResponse.from(studentService.reEnroll(
+        return ApiResponse.success(single(studentService.reEnroll(
                 studentId, request.academyId(), request.year().shortValue(),
-                request.grade(), request.track(), me)));
+                request.grade(), request.track(), me), me));
     }
 }
