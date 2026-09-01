@@ -20,8 +20,13 @@ public interface SeatAssignmentRepository extends JpaRepository<SeatAssignment, 
     Optional<SeatAssignment> findActiveByEnrollmentId(Long enrollmentId);
 
     /**
-     * 여러 학생의 현재 좌석을 <b>한 번에</b> 가져온다. 목록 화면에서 학생마다 조회하면
-     * 쿼리가 학생 수만큼 나간다.
+     * 여러 등록 건의 현재 좌석을 <b>한 번에</b> 가져온다.
+     *
+     * <p>목록 화면이 행마다 {@link #findActiveByEnrollmentId}를 부르면 쿼리가 학생 수만큼 나간다.
+     * 키오스크 {@code getStdInfoList}가 {@link #findActiveByAcademyId}로 푸는 것과 같은 방식이되,
+     * 대상이 페이지·반 단위라 등록 건 id로 좁힌다.
+     *
+     * <p><b>학생 명단과 반 명단이 함께 쓴다</b> — 같은 조회를 각자 만들지 말 것.
      */
     @Query("""
             SELECT a FROM SeatAssignment a
@@ -46,20 +51,6 @@ public interface SeatAssignmentRepository extends JpaRepository<SeatAssignment, 
             WHERE s.studyArea.id = :studyAreaId AND a.releasedAt IS NULL AND a.deleted = false
             """)
     List<SeatAssignment> findActiveByStudyAreaId(Long studyAreaId);
-
-    /**
-     * 여러 등록 건의 현재 좌석을 <b>한 번에</b> 가져온다.
-     *
-     * <p>명단 화면이 행마다 {@link #findActiveByEnrollmentId}를 부르면 학생 수만큼 쿼리가 나간다.
-     * 키오스크 {@code getStdInfoList}가 {@link #findActiveByAcademyId}로 푸는 것과 같은 방식이되,
-     * 대상이 반 단위라 등록 건 id로 좁힌다.
-     */
-    @Query("""
-            SELECT a FROM SeatAssignment a
-            JOIN FETCH a.seat
-            WHERE a.enrollment.id IN :enrollmentIds AND a.releasedAt IS NULL AND a.deleted = false
-            """)
-    List<SeatAssignment> findActiveByEnrollmentIds(java.util.Collection<Long> enrollmentIds);
 
     /** 지점의 현재 배정 전체. 키오스크 {@code getStdInfoList}가 학생별 좌석코드를 붙이는 데 쓴다. */
     @Query("""
