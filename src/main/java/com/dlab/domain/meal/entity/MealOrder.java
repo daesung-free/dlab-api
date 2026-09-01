@@ -93,6 +93,21 @@ public class MealOrder extends BaseEntity {
         return YearMonth.from(targetMonth);
     }
 
+    /**
+     * 화면·문의 응대용 <b>표시 주문번호</b> — {@code M2609-000123}.
+     *
+     * <p>컬럼을 새로 두지 않고 <b>대상월 + id로 만든다.</b> 별도 채번 컬럼을 두면
+     * 유니크 제약·재시도가 따라붙는데, 급식 주문은 이미 {@code id}가 유일하므로
+     * 얻는 게 "보기 좋은 문자열" 하나뿐이다. 이 형식은 <b>역산이 되므로</b>
+     * 학부모가 불러준 번호로 주문을 그대로 찾을 수 있다(뒤 6자리가 {@code id}).
+     *
+     * <p>id가 7자리를 넘으면 자리수가 늘어난다 — 자르지 않는다. 자르면 번호가 겹친다.
+     */
+    public String orderNo() {
+        return "M%02d%02d-%06d".formatted(
+                targetMonth.getYear() % 100, targetMonth.getMonthValue(), id);
+    }
+
     /** 살아 있는(취소 안 된) 항목. */
     public List<MealOrderItem> activeItems() {
         return items.stream().filter(MealOrderItem::isActive).toList();
