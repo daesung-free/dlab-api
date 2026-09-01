@@ -115,7 +115,7 @@ class ClassAssignmentFlowTest {
 
     /** 좌석을 만들어 배정한다. */
     private void assignSeat(StudentEnrollment enrollment, String seatCd) {
-        StudyArea area = new StudyArea(academy, "A", "A구역", (short) 1);
+        StudyArea area = new StudyArea(academy, "A" + seq, "구역" + seq, (short) 1);
         em.persist(area);
         SeatMaster seat = new SeatMaster(academy, area, seatCd, seatCd + "번", 0, 0);
         em.persist(seat);
@@ -343,6 +343,8 @@ class ClassAssignmentFlowTest {
         classService.studentsOf(large, principal).forEach(v -> touch(v));
         long fiveStudents = stats.getPrepareStatementCount();
 
+        // 통계가 꺼져 0/0으로 통과하는 것을 막는다
+        org.assertj.core.api.Assertions.assertThat(oneStudent).isPositive();
         // 학생이 5배가 돼도 쿼리 수는 그대로다 — 좌석을 행마다 조회하면 여기서 벌어진다
         org.assertj.core.api.Assertions.assertThat(fiveStudents).isEqualTo(oneStudent);
     }
