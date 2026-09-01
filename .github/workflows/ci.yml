@@ -187,3 +187,146 @@ jobs:
           SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/dlab_migration_check
           SPRING_DATASOURCE_USERNAME: dlab
           SPRING_DATASOURCE_PASSWORD: dlab_local_password
+
+  # ★ 배포 리허설 — 지금 main 에 올리면 뜨는가.
+  #
+  # 위 "Flyway 검증"은 **빈 DB**에 전부 적용해본다. 그래서 못 잡는 것이 있다:
+  # **이미 적용된 것 위에 새 마이그레이션이 얹힐 때만** 나는 문제다.
+  #
+  # 실제로 2026-09-01 에 터졌다. 파일명 두 방식이 섞여 있어
+  # `V20260830_1000`(→ 20260830.1000)이 `V20260819100000`(→ 20260819100000)보다 **작다.**
+  # 빈 DB 에서는 순서대로 들어가니 통과하는데, main 상태 DB 에 올리면
+  # *"Detected resolved migration not applied"* 로 기동이 실패했다.
+  # 41커밋을 쌓아두고 배포하려던 참이라, 손으로 리허설해보지 않았으면 배포에서 알았을 것이다.
+  #
+  # 그래서 **main 상태를 재현한 DB 에 지금 코드를 올려본다.** 잡는 것:
+  #   · 이번 배포에서만 드러나는 out-of-order·체크섬 문제
+  #   · 기존 데이터가 있을 때만 실패하는 마이그레이션(유니크 인덱스·NOT NULL 추가 등)
+  #   · 엔티티와 스키마 불일치(ddl-auto=validate)
+  #
+  # ⚠️ 운영 프로필을 그대로 쓰지 않는다 — JWT_SECRET 등 운영 비밀값이 필요해서다.
+  #   대신 out-of-order 만 운영과 같게 맞춘다(application-prod.yml 참고).
+  deploy-rehearsal:
+    name: 배포 리허설 (main 상태 DB 에 올려보기)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dlab
+          POSTGRES_PASSWORD: dlab_local_password
+          POSTGRES_DB: dlab_rehearsal
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U dlab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      # main 을 체크아웃해야 하므로 전체 히스토리가 필요하다
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Gradle 캐시
+        uses: gradle/actions/setup-gradle@v4
+
+      # ① 배포 대상(main)의 스키마를 재현한다.
+      #    main 이 아직 비어 있는 초기 상태면 이 단계는 그냥 전체 적용이 되고, 그래도 무해하다.
+      - name: main 상태로 DB 준비
+        run: |
+          # 돌아올 지점을 먼저 잡아둔다. detached HEAD 에서 `git checkout -` 은 믿기 어렵다
+          echo "TARGET_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          git checkout --detach origin/main
+
+          ./gradlew bootRun --no-daemon --args='--spring.profiles.active=ci' &
+          for i in $(seq 1 60); do
+            if curl -sf localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "main 스키마 준비 완료"
+              break
+            fi
+            sleep 3
+          done
+
+          # ★ 반드시 완전히 죽인다. gradle 만 죽이면 fork 된 java 가 8080 을 계속 물고 있고,
+          #   그러면 다음 단계가 **옛 앱의 헬스체크를 보고 성공으로 착각한다.**
+          pkill -f 'DlabApiApplication' || true
+          pkill -f 'GradleWrapperMain' || true
+          for i in $(seq 1 20); do
+            curl -sf localhost:8080/actuator/health > /dev/null 2>&1 || break
+            sleep 1
+          done
+          if curl -sf localhost:8080/actuator/health > /dev/null 2>&1; then
+            echo "::error::이전 앱이 안 죽었습니다 — 리허설 결과를 믿을 수 없습니다"
+            exit 1
+          fi
+
+          APPLIED=$(PGPASSWORD=dlab_local_password psql -h localhost -U dlab -d dlab_rehearsal \
+                      -tAc "SELECT count(*) FROM flyway_schema_history WHERE success" 2>/dev/null || echo 0)
+          echo "main 기준 적용 수: $APPLIED"
+          if [ "$APPLIED" = "0" ]; then
+            echo "::error::main 기동이 실패했거나 마이그레이션이 하나도 안 들어갔습니다"
+            exit 1
+          fi
+          echo "BASE_APPLIED=$APPLIED" >> "$GITHUB_ENV"
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/dlab_rehearsal
+          SPRING_DATASOURCE_USERNAME: dlab
+          SPRING_DATASOURCE_PASSWORD: dlab_local_password
+
+      # ② 그 DB 위에 지금 코드를 올린다. 이게 실제 배포에서 벌어지는 일이다.
+      - name: 지금 코드를 그 위에 올린다
+        run: |
+          git checkout --detach "$TARGET_SHA"
+          ./gradlew bootRun --no-daemon \
+            --args='--spring.profiles.active=ci --spring.flyway.out-of-order=true' &
+          APP_PID=$!
+          for i in $(seq 1 60); do
+            if curl -sf localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "배포 리허설 성공 — main 상태 위에 올라갑니다"
+              pkill -f 'DlabApiApplication' || true
+              exit 0
+            fi
+            if ! kill -0 $APP_PID 2>/dev/null; then
+              echo "::error::배포하면 기동이 실패합니다. 마이그레이션 또는 스키마 검증을 확인하세요"
+              exit 1
+            fi
+            sleep 3
+          done
+          echo "::error::기동 타임아웃"
+          exit 1
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/dlab_rehearsal
+          SPRING_DATASOURCE_USERNAME: dlab
+          SPRING_DATASOURCE_PASSWORD: dlab_local_password
+
+      # 몇 개가 새로 적용됐는지 보이면 "이번 배포가 스키마를 얼마나 바꾸는지"를 알 수 있다.
+      - name: 적용 결과 요약
+        if: always()
+        run: |
+          {
+            echo "## 배포 리허설"
+            echo ""
+            echo "- main 기준 **${BASE_APPLIED:-?}개**"
+            PGPASSWORD=dlab_local_password psql -h localhost -U dlab -d dlab_rehearsal -tAc \
+              "SELECT '- 이번 배포 후 **' || count(*) || '개** (최종 ' || max(version) || ')'
+                 FROM flyway_schema_history WHERE success" 2>/dev/null \
+              || echo "- (조회 실패)"
+          } >> "$GITHUB_STEP_SUMMARY"
