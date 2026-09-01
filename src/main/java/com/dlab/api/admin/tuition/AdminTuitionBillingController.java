@@ -50,7 +50,7 @@ public class AdminTuitionBillingController {
     public ApiResponse<BillingView> issueMonthly(@CurrentAccount AuthPrincipal me,
                                                  @Valid @RequestBody IssueMonthly request) {
         return ApiResponse.success(BillingView.from(billingService.issueMonthly(
-                me, request.enrollmentId(), YearMonth.of(request.year(), request.month()),
+                me, request.enrollmentId(), request.yearMonth(),
                 request.seatType(), request.discountRate(), request.remainingDays(),
                 request.dueDate())));
     }
@@ -86,15 +86,23 @@ public class AdminTuitionBillingController {
         return ApiResponse.success(billingService.suggestRemainingDays(academyId, admissionDate));
     }
 
-    /** @param remainingDays 비우면 월 정액. 중도 입·퇴원이면 실제 다니는 교습일수 */
+    /**
+     * @param month         청구 대상 월. {@code yyyy-MM} — <b>청구 1건 = 한 달분</b>이다
+     * @param remainingDays 비우면 월 정액. 중도 입·퇴원이면 실제 다니는 교습일수
+     */
     public record IssueMonthly(
             @NotNull(message = "학생은 필수입니다.") Long enrollmentId,
-            @NotNull(message = "연도는 필수입니다.") Integer year,
-            @Min(1) @Max(12) int month,
+            @NotBlank(message = "월은 필수입니다.")
+            @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])",
+                    message = "월은 yyyy-MM 형식이어야 합니다.") String month,
             @NotNull(message = "좌석 유형은 필수입니다.") SeatType seatType,
             @Min(0) @Max(100) int discountRate,
             @Min(1) @Max(31) Integer remainingDays,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDate) {
+
+        public YearMonth yearMonth() {
+            return YearMonth.parse(month);
+        }
     }
 
     public record IssueAdmission(

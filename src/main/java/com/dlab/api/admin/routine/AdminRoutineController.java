@@ -11,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,15 +33,19 @@ public class AdminRoutineController {
 
     // ── 세팅 ─────────────────────────────────────────────────────
 
-    /** 그 달 루틴 목록. */
+    /**
+     * 그 달 루틴 목록.
+     *
+     * @param month {@code yyyy-MM}
+     */
     @GetMapping
     public ApiResponse<List<RoutineResponse.RoutineDetail>> list(
             @CurrentAccount AuthPrincipal me,
             @RequestParam Long academyId,
-            @RequestParam Integer year,
-            @RequestParam Integer month) {
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
         return ApiResponse.success(routineService
-                .findByMonth(academyId, year.shortValue(), month.shortValue(), me).stream()
+                .findByMonth(academyId, (short) month.getYear(),
+                        (short) month.getMonthValue(), me).stream()
                 .map(RoutineResponse.RoutineDetail::from).toList());
     }
 
@@ -49,8 +54,9 @@ public class AdminRoutineController {
     public ApiResponse<RoutineResponse.RoutineDetail> create(
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody RoutineRequests.RoutineCreate request) {
+        YearMonth month = request.yearMonth();
         return ApiResponse.success(RoutineResponse.RoutineDetail.from(routineService.create(
-                request.academyId(), request.year().shortValue(), request.month().shortValue(),
+                request.academyId(), (short) month.getYear(), (short) month.getMonthValue(),
                 request.classId(), request.name(), request.subject(),
                 request.maxScore() == null ? 0 : request.maxScore().shortValue(),
                 request.recommended() != null && request.recommended(),
@@ -88,8 +94,9 @@ public class AdminRoutineController {
     public ApiResponse<Map<String, Integer>> copyFromPreviousMonth(
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody RoutineRequests.CopyFromPreviousMonth request) {
+        YearMonth month = request.yearMonth();
         int copied = routineService.copyFromPreviousMonth(
-                request.academyId(), request.year().shortValue(), request.month().shortValue(), me);
+                request.academyId(), (short) month.getYear(), (short) month.getMonthValue(), me);
         return ApiResponse.success(Map.of("copied", copied));
     }
 

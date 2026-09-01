@@ -14,6 +14,7 @@ import com.dlab.common.exception.ErrorCode;
 import jakarta.validation.Valid;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -43,18 +44,23 @@ public class AdminScheduleController {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final Clock clock;
 
-    /** 그 달에 정기일정을 낸 학생 전체. @param month 비우면 이번 달 */
+    /**
+     * 그 달에 정기일정을 낸 학생 전체.
+     *
+     * @param month {@code yyyy-MM}. 비우면 이번 달
+     */
     @GetMapping
     public ApiResponse<List<ScheduleResponse.ScheduleMonth>> list(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
-            @RequestParam short year,
-            @RequestParam(required = false) Short month) {
+            @RequestParam(required = false)
+            @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
 
         Long scope = resolveScope(me, academyId);
-        short target = month == null ? (short) LocalDate.now(clock).getMonthValue() : month;
+        YearMonth target = month == null ? YearMonth.now(clock) : month;
 
-        return ApiResponse.success(scheduleService.findByAcademy(scope, year, target)
+        return ApiResponse.success(scheduleService
+                .findByAcademy(scope, (short) target.getYear(), (short) target.getMonthValue())
                 .stream().map(ScheduleResponse.ScheduleMonth::from).toList());
     }
 
@@ -66,7 +72,7 @@ public class AdminScheduleController {
             @Valid @RequestBody ScheduleRequests.ScheduleSubmit request) {
 
         return ApiResponse.success(ScheduleResponse.ScheduleMonth.from(scheduleService
-                .registerByAdmin(me, enrollmentId, request.month(), request.toInputs())));
+                .registerByAdmin(me, enrollmentId, request.yearMonth(), request.toInputs())));
     }
 
     /** 정기일정 항목 교체. <b>통째로 갈아끼운다</b> — 병합하면 지운 항목을 지울 방법이 없다. */

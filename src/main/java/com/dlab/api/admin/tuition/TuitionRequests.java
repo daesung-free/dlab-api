@@ -7,11 +7,19 @@ import com.dlab.domain.payment.service.DailyFeeCalculator;
 import com.dlab.domain.user.entity.GradeType;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
+
+import java.time.YearMonth;
 
 /** 교습비 가격·교습일수 DTO. */
 public final class TuitionRequests {
+
+    /** {@code yyyy-MM}. 전 엔드포인트가 같은 형식을 쓴다. */
+    static final String MONTH_PATTERN = "\\d{4}-(0[1-9]|1[0-2])";
+    static final String MONTH_MESSAGE = "월은 yyyy-MM 형식이어야 합니다.";
 
     private TuitionRequests() {
     }
@@ -39,12 +47,18 @@ public final class TuitionRequests {
      *
      * <p><b>달력 일수가 아니다</b> — 2026년 기준 2월 27일 · 9월 29일이다.
      * 서버는 달력을 상한으로만 확인하고 값 자체는 학원이 아는 대로 받는다.
+     *
+     * @param month 대상 월. {@code yyyy-MM}
      */
     public record SaveMonth(
             Long academyId,
-            @NotNull(message = "연도는 필수입니다.") Short year,
-            @Min(1) @Max(12) int month,
+            @NotBlank(message = "월은 필수입니다.")
+            @Pattern(regexp = MONTH_PATTERN, message = MONTH_MESSAGE) String month,
             @Min(1) @Max(31) int teachingDays) {
+
+        public YearMonth yearMonth() {
+            return YearMonth.parse(month);
+        }
     }
 
     /** 등록된 가격 한 줄. */
