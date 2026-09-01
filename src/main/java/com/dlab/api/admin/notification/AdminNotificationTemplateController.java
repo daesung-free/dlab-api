@@ -47,7 +47,7 @@ public class AdminNotificationTemplateController {
      */
     @PostMapping
     public ApiResponse<NotificationTemplateResponse> create(
-            @Valid @RequestBody NotificationTemplateRequests.Create request) {
+            @Valid @RequestBody NotificationTemplateRequests.NotificationTemplateCreate request) {
         return ApiResponse.success(NotificationTemplateResponse.from(templateService.create(
                 request.event(), request.channel(), request.recipientType(),
                 request.requiredVariables())));

@@ -198,7 +198,7 @@ public class AdminMealController {
     /** @param status 결제 라이프사이클. 결제 붙기 전까지 전부 {@code PENDING}이다 */
     public record OrderResponse(Long id, String studentNo, String studentName,
                                 String targetMonth, MealOrderStatus status,
-                                int activeCount, List<ItemResponse> items, Instant createdAt) {
+                                int activeCount, List<MealItemResponse> items, Instant createdAt) {
 
         static OrderResponse from(MealOrder o) {
             return new OrderResponse(o.getId(),
@@ -206,15 +206,15 @@ public class AdminMealController {
                     o.getEnrollment().getStudent().getName(),
                     o.month().toString(), o.getStatus(),
                     o.activeItems().size(),
-                    o.getItems().stream().map(ItemResponse::from).toList(),
+                    o.getItems().stream().map(MealItemResponse::from).toList(),
                     o.getCreatedAt());
         }
     }
 
-    public record ItemResponse(Long id, LocalDate mealDate, MealType mealType,
+    public record MealItemResponse(Long id, LocalDate mealDate, MealType mealType,
                                Instant canceledAt, String cancelPath) {
-        static ItemResponse from(MealOrderItem i) {
-            return new ItemResponse(i.getId(), i.getMealDate(), i.getMealType(),
+        static MealItemResponse from(MealOrderItem i) {
+            return new MealItemResponse(i.getId(), i.getMealDate(), i.getMealType(),
                     i.getCanceledAt(),
                     i.getCancelPath() == null ? null : i.getCancelPath().name());
         }

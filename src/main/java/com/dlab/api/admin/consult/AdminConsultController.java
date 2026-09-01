@@ -86,7 +86,7 @@ public class AdminConsultController {
     @PutMapping("/{logId}")
     public ApiResponse<LogResponse> update(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long logId,
-                                           @Valid @RequestBody UpdateRequest request) {
+                                           @Valid @RequestBody ConsultUpdateRequest request) {
         return ApiResponse.success(LogResponse.from(consultService.update(
                 me, logId, request.consultType(), request.methodOrDefault(),
                 request.consultedAt(), request.placeNote(), request.content(),
@@ -181,7 +181,7 @@ public class AdminConsultController {
         }
     }
 
-    public record UpdateRequest(
+    public record ConsultUpdateRequest(
             @NotNull ConsultType consultType,
             ConsultMethod method,
             @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate consultedAt,

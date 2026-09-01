@@ -36,43 +36,43 @@ public class AdminSurveyController {
 
     /** 목록. 전 지점 설문도 함께 나온다 — 조회는 공유이고 제한되는 건 작성뿐이다. */
     @GetMapping
-    public ApiResponse<List<AdminSurveyResponses.Summary>> list(
+    public ApiResponse<List<AdminSurveyResponses.AdminSurveySummary>> list(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Short year) {
 
         return ApiResponse.success(surveyService.findForAdmin(me, year).stream()
-                .map(AdminSurveyResponses.Summary::from).toList());
+                .map(AdminSurveyResponses.AdminSurveySummary::from).toList());
     }
 
     /** 개설. 문항까지 한 번에 받는다 — 문항 없는 설문이 앱에 노출되는 순간이 없어야 한다. */
     @PostMapping
-    public ApiResponse<AdminSurveyResponses.Summary> create(
+    public ApiResponse<AdminSurveyResponses.AdminSurveySummary> create(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody AdminSurveyRequests.Create request) {
+            @Valid @RequestBody AdminSurveyRequests.AdminSurveyCreate request) {
 
-        return ApiResponse.success(AdminSurveyResponses.Summary.from(
+        return ApiResponse.success(AdminSurveyResponses.AdminSurveySummary.from(
                 surveyService.create(me, request.toCommand())));
     }
 
     /** 기간·안내문 수정. */
     @PutMapping("/{surveyId}")
-    public ApiResponse<AdminSurveyResponses.Summary> update(
+    public ApiResponse<AdminSurveyResponses.AdminSurveySummary> update(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long surveyId,
-            @Valid @RequestBody AdminSurveyRequests.Update request) {
+            @Valid @RequestBody AdminSurveyRequests.AdminSurveyUpdate request) {
 
-        return ApiResponse.success(AdminSurveyResponses.Summary.from(surveyService.update(
+        return ApiResponse.success(AdminSurveyResponses.AdminSurveySummary.from(surveyService.update(
                 me, surveyId, request.title(), request.description(),
                 request.opensAt(), request.closesAt())));
     }
 
     /** 즉시 마감. */
     @PatchMapping("/{surveyId}/close")
-    public ApiResponse<AdminSurveyResponses.Summary> close(
+    public ApiResponse<AdminSurveyResponses.AdminSurveySummary> close(
             @CurrentAccount AuthPrincipal me, @PathVariable Long surveyId) {
 
         return ApiResponse.success(
-                AdminSurveyResponses.Summary.from(surveyService.closeNow(me, surveyId)));
+                AdminSurveyResponses.AdminSurveySummary.from(surveyService.closeNow(me, surveyId)));
     }
 
     /**

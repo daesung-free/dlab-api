@@ -91,7 +91,7 @@ public class AdminNoticeController {
     @PutMapping("/{id}")
     public ApiResponse<NoticeResponse> update(@CurrentAccount AuthPrincipal me,
                                               @PathVariable Long id,
-                                              @Valid @RequestBody UpdateRequest request) {
+                                              @Valid @RequestBody NoticeUpdateRequest request) {
         return ApiResponse.success(NoticeResponse.from(noticeService.update(
                 me, id, request.title(), request.content(),
                 request.pinned(), request.banner(),
@@ -114,7 +114,7 @@ public class AdminNoticeController {
      * @param publishedAt 예약 발행. {@code null}이면 즉시 공개
      * @param banner      앱 홈 배너 노출
      */
-    public record UpdateRequest(
+    public record NoticeUpdateRequest(
             @NotBlank(message = "제목은 필수입니다.") @Size(max = 200) String title,
             @NotBlank(message = "내용은 필수입니다.") String content,
             boolean pinned,

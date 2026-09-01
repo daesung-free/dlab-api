@@ -108,7 +108,7 @@ public class AdminSeatController {
      */
     @PostMapping
     public ApiResponse<SeatAssignmentResponse> assign(@CurrentAccount AuthPrincipal me,
-                                                      @Valid @RequestBody SeatRequests.Assign request) {
+                                                      @Valid @RequestBody SeatRequests.SeatAssign request) {
         return ApiResponse.success(SeatAssignmentResponse.from(
                 seatAssignmentService.assign(request.seatId(), request.enrollmentId(), me)));
     }

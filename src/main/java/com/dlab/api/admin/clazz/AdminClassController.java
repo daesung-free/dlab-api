@@ -52,7 +52,7 @@ public class AdminClassController {
     /** 반 생성. */
     @PostMapping
     public ApiResponse<ClassResponse> create(@CurrentAccount AuthPrincipal me,
-                                             @Valid @RequestBody ClassRequests.Create request) {
+                                             @Valid @RequestBody ClassRequests.ClassCreate request) {
         return ApiResponse.success(ClassResponse.from(classService.create(
                 request.academyId(), request.year().shortValue(), request.name(),
                 request.classType(), request.homeroomTeacherId(), me)));

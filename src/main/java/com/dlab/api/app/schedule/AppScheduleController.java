@@ -44,7 +44,7 @@ public class AppScheduleController {
      * @param month 비우면 이번 달
      */
     @GetMapping
-    public ApiResponse<ScheduleResponse.Month> month(
+    public ApiResponse<ScheduleResponse.ScheduleMonth> month(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Short month,
             @RequestParam(required = false) Long studentId) {
@@ -54,7 +54,7 @@ public class AppScheduleController {
 
         return ApiResponse.success(scheduleService
                 .findMonth(enrollment.getId(), enrollment.getYear(), target)
-                .map(ScheduleResponse.Month::from)
+                .map(ScheduleResponse.ScheduleMonth::from)
                 .orElse(null));
     }
 
@@ -67,25 +67,25 @@ public class AppScheduleController {
      * <p>같은 달에 이미 제출한 게 있으면 거절된다 — 수정은 기존 제출을 고친다.
      */
     @PostMapping
-    public ApiResponse<ScheduleResponse.Month> submit(
+    public ApiResponse<ScheduleResponse.ScheduleMonth> submit(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody ScheduleRequests.Submit request) {
+            @Valid @RequestBody ScheduleRequests.ScheduleSubmit request) {
 
         StudentEnrollment enrollment =
                 scopeResolver.requireStudent(me.accountId(), "정기일정 등록");
-        return ApiResponse.success(ScheduleResponse.Month.from(scheduleService
+        return ApiResponse.success(ScheduleResponse.ScheduleMonth.from(scheduleService
                 .submitByStudent(enrollment, request.month(), request.toInputs())));
     }
 
     /** 줄을 통째로 갈아끼운다. <b>학생이 고치면 승인을 다시 받는다.</b> */
     @PutMapping("/{scheduleId}/items")
-    public ApiResponse<ScheduleResponse.Month> replaceItems(
+    public ApiResponse<ScheduleResponse.ScheduleMonth> replaceItems(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long scheduleId,
             @Valid @RequestBody ScheduleRequests.Replace request) {
 
         scopeResolver.requireStudent(me.accountId(), "정기일정 수정");
-        return ApiResponse.success(ScheduleResponse.Month.from(
+        return ApiResponse.success(ScheduleResponse.ScheduleMonth.from(
                 scheduleService.replaceItems(scheduleId, request.toInputs())));
     }
 

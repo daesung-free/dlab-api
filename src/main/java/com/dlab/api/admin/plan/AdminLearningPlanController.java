@@ -85,13 +85,13 @@ public class AdminLearningPlanController {
 
     /** 드롭다운 마스터(과목·학습형태). */
     @GetMapping("/options")
-    public ApiResponse<List<PlanResponse.Option>> options(
+    public ApiResponse<List<PlanResponse.PlanOption>> options(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @RequestParam short year) {
 
         return ApiResponse.success(planService.options(resolveScope(me, academyId), year)
-                .stream().map(PlanResponse.Option::from).toList());
+                .stream().map(PlanResponse.PlanOption::from).toList());
     }
 
     /**
@@ -101,7 +101,7 @@ public class AdminLearningPlanController {
      * 지점·연도마다 다를 수 있어서다.
      */
     @PostMapping("/options")
-    public ApiResponse<PlanResponse.Option> createOption(
+    public ApiResponse<PlanResponse.PlanOption> createOption(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @RequestParam short year,
@@ -110,19 +110,19 @@ public class AdminLearningPlanController {
         Academy academy = academyRepository.findById(resolveScope(me, academyId))
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
 
-        return ApiResponse.success(PlanResponse.Option.from(planService.createOption(
+        return ApiResponse.success(PlanResponse.PlanOption.from(planService.createOption(
                 academy, year, request.optionType(), request.label(), request.sortOrder())));
     }
 
     /** 선택지 이름 변경. 이미 그 선택지를 쓴 계획도 같이 바뀐다. */
     @PutMapping("/options/{optionId}")
-    public ApiResponse<PlanResponse.Option> updateOption(
+    public ApiResponse<PlanResponse.PlanOption> updateOption(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @PathVariable Long optionId,
             @Valid @RequestBody PlanRequests.SaveOption request) {
 
-        return ApiResponse.success(PlanResponse.Option.from(planService.updateOption(
+        return ApiResponse.success(PlanResponse.PlanOption.from(planService.updateOption(
                 resolveScope(me, academyId), optionId, request.label(), request.sortOrder())));
     }
 

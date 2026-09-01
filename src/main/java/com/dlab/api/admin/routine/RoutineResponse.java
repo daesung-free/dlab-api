@@ -18,12 +18,12 @@ public final class RoutineResponse {
      * @param maxScore    0이면 점수 없이 완료/미완료만 본다
      * @param recommended 앱에서 강조 표시된다(A-11)
      */
-    public record Detail(Long id, int year, int month, Long classId, String className,
+    public record RoutineDetail(Long id, int year, int month, Long classId, String className,
                          String name, String subject, int maxScore, boolean recommended,
                          int sortOrder, Long copiedFromId) {
 
-        public static Detail from(DailyRoutine r) {
-            return new Detail(r.getId(), r.getYear(), r.getMonth(),
+        public static RoutineDetail from(DailyRoutine r) {
+            return new RoutineDetail(r.getId(), r.getYear(), r.getMonth(),
                     r.getClassMaster() == null ? null : r.getClassMaster().getId(),
                     r.getClassMaster() == null ? null : r.getClassMaster().getName(),
                     r.getName(), r.getSubject(), r.getMaxScore(), r.isRecommended(),

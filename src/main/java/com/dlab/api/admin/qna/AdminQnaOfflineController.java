@@ -38,29 +38,29 @@ public class AdminQnaOfflineController {
      * 그때마다 시각을 손으로 맞춰야 한다.
      */
     @PostMapping("/slots")
-    public ApiResponse<List<QnaResponse.Slot>> openSlots(
+    public ApiResponse<List<QnaResponse.QnaSlot>> openSlots(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody QnaRequests.OpenSlots request) {
+            @Valid @RequestBody QnaRequests.QnaOpenSlots request) {
         var created = qnaOfflineService.openSlots(
                 request.academyId(), request.year().shortValue(), request.date(),
                 request.from(), request.to(), request.intervalMinutes(),
                 request.teacherId(), request.room(),
                 request.capacity() == null ? 1 : request.capacity().shortValue(), me);
         return ApiResponse.success(created.stream()
-                .map(slot -> QnaResponse.Slot.from(
+                .map(slot -> QnaResponse.QnaSlot.from(
                         new QnaOfflineService.SlotView(slot, 0, List.of())))
                 .toList());
     }
 
     /** 날짜별 슬롯 + 예약 현황. 예약자 명단이 함께 나온다. */
     @GetMapping("/slots")
-    public ApiResponse<List<QnaResponse.Slot>> slots(
+    public ApiResponse<List<QnaResponse.QnaSlot>> slots(
             @CurrentAccount AuthPrincipal me,
             @RequestParam Long academyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         return ApiResponse.success(
                 qnaOfflineService.slotsWithReservations(academyId, date, me).stream()
-                        .map(QnaResponse.Slot::from).toList());
+                        .map(QnaResponse.QnaSlot::from).toList());
     }
 
     /**
@@ -83,7 +83,7 @@ public class AdminQnaOfflineController {
     public ApiResponse<Void> assign(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long slotId,
-            @Valid @RequestBody QnaRequests.Assign request) {
+            @Valid @RequestBody QnaRequests.QnaAssign request) {
         qnaOfflineService.assign(slotId, request.teacherId(), request.room(), request.memo(), me);
         return ApiResponse.empty();
     }

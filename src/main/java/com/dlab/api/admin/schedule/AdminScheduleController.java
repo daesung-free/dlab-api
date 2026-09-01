@@ -45,7 +45,7 @@ public class AdminScheduleController {
 
     /** 그 달에 정기일정을 낸 학생 전체. @param month 비우면 이번 달 */
     @GetMapping
-    public ApiResponse<List<ScheduleResponse.Month>> list(
+    public ApiResponse<List<ScheduleResponse.ScheduleMonth>> list(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @RequestParam short year,
@@ -55,26 +55,26 @@ public class AdminScheduleController {
         short target = month == null ? (short) LocalDate.now(clock).getMonthValue() : month;
 
         return ApiResponse.success(scheduleService.findByAcademy(scope, year, target)
-                .stream().map(ScheduleResponse.Month::from).toList());
+                .stream().map(ScheduleResponse.ScheduleMonth::from).toList());
     }
 
     /** 담임 대신 등록 — 자동 승인이다. */
     @PostMapping("/students/{enrollmentId}")
-    public ApiResponse<ScheduleResponse.Month> register(
+    public ApiResponse<ScheduleResponse.ScheduleMonth> register(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long enrollmentId,
-            @Valid @RequestBody ScheduleRequests.Submit request) {
+            @Valid @RequestBody ScheduleRequests.ScheduleSubmit request) {
 
-        return ApiResponse.success(ScheduleResponse.Month.from(scheduleService
+        return ApiResponse.success(ScheduleResponse.ScheduleMonth.from(scheduleService
                 .registerByAdmin(me, enrollmentId, request.month(), request.toInputs())));
     }
 
     /** 정기일정 항목 교체. <b>통째로 갈아끼운다</b> — 병합하면 지운 항목을 지울 방법이 없다. */
     @PutMapping("/{scheduleId}/items")
-    public ApiResponse<ScheduleResponse.Month> replaceItems(
+    public ApiResponse<ScheduleResponse.ScheduleMonth> replaceItems(
             @PathVariable Long scheduleId,
             @Valid @RequestBody ScheduleRequests.Replace request) {
-        return ApiResponse.success(ScheduleResponse.Month.from(
+        return ApiResponse.success(ScheduleResponse.ScheduleMonth.from(
                 scheduleService.replaceItems(scheduleId, request.toInputs())));
     }
 

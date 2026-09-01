@@ -39,14 +39,14 @@ public class AppDailyReportController {
 
     /** 하루 상세. 달력에서 일자를 탭하면 열린다. */
     @GetMapping("/{date}")
-    public ApiResponse<DailyReportResponse.Day> day(
+    public ApiResponse<DailyReportResponse.DailyReportDay> day(
             @CurrentAccount AuthPrincipal me,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) Long studentId) {
 
         StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         return ApiResponse.success(
-                DailyReportResponse.Day.from(dailyReportService.day(enrollment, date)));
+                DailyReportResponse.DailyReportDay.from(dailyReportService.day(enrollment, date)));
     }
 
     /**
@@ -55,7 +55,7 @@ public class AppDailyReportController {
      * @param month {@code yyyy-MM}. 비우면 이번 달
      */
     @GetMapping("/monthly")
-    public ApiResponse<DailyReportResponse.Month> monthly(
+    public ApiResponse<DailyReportResponse.DailyReportMonth> monthly(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) String month,
             @RequestParam(required = false) Long studentId) {
@@ -65,7 +65,7 @@ public class AppDailyReportController {
                 ? LocalDate.now(clock)
                 : LocalDate.parse(month + "-01");
 
-        return ApiResponse.success(DailyReportResponse.Month.from(
+        return ApiResponse.success(DailyReportResponse.DailyReportMonth.from(
                 dailyReportService.month(enrollment, base.getYear(), base.getMonthValue())));
     }
 

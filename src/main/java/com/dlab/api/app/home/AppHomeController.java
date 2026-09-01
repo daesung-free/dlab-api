@@ -88,7 +88,7 @@ public class AppHomeController {
                         monthly.attendanceRate(),
                         monthly.confirmedDays()),
                 routineService.today(enrollment.getId(), today).stream()
-                        .map(HomeResponse.Routine::from).toList(),
+                        .map(HomeResponse.HomeRoutine::from).toList(),
                 noticeService.banners(enrollment.getId()).stream()
                         .map(HomeResponse.Banner::from).toList()));
     }

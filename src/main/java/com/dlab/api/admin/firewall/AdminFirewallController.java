@@ -32,7 +32,7 @@ public class AdminFirewallController {
 
     /** 신청·해제 이력. 조건을 비우면 그 조건은 빠진다. */
     @GetMapping
-    public ApiResponse<List<FirewallResponse.Row>> search(
+    public ApiResponse<List<FirewallResponse.FirewallRow>> search(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) Long enrollmentId,
@@ -42,16 +42,16 @@ public class AdminFirewallController {
 
         return ApiResponse.success(
                 firewallAdminService.search(me, academyId, enrollmentId, status, from, to)
-                        .stream().map(FirewallResponse.Row::from).toList());
+                        .stream().map(FirewallResponse.FirewallRow::from).toList());
     }
 
     /** 현재 해제중. 종료가 임박한 순이다. */
     @GetMapping("/active")
-    public ApiResponse<List<FirewallResponse.Row>> active(
+    public ApiResponse<List<FirewallResponse.FirewallRow>> active(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId) {
         return ApiResponse.success(firewallAdminService.active(me, academyId)
-                .stream().map(FirewallResponse.Row::from).toList());
+                .stream().map(FirewallResponse.FirewallRow::from).toList());
     }
 
     /**

@@ -65,7 +65,7 @@ public class AdminAttendanceController {
      *                  전 지점 권한자(본사)는 지정해야 한다
      */
     @GetMapping
-    public ApiResponse<BoardResponse> board(
+    public ApiResponse<AttendanceBoardResponse> board(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -82,8 +82,8 @@ public class AdminAttendanceController {
                 .toList();
 
         boolean raw = PersonalDataPolicy.canViewRaw(me);
-        return ApiResponse.success(new BoardResponse(
-                filtered.stream().map(r -> RowResponse.of(r, raw)).toList(),
+        return ApiResponse.success(new AttendanceBoardResponse(
+                filtered.stream().map(r -> AttendanceRowResponse.of(r, raw)).toList(),
                 summary(filtered),
                 !raw));
     }
@@ -116,14 +116,14 @@ public class AdminAttendanceController {
     /**
      * @param masked 개인정보가 마스킹됐는지. 화면이 모르면 "번호가 잘못 저장됐다"는 오인 문의가 생긴다
      */
-    public record BoardResponse(List<RowResponse> rows, Map<String, Long> summary, boolean masked) {
+    public record AttendanceBoardResponse(List<AttendanceRowResponse> rows, Map<String, Long> summary, boolean masked) {
     }
 
     /**
      * @param studyTime {@code "N시간 MM분"} 문자열. 화면이 그대로 찍는다
      * @param excused   사유 승인 여부. 상태와 <b>직교하는 축</b>이라 따로 내린다
      */
-    public record RowResponse(
+    public record AttendanceRowResponse(
             Long enrollmentId,
             String studentNo,
             String name,
@@ -138,8 +138,8 @@ public class AdminAttendanceController {
             String guardianPhone,
             boolean unexcusedLate
     ) {
-        static RowResponse of(AttendanceRow r, boolean raw) {
-            return new RowResponse(
+        static AttendanceRowResponse of(AttendanceRow r, boolean raw) {
+            return new AttendanceRowResponse(
                     r.enrollmentId(), r.studentNo(),
                     raw ? r.name() : Masking.name(r.name()),
                     r.className(), r.seatCd(),

@@ -37,19 +37,19 @@ public class AppLearningPlanController {
 
     /** 드롭다운 마스터(과목·학습형태). 입력 화면을 열기 전에 한 번 받는다. */
     @GetMapping("/options")
-    public ApiResponse<List<PlanResponse.Option>> options(
+    public ApiResponse<List<PlanResponse.PlanOption>> options(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long studentId) {
 
         StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         return ApiResponse.success(planService
                 .options(enrollment.getAcademy().getId(), enrollment.getYear())
-                .stream().map(PlanResponse.Option::from).toList());
+                .stream().map(PlanResponse.PlanOption::from).toList());
     }
 
     /** 일간 뷰. @param date 비우면 오늘 */
     @GetMapping("/days")
-    public ApiResponse<PlanResponse.Day> day(
+    public ApiResponse<PlanResponse.PlanDay> day(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
@@ -60,7 +60,7 @@ public class AppLearningPlanController {
 
         LearningPlan plan = planService.findDay(enrollment.getId(), target);
         return ApiResponse.success(
-                plan == null ? PlanResponse.Day.empty(target) : PlanResponse.Day.from(plan));
+                plan == null ? PlanResponse.PlanDay.empty(target) : PlanResponse.PlanDay.from(plan));
     }
 
     /** 주간 뷰. @param date 그 주 아무 날짜나. 비우면 이번 주 */
@@ -86,20 +86,20 @@ public class AppLearningPlanController {
      * 맞춰야 한다. 하루치를 통째로 보내면 서버가 시작시각 순으로 매기고 끝난다.
      */
     @PutMapping("/days/{date}")
-    public ApiResponse<PlanResponse.Day> saveDay(
+    public ApiResponse<PlanResponse.PlanDay> saveDay(
             @CurrentAccount AuthPrincipal me,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @Valid @RequestBody PlanRequests.SaveDay request) {
 
         StudentEnrollment enrollment =
                 scopeResolver.requireStudent(me.accountId(), "학습계획 작성");
-        return ApiResponse.success(PlanResponse.Day.from(
+        return ApiResponse.success(PlanResponse.PlanDay.from(
                 planService.saveDay(enrollment, date, request.toCommands())));
     }
 
     /** 이행 O/X (I-19 확정 — 부분이행 없음). */
     @PatchMapping("/days/{date}/items/{itemId}")
-    public ApiResponse<PlanResponse.Item> mark(
+    public ApiResponse<PlanResponse.PlanItem> mark(
             @CurrentAccount AuthPrincipal me,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @PathVariable Long itemId,
@@ -107,7 +107,7 @@ public class AppLearningPlanController {
 
         StudentEnrollment enrollment =
                 scopeResolver.requireStudent(me.accountId(), "이행 체크");
-        return ApiResponse.success(PlanResponse.Item.from(
+        return ApiResponse.success(PlanResponse.PlanItem.from(
                 planService.mark(enrollment, date, itemId, request.done())));
     }
 

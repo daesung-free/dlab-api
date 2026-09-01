@@ -20,23 +20,23 @@ public final class ScheduleRequests {
     /**
      * @param month 대상 월. 지난 달은 거절된다 — 사후 인정 통로가 되면 사유신청이 무의미해진다
      */
-    public record Submit(@NotNull Short month,
-                         @NotEmpty @Valid List<Item> items) {
+    public record ScheduleSubmit(@NotNull Short month,
+                         @NotEmpty @Valid List<ScheduleItemInput> items) {
 
         public List<ItemInput> toInputs() {
-            return items.stream().map(Item::toInput).toList();
+            return items.stream().map(ScheduleItemInput::toInput).toList();
         }
     }
 
-    public record Replace(@NotEmpty @Valid List<Item> items) {
+    public record Replace(@NotEmpty @Valid List<ScheduleItemInput> items) {
 
         public List<ItemInput> toInputs() {
-            return items.stream().map(Item::toInput).toList();
+            return items.stream().map(ScheduleItemInput::toInput).toList();
         }
     }
 
     /** @param dayOfWeek {@code MONDAY} … {@code SUNDAY} */
-    public record Item(@NotNull DayOfWeek dayOfWeek,
+    public record ScheduleItemInput(@NotNull DayOfWeek dayOfWeek,
                        @NotNull @JsonFormat(pattern = "HH:mm") LocalTime startTime,
                        @NotNull @JsonFormat(pattern = "HH:mm") LocalTime endTime,
                        @NotBlank @Size(max = 100) String title,

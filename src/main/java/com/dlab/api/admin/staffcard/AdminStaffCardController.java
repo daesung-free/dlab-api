@@ -49,7 +49,7 @@ public class AdminStaffCardController {
      */
     @PostMapping
     public ApiResponse<StaffRow> register(@CurrentAccount AuthPrincipal me,
-                                          @Valid @RequestBody RegisterRequest request) {
+                                          @Valid @RequestBody StaffCardRegisterRequest request) {
         return ApiResponse.success(StaffRow.from(staffEnrollmentService.register(
                 me, request.academyId(), request.name(), request.phone(), request.rfidNo())));
     }
@@ -90,7 +90,7 @@ public class AdminStaffCardController {
                         .stream().map(AttendanceRow::from).toList());
     }
 
-    public record RegisterRequest(Long academyId,
+    public record StaffCardRegisterRequest(Long academyId,
                                   @NotBlank @Size(max = 20) String name,
                                   @Size(max = 20) String phone,
                                   @Size(max = 10) String rfidNo) {

@@ -29,11 +29,11 @@ public final class AppConfigResponse {
     }
 
     /** 관리자 화면용 — 설정 원본. */
-    public record Detail(Long id, String platform, String minVersion, String latestVersion,
+    public record AppConfigDetail(Long id, String platform, String minVersion, String latestVersion,
                          boolean maintenance, String maintenanceMessage, Instant maintenanceUntil) {
 
-        public static Detail from(AppConfig config) {
-            return new Detail(config.getId(), config.getPlatform().name(), config.getMinVersion(),
+        public static AppConfigDetail from(AppConfig config) {
+            return new AppConfigDetail(config.getId(), config.getPlatform().name(), config.getMinVersion(),
                     config.getLatestVersion(), config.isMaintenance(),
                     config.getMaintenanceMessage(), config.getMaintenanceUntil());
         }

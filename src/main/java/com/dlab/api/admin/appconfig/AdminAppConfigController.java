@@ -32,17 +32,17 @@ public class AdminAppConfigController {
 
     /** 앱 설정 목록(최소 지원 버전·점검 모드). 앱이 부팅할 때 첫 번째로 읽는 값이다. */
     @GetMapping
-    public ApiResponse<List<AppConfigResponse.Detail>> list() {
+    public ApiResponse<List<AppConfigResponse.AppConfigDetail>> list() {
         return ApiResponse.success(appConfigService.findAll().stream()
-                .map(AppConfigResponse.Detail::from).toList());
+                .map(AppConfigResponse.AppConfigDetail::from).toList());
     }
 
     /** 버전 설정. {@code null} 필드는 "변경하지 않음"이다. */
     @PatchMapping("/{platform}/versions")
-    public ApiResponse<AppConfigResponse.Detail> updateVersions(
+    public ApiResponse<AppConfigResponse.AppConfigDetail> updateVersions(
             @PathVariable Platform platform,
             @Valid @RequestBody AdminAppConfigRequests.UpdateVersions request) {
-        return ApiResponse.success(AppConfigResponse.Detail.from(
+        return ApiResponse.success(AppConfigResponse.AppConfigDetail.from(
                 appConfigService.updateVersions(platform, request.minVersion(), request.latestVersion())));
     }
 
@@ -52,10 +52,10 @@ public class AdminAppConfigController {
      * <p>⚠️ <b>켜는 순간 그 플랫폼 전 사용자가 앱을 못 쓴다.</b>
      */
     @PutMapping("/{platform}/maintenance")
-    public ApiResponse<AppConfigResponse.Detail> changeMaintenance(
+    public ApiResponse<AppConfigResponse.AppConfigDetail> changeMaintenance(
             @PathVariable Platform platform,
             @Valid @RequestBody AdminAppConfigRequests.ChangeMaintenance request) {
-        return ApiResponse.success(AppConfigResponse.Detail.from(appConfigService.changeMaintenance(
+        return ApiResponse.success(AppConfigResponse.AppConfigDetail.from(appConfigService.changeMaintenance(
                 platform, request.maintenance(), request.message(), request.until())));
     }
 

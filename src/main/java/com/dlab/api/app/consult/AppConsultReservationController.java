@@ -37,7 +37,7 @@ public class AppConsultReservationController {
 
     /** 예약 가능한 일정. @param from/to 비우면 오늘부터 2주 */
     @GetMapping("/slots")
-    public ApiResponse<List<ConsultResponse.Slot>> slots(
+    public ApiResponse<List<ConsultResponse.ConsultSlotView>> slots(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -50,17 +50,17 @@ public class AppConsultReservationController {
         LocalDate end = to == null ? start.plusWeeks(2) : to;
 
         return ApiResponse.success(consultService.availableSlots(enrollment, start, end)
-                .stream().map(ConsultResponse.Slot::from).toList());
+                .stream().map(ConsultResponse.ConsultSlotView::from).toList());
     }
 
     /** 예약하면 담임에게 알림이 간다(문구 확정 전까지는 이력만 남는다). */
     @PostMapping("/reservations")
-    public ApiResponse<ConsultResponse.Reservation> reserve(
+    public ApiResponse<ConsultResponse.ConsultReservationView> reserve(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody ConsultRequests.Reserve request) {
+            @Valid @RequestBody ConsultRequests.ConsultReserve request) {
 
         StudentEnrollment enrollment = scopeResolver.requireStudent(me.accountId(), "상담 예약");
-        return ApiResponse.success(ConsultResponse.Reservation.from(consultService.reserve(
+        return ApiResponse.success(ConsultResponse.ConsultReservationView.from(consultService.reserve(
                 enrollment, request.slotId(), request.consultType(), request.requestNote())));
     }
 
@@ -77,7 +77,7 @@ public class AppConsultReservationController {
 
     /** 본인 예약 내역. 취소분도 이력으로 나온다. @param from/to 비우면 최근 3개월 */
     @GetMapping("/reservations")
-    public ApiResponse<List<ConsultResponse.Reservation>> myReservations(
+    public ApiResponse<List<ConsultResponse.ConsultReservationView>> myReservations(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -91,6 +91,6 @@ public class AppConsultReservationController {
 
         return ApiResponse.success(
                 consultService.myReservations(enrollment.getId(), start, end)
-                        .stream().map(ConsultResponse.Reservation::from).toList());
+                        .stream().map(ConsultResponse.ConsultReservationView::from).toList());
     }
 }

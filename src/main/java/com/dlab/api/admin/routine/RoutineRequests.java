@@ -12,7 +12,7 @@ public final class RoutineRequests {
     private RoutineRequests() {
     }
 
-    public record Create(
+    public record RoutineCreate(
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") Integer year,
             @NotNull(message = "월은 필수입니다.") @Min(1) @Max(12) Integer month,
@@ -27,7 +27,7 @@ public final class RoutineRequests {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
-    public record Update(
+    public record RoutineUpdate(
             @Size(max = 100) String name,
             @Size(max = 30) String subject,
             @PositiveOrZero Integer maxScore,

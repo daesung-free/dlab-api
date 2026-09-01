@@ -104,7 +104,7 @@ public class AdminStudentController {
     @PatchMapping("/{enrollmentId}")
     public ApiResponse<StudentResponse> update(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long enrollmentId,
-                                               @Valid @RequestBody StudentRequests.Update request) {
+                                               @Valid @RequestBody StudentRequests.StudentUpdate request) {
         return ApiResponse.success(StudentResponse.from(studentService.update(
                 enrollmentId, request.name(), request.phone(), request.birthDate(),
                 request.gender(), request.schoolName(), request.address(), request.grade(),
@@ -126,7 +126,7 @@ public class AdminStudentController {
     @PostMapping("/{enrollmentId}/status")
     public ApiResponse<StatusChangeResponse> changeStatus(
             @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId,
-            @Valid @RequestBody StudentRequests.ChangeStatus request) {
+            @Valid @RequestBody StudentRequests.StudentChangeStatus request) {
         var result = studentStatusService.changeStatus(
                 enrollmentId, request.status(), request.reason(), me);
         return ApiResponse.success(StatusChangeResponse.from(result));

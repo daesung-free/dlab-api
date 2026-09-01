@@ -26,7 +26,7 @@ public final class AttendanceResponse {
      */
     public record Daily(LocalDate date, String finalStatus, boolean excused,
                         Integer studyMinutes, Instant inAt, Instant outAt,
-                        List<Event> events, List<AbsenceReasonRow> reasons) {
+                        List<AttendanceEvent> events, List<AbsenceReasonRow> reasons) {
 
         public static Daily from(AttendanceQueryService.DailySummary summary) {
             AttendanceTaggingLog in = summary.firstIn();
@@ -38,7 +38,7 @@ public final class AttendanceResponse {
                     summary.studyMinutes(),
                     in == null ? null : in.getRecordedAt(),
                     out == null ? null : out.getRecordedAt(),
-                    summary.events().stream().map(Event::from).toList(),
+                    summary.events().stream().map(AttendanceEvent::from).toList(),
                     summary.reasons().stream().map(AbsenceReasonRow::from).toList());
         }
     }
@@ -51,10 +51,10 @@ public final class AttendanceResponse {
      * @param source    `KIOSK_NFC` / `APP_QR` / `MANUAL`. 관리자가 손으로 넣은 건 MANUAL이라
      *                  앱에서 "직접 등록됨"을 표시할 수 있다
      */
-    public record Event(Instant recordedAt, String eventType, String source) {
+    public record AttendanceEvent(Instant recordedAt, String eventType, String source) {
 
-        public static Event from(AttendanceTaggingLog log) {
-            return new Event(log.getRecordedAt(), log.getEventType().name(),
+        public static AttendanceEvent from(AttendanceTaggingLog log) {
+            return new AttendanceEvent(log.getRecordedAt(), log.getEventType().name(),
                     log.getSource() == null ? null : log.getSource().name());
         }
     }

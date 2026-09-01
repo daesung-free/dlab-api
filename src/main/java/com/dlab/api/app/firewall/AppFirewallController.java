@@ -31,7 +31,7 @@ public class AppFirewallController {
      */
     @PostMapping
     public ApiResponse<FirewallResponse> create(@CurrentAccount AuthPrincipal principal,
-                                                @Valid @RequestBody FirewallRequests.Create request) {
+                                                @Valid @RequestBody FirewallRequests.FirewallCreate request) {
         return ApiResponse.success(FirewallResponse.from(
                 firewallRequestService.createForAccount(
                         principal.accountId(), request.requestedMinutes(), request.reason())));
