@@ -132,16 +132,7 @@ public class ReceiptStatusService {
     }
 
     private Long requireScope(AuthPrincipal me, Long academyId) {
-        Long resolved = academyId != null ? academyId : me.academyScopeFilter();
-        if (resolved == null) {
-            // 전 지점 권한자는 지점을 골라야 한다. 전 지점을 한 번에 뿌리면
-            // 어느 지점 미납인지 구분 없이 독촉이 나간다
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        if (!me.canAccessAcademy(resolved)) {
-            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
-        }
-        return resolved;
+        return me.requireAcademyScope(academyId);
     }
 
     /** @param received 취소되지 않은 수납 합계 */

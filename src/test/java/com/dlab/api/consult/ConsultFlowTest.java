@@ -130,9 +130,9 @@ class ConsultFlowTest {
     @Test
     @DisplayName("★ 태그를 붙이고 수정 시 통째로 갈아끼운다 — 화면이 선택 목록을 그대로 보낸다")
     void tagsAreReplacedOnUpdate() {
-        ConsultTag late = consultService.createTag(admin, (short) 2026,
+        ConsultTag late = consultService.createTag(admin, null, (short) 2026,
                 ConsultType.LIFE, "지각 잦음", (short) 1);
-        ConsultTag sleep = consultService.createTag(admin, (short) 2026,
+        ConsultTag sleep = consultService.createTag(admin, null, (short) 2026,
                 ConsultType.LIFE, "수면 부족", (short) 2);
         em.flush();
 
@@ -180,9 +180,9 @@ class ConsultFlowTest {
         write(minji, ConsultType.REGULAR, today, null, List.of());   // 담임 = 박담임
         em.clear();
 
-        assertThat(consultService.findByPeriod(admin, today.minusDays(1), today,
+        assertThat(consultService.findByPeriod(admin, null, today.minusDays(1), today,
                 homeroom.getId())).hasSize(1);
-        assertThat(consultService.findByPeriod(admin, today.minusDays(1), today,
+        assertThat(consultService.findByPeriod(admin, null, today.minusDays(1), today,
                 other.getId())).isEmpty();
     }
 
@@ -209,7 +209,7 @@ class ConsultFlowTest {
         write(minji, ConsultType.REGULAR, today, null, List.of());
         em.clear();
 
-        List<ConsultStatusRow> rows = consultService.status(admin, null);
+        List<ConsultStatusRow> rows = consultService.status(admin, null, null);
 
         assertThat(rows).hasSize(2);
         var never = rows.stream().filter(r -> r.studentNo().equals("2026-0002"))
@@ -225,7 +225,7 @@ class ConsultFlowTest {
         write(minji, ConsultType.SCORE, today.minusDays(1), null, List.of());
         em.clear();
 
-        var row = consultService.status(admin, null).stream()
+        var row = consultService.status(admin, null, null).stream()
                 .filter(r -> r.studentNo().equals("2026-0001")).findFirst().orElseThrow();
 
         assertThat(row.lastConsultType()).isEqualTo(ConsultType.SCORE);
@@ -238,7 +238,7 @@ class ConsultFlowTest {
         write(minji, ConsultType.REGULAR, today.minusDays(10), today.minusDays(3), List.of());
         em.clear();
 
-        var row = consultService.status(admin, null).stream()
+        var row = consultService.status(admin, null, null).stream()
                 .filter(r -> r.studentNo().equals("2026-0001")).findFirst().orElseThrow();
 
         assertThat(row.overdueDays()).isEqualTo(3);
@@ -250,7 +250,7 @@ class ConsultFlowTest {
         write(minji, ConsultType.REGULAR, today, today.plusDays(7), List.of());
         em.clear();
 
-        var row = consultService.status(admin, null).stream()
+        var row = consultService.status(admin, null, null).stream()
                 .filter(r -> r.studentNo().equals("2026-0001")).findFirst().orElseThrow();
 
         assertThat(row.overdueDays()).isZero();
@@ -259,7 +259,7 @@ class ConsultFlowTest {
     @Test
     @DisplayName("★★ 신상기록부 작성 여부는 null이다 — false로 내리면 '작성 안 함'이라는 없는 사실이 생긴다")
     void profileWrittenIsUnknownForNow() {
-        var row = consultService.status(admin, null).get(0);
+        var row = consultService.status(admin, null, null).get(0);
 
         assertThat(row.profileWritten()).isNull();
     }
@@ -267,7 +267,7 @@ class ConsultFlowTest {
     @Test
     @DisplayName("★ 담임 필터를 걸면 그 반 학생만 나온다")
     void statusFiltersByHomeroom() {
-        List<ConsultStatusRow> rows = consultService.status(admin, homeroom.getId());
+        List<ConsultStatusRow> rows = consultService.status(admin, null, homeroom.getId());
 
         assertThat(rows).extracting(ConsultStatusRow::studentNo).containsExactly("2026-0001");
     }
@@ -277,7 +277,7 @@ class ConsultFlowTest {
     @Test
     @DisplayName("★ 꺼둔 태그는 담임 화면에서 빠진다 — 관리자 목록에는 남는다")
     void inactiveTagIsHiddenFromTeachers() {
-        ConsultTag tag = consultService.createTag(admin, (short) 2026,
+        ConsultTag tag = consultService.createTag(admin, null, (short) 2026,
                 ConsultType.SCORE, "수학 취약", (short) 1);
         em.flush();
 
@@ -286,19 +286,19 @@ class ConsultFlowTest {
         em.flush();
         em.clear();
 
-        assertThat(consultService.tags(admin, (short) 2026, false)).isEmpty();
-        assertThat(consultService.tags(admin, (short) 2026, true)).hasSize(1);
+        assertThat(consultService.tags(admin, null, (short) 2026, false)).isEmpty();
+        assertThat(consultService.tags(admin, null, (short) 2026, true)).hasSize(1);
     }
 
     @Test
     @DisplayName("태그는 정렬 순서대로 나온다")
     void tagsAreSorted() {
-        consultService.createTag(admin, (short) 2026, ConsultType.LIFE, "두번째", (short) 2);
-        consultService.createTag(admin, (short) 2026, ConsultType.LIFE, "첫번째", (short) 1);
+        consultService.createTag(admin, null, (short) 2026, ConsultType.LIFE, "두번째", (short) 2);
+        consultService.createTag(admin, null, (short) 2026, ConsultType.LIFE, "첫번째", (short) 1);
         em.flush();
         em.clear();
 
-        assertThat(consultService.tags(admin, (short) 2026, false))
+        assertThat(consultService.tags(admin, null, (short) 2026, false))
                 .extracting(ConsultTag::getName).containsExactly("첫번째", "두번째");
     }
 }

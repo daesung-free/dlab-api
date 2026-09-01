@@ -129,12 +129,17 @@ public class AdminMealController {
 
     // ── 결제·취소 내역 ────────────────────────────────────────
 
-    /** 급식 신청 현황. 취소된 끼니는 빠진다. */
+    /**
+     * 급식 신청 현황. 취소된 끼니는 빠진다.
+     *
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @GetMapping("/orders")
     public ApiResponse<List<OrderResponse>> orders(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Long academyId,
                                                    @RequestParam String month) {
-        Long resolved = academyId != null ? academyId : me.academyScopeFilter();
+        Long resolved = me.requireAcademyScope(academyId);
         return ApiResponse.success(
                 mealOrderService.findByMonth(resolved, YearMonth.parse(month)).stream()
                         .map(OrderResponse::from).toList());

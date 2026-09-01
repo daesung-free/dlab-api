@@ -42,6 +42,7 @@ public class AdminAbsenceRequestController {
     @GetMapping
     public ApiResponse<ListResponse> list(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) ApprovalStatus status) {
@@ -51,10 +52,10 @@ public class AdminAbsenceRequestController {
 
         boolean raw = PersonalDataPolicy.canViewRaw(me);
         return ApiResponse.success(new ListResponse(
-                absenceReasonService.list(me, start, end, status).stream()
+                absenceReasonService.list(me, academyId, start, end, status).stream()
                         .map(r -> RowResponse.of(r, raw))
                         .toList(),
-                absenceReasonService.summary(me, start, end),
+                absenceReasonService.summary(me, academyId, start, end),
                 !raw));
     }
 

@@ -1,6 +1,10 @@
 package com.dlab.common.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.dlab.common.exception.BusinessException;
+import com.dlab.common.exception.ErrorCode;
 
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
@@ -47,6 +51,44 @@ class AuthPrincipalTest {
 
         assertThat(me.canAccessAcademy(7L)).isFalse();
         assertThat(me.canAccessAcademy(null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("★ 전 지점 권한자는 지점을 고르면 그 지점이 스코프가 된다")
+    void headOfficeCanPickAnyAcademy() {
+        assertThat(superAdmin().requireAcademyScope(8L)).isEqualTo(8L);
+    }
+
+    @Test
+    @DisplayName("★ 전 지점 권한자가 지점을 안 고르면 400 — null은 '필터 없음'이지 '아무 지점'이 아니다")
+    void headOfficeMustPickAcademy() {
+        assertThatThrownBy(() -> superAdmin().requireAcademyScope(null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    @DisplayName("지점 관리자는 안 골라도 자기 지점이 스코프가 된다")
+    void branchAdminDefaultsToOwnAcademy() {
+        assertThat(branchAdminOf(7L).requireAcademyScope(null)).isEqualTo(7L);
+        assertThat(branchAdminOf(7L).requireAcademyScope(7L)).isEqualTo(7L);
+    }
+
+    @Test
+    @DisplayName("★ 지점 관리자가 남의 지점을 지정하면 거부된다 — 요청 값을 그대로 믿지 않는다")
+    void branchAdminCannotPickOtherAcademy() {
+        assertThatThrownBy(() -> branchAdminOf(7L).requireAcademyScope(8L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+    }
+
+    @Test
+    @DisplayName("통계처럼 전체 합계가 성립하는 화면은 본사가 안 골라도 null(=전 지점)이다")
+    void resolveAllowsNullForHeadOffice() {
+        assertThat(superAdmin().resolveAcademyScope(null)).isNull();
+        assertThat(branchAdminOf(7L).resolveAcademyScope(null)).isEqualTo(7L);
+        assertThatThrownBy(() -> branchAdminOf(7L).resolveAcademyScope(8L))
+                .isInstanceOf(BusinessException.class);
     }
 
     @Test

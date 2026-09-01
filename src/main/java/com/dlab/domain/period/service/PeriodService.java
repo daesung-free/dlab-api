@@ -172,13 +172,6 @@ public class PeriodService {
      * "전 지점 일괄"이 성립하지 않는다(지점마다 점심시간이 다르다).
      */
     private Long requireAcademyAccess(AuthPrincipal me, Long academyId) {
-        Long resolved = academyId != null ? academyId : me.academyScopeFilter();
-        if (resolved == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        if (!me.canAccessAcademy(resolved)) {
-            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
-        }
-        return resolved;
+        return me.requireAcademyScope(academyId);
     }
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.dlab.common.exception.BusinessException;
+import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
 import com.dlab.domain.penalty.entity.PenaltyCategory;
@@ -84,7 +85,7 @@ class AdminPenaltyBoardTest {
     private PenaltyService.PenaltyBoard board() {
         em.flush();
         em.clear();
-        return penaltyService.board(admin, today, today, null, null, null, null);
+        return penaltyService.board(admin, null, today, today, null, null, null, null);
     }
 
     @Test
@@ -125,12 +126,12 @@ class AdminPenaltyBoardTest {
         em.flush();
         em.clear();
 
-        var all = penaltyService.board(admin, today, today, null, null, null, null);
+        var all = penaltyService.board(admin, null, today, today, null, null, null, null);
         assertThat(all.plusTotal()).isEqualTo(3);
         assertThat(all.minusTotal()).isEqualTo(-4);   // 벌점은 음수로 표시
 
         var demeritOnly = penaltyService.board(
-                admin, today, today, PenaltyCategory.DEMERIT, null, null, null);
+                admin, null, today, today, PenaltyCategory.DEMERIT, null, null, null);
         assertThat(demeritOnly.rows()).hasSize(2);
         assertThat(demeritOnly.plusTotal()).isZero();
     }
@@ -150,9 +151,9 @@ class AdminPenaltyBoardTest {
         em.flush();
         em.clear();
 
-        assertThat(penaltyService.board(admin, today, today, null, null, "김민지", null).rows())
+        assertThat(penaltyService.board(admin, null, today, today, null, null, "김민지", null).rows())
                 .hasSize(1);
-        assertThat(penaltyService.board(admin, today, today, null, null, "2026-0002", null).rows())
+        assertThat(penaltyService.board(admin, null, today, today, null, null, "2026-0002", null).rows())
                 .hasSize(1);
     }
 
@@ -164,10 +165,10 @@ class AdminPenaltyBoardTest {
         em.clear();
 
         assertThat(penaltyService.board(
-                admin, today, today, null, PenaltySource.MANUAL, null, null).rows()).hasSize(1);
+                admin, null, today, today, null, PenaltySource.MANUAL, null, null).rows()).hasSize(1);
         assertThat(penaltyService.board(
-                admin, today, today, null, PenaltySource.KIOSK, null, null).rows()).isEmpty();
-        assertThat(penaltyService.board(admin, today, today, null, null, null, null).autoCount())
+                admin, null, today, today, null, PenaltySource.KIOSK, null, null).rows()).isEmpty();
+        assertThat(penaltyService.board(admin, null, today, today, null, null, null, null).autoCount())
                 .isZero();
     }
 
@@ -207,5 +208,54 @@ class AdminPenaltyBoardTest {
         penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
 
         assertThat(board().rows()).hasSize(1);
+    }
+
+    // ── 지점 스코프 ────────────────────────────────────────────
+    // academyScopeFilter()의 null은 "필터 없음"이지 "지점 모름"이 아니다.
+
+    @Test
+    @DisplayName("★ 본사가 지점을 고르면 그 지점 상벌점이 보인다 — 예전엔 400이라 화면이 안 열렸다")
+    void headOfficeSeesPickedAcademy() {
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
+        em.flush();
+        em.clear();
+        AuthPrincipal headOffice = AuthPrincipal.of(9L, "EMPLOYEE", null,
+                List.of(Role.SUPER_ADMIN), true);
+
+        assertThat(penaltyService.board(headOffice, bundang.getId(), today, today,
+                null, null, null, null).rows()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("본사가 지점을 안 고르면 400 — 전 지점 상벌점을 섞어 뿌리지 않는다")
+    void headOfficeMustPickAcademy() {
+        AuthPrincipal headOffice = AuthPrincipal.of(9L, "EMPLOYEE", null,
+                List.of(Role.SUPER_ADMIN), true);
+
+        assertThatThrownBy(() -> penaltyService.board(headOffice, null, today, today,
+                null, null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    @DisplayName("지점 관리자는 안 골라도 자기 지점이 보인다")
+    void branchAdminDefaultsToOwnAcademy() {
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
+
+        assertThat(board().rows()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("★ 지점 관리자가 다른 지점을 지정하면 거부된다 — 요청 값을 그대로 믿지 않는다")
+    void branchAdminCannotPickOtherAcademy() {
+        Academy ilsan = new Academy("32", "일산", LocalTime.of(9, 0));
+        em.persist(ilsan);
+        em.flush();
+
+        assertThatThrownBy(() -> penaltyService.board(admin, ilsan.getId(), today, today,
+                null, null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
     }
 }

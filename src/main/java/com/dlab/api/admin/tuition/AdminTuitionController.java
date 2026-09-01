@@ -118,7 +118,9 @@ public class AdminTuitionController {
             @RequestParam SeatType seatType,
             @RequestParam(required = false) Long academyId) {
 
-        Long scope = academyId != null ? academyId : me.academyScopeFilter();
+        // 전 지점 권한자가 안 고르면 null(= 전 지점 공통가)이다.
+        // 요청 값은 반드시 권한 검사를 거친다 — 그냥 믿으면 남의 지점 가격이 보인다
+        Long scope = me.resolveAcademyScope(academyId);
         return ApiResponse.success(
                 pricingService.feeTable(year, month, gradeType, seatType, scope).stream()
                         .map(TuitionRequests.FeeRow::from).toList());

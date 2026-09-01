@@ -216,20 +216,7 @@ public class PenaltyMasterService {
      * 별도 기능으로 두는 게 맞다.
      */
     private Long scope(AuthPrincipal me, Long requested) {
-        if (me.allAcademy()) {
-            if (requested == null) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-            }
-            return requested;
-        }
-        if (requested != null && !me.canAccessAcademy(requested)) {
-            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
-        }
-        Long own = me.academyScopeFilter();
-        if (own == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        return own;
+        return me.requireAcademyScope(requested);
     }
 
     /**

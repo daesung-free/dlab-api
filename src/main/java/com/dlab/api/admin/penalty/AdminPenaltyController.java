@@ -41,10 +41,16 @@ public class AdminPenaltyController {
     private final PenaltyService penaltyService;
     private final PenaltyItemRepository penaltyItemRepository;
 
-    /** 목록 + 상단 합계. 합계는 <b>조회 조건 기준</b>이다(화면 명시). */
+    /**
+     * 목록 + 상단 합계. 합계는 <b>조회 조건 기준</b>이다(화면 명시).
+     *
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @GetMapping
     public ApiResponse<BoardResponse> board(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) PenaltyCategory category,
@@ -55,7 +61,7 @@ public class AdminPenaltyController {
         LocalDate start = from == null ? LocalDate.now().withDayOfMonth(1) : from;
         LocalDate end = to == null ? LocalDate.now() : to;
 
-        var board = penaltyService.board(me, start, end, category, source, keyword, classId);
+        var board = penaltyService.board(me, academyId, start, end, category, source, keyword, classId);
         boolean raw = PersonalDataPolicy.canViewRaw(me);
 
         return ApiResponse.success(new BoardResponse(
@@ -66,18 +72,21 @@ public class AdminPenaltyController {
                 !raw));
     }
 
-    /** 부여 가능한 항목. 화면 드롭다운이 쓴다. */
+    /**
+     * 부여 가능한 항목. 화면 드롭다운이 쓴다.
+     *
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @GetMapping("/items")
     public ApiResponse<List<ItemResponse>> items(@CurrentAccount AuthPrincipal me,
+                                                 @RequestParam(required = false) Long academyId,
                                                  @RequestParam(required = false) Integer year) {
-        Long academyId = me.academyScopeFilter();
-        if (academyId == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
+        Long scope = me.requireAcademyScope(academyId);
         short targetYear = year == null ? (short) LocalDate.now().getYear() : year.shortValue();
 
         return ApiResponse.success(penaltyItemRepository
-                .findByAcademyIdAndYearAndDeletedFalseOrderByItemNameAsc(academyId, targetYear)
+                .findByAcademyIdAndYearAndDeletedFalseOrderByItemNameAsc(scope, targetYear)
                 .stream().map(ItemResponse::from).toList());
     }
 

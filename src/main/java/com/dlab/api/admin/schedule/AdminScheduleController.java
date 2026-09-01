@@ -111,15 +111,6 @@ public class AdminScheduleController {
 
     /** 지점 스코프는 서버가 강제한다 — 요청 값을 그대로 믿으면 다른 지점이 새어나간다. */
     private Long resolveScope(AuthPrincipal me, Long requested) {
-        if (me.allAcademy()) {
-            if (requested == null) {
-                throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해 주세요.");
-            }
-            return requested;
-        }
-        if (requested != null && !me.canAccessAcademy(requested)) {
-            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
-        }
-        return me.academyScopeFilter();
+        return me.requireAcademyScope(requested);
     }
 }

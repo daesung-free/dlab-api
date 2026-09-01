@@ -93,7 +93,7 @@ class AttendanceCorrectionTest {
     private ScreenStatus screenStatus() {
         em.flush();
         em.clear();
-        return boardService.board(admin, day, null).get(0).status();
+        return boardService.board(admin, null, day, null).get(0).status();
     }
 
     private AttendanceDailyStatus confirmed() {

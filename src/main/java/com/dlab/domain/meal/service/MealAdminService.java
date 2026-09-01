@@ -178,13 +178,7 @@ public class MealAdminService {
     }
 
     private Academy requireAcademy(AuthPrincipal me, Long academyId) {
-        Long resolved = academyId != null ? academyId : me.academyScopeFilter();
-        if (resolved == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        if (!me.canAccessAcademy(resolved)) {
-            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
-        }
+        Long resolved = me.requireAcademyScope(academyId);
         return academyRepository.findById(resolved)
                 .filter(a -> !a.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));

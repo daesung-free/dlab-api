@@ -61,17 +61,20 @@ public class AdminAttendanceController {
      * "오늘 결석 몇 명"을 셀 수 없다.
      *
      * @param classId 담당 반. 담임은 자기 반만 본다
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
      */
     @GetMapping
     public ApiResponse<BoardResponse> board(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) List<ScreenStatus> statuses,
             @RequestParam(required = false) String keyword) {
 
         List<AttendanceRow> rows = boardService.board(
-                me, date == null ? LocalDate.now() : date, classId);
+                me, academyId, date == null ? LocalDate.now() : date, classId);
 
         List<AttendanceRow> filtered = rows.stream()
                 .filter(r -> statuses == null || statuses.isEmpty() || statuses.contains(r.status()))
@@ -162,10 +165,11 @@ public class AdminAttendanceController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN')")
     public ApiResponse<RecalculationResult> recalculate(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return ApiResponse.success(
-                new RecalculationResult(recalculationService.recalculate(me, from, to)));
+        return ApiResponse.success(new RecalculationResult(
+                recalculationService.recalculate(me, academyId, from, to)));
     }
 
     /** @param updated 다시 계산한 행 수. 0이면 확정된 날이 없다는 뜻이다 */
@@ -181,12 +185,13 @@ public class AdminAttendanceController {
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) Long classId,
             @RequestParam(defaultValue = "false") boolean unmask) {
 
         byte[] body = boardService.export(
-                me, date == null ? LocalDate.now() : date, classId, unmask);
+                me, academyId, date == null ? LocalDate.now() : date, classId, unmask);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
