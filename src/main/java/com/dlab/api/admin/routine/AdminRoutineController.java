@@ -34,22 +34,22 @@ public class AdminRoutineController {
 
     /** 그 달 루틴 목록. */
     @GetMapping
-    public ApiResponse<List<RoutineResponse.Detail>> list(
+    public ApiResponse<List<RoutineResponse.RoutineDetail>> list(
             @CurrentAccount AuthPrincipal me,
             @RequestParam Long academyId,
             @RequestParam Integer year,
             @RequestParam Integer month) {
         return ApiResponse.success(routineService
                 .findByMonth(academyId, year.shortValue(), month.shortValue(), me).stream()
-                .map(RoutineResponse.Detail::from).toList());
+                .map(RoutineResponse.RoutineDetail::from).toList());
     }
 
     /** 루틴 등록. */
     @PostMapping
-    public ApiResponse<RoutineResponse.Detail> create(
+    public ApiResponse<RoutineResponse.RoutineDetail> create(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody RoutineRequests.Create request) {
-        return ApiResponse.success(RoutineResponse.Detail.from(routineService.create(
+            @Valid @RequestBody RoutineRequests.RoutineCreate request) {
+        return ApiResponse.success(RoutineResponse.RoutineDetail.from(routineService.create(
                 request.academyId(), request.year().shortValue(), request.month().shortValue(),
                 request.classId(), request.name(), request.subject(),
                 request.maxScore() == null ? 0 : request.maxScore().shortValue(),
@@ -59,11 +59,11 @@ public class AdminRoutineController {
 
     /** 루틴 수정. */
     @PatchMapping("/{routineId}")
-    public ApiResponse<RoutineResponse.Detail> update(
+    public ApiResponse<RoutineResponse.RoutineDetail> update(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long routineId,
-            @Valid @RequestBody RoutineRequests.Update request) {
-        return ApiResponse.success(RoutineResponse.Detail.from(routineService.update(
+            @Valid @RequestBody RoutineRequests.RoutineUpdate request) {
+        return ApiResponse.success(RoutineResponse.RoutineDetail.from(routineService.update(
                 routineId, request.name(), request.subject(),
                 request.maxScore() == null ? null : request.maxScore().shortValue(),
                 request.recommended(),

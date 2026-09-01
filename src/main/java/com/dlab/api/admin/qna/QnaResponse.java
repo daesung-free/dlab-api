@@ -21,26 +21,26 @@ public final class QnaResponse {
      * @param reservations 예약자 명단. <b>앱 응답에서는 비어 있다</b> — 남의 예약이 보이면 안 된다
      * @param full         정원이 찼는가. 앱이 "마감"을 표시한다
      */
-    public record Slot(Long id, LocalDate date, LocalTime startTime, LocalTime endTime,
+    public record QnaSlot(Long id, LocalDate date, LocalTime startTime, LocalTime endTime,
                        String teacherName, String room, int capacity, long reserved,
                        boolean full, boolean closed, String memo,
-                       List<Reservation> reservations) {
+                       List<QnaReservation> reservations) {
 
-        public static Slot from(QnaOfflineService.SlotView view) {
+        public static QnaSlot from(QnaOfflineService.SlotView view) {
             QnaOfflineSlot s = view.slot();
-            return new Slot(s.getId(), s.getSlotDate(), s.getStartTime(), s.getEndTime(),
+            return new QnaSlot(s.getId(), s.getSlotDate(), s.getStartTime(), s.getEndTime(),
                     s.getTeacher() == null ? null : s.getTeacher().getName(),
                     s.getRoom(), s.getCapacity(), view.reserved(),
                     view.isFull(), s.isClosed(), s.getMemo(),
-                    view.reservations().stream().map(Reservation::from).toList());
+                    view.reservations().stream().map(QnaReservation::from).toList());
         }
     }
 
-    public record Reservation(Long id, Long studentId, String studentNo, String studentName,
+    public record QnaReservation(Long id, Long studentId, String studentNo, String studentName,
                               String question, Instant reservedAt, Instant canceledAt) {
 
-        public static Reservation from(QnaOfflineReservation r) {
-            return new Reservation(r.getId(),
+        public static QnaReservation from(QnaOfflineReservation r) {
+            return new QnaReservation(r.getId(),
                     r.getEnrollment().getStudent().getId(),
                     r.getEnrollment().getStudentNo(),
                     r.getEnrollment().getStudent().getName(),

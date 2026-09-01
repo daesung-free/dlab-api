@@ -17,24 +17,24 @@ public final class LectureResponse {
      * @param visible 앱 노출 여부. {@code status}와 별개 축이다
      * @param fee     ⚠️ 안내용 금액. 결제 연동이 없어 이 값으로 수납되지 않는다
      */
-    public record Detail(Long id, String lectureType, String name, String description,
+    public record LectureDetail(Long id, String lectureType, String name, String description,
                          String status, boolean visible, Integer capacity,
                          Instant applyFrom, Instant applyTo,
                          LocalDate startDate, LocalDate endDate, int fee,
                          Long confirmedCount, Long waitlistedCount) {
 
-        public static Detail from(Lecture l) {
+        public static LectureDetail from(Lecture l) {
             return of(l, null, null);
         }
 
-        public static Detail of(Lecture l, Long confirmed, Long waitlisted) {
-            return new Detail(l.getId(), l.getLectureType().name(), l.getName(), l.getDescription(),
+        public static LectureDetail of(Lecture l, Long confirmed, Long waitlisted) {
+            return new LectureDetail(l.getId(), l.getLectureType().name(), l.getName(), l.getDescription(),
                     l.getStatus().name(), l.isVisible(), l.getCapacity(),
                     l.getApplyFrom(), l.getApplyTo(), l.getStartDate(), l.getEndDate(), l.getFee(),
                     confirmed, waitlisted);
         }
 
-        public static Detail withHeadcount(Lecture l, LectureService.Headcount h) {
+        public static LectureDetail withHeadcount(Lecture l, LectureService.Headcount h) {
             return of(l, h.confirmed(), h.waitlisted());
         }
     }

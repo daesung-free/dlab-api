@@ -28,7 +28,7 @@ public final class ExamFormRequests {
      *                   수능은 응시 연도와 학년도가 어긋나(2025년 11월 = 2026학년도)
      *                   조합식이 매번 틀린다
      */
-    public record Create(
+    public record ExamFormCreate(
             Long academyId,
             @NotNull(message = "연도는 필수입니다.") Short year,
             @NotNull(message = "학년은 필수입니다.") GradeType gradeType,
@@ -36,7 +36,7 @@ public final class ExamFormRequests {
             @NotBlank(message = "시험 이름은 필수입니다.") @Size(max = 64) String examName,
             int sortOrder,
             @NotEmpty(message = "과목이 없는 시험은 만들 수 없습니다.")
-            @Valid List<Subject> subjects) {
+            @Valid List<ExamFormSubject> subjects) {
 
         public ExamFormAdminService.Command toCommand() {
             return new ExamFormAdminService.Command(academyId, year, gradeType, examCode,
@@ -55,7 +55,7 @@ public final class ExamFormRequests {
      * @param hasStandardScore 한국사처럼 절대평가 과목은 {@code false}로 둘 것.
      *                         일괄로 열면 학생이 없는 점수를 지어내 채운다
      */
-    public record Subject(
+    public record ExamFormSubject(
             @NotBlank(message = "과목 코드는 필수입니다.") @Size(max = 20) String subjectCode,
             @NotBlank(message = "과목명은 필수입니다.") @Size(max = 30) String subjectName,
             int sortOrder,

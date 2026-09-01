@@ -30,12 +30,12 @@ public class AppLectureController {
 
     /** 신청할 수 있는 특강 목록 (A-15). 정원이 찬 것도 나오되 마감으로 표시된다. */
     @GetMapping
-    public ApiResponse<List<LectureResponse.Detail>> list(@CurrentAccount AuthPrincipal me) {
+    public ApiResponse<List<LectureResponse.LectureDetail>> list(@CurrentAccount AuthPrincipal me) {
         StudentEnrollment enrollment = lectureService.currentEnrollmentOf(me.accountId());
         return ApiResponse.success(
                 lectureService.findVisible(enrollment.getAcademy().getId(), enrollment.getYear())
                         .stream()
-                        .map(l -> LectureResponse.Detail.withHeadcount(
+                        .map(l -> LectureResponse.LectureDetail.withHeadcount(
                                 l, lectureService.headcount(l.getId())))
                         .toList());
     }

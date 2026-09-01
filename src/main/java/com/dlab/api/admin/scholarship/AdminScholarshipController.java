@@ -54,18 +54,18 @@ public class AdminScholarshipController {
      *                  화면에서 섞어 보여주지 말 것. 공통은 본사만 관리한다
      */
     @GetMapping("/rules")
-    public ApiResponse<List<RuleRow>> rules(@CurrentAccount AuthPrincipal me,
+    public ApiResponse<List<ScholarshipRuleRow>> rules(@CurrentAccount AuthPrincipal me,
                                             @RequestParam(required = false) Long academyId,
                                             @RequestParam short year) {
         return ApiResponse.success(ruleService.findAll(me, academyId, year)
-                .stream().map(RuleRow::from).toList());
+                .stream().map(ScholarshipRuleRow::from).toList());
     }
 
     /** 기준 생성. <b>항상 꺼진 채로 만들어진다</b> — 검증 전 기준이 돌면 안 된다. */
     @PostMapping("/rules")
-    public ApiResponse<RuleRow> createRule(@CurrentAccount AuthPrincipal me,
-                                           @Valid @RequestBody RuleRequest request) {
-        return ApiResponse.success(RuleRow.from(ruleService.create(
+    public ApiResponse<ScholarshipRuleRow> createRule(@CurrentAccount AuthPrincipal me,
+                                           @Valid @RequestBody ScholarshipRuleRequest request) {
+        return ApiResponse.success(ScholarshipRuleRow.from(ruleService.create(
                 me, request.academyId(), request.year(), request.ruleType(),
                 request.threshold(), request.subjectCodes(), request.scholarshipType(),
                 request.alternativeGroupOrDefault(), request.examCodes(),
@@ -79,10 +79,10 @@ public class AdminScholarshipController {
      * 때문이다. 기준을 고쳐도 "그때 왜 걸렸는지"는 남는다.
      */
     @PutMapping("/rules/{ruleId}")
-    public ApiResponse<RuleRow> updateRule(@CurrentAccount AuthPrincipal me,
+    public ApiResponse<ScholarshipRuleRow> updateRule(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long ruleId,
-                                           @Valid @RequestBody RuleRequest request) {
-        return ApiResponse.success(RuleRow.from(ruleService.update(
+                                           @Valid @RequestBody ScholarshipRuleRequest request) {
+        return ApiResponse.success(ScholarshipRuleRow.from(ruleService.update(
                 me, ruleId, request.threshold(), request.subjectCodes(),
                 request.scholarshipType(), request.alternativeGroupOrDefault(),
                 request.examCodes(), request.electiveMode(),
@@ -91,10 +91,10 @@ public class AdminScholarshipController {
 
     /** 켜고 끄기. 끄면 판정에서 빠지고, <b>이미 올라온 검토 대상은 남는다</b>. */
     @PatchMapping("/rules/{ruleId}/active")
-    public ApiResponse<RuleRow> toggleRule(@CurrentAccount AuthPrincipal me,
+    public ApiResponse<ScholarshipRuleRow> toggleRule(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long ruleId,
                                            @RequestParam boolean active) {
-        return ApiResponse.success(RuleRow.from(ruleService.toggleActive(me, ruleId, active)));
+        return ApiResponse.success(ScholarshipRuleRow.from(ruleService.toggleActive(me, ruleId, active)));
     }
 
     /** 삭제(soft). 과거 검토가 어떤 기준으로 걸렸는지 추적할 수 있어야 한다. */
@@ -176,7 +176,7 @@ public class AdminScholarshipController {
      * @param electiveMode     탐구 집계. 비우면 탐구를 안 본다
      * @param extraSubjectCode AND 조건 과목. {@code extraMaxGrade}와 <b>함께</b> 지정한다
      */
-    public record RuleRequest(Long academyId,
+    public record ScholarshipRuleRequest(Long academyId,
                               @NotNull Short year,
                               @NotNull CancelRuleType ruleType,
                               @NotNull Integer threshold,
@@ -198,13 +198,13 @@ public class AdminScholarshipController {
     }
 
     /** @param active {@code false}면 만들어만 두고 안 도는 기준이다 */
-    public record RuleRow(Long id, Long academyId, short year, CancelRuleType ruleType,
+    public record ScholarshipRuleRow(Long id, Long academyId, short year, CancelRuleType ruleType,
                           String scholarshipType, short alternativeGroup, int threshold,
                           String subjectCodes, String examCodes, ElectiveMode electiveMode,
                           String extraSubjectCode, Short extraMaxGrade, boolean active) {
 
-        static RuleRow from(ScholarshipCancelRule r) {
-            return new RuleRow(r.getId(),
+        static ScholarshipRuleRow from(ScholarshipCancelRule r) {
+            return new ScholarshipRuleRow(r.getId(),
                     r.isCommon() ? null : r.getAcademy().getId(),
                     r.getYear(), r.getRuleType(), r.getScholarshipType(),
                     r.getAlternativeGroup(), r.getThreshold(), r.getSubjectCodes(),

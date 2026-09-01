@@ -25,12 +25,12 @@ public final class GradeResponse {
      * 그래야 2028 수능 개편으로 과목이 바뀔 때 앱 배포 없이 데이터만 고치면 된다.
      */
     public record Form(Long examMasterId, String examCode, String examName,
-                       List<Subject> subjects) {
+                       List<GradeSubject> subjects) {
 
         public static Form from(ExamFormService.Form form) {
             ExamMaster exam = form.exam();
             return new Form(exam.getId(), exam.getExamCode().name(), exam.getExamName(),
-                    form.subjects().stream().map(Subject::from).toList());
+                    form.subjects().stream().map(GradeSubject::from).toList());
         }
     }
 
@@ -39,12 +39,12 @@ public final class GradeResponse {
      *                         <b>앱은 이 값이 false인 칸을 아예 그리지 말아야 한다</b> —
      *                         열어두면 학생이 없는 점수를 지어내 채운다
      */
-    public record Subject(Long examSubjectId, String subjectCode, String subjectName,
+    public record GradeSubject(Long examSubjectId, String subjectCode, String subjectName,
                           boolean hasStandardScore, boolean hasPercentile,
                           boolean hasGradeLevel) {
 
-        public static Subject from(ExamSubject subject) {
-            return new Subject(subject.getId(), subject.getSubjectCode(), subject.getSubjectName(),
+        public static GradeSubject from(ExamSubject subject) {
+            return new GradeSubject(subject.getId(), subject.getSubjectCode(), subject.getSubjectName(),
                     subject.isHasStandardScore(), subject.isHasPercentile(),
                     subject.isHasGradeLevel());
         }

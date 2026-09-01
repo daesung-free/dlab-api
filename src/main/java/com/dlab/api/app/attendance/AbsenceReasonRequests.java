@@ -23,7 +23,7 @@ public final class AbsenceReasonRequests {
      * @param date 과거·미래 모두 받는다. 사전 제출은 미등원 알림 제외에 필요하고,
      *             사후 제출은 실제로 가장 흔한 흐름이다
      */
-    public record Submit(@NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+    public record AbsenceReasonSubmit(@NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
                          @NotNull AbsenceReasonType type,
                          @NotBlank(message = "사유를 입력해 주세요.")
                          @Size(max = 500) String reasonText,

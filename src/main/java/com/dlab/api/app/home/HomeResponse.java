@@ -11,7 +11,7 @@ import java.util.List;
 /** 앱 홈 한 화면. */
 public record HomeResponse(Profile profile,
                            Metrics metrics,
-                           List<Routine> todayRoutines,
+                           List<HomeRoutine> todayRoutines,
                            List<Banner> banners) {
 
     /**
@@ -43,11 +43,11 @@ public record HomeResponse(Profile profile,
     }
 
     /** 오늘의 데일리 루틴. 점수는 <b>공개된 것만</b> 내려온다(검수 중인 값은 감춘다). */
-    public record Routine(Long routineId, String name, String subject,
+    public record HomeRoutine(Long routineId, String name, String subject,
                           RoutineResultStatus status, Short score, Short maxScore) {
 
-        static Routine from(DailyRoutineService.TodayRoutine t) {
-            return new Routine(t.routine().getId(), t.routine().getName(),
+        static HomeRoutine from(DailyRoutineService.TodayRoutine t) {
+            return new HomeRoutine(t.routine().getId(), t.routine().getName(),
                     t.routine().getSubject(), t.status(), t.visibleScore(),
                     t.routine().getMaxScore());
         }

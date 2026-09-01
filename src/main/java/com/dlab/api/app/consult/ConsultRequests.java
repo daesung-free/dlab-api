@@ -15,7 +15,7 @@ public final class ConsultRequests {
      * <p><b>간격을 여기서 받는다.</b> 스키마에 두면 바뀔 때 마이그레이션이 필요해진다 —
      * 시작·종료·간격으로 슬롯 행을 여러 개 만든다.
      */
-    public record OpenSlots(
+    public record ConsultOpenSlots(
             @NotNull LocalDate date,
             @NotNull LocalTime from,
             @NotNull LocalTime to,
@@ -29,7 +29,7 @@ public final class ConsultRequests {
 
     public record UpdateSlot(@Size(max = 50) String place, @Size(max = 200) String memo) {}
 
-    public record Reserve(
+    public record ConsultReserve(
             @NotNull Long slotId,
             @NotNull ConsultType consultType,
             /* 무엇을 상담하고 싶은지. 없으면 담임이 준비를 못 한다 */

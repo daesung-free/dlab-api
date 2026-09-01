@@ -42,6 +42,7 @@ public class AdminAbsenceRequestController {
     @GetMapping
     public ApiResponse<ListResponse> list(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) ApprovalStatus status) {
@@ -51,10 +52,10 @@ public class AdminAbsenceRequestController {
 
         boolean raw = PersonalDataPolicy.canViewRaw(me);
         return ApiResponse.success(new ListResponse(
-                absenceReasonService.list(me, start, end, status).stream()
-                        .map(r -> RowResponse.of(r, raw))
+                absenceReasonService.list(me, academyId, start, end, status).stream()
+                        .map(r -> AbsenceRowResponse.of(r, raw))
                         .toList(),
-                absenceReasonService.summary(me, start, end),
+                absenceReasonService.summary(me, academyId, start, end),
                 !raw));
     }
 
@@ -66,7 +67,7 @@ public class AdminAbsenceRequestController {
      */
     @PostMapping
     public ApiResponse<Long> register(@CurrentAccount AuthPrincipal me,
-                                      @Valid @RequestBody RegisterRequest request) {
+                                      @Valid @RequestBody AbsenceRegisterRequest request) {
         return ApiResponse.success(absenceReasonService.register(
                 me, request.enrollmentId(), request.date(), request.type(),
                 request.reason(), request.startTime(), request.endTime()).getId());
@@ -76,7 +77,7 @@ public class AdminAbsenceRequestController {
      * @param startTime 외출·조퇴 시작. 결석·지각은 종일이라 비운다
      * @param endTime   외출 종료. 조퇴는 복귀가 없어 비운다
      */
-    public record RegisterRequest(
+    public record AbsenceRegisterRequest(
             @NotNull Long enrollmentId,
             @NotNull LocalDate date,
             @NotNull AbsenceReasonType type,
@@ -86,13 +87,13 @@ public class AdminAbsenceRequestController {
     ) {
     }
 
-    public record ListResponse(List<RowResponse> rows, Map<String, Long> summary, boolean masked) {
+    public record ListResponse(List<AbsenceRowResponse> rows, Map<String, Long> summary, boolean masked) {
     }
 
     /**
      * @param approvalRequestId 승인·반려 시 이 id로 {@code /admin/approvals}를 부른다
      */
-    public record RowResponse(
+    public record AbsenceRowResponse(
             Long id,
             Long approvalRequestId,
             Instant submittedAt,
@@ -106,8 +107,8 @@ public class AdminAbsenceRequestController {
             ApprovalStatus status,
             boolean escalationCandidate
     ) {
-        static RowResponse of(AbsenceRequestRow r, boolean raw) {
-            return new RowResponse(
+        static AbsenceRowResponse of(AbsenceRequestRow r, boolean raw) {
+            return new AbsenceRowResponse(
                     r.id(), r.approvalRequestId(), r.submittedAt(), r.studentNo(),
                     raw ? r.name() : Masking.name(r.name()),
                     r.className(), r.type(), r.period(), r.reason(),

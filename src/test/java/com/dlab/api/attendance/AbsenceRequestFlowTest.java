@@ -78,7 +78,7 @@ class AbsenceRequestFlowTest {
         absenceReasonService.register(admin, minji.getId(), today, type, "병원", start, end);
         em.flush();
         em.clear();
-        return absenceReasonService.list(admin, today, today, null).get(0);
+        return absenceReasonService.list(admin, null, today, today, null).get(0);
     }
 
     @Test
@@ -155,8 +155,8 @@ class AbsenceRequestFlowTest {
     void filtersByStatus() {
         register(AbsenceReasonType.ABSENCE, null, null);
 
-        assertThat(absenceReasonService.list(admin, today, today, ApprovalStatus.PENDING)).hasSize(1);
-        assertThat(absenceReasonService.list(admin, today, today, ApprovalStatus.APPROVED)).isEmpty();
+        assertThat(absenceReasonService.list(admin, null, today, today, ApprovalStatus.PENDING)).hasSize(1);
+        assertThat(absenceReasonService.list(admin, null, today, today, ApprovalStatus.APPROVED)).isEmpty();
     }
 
     @Test
@@ -164,7 +164,7 @@ class AbsenceRequestFlowTest {
     void summaryMarksPenaltyConflictUnavailable() {
         register(AbsenceReasonType.ABSENCE, null, null);
 
-        var summary = absenceReasonService.summary(admin, today, today);
+        var summary = absenceReasonService.summary(admin, null, today, today);
 
         assertThat(summary.get("pending")).isEqualTo(1);
         assertThat(summary.get("waitingParent")).isEqualTo(1);

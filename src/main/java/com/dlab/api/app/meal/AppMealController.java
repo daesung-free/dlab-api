@@ -109,8 +109,8 @@ public class AppMealController {
 
         Long academyId = enrollment.getAcademy().getId();
         short year = enrollment.getYear();
-        List<MealResponse.Item> items = order.activeItems().stream()
-                .map(item -> MealResponse.Item.from(item,
+        List<MealResponse.MealItem> items = order.activeItems().stream()
+                .map(item -> MealResponse.MealItem.from(item,
                         mealScheduleService.isBeforeDeadline(academyId, year, item.getMealDate())))
                 .toList();
 

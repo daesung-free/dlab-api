@@ -41,13 +41,13 @@ public class AppQnaOfflineController {
      * 누가 상담을 잡았는지가 다른 학생에게 보이면 안 된다.
      */
     @GetMapping("/slots")
-    public ApiResponse<List<QnaResponse.Slot>> slots(
+    public ApiResponse<List<QnaResponse.QnaSlot>> slots(
             @CurrentAccount AuthPrincipal me,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
         StudentEnrollment enrollment = scopeResolver.requireStudent(me.accountId(), "대면 예약");
         return ApiResponse.success(
                 qnaOfflineService.availableSlots(enrollment.getAcademy().getId(), date).stream()
-                        .map(QnaResponse.Slot::from).toList());
+                        .map(QnaResponse.QnaSlot::from).toList());
     }
 
     /** 예약. 정원이 차면 거절된다 — 상담 시간은 겹칠 수 없어 대기 개념이 없다. */
@@ -55,7 +55,7 @@ public class AppQnaOfflineController {
     public ApiResponse<QnaResponse.MyReservation> reserve(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long slotId,
-            @Valid @RequestBody(required = false) QnaRequests.Reserve request) {
+            @Valid @RequestBody(required = false) QnaRequests.QnaReserve request) {
         StudentEnrollment enrollment = scopeResolver.requireStudent(me.accountId(), "대면 예약");
         return ApiResponse.success(QnaResponse.MyReservation.from(qnaOfflineService.reserve(
                 slotId, enrollment.getId(), request == null ? null : request.question())));

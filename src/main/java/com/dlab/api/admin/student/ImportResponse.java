@@ -13,11 +13,11 @@ public record ImportResponse(
         int totalRows,
         int validRows,
         int errorRows,
-        List<Row> rows,
+        List<StudentImportRow> rows,
         List<Error> errors) {
 
     /** 반영될(또는 반영된) 행. {@code existing}이면 새로 만들지 않고 기존 학생을 갱신한다. */
-    public record Row(int rowNumber, String name, String grade, String track, boolean existing) {
+    public record StudentImportRow(int rowNumber, String name, String grade, String track, boolean existing) {
     }
 
     /** 오류. <b>행 번호는 엑셀 기준 1-based</b>라 사용자가 그 행을 바로 찾을 수 있다. */
@@ -30,7 +30,7 @@ public record ImportResponse(
                 preview.validRows(),
                 preview.errorRows(),
                 preview.valid().stream()
-                        .map(p -> new Row(p.rowNumber(), p.name(),
+                        .map(p -> new StudentImportRow(p.rowNumber(), p.name(),
                                 p.grade() == null ? null : p.grade().name(),
                                 p.track() == null ? null : p.track().name(),
                                 p.existing()))

@@ -64,7 +64,7 @@ public class AdminGradeController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     public ApiResponse<ExamFormRequests.FormView> create(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody ExamFormRequests.Create request) {
+            @Valid @RequestBody ExamFormRequests.ExamFormCreate request) {
 
         return ApiResponse.success(ExamFormRequests.FormView.from(
                 examFormAdminService.create(me, request.toCommand())));

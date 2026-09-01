@@ -15,7 +15,7 @@ public final class LectureRequests {
     private LectureRequests() {
     }
 
-    public record Create(
+    public record LectureCreate(
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") Integer year,
             LectureType lectureType,
@@ -23,7 +23,7 @@ public final class LectureRequests {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
-    public record Update(
+    public record LectureUpdate(
             @Size(max = 100) String name,
             String description,
             @Positive(message = "정원은 1명 이상이어야 합니다.") Integer capacity,
@@ -34,7 +34,7 @@ public final class LectureRequests {
             @PositiveOrZero Integer fee) {
     }
 
-    public record ChangeStatus(@NotNull(message = "상태는 필수입니다.") LectureStatus status) {
+    public record LectureChangeStatus(@NotNull(message = "상태는 필수입니다.") LectureStatus status) {
     }
 
     public record ChangeVisible(@NotNull(message = "노출 여부는 필수입니다.") Boolean visible) {

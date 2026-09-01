@@ -88,7 +88,7 @@ public class AdminMealVendorController {
     @PutMapping("/assignment")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     public ApiResponse<AssignmentView> assign(@CurrentAccount AuthPrincipal me,
-                                              @Valid @RequestBody Assign request) {
+                                              @Valid @RequestBody MealVendorAssign request) {
         return ApiResponse.success(AssignmentView.from(vendorService.assignToAcademy(
                 me, request.academyId(), request.year(),
                 request.vendorId(), request.unitPrice())));
@@ -107,7 +107,7 @@ public class AdminMealVendorController {
             @Size(max = 120) String contactEmail) {
     }
 
-    public record Assign(
+    public record MealVendorAssign(
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") Short year,
             @NotNull(message = "업체는 필수입니다.") Long vendorId,

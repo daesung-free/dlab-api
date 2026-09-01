@@ -13,6 +13,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -39,34 +40,35 @@ public class AppDailyReportController {
 
     /** 하루 상세. 달력에서 일자를 탭하면 열린다. */
     @GetMapping("/{date}")
-    public ApiResponse<DailyReportResponse.Day> day(
+    public ApiResponse<DailyReportResponse.DailyReportDay> day(
             @CurrentAccount AuthPrincipal me,
             @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) Long studentId) {
 
         StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         return ApiResponse.success(
-                DailyReportResponse.Day.from(dailyReportService.day(enrollment, date)));
+                DailyReportResponse.DailyReportDay.from(dailyReportService.day(enrollment, date)));
     }
 
     /**
      * 달력(월간).
      *
-     * @param month {@code yyyy-MM}. 비우면 이번 달
+     * @param month {@code yyyy-MM}. 비우면 이번 달.
+     *              <b>바인딩 단계에서 형식을 검사</b>하므로 잘못된 값은 400이다 —
+     *              본문에서 파싱하면 {@code DateTimeParseException}이 500으로 새어나간다
      */
     @GetMapping("/monthly")
-    public ApiResponse<DailyReportResponse.Month> monthly(
+    public ApiResponse<DailyReportResponse.DailyReportMonth> monthly(
             @CurrentAccount AuthPrincipal me,
-            @RequestParam(required = false) String month,
+            @RequestParam(required = false)
+            @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
             @RequestParam(required = false) Long studentId) {
 
         StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
-        LocalDate base = month == null || month.isBlank()
-                ? LocalDate.now(clock)
-                : LocalDate.parse(month + "-01");
+        YearMonth target = month == null ? YearMonth.now(clock) : month;
 
-        return ApiResponse.success(DailyReportResponse.Month.from(
-                dailyReportService.month(enrollment, base.getYear(), base.getMonthValue())));
+        return ApiResponse.success(DailyReportResponse.DailyReportMonth.from(
+                dailyReportService.month(enrollment, target.getYear(), target.getMonthValue())));
     }
 
     /**

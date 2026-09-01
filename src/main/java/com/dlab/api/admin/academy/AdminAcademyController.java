@@ -68,7 +68,7 @@ public class AdminAcademyController {
     @PutMapping("/{academyId}")
     public ApiResponse<AcademyResponse> update(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long academyId,
-                                               @Valid @RequestBody UpdateRequest request) {
+                                               @Valid @RequestBody AcademyUpdateRequest request) {
         return ApiResponse.success(AcademyResponse.from(academyService.update(
                 me, academyId, request.acadNm(), request.fullNm(),
                 request.attendanceDeadline())));
@@ -88,7 +88,7 @@ public class AdminAcademyController {
     }
 
     /** @param attendanceDeadline 등원 기준 시각. 이 시각 이후 첫 태깅이 지각이다 */
-    public record UpdateRequest(
+    public record AcademyUpdateRequest(
             @NotBlank(message = "지점명은 필수입니다.") @Size(max = 100) String acadNm,
             @Size(max = 100) String fullNm,
             @NotNull(message = "등원 기준 시각은 필수입니다.")

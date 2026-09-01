@@ -1,6 +1,10 @@
 package com.dlab.api.attendance;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.dlab.common.exception.BusinessException;
+import com.dlab.common.exception.ErrorCode;
 
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
@@ -101,7 +105,7 @@ class AdminAttendanceBoardTest {
         enroll("DL-2", "박서준", "2026-0002");   // 안 옴
         tag(came, AttendanceEventType.CHECK_IN, 8, 30);
 
-        List<AttendanceRow> rows = boardService.board(admin, day, null);
+        List<AttendanceRow> rows = boardService.board(admin, null, day, null);
 
         assertThat(rows).hasSize(2);
         assertThat(rowOf(rows, "2026-0002").status()).isEqualTo(ScreenStatus.ABSENT);
@@ -114,7 +118,7 @@ class AdminAttendanceBoardTest {
         tag(student, AttendanceEventType.CHECK_IN, 8, 30);
         tag(student, AttendanceEventType.OUTING, 14, 0);
 
-        assertThat(rowOf(boardService.board(admin, day, null), "2026-0001").status())
+        assertThat(rowOf(boardService.board(admin, null, day, null), "2026-0001").status())
                 .isEqualTo(ScreenStatus.OUT);
     }
 
@@ -126,7 +130,7 @@ class AdminAttendanceBoardTest {
         tag(student, AttendanceEventType.OUTING, 14, 0);
         tag(student, AttendanceEventType.RETURN, 15, 0);
 
-        assertThat(rowOf(boardService.board(admin, day, null), "2026-0001").status())
+        assertThat(rowOf(boardService.board(admin, null, day, null), "2026-0001").status())
                 .isEqualTo(ScreenStatus.ON_TIME);
     }
 
@@ -136,7 +140,7 @@ class AdminAttendanceBoardTest {
         StudentEnrollment student = enroll("DL-1", "김민지", "2026-0001");
         confirm(student, DailyStatus.ABSENT, true);
 
-        AttendanceRow row = rowOf(boardService.board(admin, day, null), "2026-0001");
+        AttendanceRow row = rowOf(boardService.board(admin, null, day, null), "2026-0001");
 
         assertThat(row.status()).isEqualTo(ScreenStatus.ABSENT);
         assertThat(row.excused()).isTrue();
@@ -151,7 +155,7 @@ class AdminAttendanceBoardTest {
         tag(excused, AttendanceEventType.LATE, 9, 40);
         confirm(excused, DailyStatus.LATE, true);
 
-        List<AttendanceRow> rows = boardService.board(admin, day, null);
+        List<AttendanceRow> rows = boardService.board(admin, null, day, null);
 
         assertThat(rowOf(rows, "2026-0001").unexcusedLate()).isTrue();
         assertThat(rowOf(rows, "2026-0002").unexcusedLate()).isFalse();
@@ -164,7 +168,7 @@ class AdminAttendanceBoardTest {
         tag(student, AttendanceEventType.LATE, 9, 30);
 
         // attendance_daily_status가 아직 없다(배치는 새벽 2시)
-        AttendanceRow row = rowOf(boardService.board(admin, day, null), "2026-0001");
+        AttendanceRow row = rowOf(boardService.board(admin, null, day, null), "2026-0001");
 
         assertThat(row.status()).isEqualTo(ScreenStatus.LATE);
         assertThat(row.checkInAt()).isEqualTo(LocalTime.of(9, 30));
@@ -179,7 +183,7 @@ class AdminAttendanceBoardTest {
         tag(student, AttendanceEventType.RETURN, 15, 0);
         tag(student, AttendanceEventType.CHECK_OUT, 22, 0);
 
-        AttendanceRow row = rowOf(boardService.board(admin, day, null), "2026-0001");
+        AttendanceRow row = rowOf(boardService.board(admin, null, day, null), "2026-0001");
         assertThat(row.checkOutAt()).isEqualTo(LocalTime.of(22, 0));
     }
 
@@ -190,7 +194,7 @@ class AdminAttendanceBoardTest {
         onLeave.updateEnrollment(null, null, EnrollmentStatus.LEAVE);
         em.flush();
 
-        assertThat(boardService.board(admin, day, null)).isEmpty();
+        assertThat(boardService.board(admin, null, day, null)).isEmpty();
     }
 
     @Test
@@ -200,7 +204,7 @@ class AdminAttendanceBoardTest {
         tag(student, AttendanceEventType.CHECK_IN, 8, 0);
         tag(student, AttendanceEventType.CHECK_OUT, 12, 0);
 
-        AttendanceRow row = rowOf(boardService.board(admin, day, null), "2026-0001");
+        AttendanceRow row = rowOf(boardService.board(admin, null, day, null), "2026-0001");
 
         assertThat(row.studyMinutes()).isEqualTo(240);
         assertThat(row.studyTimeLabel()).isEqualTo("4시간 00분");
@@ -213,7 +217,7 @@ class AdminAttendanceBoardTest {
         enroll("DL-2", "박서준", "2026-0002");
         tag(came, AttendanceEventType.CHECK_IN, 8, 30);
 
-        String text = textOf(boardService.export(admin, day, null, false));
+        String text = textOf(boardService.export(admin, null, day, null, false));
 
         assertThat(text).contains("2026-0001").contains("2026-0002");
         assertThat(text).contains("결석");   // 코드값이 아니라 화면 표기로 나가야 한다
@@ -230,10 +234,10 @@ class AdminAttendanceBoardTest {
                 student.getStudent(), guardian, (short) 1));
         em.flush();
 
-        assertThat(textOf(boardService.export(admin, day, null, false)))
+        assertThat(textOf(boardService.export(admin, null, day, null, false)))
                 .contains("010-****-8888").doesNotContain("010-9999-8888");
 
-        assertThat(textOf(boardService.export(admin, day, null, true)))
+        assertThat(textOf(boardService.export(admin, null, day, null, true)))
                 .contains("010-9999-8888");
     }
 
@@ -247,5 +251,50 @@ class AdminAttendanceBoardTest {
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    // ── 지점 스코프 ────────────────────────────────────────────
+    // 전 지점 권한자(본사)에게 academyScopeFilter()는 "필터 없음"이라 null이다.
+    // 그 null을 "지점 모름"으로 읽고 400을 던지면 본사는 화면을 아예 못 연다.
+
+    @Test
+    @DisplayName("★ 본사가 지점을 고르면 그 지점 출결이 보인다 — 예전엔 400이라 화면이 안 열렸다")
+    void headOfficeSeesPickedAcademy() {
+        enroll("DL-1", "김민지", "2026-0001");
+        AuthPrincipal headOffice = AuthPrincipal.of(9L, "EMPLOYEE", null,
+                List.of(Role.SUPER_ADMIN), true);
+
+        assertThat(boardService.board(headOffice, bundang.getId(), day, null)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("본사가 지점을 안 고르면 400 — 전 지점을 한 화면에 섞어 뿌리지 않는다")
+    void headOfficeMustPickAcademy() {
+        AuthPrincipal headOffice = AuthPrincipal.of(9L, "EMPLOYEE", null,
+                List.of(Role.SUPER_ADMIN), true);
+
+        assertThatThrownBy(() -> boardService.board(headOffice, null, day, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    @DisplayName("지점 관리자는 안 골라도 자기 지점이 보인다")
+    void branchAdminDefaultsToOwnAcademy() {
+        enroll("DL-1", "김민지", "2026-0001");
+
+        assertThat(boardService.board(admin, null, day, null)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("★ 지점 관리자가 다른 지점을 지정하면 거부된다 — 요청 값을 그대로 믿지 않는다")
+    void branchAdminCannotPickOtherAcademy() {
+        Academy ilsan = new Academy("32", "일산", LocalTime.of(9, 0));
+        em.persist(ilsan);
+        em.flush();
+
+        assertThatThrownBy(() -> boardService.board(admin, ilsan.getId(), day, null))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
     }
 }

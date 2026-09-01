@@ -34,11 +34,12 @@ public class AdminApprovalItemController {
 
     /** 신청유형 3종을 전부 내린다. 안 정한 유형은 {@code configured=false}로 나온다. */
     @GetMapping
-    public ApiResponse<List<ApprovalItemService.Row>> list(
+    public ApiResponse<List<ApprovalItemRow>> list(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @RequestParam short year) {
-        return ApiResponse.success(approvalItemService.list(me, academyId, year));
+        return ApiResponse.success(approvalItemService.list(me, academyId, year)
+                .stream().map(ApprovalItemRow::from).toList());
     }
 
     /** 있으면 고치고 없으면 만든다. 유형당 1행이다. */
@@ -72,6 +73,24 @@ public class AdminApprovalItemController {
      * @param escalationApproverType  담당선생님({@code TEACHER})만 가능하다 —
      *                                학부모는 최대 1인이라 넘길 다른 학부모가 없다
      */
+    /**
+     * 정책 한 줄.
+     *
+     * @param configured {@code false}면 아직 안 정한 유형이다 — <b>그 신청은 거절된다</b>
+     * @param copiedFrom 전년도 복사 원본. {@code null}이면 그 해에 새로 만든 것이다
+     */
+    public record ApprovalItemRow(RequestType requestType, boolean configured,
+                                  ApproverType approverType, Short timeoutMinutes,
+                                  ApproverType escalationApproverType,
+                                  Long itemId, Long copiedFrom) {
+
+        static ApprovalItemRow from(ApprovalItemService.Row row) {
+            return new ApprovalItemRow(row.requestType(), row.configured(), row.approverType(),
+                    row.timeoutMinutes(), row.escalationApproverType(),
+                    row.itemId(), row.copiedFrom());
+        }
+    }
+
     public record SaveRequest(Long academyId,
                               @NotNull Short year,
                               @NotNull ApproverType approverType,

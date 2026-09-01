@@ -89,7 +89,7 @@ public class AppAttendanceController {
     @PostMapping("/absence-reasons")
     public ApiResponse<AttendanceResponse.AbsenceReasonRow> submitAbsenceReason(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody AbsenceReasonRequests.Submit request) {
+            @Valid @RequestBody AbsenceReasonRequests.AbsenceReasonSubmit request) {
 
         Long enrollmentId = scopeResolver.requireStudent(me.accountId(), "사유 신청").getId();
         return ApiResponse.success(AttendanceResponse.AbsenceReasonRow.from(

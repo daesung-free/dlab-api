@@ -41,10 +41,16 @@ public class AdminPenaltyController {
     private final PenaltyService penaltyService;
     private final PenaltyItemRepository penaltyItemRepository;
 
-    /** 목록 + 상단 합계. 합계는 <b>조회 조건 기준</b>이다(화면 명시). */
+    /**
+     * 목록 + 상단 합계. 합계는 <b>조회 조건 기준</b>이다(화면 명시).
+     *
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @GetMapping
-    public ApiResponse<BoardResponse> board(
+    public ApiResponse<PenaltyBoardResponse> board(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) PenaltyCategory category,
@@ -55,30 +61,33 @@ public class AdminPenaltyController {
         LocalDate start = from == null ? LocalDate.now().withDayOfMonth(1) : from;
         LocalDate end = to == null ? LocalDate.now() : to;
 
-        var board = penaltyService.board(me, start, end, category, source, keyword, classId);
+        var board = penaltyService.board(me, academyId, start, end, category, source, keyword, classId);
         boolean raw = PersonalDataPolicy.canViewRaw(me);
 
-        return ApiResponse.success(new BoardResponse(
-                board.rows().stream().map(p -> RowResponse.of(p, raw)).toList(),
+        return ApiResponse.success(new PenaltyBoardResponse(
+                board.rows().stream().map(p -> PenaltyRowResponse.of(p, raw)).toList(),
                 Map.of("plusTotal", (long) board.plusTotal(),
                         "minusTotal", (long) board.minusTotal(),
                         "autoCount", board.autoCount()),
                 !raw));
     }
 
-    /** 부여 가능한 항목. 화면 드롭다운이 쓴다. */
+    /**
+     * 부여 가능한 항목. 화면 드롭다운이 쓴다.
+     *
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @GetMapping("/items")
-    public ApiResponse<List<ItemResponse>> items(@CurrentAccount AuthPrincipal me,
+    public ApiResponse<List<PenaltyItemResponse>> items(@CurrentAccount AuthPrincipal me,
+                                                 @RequestParam(required = false) Long academyId,
                                                  @RequestParam(required = false) Integer year) {
-        Long academyId = me.academyScopeFilter();
-        if (academyId == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
+        Long scope = me.requireAcademyScope(academyId);
         short targetYear = year == null ? (short) LocalDate.now().getYear() : year.shortValue();
 
         return ApiResponse.success(penaltyItemRepository
-                .findByAcademyIdAndYearAndDeletedFalseOrderByItemNameAsc(academyId, targetYear)
-                .stream().map(ItemResponse::from).toList());
+                .findByAcademyIdAndYearAndDeletedFalseOrderByItemNameAsc(scope, targetYear)
+                .stream().map(PenaltyItemResponse::from).toList());
     }
 
     /**
@@ -118,7 +127,7 @@ public class AdminPenaltyController {
         boolean raw = PersonalDataPolicy.canViewRaw(me);
         return ApiResponse.success(new StudentPenaltyResponse(
                 penaltyService.findByEnrollment(me, enrollmentId).stream()
-                        .map(p -> RowResponse.of(p, raw)).toList(),
+                        .map(p -> PenaltyRowResponse.of(p, raw)).toList(),
                 penaltyService.totalPoints(enrollmentId)));
     }
 
@@ -129,17 +138,17 @@ public class AdminPenaltyController {
     ) {
     }
 
-    public record BoardResponse(List<RowResponse> rows, Map<String, Long> summary, boolean masked) {
+    public record PenaltyBoardResponse(List<PenaltyRowResponse> rows, Map<String, Long> summary, boolean masked) {
     }
 
-    public record StudentPenaltyResponse(List<RowResponse> rows, int totalPoints) {
+    public record StudentPenaltyResponse(List<PenaltyRowResponse> rows, int totalPoints) {
     }
 
     /**
      * @param point 화면 표기용 부호. <b>벌점은 음수</b>로 내린다 —
      *              화면이 카테고리를 다시 보지 않고 그대로 찍는다
      */
-    public record RowResponse(
+    public record PenaltyRowResponse(
             Long id,
             Instant occurredAt,
             String studentNo,
@@ -151,11 +160,11 @@ public class AdminPenaltyController {
             PenaltySource source,
             Long grantedBy
     ) {
-        static RowResponse of(PenaltyPoint p, boolean raw) {
+        static PenaltyRowResponse of(PenaltyPoint p, boolean raw) {
             boolean demerit = p.getPenaltyItem().getCategory() == PenaltyCategory.DEMERIT;
             int value = Math.abs(p.getPoints());
 
-            return new RowResponse(
+            return new PenaltyRowResponse(
                     p.getId(),
                     p.getOccurredAt(),
                     p.getEnrollment().getStudentNo(),
@@ -170,11 +179,11 @@ public class AdminPenaltyController {
         }
     }
 
-    public record ItemResponse(Long id, String itemName, PenaltyCategory category, int point) {
-        static ItemResponse from(PenaltyItem i) {
+    public record PenaltyItemResponse(Long id, String itemName, PenaltyCategory category, int point) {
+        static PenaltyItemResponse from(PenaltyItem i) {
             boolean demerit = i.getCategory() == PenaltyCategory.DEMERIT;
             int value = Math.abs(i.getPointValue());
-            return new ItemResponse(i.getId(), i.getItemName(), i.getCategory(),
+            return new PenaltyItemResponse(i.getId(), i.getItemName(), i.getCategory(),
                     demerit ? -value : value);
         }
     }

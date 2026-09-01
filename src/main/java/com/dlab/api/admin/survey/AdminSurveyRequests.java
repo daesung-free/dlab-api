@@ -24,7 +24,7 @@ public final class AdminSurveyRequests {
      * <p>{@code academyId}·{@code classId}는 범위에 맞는 것만 채운다 —
      * 어긋나면 서비스가 거부한다(DB CHECK로도 막혀 있다).
      */
-    public record Create(@NotNull SurveyType surveyType,
+    public record AdminSurveyCreate(@NotNull SurveyType surveyType,
                          @NotNull SurveyScope scope,
                          Long academyId,
                          Long classId,
@@ -33,7 +33,7 @@ public final class AdminSurveyRequests {
                          boolean anonymous,
                          @NotNull Instant opensAt,
                          @NotNull Instant closesAt,
-                         @NotEmpty(message = "문항이 비어 있습니다.") List<Question> questions) {
+                         @NotEmpty(message = "문항이 비어 있습니다.") List<AdminSurveyQuestion> questions) {
 
         SurveyService.SurveyCommand toCommand() {
             return new SurveyService.SurveyCommand(
@@ -53,7 +53,7 @@ public final class AdminSurveyRequests {
      * <p>순서는 보내지 않는다 — <b>배열 순서가 곧 순서</b>다. 번호를 받으면 빠진 번호나
      * 중복이 그대로 들어와 유니크 제약에 걸린다.
      */
-    public record Question(@NotNull SurveyQuestionType type,
+    public record AdminSurveyQuestion(@NotNull SurveyQuestionType type,
                            @NotBlank @Size(max = 300) String title,
                            boolean required,
                            BigDecimal minValue,
@@ -62,7 +62,7 @@ public final class AdminSurveyRequests {
     }
 
     /** 기간·안내문 수정. 범위·대상·문항은 바꿀 수 없다. */
-    public record Update(@NotBlank @Size(max = 200) String title,
+    public record AdminSurveyUpdate(@NotBlank @Size(max = 200) String title,
                          String description,
                          @NotNull Instant opensAt,
                          @NotNull Instant closesAt) {
