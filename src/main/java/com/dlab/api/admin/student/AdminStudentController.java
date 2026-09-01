@@ -48,7 +48,26 @@ public class AdminStudentController {
     private final SavedSearchService savedSearchService;
     private final StudentStatusService studentStatusService;
 
-    /** 학생 검색. 조건이 12개라 {@code SearchPredicates}로 조합한다 — 값이 없으면 그 조건이 빠진다. */
+    /**
+     * 학생 검색. 조건이 12개라 {@code SearchPredicates}로 조합한다 — 값이 없으면 그 조건이 빠진다.
+     *
+     * <p><b>정렬</b>은 {@code ?sort=필드,asc|desc}로 보낸다(여러 개 가능:
+     * {@code ?sort=grade,asc&sort=name,asc}). 허용 필드는 다음뿐이고,
+     * <b>목록에 없는 필드는 오류가 아니라 무시</b>된다(임의 컬럼 정렬로 인덱스를 못 타는 것을 막는다).
+     *
+     * <ul>
+     *   <li>{@code studentNo} — 학번</li>
+     *   <li>{@code name} — 이름 ({@code student.name}으로 보내도 된다)</li>
+     *   <li>{@code grade} — 학년</li>
+     *   <li>{@code track} — 계열</li>
+     *   <li>{@code enrollmentStatus} — 재원 상태</li>
+     *   <li>{@code admissionDate} — 입학일</li>
+     * </ul>
+     *
+     * <p>정렬을 보내지 않으면 <b>학번 오름차순</b>이고, 어떤 정렬을 보내든 마지막에 학번이
+     * tie-breaker로 붙는다 — 동점 구간의 순서가 매 요청마다 달라지면 페이징에서 학생이
+     * 중복되거나 누락된다. 반(class)으로는 정렬할 수 없다(배정이 별도 테이블이다).
+     */
     @GetMapping
     public ApiResponse<Page<StudentResponse>> search(
             @CurrentAccount AuthPrincipal me,
