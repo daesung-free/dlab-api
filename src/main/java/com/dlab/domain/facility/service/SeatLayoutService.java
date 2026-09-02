@@ -59,10 +59,24 @@ public class SeatLayoutService {
 
     /** 구역 목록. 화면이 구역을 골라야 배치도를 열 수 있다. */
     public List<AreaSummary> areas(AuthPrincipal me, Long academyId) {
+        return areas(me, academyId, false);
+    }
+
+    /**
+     * 구역 목록.
+     *
+     * <p><b>{@code includeInactive}는 관리 화면 전용이다.</b> 배치도·배정 화면은 비활성
+     * 구역을 보면 안 되지만(고를 수 있게 되면 안 쓰는 구역에 학생이 배정된다), 관리 화면에서
+     * 까지 숨기면 <b>한 번 끈 구역을 다시 켤 방법이 없어진다.</b>
+     */
+    public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive) {
         Long resolved = requireAcademyAccess(me, academyId);
-        return studyAreaRepository.findActiveByAcademyId(resolved).stream()
+        var areas = includeInactive
+                ? studyAreaRepository.findAllByAcademyId(resolved)
+                : studyAreaRepository.findActiveByAcademyId(resolved);
+        return areas.stream()
                 .map(a -> new AreaSummary(
-                        a.getId(), a.getAreaCd(), a.getAreaNm(),
+                        a.getId(), a.getAreaCd(), a.getAreaNm(), a.getSortOrder(), a.isActive(),
                         seatMasterRepository.findByStudyAreaId(a.getId()).size()))
                 .toList();
     }
@@ -170,7 +184,8 @@ public class SeatLayoutService {
     }
 
     /** @param seatCount 구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다 */
-    public record AreaSummary(Long id, String areaCd, String areaNm, int seatCount) {
+    public record AreaSummary(Long id, String areaCd, String areaNm, short sortOrder,
+                              boolean active, int seatCount) {
     }
 
     /**
