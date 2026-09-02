@@ -52,6 +52,31 @@ public interface ClassAssignmentRepository extends JpaRepository<ClassAssignment
             """)
     List<ClassAssignment> findActiveByClassId(Long classId);
 
+    /**
+     * 여러 반의 현재 인원수를 <b>한 번에</b> 센다.
+     *
+     * <p>반 목록 화면이 반마다 명단을 부르면 쿼리가 반 개수만큼 나간다 — 목록은 이미
+     * 한 번에 오므로 집계도 한 번에 해야 한다(학생 목록 {@code StudentListEnricher}와 같은 방식).
+     *
+     * <p>배정이 하나도 없는 반은 <b>행 자체가 안 나온다</b>. 받는 쪽에서 0으로 채운다.
+     */
+    @Query("""
+            SELECT ca.classMaster.id, COUNT(ca)
+            FROM ClassAssignment ca
+            WHERE ca.classMaster.id IN :classIds
+              AND ca.active = true
+              AND ca.deleted = false
+            GROUP BY ca.classMaster.id
+            """)
+    List<Object[]> countActiveByClassIds(Collection<Long> classIds);
+
+    /**
+     * 그 학생의 그 반 활성 배정. 배정 해제가 쓴다 —
+     * <b>학생만으로 찾으면 고정반·이동수업반 중 어느 것을 뗄지 정해지지 않는다.</b>
+     */
+    Optional<ClassAssignment> findByClassMasterIdAndEnrollmentIdAndActiveTrue(
+            Long classId, Long enrollmentId);
+
     /** 같은 유형의 기존 활성 배정. 새로 배정할 때 이전 것을 내리기 위해 찾는다. */
     /** 이 학생의 활성 배정 전체. 고정반·이동수업반이 따로 있어 여러 건이 나온다. */
     List<ClassAssignment> findByEnrollmentIdAndActiveTrue(Long enrollmentId);

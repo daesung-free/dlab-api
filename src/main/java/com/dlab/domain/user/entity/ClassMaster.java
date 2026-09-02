@@ -35,6 +35,16 @@ public class ClassMaster extends BaseEntity {
     @Column(name = "class_type", nullable = false, length = 10)
     private ClassType classType = ClassType.FIXED;
 
+    /**
+     * 정원. <b>NULL이면 정원을 두지 않는 반</b>이다 — 0과 다르다.
+     *
+     * <p>초과 배정을 DB로 막지 않는다. 마이그레이션 주석대로
+     * <b>정원을 넘겨야 하는 예외가 실제로 있어서</b>다(V20260805100000).
+     * 화면은 이 값과 현재 인원으로 충원율을 그린다.
+     */
+    @Column(name = "capacity")
+    private Short capacity;
+
     /** 담임 = 담당선생님(사감). 미지정일 수 있다. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "homeroom_teacher_id")
@@ -54,6 +64,28 @@ public class ClassMaster extends BaseEntity {
         this.name = name;
         this.classType = classType;
         this.homeroomTeacher = homeroomTeacher;
+    }
+
+    /**
+     * 반 기본정보 수정. 넘어온 값만 바꾼다 — 화면이 일부 필드만 보내도 나머지가 지워지지 않는다.
+     *
+     * <p><b>정원을 비우려면 {@code clearCapacity}를 함께 켠다.</b> null 하나로는
+     * "안 보냄"과 "정원 없음"이 구분되지 않는다.
+     */
+    public void updateDetails(String name, Short capacity, boolean clearCapacity) {
+        if (name != null) {
+            this.name = name;
+        }
+        if (clearCapacity) {
+            this.capacity = null;
+        } else if (capacity != null) {
+            this.capacity = capacity;
+        }
+    }
+
+    /** 전년도 복사가 정원까지 그대로 가져간다. */
+    public void changeCapacity(Short capacity) {
+        this.capacity = capacity;
     }
 
     public void assignHomeroom(Teacher teacher) {
