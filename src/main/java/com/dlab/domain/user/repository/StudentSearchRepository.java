@@ -3,6 +3,9 @@ package com.dlab.domain.user.repository;
 import com.dlab.common.search.SearchPredicates;
 import com.dlab.common.search.SearchScope;
 import com.dlab.common.search.SearchSupport;
+import com.dlab.domain.facility.entity.QSeatAssignment;
+import com.dlab.domain.master.entity.QLockerMaster;
+import com.dlab.domain.master.entity.QScholarship;
 import com.dlab.domain.user.entity.*;
 import com.querydsl.core.types.OrderSpecifier;
 import com.querydsl.core.types.dsl.BooleanExpression;
@@ -158,7 +161,11 @@ public class StudentSearchRepository {
                 SearchPredicates.contains(e.student.schoolName, cond.schoolName()),
                 SearchPredicates.between(e.admissionDate, cond.admittedFrom(), cond.admittedTo()),
                 assignedToClass(cond.classId()),
-                assignedToTeacher(cond.teacherId())
+                assignedToTeacher(cond.teacherId()),
+                classAssigned(cond.unassignedClass()),
+                seatAssigned(cond.unassignedSeat()),
+                lockerAssigned(cond.unassignedLocker()),
+                hasScholarship(cond.hasScholarship(), cond.scholarshipType())
         };
     }
 
@@ -207,5 +214,104 @@ public class StudentSearchRepository {
                         a.active.isTrue(),
                         a.classMaster.homeroomTeacher.id.eq(teacherId))
                 .exists();
+    }
+
+    // ── 미배정 조건 ──
+    //
+    // ★ 전부 "exists 서브쿼리를 뒤집은 것"이다. 배정 여부가 학생 컬럼이 아니라 별도 테이블이라
+    //   조인으로 걸면 배정이 없는 학생이 아예 결과에서 빠진다(inner join) — 그게 정확히
+    //   찾으려는 대상이라 not exists가 유일한 방법이다.
+    //
+    // ★ "배정 중"의 정의가 테이블마다 다르다. 반은 active 플래그, 좌석은 released_at IS NULL,
+    //   사물함은 컬럼 하나(assigned_enrollment_id)다. 하나로 통일하려 들지 말 것 —
+    //   좌석만 이력 테이블이고 사물함은 현재값만 들고 있다(V1/V2 스키마).
+
+    /**
+     * 고정반 배정 여부.
+     *
+     * <p><b>{@code StudentListEnricher}와 같은 조건이어야 한다</b>(고정반 · active · 미삭제) —
+     * 목록 응답의 {@code className}을 채우는 조회가 그것이라, 조건이 어긋나면
+     * "반 이름은 비었는데 미배정 검색에는 안 걸리는" 학생이 생긴다.
+     *
+     * <p>이동수업반은 보지 않는다. 담임·승인 에스컬레이션이 전부 고정반에 붙어 있어
+     * 반 배정 화면이 말하는 "반"이 고정반이다.
+     */
+    private BooleanExpression classAssigned(Boolean unassigned) {
+        if (unassigned == null) {
+            return null;
+        }
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        QClassAssignment a = QClassAssignment.classAssignment;
+        BooleanExpression exists = com.querydsl.jpa.JPAExpressions
+                .selectOne()
+                .from(a)
+                .where(a.enrollment.eq(e),
+                        a.classType.eq(ClassType.FIXED),
+                        a.active.isTrue(),
+                        a.deleted.isFalse())
+                .exists();
+        return unassigned ? exists.not() : exists;
+    }
+
+    /** 좌석 배정 여부. "배정 중"은 {@code released_at IS NULL}이다(V2 스키마 규약). */
+    private BooleanExpression seatAssigned(Boolean unassigned) {
+        if (unassigned == null) {
+            return null;
+        }
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        QSeatAssignment a = QSeatAssignment.seatAssignment;
+        BooleanExpression exists = com.querydsl.jpa.JPAExpressions
+                .selectOne()
+                .from(a)
+                .where(a.enrollment.eq(e), a.releasedAt.isNull(), a.deleted.isFalse())
+                .exists();
+        return unassigned ? exists.not() : exists;
+    }
+
+    /**
+     * 사물함 배정 여부.
+     *
+     * <p>좌석과 달리 배정 이력 테이블이 없고 사물함 행이 현재 사용자를 직접 가리킨다 —
+     * 그래서 방향이 반대다(사물함 → 학생).
+     */
+    private BooleanExpression lockerAssigned(Boolean unassigned) {
+        if (unassigned == null) {
+            return null;
+        }
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        QLockerMaster l = QLockerMaster.lockerMaster;
+        BooleanExpression exists = com.querydsl.jpa.JPAExpressions
+                .selectOne()
+                .from(l)
+                .where(l.assignedEnrollment.eq(e), l.deleted.isFalse())
+                .exists();
+        return unassigned ? exists.not() : exists;
+    }
+
+    /**
+     * 장학 보유 여부 / 종류.
+     *
+     * <p>둘을 한 메서드로 묶은 이유는 <b>같은 서브쿼리</b>이기 때문이다 — 종류가 들어오면
+     * 그 종류로 좁힌 exists가 되고, 없으면 종류 무관 exists다. 따로 두면
+     * {@code hasScholarship=true&scholarshipType=KICE_50}이 서브쿼리 두 개로 나간다.
+     *
+     * <p>종류만 오면 <b>"그 장학을 가진 학생"</b>으로 읽는다 — 종류를 지정해 놓고
+     * 보유 여부를 또 보내야 한다면 화면이 불필요하게 두 값을 관리하게 된다.
+     * ({@code hasScholarship=false} + 종류는 모순이라 조건 생성 시점에 막힌다.)
+     */
+    private BooleanExpression hasScholarship(Boolean has, String type) {
+        if (has == null && type == null) {
+            return null;
+        }
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        QScholarship s = QScholarship.scholarship;
+        BooleanExpression exists = com.querydsl.jpa.JPAExpressions
+                .selectOne()
+                .from(s)
+                .where(s.enrollment.eq(e),
+                        s.deleted.isFalse(),
+                        SearchPredicates.eq(s.scholarshipType, type))
+                .exists();
+        return Boolean.FALSE.equals(has) ? exists.not() : exists;
     }
 }

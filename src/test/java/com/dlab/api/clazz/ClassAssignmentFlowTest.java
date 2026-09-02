@@ -7,6 +7,7 @@ import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.user.entity.*;
 import com.dlab.domain.user.service.ClassService;
 import com.dlab.api.admin.clazz.ClassResponse;
+import com.dlab.common.search.SearchScope;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
 import org.hibernate.SessionFactory;
@@ -147,7 +148,7 @@ class ClassAssignmentFlowTest {
                         .header("Authorization", token("CLADM"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"academyId":%d,"year":2026,"name":"1반","classType":"FIXED","homeroomTeacherId":%s}"""
+                                {"academyId":%d,"year":2026,"name":"1반","classType":"FIXED","homeroomTeacherId":%s,"capacity":2}"""
                                 .formatted(academyId, homeroom)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -352,6 +353,187 @@ class ClassAssignmentFlowTest {
     /** 응답 조립과 같은 접근을 해서 지연 로딩이 숨어 있지 않은지 함께 본다. */
     private void touch(ClassService.ClassMemberView view) {
         ClassResponse.Member.from(view);
+    }
+
+    // ── 4-3 배정 해제 · 4-4 정원/인원수 · 4-1 일괄 배정 ──
+
+    @Test
+    @DisplayName("★ 반 배정을 해제하면 명단에서 빠지고 이력은 남는다")
+    void releaseStudentFromClass() throws Exception {
+        long classId = createClass(teacherId);
+        classService.assignStudent(classId, enrollmentId, principal);
+        em.flush();
+
+        mvc.perform(delete("/api/v1/admin/classes/{classId}/students/{enrollmentId}",
+                        classId, enrollmentId)
+                        .header("Authorization", token("CLADM")))
+                .andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/v1/admin/classes/{id}/students", classId)
+                        .header("Authorization", token("CLADM")))
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        // 행을 지우지 않는다 — 배정은 이력이다
+        Long total = em.createQuery("""
+                        SELECT COUNT(a) FROM ClassAssignment a WHERE a.enrollment.id = :id
+                        """, Long.class).setParameter("id", enrollmentId).getSingleResult();
+        org.assertj.core.api.Assertions.assertThat(total).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("배정되지 않은 학생을 해제하면 404다")
+    void releaseUnassignedStudentIsNotFound() throws Exception {
+        long classId = createClass(teacherId);
+
+        mvc.perform(delete("/api/v1/admin/classes/{classId}/students/{enrollmentId}",
+                        classId, enrollmentId)
+                        .header("Authorization", token("CLADM")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("★ 목록에 정원과 현재 인원이 실린다 — 배정 없는 반은 0")
+    void listCarriesCapacityAndMemberCount() throws Exception {
+        long classId = createClass(teacherId);
+        long empty = createClass2("빈반");
+        classService.assignStudent(classId, enrollmentId, principal);
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/v1/admin/classes").header("Authorization", token("CLADM"))
+                        .param("year", "2026"))
+                .andExpect(status().isOk())
+                // 정렬은 DB 콜레이션에 달렸으므로 순서가 아니라 id로 찾는다
+                .andExpect(jsonPath("$.data[?(@.id == %d)].capacity".formatted(classId))
+                        .value(org.hamcrest.Matchers.contains(2)))
+                .andExpect(jsonPath("$.data[?(@.id == %d)].memberCount".formatted(classId))
+                        .value(org.hamcrest.Matchers.contains(1)))
+                // 배정이 없어도 비지 않는다 — 집계에 행이 없을 뿐 인원은 0이다
+                .andExpect(jsonPath("$.data[?(@.id == %d)].memberCount".formatted(empty))
+                        .value(org.hamcrest.Matchers.contains(0)));
+    }
+
+    @Test
+    @DisplayName("정원을 수정할 수 있고, 비우려면 clearCapacity를 켠다")
+    void updateCapacity() throws Exception {
+        long classId = createClass(teacherId);
+
+        mvc.perform(put("/api/v1/admin/classes/{id}", classId)
+                        .header("Authorization", token("CLADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"capacity":14}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.capacity").value(14));
+
+        mvc.perform(put("/api/v1/admin/classes/{id}", classId)
+                        .header("Authorization", token("CLADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"clearCapacity":true}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.capacity").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("★ 일괄 배정 — 정상 건은 배정되고 실패 건은 건별로 사유가 나온다")
+    void bulkAssignReportsPerItem() throws Exception {
+        long classId = createClass(teacherId);
+        StudentEnrollment first = newEnrollment("일괄1", GradeType.N_SU, TrackType.SCIENCE, "가고");
+        StudentEnrollment second = newEnrollment("일괄2", GradeType.N_SU, TrackType.SCIENCE, "가고");
+        em.flush();
+
+        // 999999는 없는 등록 건이다 — 이 한 건 때문에 나머지가 되돌아가면 안 된다
+        String body = mvc.perform(post("/api/v1/admin/classes/{id}/students/bulk", classId)
+                        .header("Authorization", token("CLADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"enrollmentIds":[%d,%d,999999,%d]}"""
+                                .formatted(first.getId(), second.getId(), first.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.assignedCount").value(2))
+                .andExpect(jsonPath("$.data.failedCount").value(1))
+                .andExpect(jsonPath("$.data.results[0].status").value("ASSIGNED"))
+                .andExpect(jsonPath("$.data.results[1].status").value("ASSIGNED"))
+                .andExpect(jsonPath("$.data.results[2].status").value("FAILED"))
+                // 같은 요청에 두 번 들어온 건은 건너뛴다 — 이력에 의미 없는 줄이 남지 않게
+                .andExpect(jsonPath("$.data.results[3].status").value("DUPLICATE"))
+                .andExpect(jsonPath("$.data.memberCount").value(2))
+                .andReturn().getResponse().getContentAsString();
+
+        // 실패 건이 있어도 성공분은 실제로 저장된다
+        org.assertj.core.api.Assertions.assertThat(
+                objectMapper.readTree(body).path("data").path("overCapacity").asBoolean()).isFalse();
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/v1/admin/classes/{id}/students", classId)
+                        .header("Authorization", token("CLADM")))
+                .andExpect(jsonPath("$.data.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("★ 정원을 넘겨도 배정은 되고 overCapacity로 알린다 — 초과가 필요한 운영이 있다")
+    void bulkAssignAllowsOverCapacity() throws Exception {
+        long classId = createClass(teacherId); // 정원 2
+        StudentEnrollment a = newEnrollment("초과1", GradeType.N_SU, TrackType.SCIENCE, "가고");
+        StudentEnrollment b = newEnrollment("초과2", GradeType.N_SU, TrackType.SCIENCE, "가고");
+        StudentEnrollment c = newEnrollment("초과3", GradeType.N_SU, TrackType.SCIENCE, "가고");
+        em.flush();
+
+        mvc.perform(post("/api/v1/admin/classes/{id}/students/bulk", classId)
+                        .header("Authorization", token("CLADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"enrollmentIds":[%d,%d,%d]}"""
+                                .formatted(a.getId(), b.getId(), c.getId())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.assignedCount").value(3))
+                .andExpect(jsonPath("$.data.memberCount").value(3))
+                .andExpect(jsonPath("$.data.overCapacity").value(true));
+    }
+
+    @Test
+    @DisplayName("★ 반 목록 쿼리 수가 반 개수에 비례하지 않는다 (N+1 방지)")
+    void classListDoesNotScaleWithClassCount() throws Exception {
+        // 반 1개 + 학생 1명
+        long only = createClass(teacherId);
+        StudentEnrollment one = newEnrollment("한명", GradeType.N_SU, TrackType.SCIENCE, "가고");
+        classService.assignStudent(only, one.getId(), principal);
+        em.flush();
+
+        Statistics stats = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        stats.setStatisticsEnabled(true);
+
+        SearchScope scope = SearchScope.of(principal, 2026);
+        em.clear();
+        stats.clear();
+        classService.searchWithMemberCount(scope).forEach(this::touchClass);
+        long oneClass = stats.getPrepareStatementCount();
+
+        // 반을 4개 더 만들고 학생도 붙인다
+        for (int i = 0; i < 4; i++) {
+            long extra = createClass2("추가" + i + "반");
+            StudentEnrollment e = newEnrollment("추가학생" + i, GradeType.N_SU, TrackType.SCIENCE, "나고");
+            classService.assignStudent(extra, e.getId(), principal);
+        }
+        em.flush();
+
+        em.clear();
+        stats.clear();
+        classService.searchWithMemberCount(scope).forEach(this::touchClass);
+        long fiveClasses = stats.getPrepareStatementCount();
+
+        org.assertj.core.api.Assertions.assertThat(oneClass).isPositive();
+        // 반이 5배가 돼도 쿼리 수는 그대로다 — 반마다 인원을 세면 여기서 벌어진다
+        org.assertj.core.api.Assertions.assertThat(fiveClasses).isEqualTo(oneClass);
+    }
+
+    /** 응답 조립과 같은 접근을 해서 지연 로딩이 숨어 있지 않은지 함께 본다. */
+    private void touchClass(ClassService.ClassSummaryView view) {
+        ClassResponse.from(view);
     }
 
     private long createClass2(String name) throws Exception {

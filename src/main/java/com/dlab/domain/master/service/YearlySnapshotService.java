@@ -274,6 +274,8 @@ public class YearlySnapshotService {
                     academy, toYear, src.getName(), src.getClassType(),
                     activeTeacherOrNull(src.getHomeroomTeacher())));
             copy.markCopiedFrom(src.getId());
+            // 정원도 같이 가져간다 — 안 가져가면 새 연도 반이 전부 "정원 없음"이 된다
+            copy.changeCapacity(src.getCapacity());
             // ★ 과정 참조를 새 연도 것으로 갈아끼운다. 그냥 두면 새 연도 반이 옛 과정을 가리킨다.
             if (src.getCourseType() != null) {
                 copy.assignCourseType(courseMapping.get(src.getCourseType().getId()));

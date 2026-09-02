@@ -63,3 +63,6 @@ docs/*
 # macOS Finder 메타파일. 폴더를 열기만 해도 바뀌고 바이너리라 머지가 안 된다 —
 # 두 사람의 Finder 설정이 다르면 매번 충돌한다
 .DS_Store
+
+# 에이전트 작업용 임시 워크트리 — 커밋 대상이 아니다
+.claude/worktrees/

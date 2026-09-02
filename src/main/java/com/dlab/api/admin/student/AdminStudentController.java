@@ -79,6 +79,23 @@ public class AdminStudentController {
      *
      * <p>반·담임·좌석·장학은 {@link StudentListEnricher}가 <b>페이지 전체를 IN 조회 3번</b>으로
      * 모아 붙인다. 응답을 만들면서 행마다 꺼내면 쿼리가 학생 수만큼 나간다.
+     *
+     * <h3>★ 미배정·장학 필터</h3>
+     * 반 배정 화면(미배정 명단)과 교무업무 '장학생 명단' 탭이 <b>받아온 페이지 안에서
+     * 걸러 쓰고 있었다</b> — 그건 그 페이지의 미배정이지 전체 명단이 아니고 총계도 맞지 않는다.
+     * 그래서 서버 조건으로 연다.
+     *
+     * <ul>
+     *   <li>{@code unassignedClass=true} — 고정반 미배정만. {@code false}면 배정된 학생만</li>
+     *   <li>{@code unassignedSeat} · {@code unassignedLocker} — 좌석·사물함도 같은 규칙</li>
+     *   <li>{@code hasScholarship=true} — 장학생만. {@code false}면 장학 없는 학생만</li>
+     *   <li>{@code scholarshipType=KICE_50} — 그 종류의 장학을 가진 학생만
+     *       (보유 여부를 따로 보내지 않아도 된다)</li>
+     * </ul>
+     *
+     * <p><b>모순되는 조합은 400이다</b> — {@code classId}/{@code teacherId} + {@code unassignedClass=true},
+     * {@code hasScholarship=false} + {@code scholarshipType}. 빈 목록으로 돌려주면 화면이
+     * "해당 학생이 없다"로 읽고 조용히 넘어간다.
      */
     @GetMapping
     public ApiResponse<List<StudentResponse>> search(
@@ -95,12 +112,18 @@ public class AdminStudentController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedFrom,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedTo,
+            @RequestParam(required = false) Boolean unassignedClass,
+            @RequestParam(required = false) Boolean unassignedSeat,
+            @RequestParam(required = false) Boolean unassignedLocker,
+            @RequestParam(required = false) Boolean hasScholarship,
+            @RequestParam(required = false) String scholarshipType,
             @PageableDefault(size = 20) Pageable pageable) {
 
         Page<StudentEnrollment> page = studentService.search(
                 SearchScope.of(me, year),
                 condition(keyword, grade, track, status, classId, teacherId, schoolName,
-                        admittedFrom, admittedTo),
+                        admittedFrom, admittedTo, unassignedClass, unassignedSeat,
+                        unassignedLocker, hasScholarship, scholarshipType),
                 pageable);
 
         var extras = studentListEnricher.of(page.getContent());
@@ -110,9 +133,12 @@ public class AdminStudentController {
     private StudentSearchCondition condition(String keyword, GradeType grade, TrackType track,
                                              EnrollmentStatus status, Long classId, Long teacherId,
                                              String schoolName, LocalDate admittedFrom,
-                                             LocalDate admittedTo) {
+                                             LocalDate admittedTo, Boolean unassignedClass,
+                                             Boolean unassignedSeat, Boolean unassignedLocker,
+                                             Boolean hasScholarship, String scholarshipType) {
         return new StudentSearchCondition(keyword, grade, track, status, classId, teacherId,
-                schoolName, admittedFrom, admittedTo);
+                schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
+                unassignedLocker, hasScholarship, scholarshipType);
     }
 
     /** 학생 상세. 목록과 <b>같은 필드</b>를 내린다 — 화면이 목록에서 상세로 넘어갈 때 값이 사라지면 안 된다. */
@@ -216,11 +242,17 @@ public class AdminStudentController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedFrom,
             @RequestParam(required = false)
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedTo) {
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedTo,
+            @RequestParam(required = false) Boolean unassignedClass,
+            @RequestParam(required = false) Boolean unassignedSeat,
+            @RequestParam(required = false) Boolean unassignedLocker,
+            @RequestParam(required = false) Boolean hasScholarship,
+            @RequestParam(required = false) String scholarshipType) {
 
         byte[] file = studentExportService.export(SearchScope.of(me, year),
                 condition(keyword, grade, track, status, classId, teacherId, schoolName,
-                        admittedFrom, admittedTo));
+                        admittedFrom, admittedTo, unassignedClass, unassignedSeat,
+                        unassignedLocker, hasScholarship, scholarshipType));
 
         String filename = URLEncoder.encode("학생명단.xlsx", StandardCharsets.UTF_8);
         return ResponseEntity.ok()

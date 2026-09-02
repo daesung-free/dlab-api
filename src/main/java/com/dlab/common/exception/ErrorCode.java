@@ -45,6 +45,12 @@ public enum ErrorCode {
     SEAT_NOT_FOUND(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."),
     SEAT_ALREADY_OCCUPIED(HttpStatus.CONFLICT, "이미 배정된 좌석입니다."),
     SEAT_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "배정된 좌석이 없습니다."),
+    CLASS_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "그 반에 배정된 학생이 아닙니다."),
+    STUDY_AREA_NOT_FOUND(HttpStatus.NOT_FOUND, "구역을 찾을 수 없습니다."),
+    STUDY_AREA_DUPLICATED(HttpStatus.CONFLICT, "같은 지점에 이미 있는 구역 코드입니다."),
+    STUDY_AREA_HAS_SEATS(HttpStatus.CONFLICT, "좌석이 남아 있는 구역은 삭제할 수 없습니다."),
+    SEAT_CD_DUPLICATED(HttpStatus.CONFLICT, "같은 지점에 이미 있는 좌석번호입니다."),
+    SEAT_ASSIGN_PARTIAL_FAILED(HttpStatus.CONFLICT, "배정할 수 없는 건이 있어 전체를 취소했습니다."),
     MASTER_NOT_FOUND(HttpStatus.NOT_FOUND, "기초 데이터를 찾을 수 없습니다."),
     LOCKER_ALREADY_OCCUPIED(HttpStatus.CONFLICT, "이미 배정된 사물함입니다."),
     OTHER_BRANCH_ACCESS_DENIED(HttpStatus.FORBIDDEN, "다른 지점의 데이터에 접근할 수 없습니다."),
@@ -212,7 +218,13 @@ public enum ErrorCode {
     EXAM_SUBJECT_NOT_IN_FORM(HttpStatus.BAD_REQUEST, "이 학생의 성적 입력 양식에 없는 과목입니다."),
     GRADE_SUBMISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "제출된 성적이 없습니다."),
     /** 0으로 채우게 두면 진짜 0점과 구분되지 않는다. 사유를 남기고 건너뛴다. */
-    GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요.");
+    GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요."),
+
+    /**
+     * 조건 자체가 성립하지 않는 검색 조합(예: 특정 반 + 반 미배정).
+     * 빈 목록으로 돌려주면 화면이 "해당 학생이 없다"로 읽고 조용히 넘어간다.
+     */
+    CONFLICTING_SEARCH_CONDITION(HttpStatus.BAD_REQUEST, "함께 지정할 수 없는 검색 조건입니다.");
 
     private final HttpStatus status;
     private final String message;
