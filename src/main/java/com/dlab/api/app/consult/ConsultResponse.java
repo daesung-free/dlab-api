@@ -19,7 +19,7 @@ public final class ConsultResponse {
      * <p>{@code reservedNames}는 <b>담임 화면에서만</b> 채워진다 — 학생에게 남의 상담 예약이
      * 보이면 안 된다.
      */
-    public record Slot(
+    public record ConsultSlotView(
             Long id,
             LocalDate date,
             LocalTime startTime,
@@ -34,9 +34,9 @@ public final class ConsultResponse {
             boolean published,
             List<Reserved> reservedList) {
 
-        public static Slot from(ConsultReservationService.SlotView view) {
+        public static ConsultSlotView from(ConsultReservationService.SlotView view) {
             ConsultSlot s = view.slot();
-            return new Slot(s.getId(), s.getSlotDate(), s.getStartTime(), s.getEndTime(),
+            return new ConsultSlotView(s.getId(), s.getSlotDate(), s.getStartTime(), s.getEndTime(),
                     s.getTeacher().getId(), s.getTeacher().getName(),
                     s.getPlace(), s.getMemo(), s.getCapacity(), view.reserved(), view.isFull(),
                     s.isPublished(),
@@ -56,7 +56,7 @@ public final class ConsultResponse {
     }
 
     /** 학생이 보는 본인 예약. */
-    public record Reservation(
+    public record ConsultReservationView(
             Long id,
             Long slotId,
             LocalDate date,
@@ -69,9 +69,9 @@ public final class ConsultResponse {
             Instant reservedAt,
             Instant canceledAt) {
 
-        public static Reservation from(ConsultReservation r) {
+        public static ConsultReservationView from(ConsultReservation r) {
             ConsultSlot s = r.getSlot();
-            return new Reservation(r.getId(), s.getId(), s.getSlotDate(),
+            return new ConsultReservationView(r.getId(), s.getId(), s.getSlotDate(),
                     s.getStartTime(), s.getEndTime(), s.getTeacher().getName(), s.getPlace(),
                     r.getConsultType(), r.getRequestNote(), r.getReservedAt(), r.getCanceledAt());
         }

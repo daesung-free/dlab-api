@@ -8,7 +8,7 @@ public final class ClassRequests {
     private ClassRequests() {
     }
 
-    public record Create(
+    public record ClassCreate(
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") @Min(2000) @Max(2100) Integer year,
             @NotBlank(message = "반 이름은 필수입니다.") @Size(max = 50) String name,

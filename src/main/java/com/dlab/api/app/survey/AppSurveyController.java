@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 — 설문 (A-14).
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><b>익명 설문은 응답 내용을 다시 볼 수 없다.</b> 응답 행에 응답자를 남기지 않기
  * 때문이고, 그게 익명의 정의다. 앱은 제출 완료 표시까지만 한다.
  */
+@Tag(name = "앱 · 설문 (A-14)")
 @RestController
 @RequestMapping("/api/v1/app/surveys")
 @RequiredArgsConstructor
@@ -40,25 +42,25 @@ public class AppSurveyController {
      * @param studentId <b>학부모만</b> 쓴다. 계정 하나에 자녀가 여럿이라 서버가 고를 수 없다
      */
     @GetMapping
-    public ApiResponse<List<SurveyResponses.Summary>> list(
+    public ApiResponse<List<SurveyResponses.SurveySummary>> list(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long studentId) {
 
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(surveyService.feed(enrollmentId).stream()
-                .map(SurveyResponses.Summary::from).toList());
+                .map(SurveyResponses.SurveySummary::from).toList());
     }
 
     /** 상세 — 문항·선택지. 내게 배포된 설문인지 확인하고 내린다. */
     @GetMapping("/{surveyId}")
-    public ApiResponse<SurveyResponses.Detail> detail(
+    public ApiResponse<SurveyResponses.SurveyDetail> detail(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long surveyId,
             @RequestParam(required = false) Long studentId) {
 
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(
-                SurveyResponses.Detail.from(surveyService.detail(enrollmentId, surveyId)));
+                SurveyResponses.SurveyDetail.from(surveyService.detail(enrollmentId, surveyId)));
     }
 
     /** 응답 제출. 한 번만 낼 수 있다. */
@@ -67,7 +69,7 @@ public class AppSurveyController {
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long surveyId,
             @RequestParam(required = false) Long studentId,
-            @Valid @RequestBody SurveyRequests.Submit request) {
+            @Valid @RequestBody SurveyRequests.SurveySubmit request) {
 
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         var response = surveyService.submit(enrollmentId, surveyId, request.toCommands());

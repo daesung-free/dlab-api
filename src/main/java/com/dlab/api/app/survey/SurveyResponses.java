@@ -20,40 +20,40 @@ public final class SurveyResponses {
      *
      * <p>{@code open}·{@code submitted}를 서버가 판정해 내린다 — 앱은 버튼 상태만 그린다.
      */
-    public record Summary(Long id, SurveyType surveyType, String title, String description,
+    public record SurveySummary(Long id, SurveyType surveyType, String title, String description,
                           boolean anonymous, Instant opensAt, Instant closesAt,
                           boolean open, boolean submitted) {
 
-        static Summary from(SurveyService.AppSurvey s) {
+        static SurveySummary from(SurveyService.AppSurvey s) {
             Survey survey = s.survey();
-            return new Summary(survey.getId(), survey.getSurveyType(), survey.getTitle(),
+            return new SurveySummary(survey.getId(), survey.getSurveyType(), survey.getTitle(),
                     survey.getDescription(), survey.isAnonymous(),
                     survey.getOpensAt(), survey.getClosesAt(), s.open(), s.submitted());
         }
     }
 
-    public record Detail(Summary survey, List<Question> questions) {
+    public record SurveyDetail(SurveySummary survey, List<SurveyQuestionView> questions) {
 
-        static Detail from(SurveyService.AppSurvey s) {
-            return new Detail(Summary.from(s),
-                    s.survey().activeQuestions().stream().map(Question::from).toList());
+        static SurveyDetail from(SurveyService.AppSurvey s) {
+            return new SurveyDetail(SurveySummary.from(s),
+                    s.survey().activeQuestions().stream().map(SurveyQuestionView::from).toList());
         }
     }
 
-    public record Question(Long id, short seq, SurveyQuestionType type, String title,
+    public record SurveyQuestionView(Long id, short seq, SurveyQuestionType type, String title,
                            boolean required, BigDecimal minValue, BigDecimal maxValue,
-                           List<Option> options) {
+                           List<SurveyOptionView> options) {
 
-        static Question from(SurveyQuestion q) {
-            return new Question(q.getId(), q.getSeq(), q.getQuestionType(), q.getTitle(),
+        static SurveyQuestionView from(SurveyQuestion q) {
+            return new SurveyQuestionView(q.getId(), q.getSeq(), q.getQuestionType(), q.getTitle(),
                     q.isRequired(), q.getMinValue(), q.getMaxValue(),
                     q.activeOptions().stream()
-                            .map(o -> new Option(o.getId(), o.getSeq(), o.getLabel()))
+                            .map(o -> new SurveyOptionView(o.getId(), o.getSeq(), o.getLabel()))
                             .toList());
         }
     }
 
-    public record Option(Long id, short seq, String label) {
+    public record SurveyOptionView(Long id, short seq, String label) {
     }
 
     /** 제출 결과. 익명이든 아니든 "냈다"는 사실만 돌려준다. */
@@ -64,12 +64,12 @@ public final class SurveyResponses {
         }
     }
 
-    public record MyResponse(Long responseId, Instant submittedAt, List<Answer> answers) {
+    public record MyResponse(Long responseId, Instant submittedAt, List<SurveyAnswerView> answers) {
 
         static MyResponse from(com.dlab.domain.survey.entity.SurveyResponse r) {
             return new MyResponse(r.getId(), r.getSubmittedAt(),
                     r.activeAnswers().stream()
-                            .map(a -> new Answer(
+                            .map(a -> new SurveyAnswerView(
                                     a.getQuestion().getId(),
                                     a.getOption() != null ? a.getOption().getId() : null,
                                     a.getOption() != null ? a.getOption().getLabel() : null,
@@ -78,7 +78,7 @@ public final class SurveyResponses {
         }
     }
 
-    public record Answer(Long questionId, Long optionId, String optionLabel,
+    public record SurveyAnswerView(Long questionId, Long optionId, String optionLabel,
                          String textValue, BigDecimal numberValue) {
     }
 }

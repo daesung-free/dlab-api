@@ -103,15 +103,16 @@ public class PenaltyService {
      *
      * <p>화면 상단 합계가 <b>조회 조건 기준</b>이라(목업 "조회 조건 기준") 필터를 적용한
      * 결과로 합산한다 — 전체 합계를 내리면 필터를 걸어도 숫자가 안 바뀐다.
+     *
+     * @param requestedAcademyId 조회할 지점. <b>비우면 내 지점</b>이고,
+     *                           전 지점 권한자는 지정해야 한다
      */
     @Transactional(readOnly = true)
-    public PenaltyBoard board(AuthPrincipal principal, java.time.LocalDate from,
+    public PenaltyBoard board(AuthPrincipal principal, Long requestedAcademyId,
+                              java.time.LocalDate from,
                               java.time.LocalDate to, PenaltyCategory category,
                               PenaltySource source, String keyword, Long classId) {
-        Long academyId = principal.academyScopeFilter();
-        if (academyId == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
+        Long academyId = principal.requireAcademyScope(requestedAcademyId);
 
         java.time.ZoneId zone = clock.getZone();
         List<PenaltyPoint> points = pointRepository.search(

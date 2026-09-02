@@ -10,7 +10,7 @@ public final class FirewallRequests {
     private FirewallRequests() {
     }
 
-    public record Create(
+    public record FirewallCreate(
             @Min(value = 1, message = "해제 시간은 1분 이상이어야 합니다.")
             @Max(value = FirewallRequest.MAX_REQUESTED_MINUTES,
                  message = "해제 시간은 최대 300분(5시간)입니다.")

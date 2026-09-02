@@ -8,6 +8,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 알림 템플릿 관리 (실행가이드 P1-12).
@@ -15,6 +16,7 @@ import java.util.List;
  * <p><b>전 지점 공통 참조값이라 최상위 관리자만 만진다.</b> 지점 관리자가 문구를 바꾸면
  * 다른 지점 알림까지 함께 바뀐다.
  */
+@Tag(name = "관리자 · 알림 템플릿 (F-4.4-1)")
 @RestController
 @RequestMapping("/api/v1/admin/notification-templates")
 @RequiredArgsConstructor
@@ -37,9 +39,15 @@ public class AdminNotificationTemplateController {
                 .map(NotificationTemplateResponse::from).toList());
     }
 
+    /**
+     * 알림 템플릿 등록.
+     *
+     * <p>⚠️ <b>학생명 변수가 필수다</b> — 다자녀 학부모가 "이거 누구 얘기지" 하고
+     * 헷갈리지 않아야 한다. 빠지면 등록이 거부된다.
+     */
     @PostMapping
     public ApiResponse<NotificationTemplateResponse> create(
-            @Valid @RequestBody NotificationTemplateRequests.Create request) {
+            @Valid @RequestBody NotificationTemplateRequests.NotificationTemplateCreate request) {
         return ApiResponse.success(NotificationTemplateResponse.from(templateService.create(
                 request.event(), request.channel(), request.recipientType(),
                 request.requiredVariables())));
@@ -70,6 +78,12 @@ public class AdminNotificationTemplateController {
                 templateService.updateMapping(id, request.channel(), request.recipientType())));
     }
 
+    /**
+     * 템플릿 사용 여부.
+     *
+     * <p>문구 확정({@code content_confirmed})과 <b>카카오 심사 상태는 다른 축</b>이다 —
+     * 문구가 확정돼도 심사를 못 넘으면 못 나간다.
+     */
     @PutMapping("/{id}/active")
     public ApiResponse<NotificationTemplateResponse> changeActive(
             @PathVariable Long id,

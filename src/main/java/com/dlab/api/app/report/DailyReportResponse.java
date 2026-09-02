@@ -24,20 +24,20 @@ public final class DailyReportResponse {
      * @param studyMinutes 확정 전이면 {@code null}
      * @param qnaCount     지금은 <b>오프라인 상담실 예약</b> 건수다(온라인 QnA 미구현)
      */
-    public record Day(LocalDate date, String finalStatus, boolean excused,
+    public record DailyReportDay(LocalDate date, String finalStatus, boolean excused,
                       Integer studyMinutes,
-                      List<AttendanceResponse.Event> events,
+                      List<AttendanceResponse.AttendanceEvent> events,
                       List<AttendanceResponse.AbsenceReasonRow> reasons,
-                      List<Routine> routines, int qnaCount, String selfFeedback) {
+                      List<DailyReportRoutine> routines, int qnaCount, String selfFeedback) {
 
-        public static Day from(DailyReportService.DayReport r) {
-            return new Day(r.date(),
+        public static DailyReportDay from(DailyReportService.DayReport r) {
+            return new DailyReportDay(r.date(),
                     r.finalStatus() == null ? null : r.finalStatus().name(),
                     r.excused(),
                     r.studyMinutes(),
-                    r.events().stream().map(AttendanceResponse.Event::from).toList(),
+                    r.events().stream().map(AttendanceResponse.AttendanceEvent::from).toList(),
                     r.reasons().stream().map(AttendanceResponse.AbsenceReasonRow::from).toList(),
-                    r.routines().stream().map(Routine::from).toList(),
+                    r.routines().stream().map(DailyReportRoutine::from).toList(),
                     r.qnaCount(),
                     r.selfFeedback());
         }
@@ -49,11 +49,11 @@ public final class DailyReportResponse {
      * <p><b>검수 전 가채점 점수는 내리지 않는다</b> — 학생이 매긴 점수가 확정처럼 보이면
      * 교사 검수 결과와 달라졌을 때 이의가 붙는다.
      */
-    public record Routine(Long routineId, String name, String subject, String status,
+    public record DailyReportRoutine(Long routineId, String name, String subject, String status,
                           Short score, Short maxScore) {
 
-        static Routine from(DailyRoutineResult r) {
-            return new Routine(r.getRoutine().getId(), r.getRoutine().getName(),
+        static DailyReportRoutine from(DailyRoutineResult r) {
+            return new DailyReportRoutine(r.getRoutine().getId(), r.getRoutine().getName(),
                     r.getRoutine().getSubject(), r.getStatus().name(),
                     r.getReviewedScore(), r.getRoutine().getMaxScore());
         }
@@ -64,11 +64,11 @@ public final class DailyReportResponse {
      *
      * @param attendanceRate 확정된 날이 없으면 {@code null} — 0%면 결석한 것처럼 보인다
      */
-    public record Month(int year, int month, int studyMinutes, Integer attendanceRate,
+    public record DailyReportMonth(int year, int month, int studyMinutes, Integer attendanceRate,
                         int confirmedDays, List<DayCell> days) {
 
-        public static Month from(DailyReportService.MonthReport r) {
-            return new Month(r.year(), r.month(), r.studyMinutes(), r.attendanceRate(),
+        public static DailyReportMonth from(DailyReportService.MonthReport r) {
+            return new DailyReportMonth(r.year(), r.month(), r.studyMinutes(), r.attendanceRate(),
                     r.confirmedDays(), r.days().stream().map(DayCell::from).toList());
         }
     }

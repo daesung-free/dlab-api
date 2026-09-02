@@ -16,6 +16,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 상벌점 항목·규칙 관리 (F-4.1-3, I-5).
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
  * <p><b>항목만 만들면 자동부여는 안 돈다</b> — 규칙(어떤 상황에 그 항목을 준다)까지
  * 만들고 켜야 한다. 화면에서 이 순서를 안내할 것.
  */
+@Tag(name = "관리자 · 상벌점 항목·규칙 (F-4.1-3)")
 @RestController
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
@@ -35,6 +37,7 @@ public class AdminPenaltyMasterController {
 
     // ── 항목 ──────────────────────────────────────────────────
 
+    /** 상벌점 항목 목록. */
     @GetMapping("/penalty-items")
     public ApiResponse<List<ItemRow>> items(@CurrentAccount AuthPrincipal me,
                                             @RequestParam(required = false) Long academyId,
@@ -65,6 +68,7 @@ public class AdminPenaltyMasterController {
                 me, itemId, request.itemName(), request.point(), request.category())));
     }
 
+    /** 상벌점 항목 삭제(soft). 과거 부여 이력이 참조한다. */
     @DeleteMapping("/penalty-items/{itemId}")
     public ApiResponse<Void> deleteItem(@CurrentAccount AuthPrincipal me,
                                         @PathVariable Long itemId) {
@@ -76,39 +80,41 @@ public class AdminPenaltyMasterController {
 
     /** 꺼진 규칙까지 전부. 화면이 on/off 토글을 그린다. */
     @GetMapping("/penalty-rules")
-    public ApiResponse<List<RuleRow>> rules(@CurrentAccount AuthPrincipal me,
+    public ApiResponse<List<PenaltyRuleRow>> rules(@CurrentAccount AuthPrincipal me,
                                             @RequestParam(required = false) Long academyId,
                                             @RequestParam short year) {
         return ApiResponse.success(masterService.rules(me, academyId, year)
-                .stream().map(RuleRow::from).toList());
+                .stream().map(PenaltyRuleRow::from).toList());
     }
 
     /** <b>기본은 꺼짐이다</b> — 검증 전 규칙이 전교생에게 벌점을 뿌리지 않게. */
     @PostMapping("/penalty-rules")
-    public ApiResponse<RuleRow> createRule(@CurrentAccount AuthPrincipal me,
-                                           @Valid @RequestBody RuleRequest request) {
-        return ApiResponse.success(RuleRow.from(masterService.createRule(
+    public ApiResponse<PenaltyRuleRow> createRule(@CurrentAccount AuthPrincipal me,
+                                           @Valid @RequestBody PenaltyRuleRequest request) {
+        return ApiResponse.success(PenaltyRuleRow.from(masterService.createRule(
                 me, request.academyId(), request.year(), request.triggerType(),
                 request.triggerCondition(), request.penaltyItemId())));
     }
 
+    /** 규칙 수정. */
     @PutMapping("/penalty-rules/{ruleId}")
-    public ApiResponse<RuleRow> updateRule(@CurrentAccount AuthPrincipal me,
+    public ApiResponse<PenaltyRuleRow> updateRule(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long ruleId,
-                                           @Valid @RequestBody RuleRequest request) {
-        return ApiResponse.success(RuleRow.from(masterService.updateRule(
+                                           @Valid @RequestBody PenaltyRuleRequest request) {
+        return ApiResponse.success(PenaltyRuleRow.from(masterService.updateRule(
                 me, ruleId, request.triggerType(), request.triggerCondition(),
                 request.penaltyItemId())));
     }
 
     /** 켜고 끄기. 지우지 않고 끄면 과거 부여 근거가 남는다. */
     @PatchMapping("/penalty-rules/{ruleId}/active")
-    public ApiResponse<RuleRow> toggleRule(@CurrentAccount AuthPrincipal me,
+    public ApiResponse<PenaltyRuleRow> toggleRule(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long ruleId,
                                            @RequestParam boolean active) {
-        return ApiResponse.success(RuleRow.from(masterService.toggleRule(me, ruleId, active)));
+        return ApiResponse.success(PenaltyRuleRow.from(masterService.toggleRule(me, ruleId, active)));
     }
 
+    /** 규칙 삭제(soft). */
     @DeleteMapping("/penalty-rules/{ruleId}")
     public ApiResponse<Void> deleteRule(@CurrentAccount AuthPrincipal me,
                                         @PathVariable Long ruleId) {
@@ -130,7 +136,7 @@ public class AdminPenaltyMasterController {
      * @param triggerCondition 출결이면 {@code att_gn}(A=지각 등), 루틴이면 결과 상태,
      *                         정기일정이면 {@code NOT_RECOGNIZED}
      */
-    public record RuleRequest(Long academyId,
+    public record PenaltyRuleRequest(Long academyId,
                               @NotNull Short year,
                               @NotNull PenaltyTriggerType triggerType,
                               @NotBlank @Size(max = 100) String triggerCondition,
@@ -146,11 +152,11 @@ public class AdminPenaltyMasterController {
     }
 
     /** @param active {@code false}면 만들어만 두고 안 도는 규칙이다 */
-    public record RuleRow(Long id, PenaltyTriggerType triggerType, String triggerCondition,
+    public record PenaltyRuleRow(Long id, PenaltyTriggerType triggerType, String triggerCondition,
                           Long penaltyItemId, String itemName, int point, boolean active) {
 
-        static RuleRow from(PenaltyRule r) {
-            return new RuleRow(r.getId(), r.getTriggerType(), r.getTriggerCondition(),
+        static PenaltyRuleRow from(PenaltyRule r) {
+            return new PenaltyRuleRow(r.getId(), r.getTriggerType(), r.getTriggerCondition(),
                     r.getPenaltyItem().getId(), r.getPenaltyItem().getItemName(),
                     r.getPenaltyItem().getPointValue(), r.isActive());
         }

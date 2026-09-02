@@ -13,7 +13,7 @@ public final class NotificationTemplateRequests {
     private NotificationTemplateRequests() {
     }
 
-    public record Create(
+    public record NotificationTemplateCreate(
             @NotNull(message = "이벤트는 필수입니다.") NotificationEvent event,
             @NotNull(message = "채널은 필수입니다.") NotificationChannel channel,
             RecipientType recipientType,

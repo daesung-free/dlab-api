@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 공지 (F-4.11-3).
@@ -33,6 +34,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 대상 필드(반·학생)가 범위마다 달라 <b>어느 조합이 유효한지가 요청마다 흔들린다.</b>
  * 경로가 갈리면 필요한 값이 무엇인지 명확하다.
  */
+@Tag(name = "관리자 · 공지 (F-4.11-3)")
 @RestController
 @RequestMapping("/api/v1/admin/notices")
 @RequiredArgsConstructor
@@ -40,6 +42,7 @@ public class AdminNoticeController {
 
     private final NoticeService noticeService;
 
+    /** 공지 목록. <b>조회는 관리자 전체 공유</b>이고 작성만 역할별로 갈린다. */
     @GetMapping
     public ApiResponse<List<NoticeResponse>> list(@CurrentAccount AuthPrincipal me,
                                                   @RequestParam(required = false) Short year) {
@@ -88,13 +91,14 @@ public class AdminNoticeController {
     @PutMapping("/{id}")
     public ApiResponse<NoticeResponse> update(@CurrentAccount AuthPrincipal me,
                                               @PathVariable Long id,
-                                              @Valid @RequestBody UpdateRequest request) {
+                                              @Valid @RequestBody NoticeUpdateRequest request) {
         return ApiResponse.success(NoticeResponse.from(noticeService.update(
                 me, id, request.title(), request.content(),
                 request.pinned(), request.banner(),
                 request.publishedAt(), request.expiresAt())));
     }
 
+    /** 공지 삭제(soft). */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me, @PathVariable Long id) {
         noticeService.delete(me, id);
@@ -110,7 +114,7 @@ public class AdminNoticeController {
      * @param publishedAt 예약 발행. {@code null}이면 즉시 공개
      * @param banner      앱 홈 배너 노출
      */
-    public record UpdateRequest(
+    public record NoticeUpdateRequest(
             @NotBlank(message = "제목은 필수입니다.") @Size(max = 200) String title,
             @NotBlank(message = "내용은 필수입니다.") String content,
             boolean pinned,

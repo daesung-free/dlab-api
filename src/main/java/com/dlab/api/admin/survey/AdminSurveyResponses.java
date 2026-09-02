@@ -16,13 +16,13 @@ public final class AdminSurveyResponses {
     private AdminSurveyResponses() {
     }
 
-    public record Summary(Long id, SurveyType surveyType, SurveyScope scope,
+    public record AdminSurveySummary(Long id, SurveyType surveyType, SurveyScope scope,
                           Long academyId, Long classId,
                           String title, String description, boolean anonymous,
                           Instant opensAt, Instant closesAt, int questionCount) {
 
-        static Summary from(Survey s) {
-            return new Summary(s.getId(), s.getSurveyType(), s.getScope(),
+        static AdminSurveySummary from(Survey s) {
+            return new AdminSurveySummary(s.getId(), s.getSurveyType(), s.getScope(),
                     s.getAcademy() != null ? s.getAcademy().getId() : null,
                     s.getClassMaster() != null ? s.getClassMaster().getId() : null,
                     s.getTitle(), s.getDescription(), s.isAnonymous(),
@@ -30,10 +30,10 @@ public final class AdminSurveyResponses {
         }
     }
 
-    public record Result(Summary survey, int responseCount, List<QuestionResult> questions) {
+    public record Result(AdminSurveySummary survey, int responseCount, List<QuestionResult> questions) {
 
         static Result from(SurveyService.SurveyResult r) {
-            return new Result(Summary.from(r.survey()), r.responseCount(),
+            return new Result(AdminSurveySummary.from(r.survey()), r.responseCount(),
                     r.questions().stream().map(QuestionResult::from).toList());
         }
     }

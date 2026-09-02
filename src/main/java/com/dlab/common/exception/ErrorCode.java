@@ -136,6 +136,36 @@ public enum ErrorCode {
     /** 앱이 이 오류를 받으면 급식업체 제3자 제공 동의 화면을 띄운다. */
     MEAL_THIRD_PARTY_CONSENT_REQUIRED(HttpStatus.BAD_REQUEST,
             "급식업체 개인정보 제3자 제공에 동의해야 신청할 수 있습니다."),
+    // 급식업체·단가 (0820 규정)
+    MEAL_VENDOR_NOT_FOUND(HttpStatus.NOT_FOUND, "급식업체를 찾을 수 없습니다."),
+    /** 같은 업체가 두 벌이면 연락처를 고칠 때 어느 쪽이 진짜인지 알 수 없다. */
+    MEAL_VENDOR_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 급식업체입니다."),
+    MEAL_POLICY_NOT_FOUND(HttpStatus.NOT_FOUND, "지점 급식 설정이 없습니다."),
+    /** 0원으로 청구하면 학생이 공짜로 먹고 나중에 아무도 못 찾는다. */
+    MEAL_UNIT_PRICE_NOT_REGISTERED(HttpStatus.CONFLICT,
+            "급식 단가가 등록되지 않아 청구할 수 없습니다. 업체·단가를 먼저 등록해 주세요."),
+    /**
+     * 교습비는 두 번 발행되면 <b>미납액이 두 배</b>로 잡힌 채 독촉이 나가고,
+     * 급식은 <b>학생이 두 번 낸다</b>. 두 도메인이 같은 코드를 쓴다.
+     */
+    BILLING_ALREADY_ISSUED(HttpStatus.CONFLICT, "해당 월 청구가 이미 발행되었습니다."),
+
+    // 장학 취소 판정 (0820 규정)
+    SCHOLARSHIP_RULE_NOT_FOUND(HttpStatus.NOT_FOUND, "장학 취소 기준을 찾을 수 없습니다."),
+    SCHOLARSHIP_REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "검토 대상을 찾을 수 없습니다."),
+    SCHOLARSHIP_REVIEW_ALREADY_DECIDED(HttpStatus.CONFLICT, "이미 처리된 검토 건입니다."),
+    /** 사유가 없으면 나중에 "왜 살려뒀나"에 답할 수 없다. */
+    SCHOLARSHIP_EXCEPTION_NOTE_REQUIRED(HttpStatus.BAD_REQUEST, "예외 인정 사유를 적어주세요."),
+
+    // 교습비 가격 (F-4.10-5 · 0820 규정)
+    TUITION_PRICE_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 조건의 교습비가 등록되지 않았습니다."),
+    /** 지점 관리자가 공통 가격을 고치면 나머지 지점 청구가 같이 바뀐다. */
+    TUITION_PRICE_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN, "전 지점 공통 교습비는 본사만 다룰 수 있습니다."),
+    /**
+     * ★ 달력 일수로 대신 계산하지 않는다. 표가 2월 27일·9월 29일이라
+     * 달력(28·30)으로 떨어뜨리면 조용히 틀린 금액이 청구된다.
+     */
+    TEACHING_DAYS_NOT_REGISTERED(HttpStatus.NOT_FOUND, "그 달의 교습일수가 등록되지 않았습니다."),
 
     // 공지 (F-4.11-3)
     NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지를 찾을 수 없습니다."),
@@ -169,7 +199,20 @@ public enum ErrorCode {
     PERIOD_TIME_OVERLAPPED(HttpStatus.CONFLICT, "다른 교시와 시간이 겹칩니다."),
     /** 교시가 하나도 없는 날은 "운영일 아님"이 돼 태깅이 전부 거부된다. */
     PERIOD_LAST_ONE(HttpStatus.CONFLICT,
-            "마지막 교시는 삭제할 수 없습니다. 새 교시를 먼저 등록하세요.");
+            "마지막 교시는 삭제할 수 없습니다. 새 교시를 먼저 등록하세요."),
+
+    // 성적
+    /** 마스터 데이터를 안 넣은 것과 "낼 성적이 없음"을 구분해야 한다. */
+    EXAM_FORM_NOT_FOUND(HttpStatus.NOT_FOUND, "이 학년의 성적 입력 양식이 등록되지 않았습니다."),
+    EXAM_MASTER_NOT_FOUND(HttpStatus.NOT_FOUND, "시험 회차를 찾을 수 없습니다."),
+    EXAM_MASTER_DUPLICATED(HttpStatus.CONFLICT, "이미 등록된 시험 회차입니다."),
+    /** 지점 관리자가 공통 행을 고치면 나머지 8개 지점의 가입 화면이 같이 바뀐다. */
+    EXAM_FORM_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN, "전 지점 공통 성적 양식은 본사만 다룰 수 있습니다."),
+    /** 검사하지 않으면 남의 학년 과목이 학년 통계에 섞인다. */
+    EXAM_SUBJECT_NOT_IN_FORM(HttpStatus.BAD_REQUEST, "이 학생의 성적 입력 양식에 없는 과목입니다."),
+    GRADE_SUBMISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "제출된 성적이 없습니다."),
+    /** 0으로 채우게 두면 진짜 0점과 구분되지 않는다. 사유를 남기고 건너뛴다. */
+    GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요.");
 
     private final HttpStatus status;
     private final String message;

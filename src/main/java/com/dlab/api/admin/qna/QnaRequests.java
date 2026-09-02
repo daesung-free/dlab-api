@@ -16,7 +16,7 @@ public final class QnaRequests {
      *
      * <p><b>간격을 요청으로 받는다</b> — ▷[0803] "현재 15분, 변동 가능"이라 스키마에 두지 않았다.
      */
-    public record OpenSlots(
+    public record QnaOpenSlots(
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") Integer year,
             @NotNull(message = "날짜는 필수입니다.") LocalDate date,
@@ -33,11 +33,11 @@ public final class QnaRequests {
     public record ChangeClosed(@NotNull(message = "마감 여부는 필수입니다.") Boolean closed) {
     }
 
-    public record Assign(Long teacherId, @Size(max = 50) String room,
+    public record QnaAssign(Long teacherId, @Size(max = 50) String room,
                          @Size(max = 200) String memo) {
     }
 
     /** 학생 예약. 질문은 선택 — ▷[0803] 회신 항목이라 시트 미반영이다. */
-    public record Reserve(@Size(max = 500) String question) {
+    public record QnaReserve(@Size(max = 500) String question) {
     }
 }

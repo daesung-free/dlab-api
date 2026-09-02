@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 공휴일 관리 (기초설정).
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
  * "학과·전형·반·강의실·사물함·장학"이고 공휴일이 빠져 있다.
  * 급식 가능일 계산이 이 데이터에 의존하므로 수기 입력 경로로 추가한 것이다.
  */
+@Tag(name = "관리자 · 공휴일")
 @RestController
 @RequestMapping("/api/v1/admin/holidays")
 @RequiredArgsConstructor
@@ -48,6 +50,15 @@ public class AdminHolidayController {
         return ApiResponse.success(holidays);
     }
 
+    /**
+     * 공휴일 등록.
+     *
+     * <p><b>전 지점 공통 휴일은 본사만</b> 넣을 수 있다 — 지점 관리자가 넣으면
+     * 다른 지점 급식까지 막힌다. 지점은 자기 지점 유형만 등록한다.
+     *
+     * <p>⚠️ 이 데이터는 <b>급식 가능일</b>용이다. 교습비 일수는 별개다 —
+     * 학원은 삼일절·어린이날에도 운영한다.
+     */
     @PostMapping
     public ApiResponse<HolidayResponse> register(
             @CurrentAccount AuthPrincipal me,
@@ -67,6 +78,7 @@ public class AdminHolidayController {
                 HolidayResponse.from(holidayService.rename(me, holidayId, request.name())));
     }
 
+    /** 공휴일 삭제(soft). 물리 삭제하면 과거 급식 신청이 어느 규칙으로 계산됐는지 추적이 끊긴다. */
     @DeleteMapping("/{holidayId}")
     public ApiResponse<Void> remove(
             @CurrentAccount AuthPrincipal me,

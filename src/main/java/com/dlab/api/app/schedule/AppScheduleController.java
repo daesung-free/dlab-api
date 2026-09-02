@@ -10,10 +10,12 @@ import com.dlab.domain.user.service.AppScopeResolver;
 import jakarta.validation.Valid;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 정기일정 (앱 A-7).
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
  *
  * <p>담임이 대신 넣는 트랙은 관리자 웹이다(자동 승인).
  */
+@Tag(name = "앱 · 정기일정 (A-7)")
 @RestController
 @RequestMapping("/api/v1/app/schedules")
 @RequiredArgsConstructor
@@ -33,45 +36,64 @@ public class AppScheduleController {
     private final ScheduleComplianceService complianceService;
     private final Clock clock;
 
-    /** @param month 비우면 이번 달 */
+    /**
+     * 이번 달 정기일정 (A-7).
+     *
+     * <p>현강·과외처럼 <b>매주 같은 요일에 나갔다 오는 일정</b>을 월 단위로 등록해 둔 것이다.
+     * 승인되면 그 시간의 외출이 무단이 아니게 되어 벌점을 받지 않는다.
+     *
+     * @param month {@code yyyy-MM}. 비우면 이번 달
+     */
     @GetMapping
-    public ApiResponse<ScheduleResponse.Month> month(
+    public ApiResponse<ScheduleResponse.ScheduleMonth> month(
             @CurrentAccount AuthPrincipal me,
-            @RequestParam(required = false) Short month,
+            @RequestParam(required = false)
+            @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
             @RequestParam(required = false) Long studentId) {
 
         StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
-        short target = month == null ? (short) LocalDate.now(clock).getMonthValue() : month;
+        YearMonth target = month != null ? month
+                : YearMonth.of(enrollment.getYear(), LocalDate.now(clock).getMonthValue());
 
         return ApiResponse.success(scheduleService
-                .findMonth(enrollment.getId(), enrollment.getYear(), target)
-                .map(ScheduleResponse.Month::from)
+                .findMonth(enrollment.getId(), (short) target.getYear(),
+                        (short) target.getMonthValue())
+                .map(ScheduleResponse.ScheduleMonth::from)
                 .orElse(null));
     }
 
+    /**
+     * 한 달치 제출.
+     *
+     * <p><b>월 단위로 한 번 승인받는다</b> — 요일이 여러 개여도 승인은 한 번이다. 줄마다
+     * 승인을 만들면 학부모 대기 목록에 같은 학생이 여러 번 뜬다.
+     *
+     * <p>같은 달에 이미 제출한 게 있으면 거절된다 — 수정은 기존 제출을 고친다.
+     */
     @PostMapping
-    public ApiResponse<ScheduleResponse.Month> submit(
+    public ApiResponse<ScheduleResponse.ScheduleMonth> submit(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody ScheduleRequests.Submit request) {
+            @Valid @RequestBody ScheduleRequests.ScheduleSubmit request) {
 
         StudentEnrollment enrollment =
                 scopeResolver.requireStudent(me.accountId(), "정기일정 등록");
-        return ApiResponse.success(ScheduleResponse.Month.from(scheduleService
-                .submitByStudent(enrollment, request.month(), request.toInputs())));
+        return ApiResponse.success(ScheduleResponse.ScheduleMonth.from(scheduleService
+                .submitByStudent(enrollment, request.yearMonth(), request.toInputs())));
     }
 
     /** 줄을 통째로 갈아끼운다. <b>학생이 고치면 승인을 다시 받는다.</b> */
     @PutMapping("/{scheduleId}/items")
-    public ApiResponse<ScheduleResponse.Month> replaceItems(
+    public ApiResponse<ScheduleResponse.ScheduleMonth> replaceItems(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long scheduleId,
             @Valid @RequestBody ScheduleRequests.Replace request) {
 
         scopeResolver.requireStudent(me.accountId(), "정기일정 수정");
-        return ApiResponse.success(ScheduleResponse.Month.from(
+        return ApiResponse.success(ScheduleResponse.ScheduleMonth.from(
                 scheduleService.replaceItems(scheduleId, request.toInputs())));
     }
 
+    /** 제출 취소. 승인 대기 중인 요청도 함께 취소된다. */
     @DeleteMapping("/{scheduleId}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me,
                                     @PathVariable Long scheduleId) {

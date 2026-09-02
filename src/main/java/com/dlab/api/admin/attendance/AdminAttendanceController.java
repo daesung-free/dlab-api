@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 출결 현황 (F-4.3-1).
@@ -43,6 +44,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>승인·반려는 여기 없다 — 사유신청 화면(F-4.1-6)이 맡는다. 여기 있는 쓰기는
  * <b>정정</b>뿐이고, 태깅 보정과 상태 정정 두 가지로 갈린다.
  */
+@Tag(name = "관리자 · 출결 관리 (F-4.3-1)")
 @RestController
 @RequestMapping("/api/v1/admin/attendance")
 @RequiredArgsConstructor
@@ -59,17 +61,20 @@ public class AdminAttendanceController {
      * "오늘 결석 몇 명"을 셀 수 없다.
      *
      * @param classId 담당 반. 담임은 자기 반만 본다
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
      */
     @GetMapping
-    public ApiResponse<BoardResponse> board(
+    public ApiResponse<AttendanceBoardResponse> board(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) List<ScreenStatus> statuses,
             @RequestParam(required = false) String keyword) {
 
         List<AttendanceRow> rows = boardService.board(
-                me, date == null ? LocalDate.now() : date, classId);
+                me, academyId, date == null ? LocalDate.now() : date, classId);
 
         List<AttendanceRow> filtered = rows.stream()
                 .filter(r -> statuses == null || statuses.isEmpty() || statuses.contains(r.status()))
@@ -77,8 +82,8 @@ public class AdminAttendanceController {
                 .toList();
 
         boolean raw = PersonalDataPolicy.canViewRaw(me);
-        return ApiResponse.success(new BoardResponse(
-                filtered.stream().map(r -> RowResponse.of(r, raw)).toList(),
+        return ApiResponse.success(new AttendanceBoardResponse(
+                filtered.stream().map(r -> AttendanceRowResponse.of(r, raw)).toList(),
                 summary(filtered),
                 !raw));
     }
@@ -111,14 +116,14 @@ public class AdminAttendanceController {
     /**
      * @param masked 개인정보가 마스킹됐는지. 화면이 모르면 "번호가 잘못 저장됐다"는 오인 문의가 생긴다
      */
-    public record BoardResponse(List<RowResponse> rows, Map<String, Long> summary, boolean masked) {
+    public record AttendanceBoardResponse(List<AttendanceRowResponse> rows, Map<String, Long> summary, boolean masked) {
     }
 
     /**
      * @param studyTime {@code "N시간 MM분"} 문자열. 화면이 그대로 찍는다
      * @param excused   사유 승인 여부. 상태와 <b>직교하는 축</b>이라 따로 내린다
      */
-    public record RowResponse(
+    public record AttendanceRowResponse(
             Long enrollmentId,
             String studentNo,
             String name,
@@ -133,8 +138,8 @@ public class AdminAttendanceController {
             String guardianPhone,
             boolean unexcusedLate
     ) {
-        static RowResponse of(AttendanceRow r, boolean raw) {
-            return new RowResponse(
+        static AttendanceRowResponse of(AttendanceRow r, boolean raw) {
+            return new AttendanceRowResponse(
                     r.enrollmentId(), r.studentNo(),
                     raw ? r.name() : Masking.name(r.name()),
                     r.className(), r.seatCd(),
@@ -160,10 +165,11 @@ public class AdminAttendanceController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN')")
     public ApiResponse<RecalculationResult> recalculate(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return ApiResponse.success(
-                new RecalculationResult(recalculationService.recalculate(me, from, to)));
+        return ApiResponse.success(new RecalculationResult(
+                recalculationService.recalculate(me, academyId, from, to)));
     }
 
     /** @param updated 다시 계산한 행 수. 0이면 확정된 날이 없다는 뜻이다 */
@@ -179,12 +185,13 @@ public class AdminAttendanceController {
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) Long classId,
             @RequestParam(defaultValue = "false") boolean unmask) {
 
         byte[] body = boardService.export(
-                me, date == null ? LocalDate.now() : date, classId, unmask);
+                me, academyId, date == null ? LocalDate.now() : date, classId, unmask);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)

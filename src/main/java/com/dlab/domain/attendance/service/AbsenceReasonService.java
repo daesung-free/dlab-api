@@ -193,11 +193,14 @@ public class AbsenceReasonService {
      * 관리자 목록.
      *
      * @param status 화면 탭(대기/승인/반려). {@code null}이면 전체
+     * @param requestedAcademyId 조회할 지점. <b>비우면 내 지점</b>이고,
+     *                           전 지점 권한자는 지정해야 한다
      */
     @Transactional(readOnly = true)
-    public List<AbsenceRequestRow> list(AuthPrincipal me, LocalDate from, LocalDate to,
+    public List<AbsenceRequestRow> list(AuthPrincipal me, Long requestedAcademyId,
+                                        LocalDate from, LocalDate to,
                                         ApprovalStatus status) {
-        Long academyId = academyOf(me);
+        Long academyId = me.requireAcademyScope(requestedAcademyId);
 
         List<AbsenceReason> reasons =
                 absenceReasonRepository.findByAcademyAndPeriod(academyId, from, to);
@@ -211,10 +214,17 @@ public class AbsenceReasonService {
                 .toList();
     }
 
-    /** 화면 상단 통계 5칸. */
+    /**
+     * 화면 상단 통계 5칸.
+     *
+     * @param requestedAcademyId 조회할 지점. <b>비우면 내 지점</b>이고,
+     *                           전 지점 권한자는 지정해야 한다
+     */
     @Transactional(readOnly = true)
-    public Map<String, Long> summary(AuthPrincipal me, LocalDate from, LocalDate to) {
-        List<AbsenceRequestRow> pending = list(me, from, to, ApprovalStatus.PENDING);
+    public Map<String, Long> summary(AuthPrincipal me, Long requestedAcademyId,
+                                     LocalDate from, LocalDate to) {
+        List<AbsenceRequestRow> pending =
+                list(me, requestedAcademyId, from, to, ApprovalStatus.PENDING);
 
         Map<String, Long> counts = new LinkedHashMap<>();
         counts.put("pending", (long) pending.size());
@@ -283,14 +293,6 @@ public class AbsenceReasonService {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
         return enrollment;
-    }
-
-    private Long academyOf(AuthPrincipal me) {
-        Long academyId = me.academyScopeFilter();
-        if (academyId == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        return academyId;
     }
 
     /**

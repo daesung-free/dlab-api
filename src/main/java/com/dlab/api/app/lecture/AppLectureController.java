@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 학생 앱 — 특강 목록 조회 · 신청 · 신청 내역 (A-15).
@@ -19,6 +20,7 @@ import java.util.List;
  * <p>목록은 <b>본인 지점·올해 것만</b> 나온다. 지점을 요청 파라미터로 받지 않는 이유는
  * 클라이언트가 값을 바꿔 보내는 것만으로 다른 지점 특강이 열리기 때문이다.
  */
+@Tag(name = "앱 · 특강 (A-15)")
 @RestController
 @RequestMapping("/api/v1/app/lectures")
 @RequiredArgsConstructor
@@ -26,13 +28,14 @@ public class AppLectureController {
 
     private final LectureService lectureService;
 
+    /** 신청할 수 있는 특강 목록 (A-15). 정원이 찬 것도 나오되 마감으로 표시된다. */
     @GetMapping
-    public ApiResponse<List<LectureResponse.Detail>> list(@CurrentAccount AuthPrincipal me) {
+    public ApiResponse<List<LectureResponse.LectureDetail>> list(@CurrentAccount AuthPrincipal me) {
         StudentEnrollment enrollment = lectureService.currentEnrollmentOf(me.accountId());
         return ApiResponse.success(
                 lectureService.findVisible(enrollment.getAcademy().getId(), enrollment.getYear())
                         .stream()
-                        .map(l -> LectureResponse.Detail.withHeadcount(
+                        .map(l -> LectureResponse.LectureDetail.withHeadcount(
                                 l, lectureService.headcount(l.getId())))
                         .toList());
     }

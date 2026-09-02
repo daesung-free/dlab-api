@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 지점 관리.
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <p>목록은 여러 화면(교시·공지·좌석·공휴일)이 "지점 고르기"에 쓴다.
  */
+@Tag(name = "관리자 · 지점")
 @RestController
 @RequestMapping("/api/v1/admin/academies")
 @RequiredArgsConstructor
@@ -36,7 +38,13 @@ public class AdminAcademyController {
 
     private final AcademyService academyService;
 
-    /** @param includeInactive 비활성 지점 포함. 기본은 활성만 — 셀렉트에 죽은 지점이 뜨면 안 된다 */
+    /**
+     * 지점 목록.
+     *
+     * <p>지점 관리자에게는 <b>자기 지점만</b> 보인다.
+     *
+     * @param includeInactive 비활성 지점 포함. 기본은 활성만 — 셀렉트에 죽은 지점이 뜨면 안 된다
+     */
     @GetMapping
     public ApiResponse<List<AcademyResponse>> list(
             @CurrentAccount AuthPrincipal me,
@@ -45,6 +53,7 @@ public class AdminAcademyController {
                 .map(AcademyResponse::from).toList());
     }
 
+    /** 지점 상세. <b>지점코드·연동코드는 수정 대상이 아니다</b> — 키오스크가 이 값으로 인증한다. */
     @GetMapping("/{academyId}")
     public ApiResponse<AcademyResponse> detail(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long academyId) {
@@ -59,7 +68,7 @@ public class AdminAcademyController {
     @PutMapping("/{academyId}")
     public ApiResponse<AcademyResponse> update(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long academyId,
-                                               @Valid @RequestBody UpdateRequest request) {
+                                               @Valid @RequestBody AcademyUpdateRequest request) {
         return ApiResponse.success(AcademyResponse.from(academyService.update(
                 me, academyId, request.acadNm(), request.fullNm(),
                 request.attendanceDeadline())));
@@ -79,7 +88,7 @@ public class AdminAcademyController {
     }
 
     /** @param attendanceDeadline 등원 기준 시각. 이 시각 이후 첫 태깅이 지각이다 */
-    public record UpdateRequest(
+    public record AcademyUpdateRequest(
             @NotBlank(message = "지점명은 필수입니다.") @Size(max = 100) String acadNm,
             @Size(max = 100) String fullNm,
             @NotNull(message = "등원 기준 시각은 필수입니다.")

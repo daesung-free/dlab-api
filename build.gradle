@@ -45,6 +45,12 @@ dependencies {
     // dlab-admin-web(openapi-typescript)·dlab-app(openapi-generator)이 여기서 타입을 뽑는다.
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.0'
 
+    // ★ javadoc을 그대로 API 문서 설명으로 끌어온다.
+    //   이 레포는 "왜 이렇게 했는가"를 javadoc에 적는 규칙이라, 컨트롤러 53개·엔드포인트
+    //   283개에 @Operation을 손으로 다시 쓰면 같은 설명이 두 벌이 되고 한쪽만 낡는다.
+    implementation 'com.github.therapi:therapi-runtime-javadoc:0.15.0'
+    annotationProcessor 'com.github.therapi:therapi-runtime-javadoc-scribe:0.15.0'
+
     // 엑셀 Import/Export. 학생 일괄 등록(P1-02)·명단 출력(F-4.9)이 여기 의존한다.
     implementation 'org.apache.poi:poi-ooxml:5.4.1'
 

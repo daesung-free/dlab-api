@@ -22,7 +22,7 @@ public final class SeatLeaveRequests {
      */
     public record Ingest(
             @NotNull String token,
-            @NotEmpty @Size(max = 500) @Valid List<Event> events) {
+            @NotEmpty @Size(max = 500) @Valid List<SeatLeaveEvent> events) {
 
         public List<SeatLeaveIngestService.Event> toEvents() {
             return events.stream()
@@ -39,7 +39,7 @@ public final class SeatLeaveRequests {
      * @param occurredAt  발생 시각. 받은 시각이 아니라 <b>실제 이탈·복귀 시각</b>이어야
      *                    미복귀 판정이 맞는다
      */
-    public record Event(
+    public record SeatLeaveEvent(
             @NotNull Long sourceRowId,
             @Size(max = 50) String rfidNo,
             @Size(max = 20) String studentNo,

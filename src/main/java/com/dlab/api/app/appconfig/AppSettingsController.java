@@ -10,12 +10,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 설정 — 약관 동의 · 알림 수신 · 푸시 토큰 (A-21).
  *
  * <p>비밀번호 변경·로그아웃은 {@code /api/v1/app/auth}에 이미 있다.
  */
+@Tag(name = "앱 · 설정 — 약관·알림·푸시 (A-21)")
 @RestController
 @RequestMapping("/api/v1/app/settings")
 @RequiredArgsConstructor
@@ -44,6 +46,12 @@ public class AppSettingsController {
 
     // ── 알림 수신 ────────────────────────────────────────────────
 
+    /**
+     * 알림 수신 설정 (A-21).
+     *
+     * <p><b>행이 없으면 수신</b>이다. 유형이 추가될 때마다 기존 계정에 행을 채워 넣는 방식은,
+     * 한 번 빠뜨리면 새 알림이 아무에게도 안 간다.
+     */
     @GetMapping("/notifications")
     public ApiResponse<List<SettingsResponse.Preference>> notifications(
             @CurrentAccount AuthPrincipal me) {
@@ -51,6 +59,11 @@ public class AppSettingsController {
                 .map(SettingsResponse.Preference::from).toList());
     }
 
+    /**
+     * 유형별 수신 on/off.
+     *
+     * <p><b>필수 알림은 끌 수 없다</b> — 미등원처럼 안전에 걸리는 것은 거부된다.
+     */
     @PutMapping("/notifications/{event}")
     public ApiResponse<Void> changeNotification(
             @CurrentAccount AuthPrincipal me,

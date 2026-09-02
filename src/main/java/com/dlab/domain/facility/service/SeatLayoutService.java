@@ -166,14 +166,7 @@ public class SeatLayoutService {
     }
 
     private Long requireAcademyAccess(AuthPrincipal me, Long academyId) {
-        Long resolved = academyId != null ? academyId : me.academyScopeFilter();
-        if (resolved == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        if (!me.canAccessAcademy(resolved)) {
-            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
-        }
-        return resolved;
+        return me.requireAcademyScope(academyId);
     }
 
     /** @param seatCount 구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다 */

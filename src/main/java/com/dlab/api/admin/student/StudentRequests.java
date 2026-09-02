@@ -28,7 +28,7 @@ public final class StudentRequests {
      * <p>학번은 여기 없다 — 서버가 채번하고 유니크 제약으로 지키는 값이라 임의 수정을 열면
      * 중복·건너뜀이 생긴다.
      */
-    public record Update(
+    public record StudentUpdate(
             @Size(max = 20) String name,
             @Size(max = 20) String phone,
             LocalDate birthDate,
@@ -45,7 +45,7 @@ public final class StudentRequests {
      *
      * <p>사유는 필수가 아니지만 <b>제적처럼 다툼이 생길 수 있는 전이</b>에는 남겨야 한다.
      */
-    public record ChangeStatus(
+    public record StudentChangeStatus(
             @NotNull(message = "변경할 상태는 필수입니다.") EnrollmentStatus status,
             @Size(max = 200) String reason) {
     }

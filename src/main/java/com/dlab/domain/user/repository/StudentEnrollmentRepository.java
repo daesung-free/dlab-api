@@ -49,13 +49,31 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
      *
      * <p>학번 형식이 {@code yyyy-NNNN}이라 뒤 4자리만 잘라 숫자로 본다.
      * 행이 없으면 0 — 그 해 첫 학생이다.
+     *
+     * <p>★ <b>직원은 뺀다.</b> 직원 학번이 9000번대라 같이 세면 다음 학생이
+     * {@code 0011}이 아니라 {@code 9004}가 되어 대역을 나눈 의미가 사라진다.
      */
     @Query(value = """
             SELECT COALESCE(MAX(CAST(SPLIT_PART(student_no, '-', 2) AS INTEGER)), 0)
             FROM student_enrollment
             WHERE academy_id = :academyId AND year = :year AND student_no IS NOT NULL
+              AND grade <> 'STAFF'
             """, nativeQuery = true)
     int findMaxSequence(Long academyId, short year);
+
+    /**
+     * 직원 학번의 다음 일련번호.
+     *
+     * <p><b>대역을 나눈다</b>({@code 9000}번대) — 키오스크가 4자리 학번 키패드를 쓰는데
+     * 학생과 번호가 섞이면 번호만 보고 직원인지 알 수 없다. 운영에서 눈으로 구분된다.
+     */
+    @Query(value = """
+            SELECT COALESCE(MAX(CAST(SPLIT_PART(student_no, '-', 2) AS INTEGER)), :floor)
+            FROM student_enrollment
+            WHERE academy_id = :academyId AND year = :year
+              AND grade = 'STAFF' AND student_no IS NOT NULL
+            """, nativeQuery = true)
+    int findMaxStaffSequence(Long academyId, short year, int floor);
 
     /**
      * 학생(사람)의 현재 유효한 등록 건.
@@ -75,6 +93,7 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
             JOIN FETCH e.student
             WHERE e.academy.id = :academyId AND e.year = :year
               AND e.current = true AND e.deleted = false
+              AND e.grade <> com.dlab.domain.user.entity.GradeType.STAFF
             ORDER BY e.studentNo
             """)
     List<StudentEnrollment> findCurrentByAcademyAndYear(Long academyId, short year);
@@ -112,7 +131,37 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
             WHERE e.academy.id = :academyId
               AND e.current = true
               AND e.deleted = false
+              AND e.grade <> com.dlab.domain.user.entity.GradeType.STAFF
             ORDER BY e.studentNo ASC
             """)
     List<StudentEnrollment> findCurrentByAcademyId(Long academyId);
+
+    /**
+     * ★ <b>직원까지 포함한 전체.</b> 키오스크 동기화 전용이다.
+     *
+     * <p>직원도 카드를 인식해야 출퇴근을 찍으므로 {@code getStdInfoList}에는 같이 나가야 한다.
+     * <b>이 메서드를 다른 곳에서 쓰면 직원이 학생 통계·배치에 섞인다</b> —
+     * 기본 조회({@link #findCurrentByAcademyId})가 학생만 반환하는 이유가 그것이다.
+     */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            WHERE e.academy.id = :academyId
+              AND e.current = true
+              AND e.deleted = false
+            ORDER BY e.studentNo ASC
+            """)
+    List<StudentEnrollment> findCurrentIncludingStaff(Long academyId);
+
+    /** 직원만. 관리자 직원 목록 화면이 쓴다. */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            WHERE e.academy.id = :academyId
+              AND e.current = true
+              AND e.deleted = false
+              AND e.grade = com.dlab.domain.user.entity.GradeType.STAFF
+            ORDER BY e.studentNo ASC
+            """)
+    List<StudentEnrollment> findCurrentStaff(Long academyId);
 }

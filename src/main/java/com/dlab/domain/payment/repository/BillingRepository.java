@@ -24,6 +24,24 @@ public interface BillingRepository extends JpaRepository<Billing, Long> {
             """)
     List<Billing> findByEnrollment(@Param("enrollmentId") Long enrollmentId);
 
+    /**
+     * 그 학생의 그 달 교습비 청구가 이미 있는가.
+     *
+     * <p><b>중복 발행을 막는다.</b> 데스크가 두 번 누르거나 입학 처리를 다시 태우면
+     * 같은 달 청구가 두 건 생기고, 그러면 미납액이 두 배로 잡힌 채 독촉이 나간다.
+     * 취소된 건은 다시 발행해야 하므로 뺀다.
+     */
+    @Query("""
+            SELECT COUNT(b) > 0 FROM Billing b
+            WHERE b.enrollment.id = :enrollmentId
+              AND b.serviceYear = :year AND b.serviceMonth = :month
+              AND b.billingType = com.dlab.domain.payment.entity.BillingType.TUITION
+              AND b.status <> com.dlab.domain.payment.entity.BillingStatus.CANCELLED
+              AND b.deleted = false
+            """)
+    boolean existsTuitionFor(@Param("enrollmentId") Long enrollmentId,
+                             @Param("year") Short year, @Param("month") Short month);
+
     /** 지점·연도 청구 전체. 수납현황·미납자 추출이 쓴다. */
     @Query("""
             SELECT b FROM Billing b
@@ -34,4 +52,37 @@ public interface BillingRepository extends JpaRepository<Billing, Long> {
             """)
     List<Billing> findByAcademyAndYear(@Param("academyId") Long academyId,
                                        @Param("year") short year);
+
+    /**
+     * 수납현황 — 지점·연도의 청구를 <b>수납 합계와 함께</b> 가져온다 (F-4.8-1).
+     *
+     * <p>미납액은 {@code billedAmount − 수납합계}인데, 엔티티의 {@code unpaidAmount()}는
+     * 거래를 메모리에서 훑는다. <b>지점 전체를 그렇게 하면 청구 수만큼 거래를 다 끌어온다</b> —
+     * 여기서는 DB가 합계를 내게 한다.
+     *
+     * <p>취소된 거래는 빼고 센다. 납부기한이 없는 청구도 있으므로 기간 필터는
+     * <b>기한이 있는 건에만</b> 걸린다 — 안 그러면 기한 없는 청구가 통째로 사라진다.
+     *
+     * <p>⚠️ {@code from}·{@code to}에 {@code null}을 넘기지 말 것.
+     * PostgreSQL이 {@code :param IS NULL}만 보고는 타입을 추론하지 못해
+     * <b>"could not determine data type"</b>으로 깨진다 — 호출자가 넓은 기본값을 넣는다.
+     */
+    @Query("""
+            SELECT b, COALESCE(SUM(CASE WHEN tx.canceledAt IS NULL AND tx.deleted = false
+                                        THEN tx.amount ELSE 0 END), 0)
+            FROM Billing b
+            JOIN FETCH b.enrollment e
+            JOIN FETCH e.student
+            LEFT JOIN b.transactions tx
+            WHERE b.academy.id = :academyId AND b.year = :year
+              AND b.status <> com.dlab.domain.payment.entity.BillingStatus.CANCELLED
+              AND b.deleted = false
+              AND (b.dueDate IS NULL OR (b.dueDate >= :from AND b.dueDate <= :to))
+            GROUP BY b, e, e.student
+            ORDER BY b.dueDate ASC NULLS LAST, b.id ASC
+            """)
+    List<Object[]> findWithReceived(@Param("academyId") Long academyId,
+                                    @Param("year") short year,
+                                    @Param("from") java.time.LocalDate from,
+                                    @Param("to") java.time.LocalDate to);
 }

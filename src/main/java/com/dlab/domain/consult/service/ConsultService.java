@@ -104,9 +104,10 @@ public class ConsultService {
     }
 
     @Transactional(readOnly = true)
-    public List<ConsultLog> findByPeriod(AuthPrincipal me, LocalDate from, LocalDate to,
+    public List<ConsultLog> findByPeriod(AuthPrincipal me, Long requestedAcademyId,
+                                         LocalDate from, LocalDate to,
                                          Long teacherId) {
-        Long academyId = academyOf(me);
+        Long academyId = me.requireAcademyScope(requestedAcademyId);
         short year = (short) from.getYear();
 
         return logRepository.findByPeriod(academyId, year, from, to).stream()
@@ -128,8 +129,9 @@ public class ConsultService {
      * 없는 사실을 만들어낸다.
      */
     @Transactional(readOnly = true)
-    public List<ConsultStatusRow> status(AuthPrincipal me, Long teacherId) {
-        Long academyId = academyOf(me);
+    public List<ConsultStatusRow> status(AuthPrincipal me, Long requestedAcademyId,
+                                        Long teacherId) {
+        Long academyId = me.requireAcademyScope(requestedAcademyId);
         List<StudentEnrollment> targets = enrollmentRepository.findCurrentByAcademyId(academyId)
                 .stream()
                 .filter(e -> e.getEnrollmentStatus() == EnrollmentStatus.ENROLLED)
@@ -208,17 +210,18 @@ public class ConsultService {
     // ── 태그 마스터 ────────────────────────────────────────────
 
     @Transactional(readOnly = true)
-    public List<ConsultTag> tags(AuthPrincipal me, short year, boolean includeInactive) {
-        Long academyId = academyOf(me);
+    public List<ConsultTag> tags(AuthPrincipal me, Long requestedAcademyId, short year,
+                                 boolean includeInactive) {
+        Long academyId = me.requireAcademyScope(requestedAcademyId);
         return includeInactive
                 ? tagRepository.findAll(academyId, year)
                 : tagRepository.findActive(academyId, year);
     }
 
     @Transactional
-    public ConsultTag createTag(AuthPrincipal me, short year, ConsultType type,
-                                String name, short sortOrder) {
-        var academy = academyRepository.findById(academyOf(me))
+    public ConsultTag createTag(AuthPrincipal me, Long requestedAcademyId, short year,
+                                ConsultType type, String name, short sortOrder) {
+        var academy = academyRepository.findById(me.requireAcademyScope(requestedAcademyId))
                 .filter(a -> !a.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
         return tagRepository.save(new ConsultTag(academy, year, type, name, sortOrder));
@@ -288,14 +291,6 @@ public class ConsultService {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
         return enrollment;
-    }
-
-    private Long academyOf(AuthPrincipal me) {
-        Long academyId = me.academyScopeFilter();
-        if (academyId == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        return academyId;
     }
 
     /**

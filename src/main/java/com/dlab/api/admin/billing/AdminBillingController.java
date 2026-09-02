@@ -19,16 +19,20 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 청구·수납 (F-4.8-1) — <b>최소분</b>.
  *
  * <p>키오스크 {@code getReceiptInfo}(3.29)에 내릴 데이터를 만드는 데 필요한 만큼이다.
- * 수납현황 화면(통계·미납자 알림·엑셀)과 청구기준 관리(F-4.10-5)는 블로커 대기 —
- * <b>E-3</b>(PG 스펙) · <b>I-25</b>(현금영수증) · <b>I-26</b>(환불 일할계산) · 할인 정책.
+ *
+ * <p><b>수납현황·미납자는 {@code AdminReceiptStatusController}로 옮겼다</b>(2026-08-27) —
+ * I-26(환불 산식)이 풀리고 청구를 만드는 경로가 생기면서 막혀 있던 게 해소됐다.
+ * 남은 블로커는 <b>E-3</b>(PG 스펙) · <b>I-25</b>(현금영수증) · 청구기준 관리(F-4.10-5)다.
  *
  * <p>수납은 <b>수기 기록</b>이다. PG 연동은 없다.
  */
+@Tag(name = "관리자 · 청구·수납 (F-4.8)")
 @RestController
 @RequestMapping("/api/v1/admin/billings")
 @RequiredArgsConstructor
@@ -37,6 +41,7 @@ public class AdminBillingController {
 
     private final BillingService billingService;
 
+    /** 지점·연도 청구 목록. 미납자 추출은 {@code /admin/receipt-status}가 담당한다. */
     @GetMapping
     public ApiResponse<List<BillingResponse>> list(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Long academyId,
@@ -45,6 +50,7 @@ public class AdminBillingController {
                 .map(BillingResponse::from).toList());
     }
 
+    /** 그 학생의 청구 전체. <b>완납 건도 내린다</b> — 미납만 주면 "낸 것"이 화면에서 사라진다. */
     @GetMapping("/students/{enrollmentId}")
     public ApiResponse<List<BillingResponse>> byStudent(@CurrentAccount AuthPrincipal me,
                                                         @PathVariable Long enrollmentId) {
@@ -79,6 +85,12 @@ public class AdminBillingController {
         return ApiResponse.empty();
     }
 
+    /**
+     * 청구 취소.
+     *
+     * <p>환불 산출은 하지 않는다 — 퇴원 정산은 {@code RefundCalculator}가
+     * 구간·일할로 따로 계산한다.
+     */
     @DeleteMapping("/{billingId}")
     public ApiResponse<Void> cancel(@CurrentAccount AuthPrincipal me,
                                     @PathVariable Long billingId) {

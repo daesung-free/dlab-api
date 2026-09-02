@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 앱 버전·점검 모드·약관 관리 (F-4.12-3).
@@ -19,6 +20,7 @@ import java.util.List;
  * <p><b>전 지점 공통 설정이라 최상위 관리자만 만진다.</b> 지점 관리자가 점검 모드를 켜면
  * 다른 지점 앱까지 전부 멈춘다 — 공휴일 등록에서 전 지점 공통을 본사만 넣게 한 것과 같은 이유다.
  */
+@Tag(name = "관리자 · 앱 설정·약관 (F-4.12-3)")
 @RestController
 @RequestMapping("/api/v1/admin/app-config")
 @RequiredArgsConstructor
@@ -28,18 +30,19 @@ public class AdminAppConfigController {
     private final AppConfigService appConfigService;
     private final TermsService termsService;
 
+    /** 앱 설정 목록(최소 지원 버전·점검 모드). 앱이 부팅할 때 첫 번째로 읽는 값이다. */
     @GetMapping
-    public ApiResponse<List<AppConfigResponse.Detail>> list() {
+    public ApiResponse<List<AppConfigResponse.AppConfigDetail>> list() {
         return ApiResponse.success(appConfigService.findAll().stream()
-                .map(AppConfigResponse.Detail::from).toList());
+                .map(AppConfigResponse.AppConfigDetail::from).toList());
     }
 
     /** 버전 설정. {@code null} 필드는 "변경하지 않음"이다. */
     @PatchMapping("/{platform}/versions")
-    public ApiResponse<AppConfigResponse.Detail> updateVersions(
+    public ApiResponse<AppConfigResponse.AppConfigDetail> updateVersions(
             @PathVariable Platform platform,
             @Valid @RequestBody AdminAppConfigRequests.UpdateVersions request) {
-        return ApiResponse.success(AppConfigResponse.Detail.from(
+        return ApiResponse.success(AppConfigResponse.AppConfigDetail.from(
                 appConfigService.updateVersions(platform, request.minVersion(), request.latestVersion())));
     }
 
@@ -49,16 +52,23 @@ public class AdminAppConfigController {
      * <p>⚠️ <b>켜는 순간 그 플랫폼 전 사용자가 앱을 못 쓴다.</b>
      */
     @PutMapping("/{platform}/maintenance")
-    public ApiResponse<AppConfigResponse.Detail> changeMaintenance(
+    public ApiResponse<AppConfigResponse.AppConfigDetail> changeMaintenance(
             @PathVariable Platform platform,
             @Valid @RequestBody AdminAppConfigRequests.ChangeMaintenance request) {
-        return ApiResponse.success(AppConfigResponse.Detail.from(appConfigService.changeMaintenance(
+        return ApiResponse.success(AppConfigResponse.AppConfigDetail.from(appConfigService.changeMaintenance(
                 platform, request.maintenance(), request.message(), request.until())));
     }
 
     // ── 약관 ─────────────────────────────────────────────────────
 
-    /** @param academyId 지정하면 그 지점 전용 약관까지 본다. 비우면 공통본만 */
+    /**
+     * 약관 목록.
+     *
+     * <p>문구를 고치는 게 아니라 <b>버전을 올려 새 행을 추가한다</b> — 덮어쓰면
+     * 이미 동의한 사람들의 근거가 사라진다.
+     *
+     * @param academyId 지정하면 그 지점 전용 약관까지 본다. 비우면 공통본만
+     */
     @GetMapping("/terms")
     public ApiResponse<List<AdminTermsResponse>> terms(
             @RequestParam(required = false) Long academyId) {

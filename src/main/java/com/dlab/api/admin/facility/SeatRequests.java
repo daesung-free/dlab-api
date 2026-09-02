@@ -7,7 +7,7 @@ public final class SeatRequests {
     private SeatRequests() {
     }
 
-    public record Assign(
+    public record SeatAssign(
             @NotNull(message = "좌석은 필수입니다.") Long seatId,
             @NotNull(message = "등록 건은 필수입니다.") Long enrollmentId) {
     }

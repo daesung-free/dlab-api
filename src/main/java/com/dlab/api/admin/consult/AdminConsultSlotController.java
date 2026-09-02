@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 상담 가능 일정 관리 (F-4.11-4).
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
  * <p><b>개설과 노출이 두 단계다.</b> 만들면 꺼진 상태이고, 명시적으로 켜야 학생에게 보인다 —
  * 일정을 짜는 중간 상태가 그대로 노출되지 않게 한다.
  */
+@Tag(name = "관리자 · 상담 가능 일정 (F-4.11-4)")
 @RestController
 @RequestMapping("/api/v1/admin/consults/slots")
 @RequiredArgsConstructor
@@ -39,7 +41,7 @@ public class AdminConsultSlotController {
 
     /** 내 일정 + 예약자 명단. 노출 전 슬롯도 나온다. @param from/to 비우면 오늘부터 2주 */
     @GetMapping
-    public ApiResponse<List<ConsultResponse.Slot>> mySlots(
+    public ApiResponse<List<ConsultResponse.ConsultSlotView>> mySlots(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -51,48 +53,49 @@ public class AdminConsultSlotController {
         LocalDate end = to == null ? start.plusWeeks(2) : to;
 
         return ApiResponse.success(consultService.mySlots(teacher, start, end)
-                .stream().map(ConsultResponse.Slot::from).toList());
+                .stream().map(ConsultResponse.ConsultSlotView::from).toList());
     }
 
     /** 일괄 개설. 이미 있는 시각은 건너뛴다 — 오전을 연 뒤 오후를 추가하는 흐름이 있다. */
     @PostMapping
-    public ApiResponse<List<ConsultResponse.Slot>> open(
+    public ApiResponse<List<ConsultResponse.ConsultSlotView>> open(
             @CurrentAccount AuthPrincipal me,
             @RequestParam short year,
-            @Valid @RequestBody ConsultRequests.OpenSlots request) {
+            @Valid @RequestBody ConsultRequests.ConsultOpenSlots request) {
 
         Teacher teacher = consultService.requireTeacher(me.accountId());
         return ApiResponse.success(consultService.openSlots(teacher, year, request.date(),
                         request.from(), request.to(), request.intervalMinutes(),
                         request.capacity(), request.place())
                 .stream()
-                .map(slot -> ConsultResponse.Slot.from(
+                .map(slot -> ConsultResponse.ConsultSlotView.from(
                         new ConsultReservationService.SlotView(slot, 0, List.of())))
                 .toList());
     }
 
     /** 노출 켜기/끄기. 내려도 이미 잡힌 예약은 유효하다. */
     @PatchMapping("/{slotId}/publish")
-    public ApiResponse<ConsultResponse.Slot> publish(
+    public ApiResponse<ConsultResponse.ConsultSlotView> publish(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long slotId,
             @Valid @RequestBody ConsultRequests.Publish request) {
 
         Teacher teacher = consultService.requireTeacher(me.accountId());
-        return ApiResponse.success(ConsultResponse.Slot.from(
+        return ApiResponse.success(ConsultResponse.ConsultSlotView.from(
                 new ConsultReservationService.SlotView(
                         consultService.changePublished(slotId, teacher, request.published()),
                         0, List.of())));
     }
 
+    /** 상담 가능 일정 수정. <b>이미 예약된 인원보다 적은 정원으로는 줄일 수 없다.</b> */
     @PatchMapping("/{slotId}")
-    public ApiResponse<ConsultResponse.Slot> update(
+    public ApiResponse<ConsultResponse.ConsultSlotView> update(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long slotId,
             @Valid @RequestBody ConsultRequests.UpdateSlot request) {
 
         Teacher teacher = consultService.requireTeacher(me.accountId());
-        return ApiResponse.success(ConsultResponse.Slot.from(
+        return ApiResponse.success(ConsultResponse.ConsultSlotView.from(
                 new ConsultReservationService.SlotView(
                         consultService.update(slotId, teacher, request.place(), request.memo()),
                         0, List.of())));

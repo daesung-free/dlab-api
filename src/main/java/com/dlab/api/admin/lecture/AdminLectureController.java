@@ -11,12 +11,14 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 특강 기초 설정 · 명단 · 출석부 (F-4.10-4 · F-4.7).
  *
  * <p>결제는 붙어 있지 않다 — 0803 답변서가 *"신청+결제 검토 중"*이고 {@code payment} 도메인이 없다.
  */
+@Tag(name = "관리자 · 특강 (F-4.7)")
 @RestController
 @RequestMapping("/api/v1/admin/lectures")
 @RequiredArgsConstructor
@@ -27,60 +29,70 @@ public class AdminLectureController {
 
     // ── 기초 설정 (F-4.10-4) ─────────────────────────────────────
 
+    /** 특강 목록. 지점·연도 범위가 걸린다. */
     @GetMapping
-    public ApiResponse<List<LectureResponse.Detail>> list(
+    public ApiResponse<List<LectureResponse.LectureDetail>> list(
             @CurrentAccount AuthPrincipal me,
             @RequestParam Long academyId,
             @RequestParam Integer year,
             @RequestParam(required = false) LectureStatus status) {
         return ApiResponse.success(
                 lectureService.findAll(academyId, year.shortValue(), status, me).stream()
-                        .map(l -> LectureResponse.Detail.withHeadcount(
+                        .map(l -> LectureResponse.LectureDetail.withHeadcount(
                                 l, lectureService.headcount(l.getId())))
                         .toList());
     }
 
+    /** 특강 등록. 회차는 따로 추가한다 — 회차 없는 특강은 신청을 받을 수 없다. */
     @PostMapping
-    public ApiResponse<LectureResponse.Detail> create(
+    public ApiResponse<LectureResponse.LectureDetail> create(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody LectureRequests.Create request) {
-        return ApiResponse.success(LectureResponse.Detail.from(lectureService.create(
+            @Valid @RequestBody LectureRequests.LectureCreate request) {
+        return ApiResponse.success(LectureResponse.LectureDetail.from(lectureService.create(
                 request.academyId(), request.year().shortValue(),
                 request.lectureType(), request.name(), me)));
     }
 
+    /** 특강 수정. 비운 항목은 변경하지 않는다. */
     @PatchMapping("/{lectureId}")
-    public ApiResponse<LectureResponse.Detail> update(
+    public ApiResponse<LectureResponse.LectureDetail> update(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long lectureId,
-            @Valid @RequestBody LectureRequests.Update request) {
-        return ApiResponse.success(LectureResponse.Detail.from(lectureService.update(
+            @Valid @RequestBody LectureRequests.LectureUpdate request) {
+        return ApiResponse.success(LectureResponse.LectureDetail.from(lectureService.update(
                 lectureId, request.name(), request.description(), request.capacity(),
                 request.applyFrom(), request.applyTo(), request.startDate(), request.endDate(),
                 request.fee(), me)));
     }
 
+    /**
+     * 접수 상태 변경.
+     *
+     * <p>닫으면 앱에서 신청이 막힌다. <b>이미 신청한 건은 그대로 남는다</b> —
+     * 상태는 "지금 받는가"이지 "누가 신청했는가"가 아니다.
+     */
     @PutMapping("/{lectureId}/status")
-    public ApiResponse<LectureResponse.Detail> changeStatus(
+    public ApiResponse<LectureResponse.LectureDetail> changeStatus(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long lectureId,
-            @Valid @RequestBody LectureRequests.ChangeStatus request) {
-        return ApiResponse.success(LectureResponse.Detail.from(
+            @Valid @RequestBody LectureRequests.LectureChangeStatus request) {
+        return ApiResponse.success(LectureResponse.LectureDetail.from(
                 lectureService.changeStatus(lectureId, request.status(), me)));
     }
 
     /** 앱 노출 전환 (0803 "개설 시에만 노출"). 상태와 별개 축이다. */
     @PutMapping("/{lectureId}/visible")
-    public ApiResponse<LectureResponse.Detail> changeVisible(
+    public ApiResponse<LectureResponse.LectureDetail> changeVisible(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long lectureId,
             @Valid @RequestBody LectureRequests.ChangeVisible request) {
-        return ApiResponse.success(LectureResponse.Detail.from(
+        return ApiResponse.success(LectureResponse.LectureDetail.from(
                 lectureService.changeVisible(lectureId, request.visible(), me)));
     }
 
     // ── 회차 ─────────────────────────────────────────────────────
 
+    /** 회차 목록. */
     @GetMapping("/{lectureId}/sessions")
     public ApiResponse<List<LectureResponse.Session>> sessions(
             @CurrentAccount AuthPrincipal me, @PathVariable Long lectureId) {
@@ -88,6 +100,7 @@ public class AdminLectureController {
                 .map(LectureResponse.Session::from).toList());
     }
 
+    /** 회차 추가. 출석부가 회차 단위로 만들어진다. */
     @PostMapping("/{lectureId}/sessions")
     public ApiResponse<LectureResponse.Session> addSession(
             @CurrentAccount AuthPrincipal me,
@@ -133,6 +146,7 @@ public class AdminLectureController {
                 .map(LectureResponse.RosterRow::from).toList());
     }
 
+    /** 회차 출석부. */
     @GetMapping("/sessions/{sessionId}/attendances")
     public ApiResponse<List<LectureResponse.Attendance>> attendances(@PathVariable Long sessionId) {
         return ApiResponse.success(lectureService.attendances(sessionId).stream()

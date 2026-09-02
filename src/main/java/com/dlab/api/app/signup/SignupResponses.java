@@ -18,4 +18,26 @@ public final class SignupResponses {
      */
     public record SignupResult(String loginId) {
     }
+
+    /**
+     * 학생 가입 결과.
+     *
+     * <p>{@code uniqueCode}는 <b>승인 대기 중에도</b> 내려준다. 학부모가 이 값으로
+     * 연결하는데, 학생 승인까지 기다리게 하면 학부모 가입이 같이 막힌다.
+     * 여기서만 내려주는 이유는 {@link #SignupResult} 참고 — 무인증 조회 API로 열면
+     * 전화번호만 넣어보는 것으로 남의 고유ID를 얻을 수 있다.
+     *
+     * @param pendingApproval 항상 {@code true}. 학생은 승인 전 로그인 자체가 거부되므로
+     *                        앱이 곧바로 "승인 대기" 안내를 띄워야 한다
+     */
+    public record StudentSignupResult(String loginId, String uniqueCode, boolean pendingApproval) {
+    }
+
+    /** 가입 화면의 지점 선택지. 운영정보는 싣지 않는다 — 무인증으로 열리는 목록이다. */
+    public record AcademyOption(Long academyId, String name) {
+
+        public static AcademyOption from(com.dlab.domain.user.entity.Academy academy) {
+            return new AcademyOption(academy.getId(), academy.getAcadNm());
+        }
+    }
 }

@@ -11,6 +11,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 반 관리.
@@ -21,6 +22,7 @@ import java.util.List;
  * <p>지점 스코프는 {@link SearchScope}가 인증 주체에서 뽑는다 — 요청 파라미터로 받으면
  * 값을 바꿔 보내는 것만으로 다른 지점 데이터가 새어나간다.
  */
+@Tag(name = "관리자 · 반 관리")
 @RestController
 @RequestMapping("/api/v1/admin/classes")
 @RequiredArgsConstructor
@@ -29,6 +31,7 @@ public class AdminClassController {
 
     private final ClassService classService;
 
+    /** 반 목록. */
     @GetMapping
     public ApiResponse<List<ClassResponse>> search(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Integer year) {
@@ -37,6 +40,7 @@ public class AdminClassController {
                 .toList());
     }
 
+    /** 그 반 학생 명단. */
     @GetMapping("/{classId}/students")
     public ApiResponse<List<ClassResponse.Member>> students(@CurrentAccount AuthPrincipal me,
                                                             @PathVariable Long classId) {
@@ -45,9 +49,10 @@ public class AdminClassController {
                 .toList());
     }
 
+    /** 반 생성. */
     @PostMapping
     public ApiResponse<ClassResponse> create(@CurrentAccount AuthPrincipal me,
-                                             @Valid @RequestBody ClassRequests.Create request) {
+                                             @Valid @RequestBody ClassRequests.ClassCreate request) {
         return ApiResponse.success(ClassResponse.from(classService.create(
                 request.academyId(), request.year().shortValue(), request.name(),
                 request.classType(), request.homeroomTeacherId(), me)));

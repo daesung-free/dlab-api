@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 교시·시간 편집 (F-4.10-1).
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>이 마스터를 출결 판정·순공시간·학습계획이 함께 쓴다. 그래서 겹치는 교시를 만들 수 없고,
  * 마지막 하나를 지울 수 없다 — 교시가 0개인 날은 "운영일 아님"이 돼 태깅이 전원 거부된다.
  */
+@Tag(name = "관리자 · 교시 (F-4.10-1)")
 @RestController
 @RequestMapping("/api/v1/admin/periods")
 @RequiredArgsConstructor
@@ -62,6 +64,12 @@ public class AdminPeriodController {
         return ApiResponse.success(periods.stream().map(PeriodResponse::from).toList());
     }
 
+    /**
+     * 교시 등록.
+     *
+     * <p>시간이 겹치면 거부된다 — 한 시각이 두 교시에 걸리면
+     * <b>출결 판정과 순공시간이 흔들린다.</b>
+     */
     @PostMapping
     public ApiResponse<PeriodResponse> create(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody PeriodRequest request) {
@@ -83,6 +91,12 @@ public class AdminPeriodController {
                 request.planable(), request.mandatory())));
     }
 
+    /**
+     * 교시 삭제.
+     *
+     * <p><b>마지막 교시는 지울 수 없다</b> — 교시가 하나도 없는 날은 "운영일 아님"이 돼서
+     * 그날 태깅이 전부 거부된다.
+     */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me, @PathVariable Long id) {
         periodService.delete(me, id);

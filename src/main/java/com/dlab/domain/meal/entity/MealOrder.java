@@ -68,11 +68,44 @@ public class MealOrder extends BaseEntity {
     }
 
     public void addItem(LocalDate mealDate, MealType mealType) {
-        items.add(new MealOrderItem(this, mealDate, mealType));
+        addItem(mealDate, mealType, null);
+    }
+
+    /**
+     * @param unitPrice <b>신청 시점 단가 스냅샷</b>. 나중에 마스터를 다시 읽어 계산하면
+     *                  단가 인상이 과거 주문에 소급된다({@link MealOrderItem#getUnitPrice()})
+     */
+    public void addItem(LocalDate mealDate, MealType mealType, Integer unitPrice) {
+        items.add(new MealOrderItem(this, mealDate, mealType, unitPrice));
+    }
+
+    /**
+     * 살아 있는 항목의 금액 합계.
+     *
+     * <p>주문에 총액 컬럼을 두지 않는 이유는 청구와 같다 — 취소가 항목 단위로 들어오는데
+     * 컬럼으로 두면 항목 합계와 어긋났을 때 <b>어느 쪽이 맞는지 알 수 없다.</b>
+     */
+    public int totalAmount() {
+        return activeItems().stream().mapToInt(MealOrderItem::amount).sum();
     }
 
     public YearMonth month() {
         return YearMonth.from(targetMonth);
+    }
+
+    /**
+     * 화면·문의 응대용 <b>표시 주문번호</b> — {@code M2609-000123}.
+     *
+     * <p>컬럼을 새로 두지 않고 <b>대상월 + id로 만든다.</b> 별도 채번 컬럼을 두면
+     * 유니크 제약·재시도가 따라붙는데, 급식 주문은 이미 {@code id}가 유일하므로
+     * 얻는 게 "보기 좋은 문자열" 하나뿐이다. 이 형식은 <b>역산이 되므로</b>
+     * 학부모가 불러준 번호로 주문을 그대로 찾을 수 있다(뒤 6자리가 {@code id}).
+     *
+     * <p>id가 7자리를 넘으면 자리수가 늘어난다 — 자르지 않는다. 자르면 번호가 겹친다.
+     */
+    public String orderNo() {
+        return "M%02d%02d-%06d".formatted(
+                targetMonth.getYear() % 100, targetMonth.getMonthValue(), id);
     }
 
     /** 살아 있는(취소 안 된) 항목. */
@@ -90,5 +123,38 @@ public class MealOrder extends BaseEntity {
         if (activeItems().isEmpty() && status != MealOrderStatus.CANCELLED) {
             this.status = MealOrderStatus.CANCELLED;
         }
+    }
+
+    /**
+     * 발행된 청구.
+     *
+     * <p><b>발행 후 취소</b> 때문에 연결해 둔다. 급식은 날짜·끼니 단위로 취소되는데,
+     * 청구를 낸 뒤 취소되면 <b>청구액과 실제 이용액이 어긋난다.</b> 그 차액이 곧
+     * 환불 대상이고, 연결이 없으면 되짚을 방법이 없다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "billing_id")
+    private com.dlab.domain.payment.entity.Billing billing;
+
+    public void assignBilling(com.dlab.domain.payment.entity.Billing billing) {
+        this.billing = billing;
+        this.status = MealOrderStatus.ISSUED;
+    }
+
+    public boolean isBilled() {
+        return billing != null;
+    }
+
+    /**
+     * 발행 후 취소된 만큼의 <b>환불 대상 금액</b>.
+     *
+     * <p>청구액에서 지금 살아 있는 금액을 뺀다. 청구 전이면 0이다 —
+     * 아직 받은 돈이 없으니 돌려줄 것도 없다.
+     *
+     * <p>⚠️ <b>실제 환불(PG 취소)은 아직 없다.</b> 여기까지는 "얼마가 환불 대상인가"다.
+     * 급식은 날짜·끼니 단위 취소라 교습비의 구간·일할 환불을 타지 않는다.
+     */
+    public int refundableAmount() {
+        return billing == null ? 0 : Math.max(0, billing.getBilledAmount() - totalAmount());
     }
 }

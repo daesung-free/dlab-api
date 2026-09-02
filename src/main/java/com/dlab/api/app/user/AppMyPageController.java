@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 마이페이지.
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>자녀 <b>목록</b>은 {@code /api/v1/app/me/children}이 이미 내린다. 여기서 또 내리면
  * 자녀를 추가·해제했을 때 두 화면이 서로 다른 목록을 보여준다.
  */
+@Tag(name = "앱 · 마이페이지")
 @RestController
 @RequestMapping("/api/v1/app/me")
 @RequiredArgsConstructor

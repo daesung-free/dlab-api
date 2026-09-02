@@ -1,7 +1,5 @@
 package com.dlab.domain.statistics.service;
 
-import com.dlab.common.exception.BusinessException;
-import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.attendance.entity.DailyStatus;
 import com.dlab.domain.meal.entity.CancelPath;
@@ -48,21 +46,17 @@ public class StatisticsService {
     /**
      * 조회 지점 결정.
      *
-     * <p><b>전 지점 권한자만 {@code null}(전체)을 쓸 수 있다.</b> 지점 관리자가
-     * {@code academyId}를 비우거나 남의 지점을 넣어도 자기 지점으로 고정된다.
+     * <p><b>전 지점 권한자만 {@code null}(전체 합계)을 쓸 수 있다.</b> 지점 관리자가
+     * {@code academyId}를 비우면 자기 지점으로 고정되고, 남의 지점을 넣으면 거부된다.
+     *
+     * <p>통계는 "전 지점 합계"가 의미 있는 화면이라 {@code require~}가 아니라
+     * {@link AuthPrincipal#resolveAcademyScope(Long)}를 쓴다.
+     *
+     * <p>⚠️ 예전에는 {@code requested}를 권한 검사까지 해놓고 <b>정작 쓰지 않고</b>
+     * 자기 지점을 돌려줬다 — 값이 같아 결과는 맞았지만 의도가 드러나지 않았다.
      */
     private Long resolveScope(AuthPrincipal me, Long requested) {
-        if (me.allAcademy()) {
-            return requested;   // null이면 전 지점
-        }
-        if (requested != null && !me.canAccessAcademy(requested)) {
-            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
-        }
-        Long own = me.academyScopeFilter();
-        if (own == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        return own;
+        return me.resolveAcademyScope(requested);
     }
 
     /** 대시보드 한 번에. 화면이 카드 여러 개를 한 화면에 띄운다. */

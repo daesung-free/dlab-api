@@ -13,6 +13,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 상담 예약 (앱, F-4.11-4).
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
  * <p><b>예약·취소는 학생 본인만 한다.</b> 조회는 학부모도 본다 — 자녀가 언제 상담을
  * 잡았는지는 알아야 한다.
  */
+@Tag(name = "앱 · 상담 예약 (F-4.11-4)")
 @RestController
 @RequestMapping("/api/v1/app/consults")
 @RequiredArgsConstructor
@@ -35,7 +37,7 @@ public class AppConsultReservationController {
 
     /** 예약 가능한 일정. @param from/to 비우면 오늘부터 2주 */
     @GetMapping("/slots")
-    public ApiResponse<List<ConsultResponse.Slot>> slots(
+    public ApiResponse<List<ConsultResponse.ConsultSlotView>> slots(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -48,17 +50,17 @@ public class AppConsultReservationController {
         LocalDate end = to == null ? start.plusWeeks(2) : to;
 
         return ApiResponse.success(consultService.availableSlots(enrollment, start, end)
-                .stream().map(ConsultResponse.Slot::from).toList());
+                .stream().map(ConsultResponse.ConsultSlotView::from).toList());
     }
 
     /** 예약하면 담임에게 알림이 간다(문구 확정 전까지는 이력만 남는다). */
     @PostMapping("/reservations")
-    public ApiResponse<ConsultResponse.Reservation> reserve(
+    public ApiResponse<ConsultResponse.ConsultReservationView> reserve(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody ConsultRequests.Reserve request) {
+            @Valid @RequestBody ConsultRequests.ConsultReserve request) {
 
         StudentEnrollment enrollment = scopeResolver.requireStudent(me.accountId(), "상담 예약");
-        return ApiResponse.success(ConsultResponse.Reservation.from(consultService.reserve(
+        return ApiResponse.success(ConsultResponse.ConsultReservationView.from(consultService.reserve(
                 enrollment, request.slotId(), request.consultType(), request.requestNote())));
     }
 
@@ -75,7 +77,7 @@ public class AppConsultReservationController {
 
     /** 본인 예약 내역. 취소분도 이력으로 나온다. @param from/to 비우면 최근 3개월 */
     @GetMapping("/reservations")
-    public ApiResponse<List<ConsultResponse.Reservation>> myReservations(
+    public ApiResponse<List<ConsultResponse.ConsultReservationView>> myReservations(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -89,6 +91,6 @@ public class AppConsultReservationController {
 
         return ApiResponse.success(
                 consultService.myReservations(enrollment.getId(), start, end)
-                        .stream().map(ConsultResponse.Reservation::from).toList());
+                        .stream().map(ConsultResponse.ConsultReservationView::from).toList());
     }
 }

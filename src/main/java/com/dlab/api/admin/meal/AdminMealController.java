@@ -9,9 +9,11 @@ import com.dlab.domain.meal.entity.MealOrderItem;
 import com.dlab.domain.meal.entity.MealOrderStatus;
 import com.dlab.domain.meal.entity.MealType;
 import com.dlab.domain.meal.service.MealAdminService;
+import com.dlab.domain.meal.service.MealOrderListEnricher;
 import com.dlab.domain.meal.service.MealOrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 급식 관리 (F-4.5).
@@ -39,6 +42,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <p><b>배식 체크 탭은 없다</b> — 식사체크 방식(I-18)이 미확정이고,
  * QR 1회용 토큰이 앱 동적 QR(D-2)과 같은 건이다.
  */
+@Tag(name = "관리자 · 급식 (F-4.5)")
 @RestController
 @RequestMapping("/api/v1/admin/meals")
 @RequiredArgsConstructor
@@ -47,26 +51,27 @@ public class AdminMealController {
 
     private final MealAdminService mealAdminService;
     private final MealOrderService mealOrderService;
+    private final MealOrderListEnricher orderListEnricher;
 
     /** 월별 신청 현황 — 달력. */
     @GetMapping("/monthly")
     public ApiResponse<List<MealAdminService.DayStatus>> monthly(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
-            @RequestParam String month) {
-        return ApiResponse.success(
-                mealAdminService.monthly(me, academyId, YearMonth.parse(month)));
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
+        return ApiResponse.success(mealAdminService.monthly(me, academyId, month));
     }
 
     // ── 급식 일정 관리 ─────────────────────────────────────────
 
+    /** 급식 중단일 목록. */
     @GetMapping("/closures")
     public ApiResponse<List<ClosureResponse>> closures(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
-            @RequestParam String month) {
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
         return ApiResponse.success(
-                mealAdminService.closures(me, academyId, YearMonth.parse(month)).stream()
+                mealAdminService.closures(me, academyId, month).stream()
                         .map(ClosureResponse::from).toList());
     }
 
@@ -110,9 +115,16 @@ public class AdminMealController {
                 .map(WindowResponse::from).toList());
     }
 
+    /**
+     * 월 접수기간 설정.
+     *
+     * <p>대상월마다 다르다(5/18~27에 6월분을 받는다). <b>기간 밖에는 신청 화면이
+     * 열리지 않고, 미등록도 닫힘</b>으로 본다.
+     */
     @PutMapping("/order-windows")
     public ApiResponse<WindowResponse> saveWindow(@CurrentAccount AuthPrincipal me,
                                                   @Valid @RequestBody WindowRequest request) {
+        // 형식은 WindowRequest 의 @Pattern 이 이미 막는다 — 여기 parse 는 실패하지 않는다
         return ApiResponse.success(WindowResponse.from(mealAdminService.saveWindow(
                 me, request.academyId(), YearMonth.parse(request.targetMonth()),
                 request.startsOn(), request.endsOn())));
@@ -120,14 +132,24 @@ public class AdminMealController {
 
     // ── 결제·취소 내역 ────────────────────────────────────────
 
+    /**
+     * 급식 신청 현황. 취소된 끼니는 빠진다.
+     *
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @GetMapping("/orders")
     public ApiResponse<List<OrderResponse>> orders(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Long academyId,
-                                                   @RequestParam String month) {
-        Long resolved = academyId != null ? academyId : me.academyScopeFilter();
+                                                   @RequestParam
+                                                   @DateTimeFormat(pattern = "yyyy-MM")
+                                                   YearMonth month) {
+        Long resolved = me.requireAcademyScope(academyId);
+        List<MealOrder> orders = mealOrderService.findByMonth(resolved, month);
+        // ★ 반·결제수단은 여기서 한 번에 모은다 — 행마다 조회하면 쿼리가 주문 수만큼 나간다
+        MealOrderListEnricher.Extras extras = orderListEnricher.of(orders);
         return ApiResponse.success(
-                mealOrderService.findByMonth(resolved, YearMonth.parse(month)).stream()
-                        .map(OrderResponse::from).toList());
+                orders.stream().map(o -> OrderResponse.from(o, extras)).toList());
     }
 
     /** 관리자 취소 — <b>기간 제한 없이 즉시</b>. */
@@ -167,7 +189,9 @@ public class AdminMealController {
 
     public record WindowRequest(
             Long academyId,
-            @NotBlank(message = "대상 월은 필수입니다.") String targetMonth,
+            @NotBlank(message = "대상 월은 필수입니다.")
+            @Pattern(regexp = "\\d{4}-\\d{2}", message = "대상 월은 yyyy-MM 형식입니다.")
+            String targetMonth,
             @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startsOn,
             @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endsOn) {
     }
@@ -180,26 +204,53 @@ public class AdminMealController {
         }
     }
 
-    /** @param status 결제 라이프사이클. 결제 붙기 전까지 전부 {@code PENDING}이다 */
-    public record OrderResponse(Long id, String studentNo, String studentName,
-                                String targetMonth, MealOrderStatus status,
-                                int activeCount, List<ItemResponse> items, Instant createdAt) {
+    /**
+     * 급식 신청 한 건 — 화면 목록의 한 행.
+     *
+     * @param orderNo   표시용 주문번호({@code M2609-000123}). {@code id}에서 파생되며
+     *                  뒤 6자리가 곧 {@code id}라 불러준 번호로 되짚을 수 있다
+     * @param className 반 이름. <b>미배정이면 {@code null}</b>
+     * @param status    결제 라이프사이클. 결제 붙기 전까지 전부 {@code PENDING}이다
+     * @param amount    <b>지금 살아 있는 끼니의 합계</b>. 취소가 반영된 실제 이용액이다.
+     *                  단가가 안 박힌 옛 주문은 0이다
+     * @param billedAmount 발행된 청구액. <b>청구 전이면 {@code null}</b> — 0으로 내리면
+     *                  "0원 청구"와 "아직 청구 안 함"이 구분되지 않는다
+     * @param refundableAmount 발행 후 취소된 만큼의 환불 대상 금액. 청구 전이면 0
+     * @param paymentMethods 수납 수단. <b>미수납이면 빈 목록</b>이고, 분납이면 여러 개다
+     */
+    public record OrderResponse(Long id, String orderNo, String studentNo, String studentName,
+                                String className, String targetMonth, MealOrderStatus status,
+                                int activeCount, Integer amount, Integer billedAmount,
+                                int refundableAmount, List<String> paymentMethods,
+                                Long billingId, List<MealItemResponse> items, Instant createdAt) {
 
-        static OrderResponse from(MealOrder o) {
+        static OrderResponse from(MealOrder o, MealOrderListEnricher.Extras extras) {
             return new OrderResponse(o.getId(),
+                    o.orderNo(),
                     o.getEnrollment().getStudentNo(),
                     o.getEnrollment().getStudent().getName(),
+                    extras.className(o),
                     o.month().toString(), o.getStatus(),
                     o.activeItems().size(),
-                    o.getItems().stream().map(ItemResponse::from).toList(),
+                    o.totalAmount(),
+                    o.isBilled() ? o.getBilling().getBilledAmount() : null,
+                    o.refundableAmount(),
+                    extras.paymentMethods(o),
+                    o.isBilled() ? o.getBilling().getId() : null,
+                    o.getItems().stream().map(MealItemResponse::from).toList(),
                     o.getCreatedAt());
         }
     }
 
-    public record ItemResponse(Long id, LocalDate mealDate, MealType mealType,
-                               Instant canceledAt, String cancelPath) {
-        static ItemResponse from(MealOrderItem i) {
-            return new ItemResponse(i.getId(), i.getMealDate(), i.getMealType(),
+    /**
+     * @param unitPrice 신청 시점 단가 스냅샷. 단가 등록 전 주문은 {@code null}이다
+     *                  — 0으로 내리면 "무료"와 "금액 미상"이 구분되지 않는다
+     */
+    public record MealItemResponse(Long id, LocalDate mealDate, MealType mealType,
+                               Integer unitPrice, Instant canceledAt, String cancelPath) {
+        static MealItemResponse from(MealOrderItem i) {
+            return new MealItemResponse(i.getId(), i.getMealDate(), i.getMealType(),
+                    i.getUnitPrice(),
                     i.getCanceledAt(),
                     i.getCancelPath() == null ? null : i.getCancelPath().name());
         }

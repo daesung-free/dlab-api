@@ -109,6 +109,16 @@ public class StudentEnrollment extends BaseEntity {
         this.current = false;
     }
 
+    /**
+     * 입학(등원 시작)일. 등록 건이 만들어질 때 남긴다.
+     *
+     * <p><b>{@code created_at}으로 대신할 수 없다.</b> 소급 등록이 실제로 있고
+     * (데스크가 며칠 뒤에 입력한다), 교습비 일할계산·재원기간 산정이 이 값을 본다.
+     */
+    public void recordAdmission(java.time.LocalDate date) {
+        this.admissionDate = date;
+    }
+
     /** 이 기수가 끝나 다음 기수로 넘어갈 때 이전 등록 건을 내린다. */
     public void expire() {
         this.current = false;

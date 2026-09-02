@@ -18,13 +18,13 @@ public final class FirewallResponse {
      * @param approvalStatus 승인 상태. <b>{@code unlockStatus}와 다르다</b> —
      *                       승인됐어도 시간이 지나면 해제는 끝난다
      */
-    public record Row(Long id, Long enrollmentId, String studentName, String studentNo,
+    public record FirewallRow(Long id, Long enrollmentId, String studentName, String studentNo,
                       short requestedMinutes, String reason, String approvalStatus,
                       String unlockStatus, Instant unlockStartAt, Instant unlockEndAt,
                       Instant requestedAt) {
 
-        public static Row from(FirewallRequest r) {
-            return new Row(r.getId(), r.getEnrollment().getId(),
+        public static FirewallRow from(FirewallRequest r) {
+            return new FirewallRow(r.getId(), r.getEnrollment().getId(),
                     r.getEnrollment().getStudent().getName(),
                     r.getEnrollment().getStudentNo(),
                     r.getRequestedMinutes(), r.getReason(),

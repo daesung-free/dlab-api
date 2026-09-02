@@ -20,7 +20,10 @@ import com.dlab.domain.penalty.repository.PenaltyRuleRepository;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.ClassMaster;
 import com.dlab.domain.user.entity.Teacher;
+import com.dlab.domain.user.entity.GradeType;
+import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.repository.AcademyRepository;
+import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import com.dlab.domain.user.repository.ClassMasterRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -33,6 +36,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 전년도 복사 (요구사항 F-4.10-1).
@@ -64,6 +68,7 @@ import java.util.Map;
 public class YearlySnapshotService {
 
     private final AcademyRepository academyRepository;
+    private final StudentEnrollmentRepository enrollmentRepository;
     private final DepartmentMasterRepository departmentRepository;
     private final CourseTypeRepository courseTypeRepository;
     private final CurriculumRepository curriculumRepository;
@@ -115,11 +120,56 @@ public class YearlySnapshotService {
         copied.put("penaltyItem", itemMapping.size());
         copied.put("penaltyRule", copyPenaltyRules(academy, fromYear, toYear, itemMapping));
         copied.put("tuition", copyTuitions(academy, fromYear, toYear));
+        copied.put("staff", copyStaffEnrollments(academy, fromYear, toYear));
 
         SnapshotResult result = new SnapshotResult(fromYear, toYear, copied);
         log.info("전년도 복사 완료: academy={}, {} → {}, 합계 {}건 {}",
                 academyId, fromYear, toYear, result.total(), copied);
         return result;
+    }
+
+    /**
+     * 직원 등록 건 이월.
+     *
+     * <p><b>학생 등록 건은 복사하지 않는다</b> — 매년 새로 등록하는 게 맞다. 직원은 다르다.
+     * {@code student_enrollment}가 1년짜리라 새 해에 행이 없으면 {@code current=false}가
+     * 되고, 그러면 <b>다음 동기화에서 키오스크가 비활성 처리해 직원 카드가 먹통이 된다.</b>
+     *
+     * <p><b>학번·카드를 그대로 유지한다.</b> 직원은 4자리 학번을 외워서 찍는데 매년 바뀌면
+     * 쓸 수 없다. 학생 학번이 매년 초기화되는 것과 반대다.
+     *
+     * <p>이전 해 등록 건은 그대로 둔다 — 근태 이력이 거기 붙어 있다.
+     */
+    private int copyStaffEnrollments(Academy academy, short fromYear, short toYear) {
+        List<StudentEnrollment> staff = enrollmentRepository.findCurrentStaff(academy.getId());
+
+        // 새 해에 직접 등록된 직원. 복사가 같은 사람을 한 번 더 만들면
+        // findCurrentByRfidNo가 어느 행을 줄지 정해지지 않는다
+        Set<Long> alreadyInTarget = staff.stream()
+                .filter(e -> e.getYear() == toYear)
+                .map(e -> e.getStudent().getId())
+                .collect(java.util.stream.Collectors.toSet());
+
+        int created = 0;
+        for (StudentEnrollment source : staff) {
+            if (source.getYear() != fromYear) {
+                continue;
+            }
+            // 지난 해 행은 어느 경우든 닫는다. 카드도 새 행으로 넘긴다 —
+            // 두 행이 같은 카드를 들고 있으면 태깅이 어느 쪽인지 정해지지 않는다
+            String rfidNo = source.getRfidNo();
+            source.assignCard(null);
+            source.expire();
+
+            if (alreadyInTarget.contains(source.getStudent().getId())) {
+                continue;
+            }
+            enrollmentRepository.save(new StudentEnrollment(
+                    source.getStudent(), academy, toYear,
+                    source.getStudentNo(), rfidNo, GradeType.STAFF));
+            created++;
+        }
+        return created;
     }
 
     /**
@@ -167,11 +217,28 @@ public class YearlySnapshotService {
      * 갈아끼울 FK가 없다. 그래서 엔티티를 먼저 만들어 작업이 겹치는 대신 표만 그대로 복사한다.
      * 엔티티가 생기면 위 학과·반과 같은 형태로 옮기면 된다.
      */
+    /**
+     * 교시 복사.
+     *
+     * <p>★ <b>나중에 추가된 컬럼을 빠뜨리면 조용히 틀린다.</b> 실제로 {@code day_type}·
+     * {@code period_type}·{@code planable}·{@code mandatory}가 빠져 있었다.
+     * <ul>
+     *   <li>{@code day_type} — 평일·토·일 세 벌이 같은 값으로 들어가 유니크가 깨진다.
+     *       <b>이건 터지기라도 한다</b></li>
+     *   <li>{@code period_type} — 급식·쉬는시간이 {@code CLASS}가 된다. 순공시간이
+     *       재실에서 급식·쉬는시간을 빼는 근거라 <b>다음 해 순공이 통째로 부풀려진다</b></li>
+     *   <li>{@code mandatory} — 자율교시가 의무가 되어 하원 판정 경계가 밀린다</li>
+     * </ul>
+     * 뒤의 둘은 예외도 안 나고 화면도 정상으로 보인다. 교시에 컬럼을 더하면
+     * <b>여기를 같이 고쳐야 한다.</b>
+     */
     private int copyPeriods(Long academyId, short fromYear, short toYear) {
         return em.createNativeQuery("""
                         INSERT INTO period_master
-                            (academy_id, year, period_no, name, start_time, end_time, copied_from_id)
-                        SELECT academy_id, :toYear, period_no, name, start_time, end_time, id
+                            (academy_id, year, period_no, name, start_time, end_time,
+                             day_type, period_type, planable, mandatory, copied_from_id)
+                        SELECT academy_id, :toYear, period_no, name, start_time, end_time,
+                               day_type, period_type, planable, mandatory, id
                         FROM period_master
                         WHERE academy_id = :academyId AND year = :fromYear AND is_deleted = FALSE
                         """)

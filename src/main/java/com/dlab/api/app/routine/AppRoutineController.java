@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 — 오늘의 루틴 (A-11).
@@ -23,6 +24,7 @@ import java.util.List;
  * <p><b>점수는 공개된 것만 보인다.</b> 교사가 검수 중인 값이 새어나가면
  * 고치기 전 점수가 학생에게 노출된다.
  */
+@Tag(name = "앱 · 데일리 루틴 (A-11)")
 @RestController
 @RequestMapping("/api/v1/app/routines")
 @RequiredArgsConstructor

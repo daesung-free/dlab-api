@@ -9,12 +9,14 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 학생 가입 승인 (F-4.1 · A-2).
  *
  * <p><b>승인 주체는 행정({@code Employee})이다</b> — 담당선생님이 아니다(CLAUDE.md §2).
  */
+@Tag(name = "관리자 · 학생 가입 승인 (F-4.12-1)")
 @RestController
 @RequestMapping("/api/v1/admin/student-signups")
 @RequiredArgsConstructor
@@ -22,11 +24,18 @@ public class AdminStudentSignupController {
 
     private final StudentSignupApprovalService approvalService;
 
-    /** 승인 대기 목록. 지점 스코프가 걸린다. */
+    /**
+     * 승인 대기 목록. 지점 스코프가 걸린다.
+     *
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @GetMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN', 'STAFF')")
-    public ApiResponse<List<PendingSignupResponse>> pending(@CurrentAccount AuthPrincipal me) {
-        return ApiResponse.success(approvalService.pending(me).stream()
+    public ApiResponse<List<PendingSignupResponse>> pending(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId) {
+        return ApiResponse.success(approvalService.pending(me, academyId).stream()
                 .map(PendingSignupResponse::from)
                 .toList());
     }

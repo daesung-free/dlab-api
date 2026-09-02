@@ -20,30 +20,30 @@ public final class PlanResponse {
      * <p>{@code doneCount}/{@code totalCount}를 함께 내린다 — 앱이 "완료 X/Y 진행률"을
      * 그리는데, 항목을 세게 하면 삭제된 줄을 걸러야 하는 규칙이 앱에도 생긴다.
      */
-    public record Day(
+    public record PlanDay(
             Long id,
             LocalDate date,
-            List<Item> items,
+            List<PlanItem> items,
             int plannedMinutes,
             int doneMinutes,
             long doneCount,
             int totalCount,
             boolean copied) {
 
-        public static Day from(LearningPlan plan) {
-            List<Item> items = plan.activeItems().stream().map(Item::from).toList();
-            return new Day(plan.getId(), plan.getPlanDate(), items,
+        public static PlanDay from(LearningPlan plan) {
+            List<PlanItem> items = plan.activeItems().stream().map(PlanItem::from).toList();
+            return new PlanDay(plan.getId(), plan.getPlanDate(), items,
                     plan.totalMinutes(), plan.doneMinutes(), plan.doneCount(), items.size(),
                     plan.getCopiedFromId() != null);
         }
 
         /** 계획이 없는 날. 앱이 빈 화면을 그릴 때 날짜만 있으면 된다. */
-        public static Day empty(LocalDate date) {
-            return new Day(null, date, List.of(), 0, 0, 0, 0, false);
+        public static PlanDay empty(LocalDate date) {
+            return new PlanDay(null, date, List.of(), 0, 0, 0, 0, false);
         }
     }
 
-    public record Item(
+    public record PlanItem(
             Long id,
             short sequence,
             LocalTime startTime,
@@ -57,8 +57,8 @@ public final class PlanResponse {
             boolean done,
             Instant doneAt) {
 
-        public static Item from(LearningPlanItem item) {
-            return new Item(item.getId(), item.getSequence(), item.getStartTime(), item.endTime(),
+        public static PlanItem from(LearningPlanItem item) {
+            return new PlanItem(item.getId(), item.getSequence(), item.getStartTime(), item.endTime(),
                     item.getDurationMinutes(),
                     item.getSubject().getId(), item.getSubject().getLabel(),
                     item.getStudyType().getId(), item.getStudyType().getLabel(),
@@ -67,24 +67,24 @@ public final class PlanResponse {
     }
 
     /** 주간 뷰. 계획이 없는 날도 빈 날로 채워 7일을 온전히 내린다. */
-    public record Week(LocalDate weekStart, List<Day> days) {
+    public record Week(LocalDate weekStart, List<PlanDay> days) {
 
         public static Week of(LocalDate weekStart, List<LearningPlan> plans) {
-            List<Day> days = new java.util.ArrayList<>();
+            List<PlanDay> days = new java.util.ArrayList<>();
             for (int i = 0; i < 7; i++) {
                 LocalDate date = weekStart.plusDays(i);
                 days.add(plans.stream()
                         .filter(p -> p.getPlanDate().equals(date))
-                        .findFirst().map(Day::from)
-                        .orElseGet(() -> Day.empty(date)));
+                        .findFirst().map(PlanDay::from)
+                        .orElseGet(() -> PlanDay.empty(date)));
             }
             return new Week(weekStart, days);
         }
     }
 
-    public record Option(Long id, LearningPlanOptionType optionType, String label, short sortOrder) {
-        public static Option from(LearningPlanOption o) {
-            return new Option(o.getId(), o.getOptionType(), o.getLabel(), o.getSortOrder());
+    public record PlanOption(Long id, LearningPlanOptionType optionType, String label, short sortOrder) {
+        public static PlanOption from(LearningPlanOption o) {
+            return new PlanOption(o.getId(), o.getOptionType(), o.getLabel(), o.getSortOrder());
         }
     }
 

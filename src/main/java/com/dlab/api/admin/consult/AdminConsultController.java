@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 상담 (F-4.11-4) — <b>일지까지다</b>.
@@ -34,6 +35,7 @@ import org.springframework.web.bind.annotation.*;
  *   <li><b>담임 스티커·학부모 공유</b> — 리포트 발송이라 위 셋에 딸린다</li>
  * </ul>
  */
+@Tag(name = "관리자 · 상담 일지 (F-4.11-4)")
 @RestController
 @RequestMapping("/api/v1/admin/consults")
 @RequiredArgsConstructor
@@ -44,14 +46,20 @@ public class AdminConsultController {
 
     // ── 일지 ──────────────────────────────────────────────────
 
-    /** 기간별 상담 목록. {@code teacherId}로 담임별 필터. */
+    /**
+     * 기간별 상담 목록. {@code teacherId}로 담임별 필터.
+     *
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @GetMapping
     public ApiResponse<List<LogResponse>> list(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long teacherId) {
-        return ApiResponse.success(consultService.findByPeriod(me, from, to, teacherId).stream()
+        return ApiResponse.success(consultService.findByPeriod(me, academyId, from, to, teacherId).stream()
                 .map(LogResponse::from).toList());
     }
 
@@ -63,6 +71,7 @@ public class AdminConsultController {
                 .map(LogResponse::from).toList());
     }
 
+    /** 상담 일지 작성. */
     @PostMapping
     public ApiResponse<LogResponse> write(@CurrentAccount AuthPrincipal me,
                                           @Valid @RequestBody WriteRequest request) {
@@ -73,10 +82,11 @@ public class AdminConsultController {
                 request.tagIds())));
     }
 
+    /** 상담 일지 수정. */
     @PutMapping("/{logId}")
     public ApiResponse<LogResponse> update(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long logId,
-                                           @Valid @RequestBody UpdateRequest request) {
+                                           @Valid @RequestBody ConsultUpdateRequest request) {
         return ApiResponse.success(LogResponse.from(consultService.update(
                 me, logId, request.consultType(), request.methodOrDefault(),
                 request.consultedAt(), request.placeNote(), request.content(),
@@ -101,29 +111,46 @@ public class AdminConsultController {
     @GetMapping("/status")
     public ApiResponse<List<ConsultService.ConsultStatusRow>> status(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) Long teacherId) {
-        return ApiResponse.success(consultService.status(me, teacherId));
+        return ApiResponse.success(consultService.status(me, academyId, teacherId));
     }
 
     // ── 태그 마스터 ────────────────────────────────────────────
 
+    /**
+     * 상담 태그 목록.
+     *
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @GetMapping("/tags")
     public ApiResponse<List<TagResponse>> tags(@CurrentAccount AuthPrincipal me,
+                                               @RequestParam(required = false) Long academyId,
                                                @RequestParam short year,
                                                @RequestParam(defaultValue = "false")
                                                boolean includeInactive) {
-        return ApiResponse.success(consultService.tags(me, year, includeInactive).stream()
+        return ApiResponse.success(
+                consultService.tags(me, academyId, year, includeInactive).stream()
                 .map(TagResponse::from).toList());
     }
 
+    /**
+     * 상담 태그 등록.
+     *
+     * @param academyId 등록할 지점. <b>비우면 내 지점</b>이다.
+     *                  전 지점 권한자(본사)는 지정해야 한다
+     */
     @PostMapping("/tags")
     public ApiResponse<TagResponse> createTag(@CurrentAccount AuthPrincipal me,
+                                              @RequestParam(required = false) Long academyId,
                                               @Valid @RequestBody TagRequest request) {
         return ApiResponse.success(TagResponse.from(consultService.createTag(
-                me, request.year(), request.consultType(), request.name(),
+                me, academyId, request.year(), request.consultType(), request.name(),
                 request.sortOrderOrZero())));
     }
 
+    /** 상담 태그 수정. 이미 붙은 일지의 태그도 같이 바뀐다. */
     @PutMapping("/tags/{tagId}")
     public ApiResponse<TagResponse> updateTag(@CurrentAccount AuthPrincipal me,
                                               @PathVariable Long tagId,
@@ -154,7 +181,7 @@ public class AdminConsultController {
         }
     }
 
-    public record UpdateRequest(
+    public record ConsultUpdateRequest(
             @NotNull ConsultType consultType,
             ConsultMethod method,
             @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate consultedAt,

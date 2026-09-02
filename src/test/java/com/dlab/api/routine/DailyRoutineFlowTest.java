@@ -109,7 +109,7 @@ class DailyRoutineFlowTest {
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"academyId":%d,"year":%d,"month":%d,"name":"%s","subject":"국어",
+                                {"academyId":%d,"month":"%d-%02d","name":"%s","subject":"국어",
                                  "maxScore":%d,"recommended":true}"""
                                 .formatted(academyId, YEAR, month, name, maxScore)))
                 .andExpect(status().isOk())
@@ -153,8 +153,7 @@ class DailyRoutineFlowTest {
         mvc.perform(get("/api/v1/admin/routines")
                         .header("Authorization", adminToken())
                         .param("academyId", String.valueOf(academyId))
-                        .param("year", String.valueOf(YEAR))
-                        .param("month", "8"))
+                        .param("month", YEAR + "-08"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].name").value("국어 데일리테스트"))
@@ -170,7 +169,7 @@ class DailyRoutineFlowTest {
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"academyId":%d,"year":%d,"month":8}""".formatted(academyId, YEAR)))
+                                {"academyId":%d,"month":"%d-08"}""".formatted(academyId, YEAR)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.copied").value(1));
         em.flush();
@@ -178,8 +177,7 @@ class DailyRoutineFlowTest {
         mvc.perform(get("/api/v1/admin/routines")
                         .header("Authorization", adminToken())
                         .param("academyId", String.valueOf(academyId))
-                        .param("year", String.valueOf(YEAR))
-                        .param("month", "8"))
+                        .param("month", YEAR + "-08"))
                 .andExpect(jsonPath("$.data[0].name").value("7월 루틴"))
                 .andExpect(jsonPath("$.data[0].copiedFromId").value((int) source));
     }
@@ -194,7 +192,7 @@ class DailyRoutineFlowTest {
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"academyId":%d,"year":%d,"month":8}""".formatted(academyId, YEAR)))
+                                {"academyId":%d,"month":"%d-08"}""".formatted(academyId, YEAR)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("ROUTINE_TARGET_MONTH_NOT_EMPTY"));
     }
@@ -206,7 +204,7 @@ class DailyRoutineFlowTest {
                         .header("Authorization", adminToken())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"academyId":%d,"year":%d,"month":8}""".formatted(academyId, YEAR)))
+                                {"academyId":%d,"month":"%d-08"}""".formatted(academyId, YEAR)))
                 .andExpect(status().isNotFound());
     }
 

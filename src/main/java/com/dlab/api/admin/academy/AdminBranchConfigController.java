@@ -12,6 +12,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 지점 설정 관리 (F-4.10-7).
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
  *
  * <p><b>시크릿 원문은 재발급 응답에만 담긴다.</b> 조회는 언제나 마스킹이다.
  */
+@Tag(name = "관리자 · 지점 설정")
 @RestController
 @RequestMapping("/api/v1/admin/branch-configs")
 @RequiredArgsConstructor
@@ -35,6 +37,12 @@ public class AdminBranchConfigController {
         return ApiResponse.success(branchConfigService.list());
     }
 
+    /**
+     * 지점 운영 설정.
+     *
+     * <p>⚠️ 키오스크 자격증명·PG 코드가 들어 있다 — <b>이 응답을 가입 화면 같은
+     * 무인증 경로로 흘리지 말 것.</b>
+     */
     @GetMapping("/{academyId}")
     public ApiResponse<BranchConfigService.View> get(@PathVariable Long academyId) {
         return ApiResponse.success(branchConfigService.get(academyId));
@@ -53,6 +61,7 @@ public class AdminBranchConfigController {
         return ApiResponse.success(branchConfigService.issueKioskCredential(academyId));
     }
 
+    /** PG 가맹점 코드 변경. 결제가 이 값으로 나가므로 <b>틀리면 그 지점 결제가 통째로 실패한다.</b> */
     @PatchMapping("/{academyId}/pg-merchant-code")
     public ApiResponse<Void> changePgMerchantCode(@PathVariable Long academyId,
                                                   @Valid @RequestBody ValueRequest request) {
@@ -60,6 +69,7 @@ public class AdminBranchConfigController {
         return ApiResponse.empty();
     }
 
+    /** Nebula 장비 ID 변경. 방화벽 해제가 이 장비를 향한다 — 틀리면 다른 지점 와이파이가 열린다. */
     @PatchMapping("/{academyId}/nebula-device-id")
     public ApiResponse<Void> changeNebulaDeviceId(@PathVariable Long academyId,
                                                   @Valid @RequestBody ValueRequest request) {

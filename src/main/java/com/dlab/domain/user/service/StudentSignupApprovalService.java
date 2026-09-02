@@ -66,10 +66,14 @@ public class StudentSignupApprovalService {
      * 승인 대기 목록.
      *
      * <p><b>지점 스코프가 걸린다</b> — 다른 지점 가입 신청까지 보이면 안 된다.
+     *
+     * @param requestedAcademyId 조회할 지점. <b>비우면 내 지점</b>이고,
+     *                           전 지점 권한자는 지정해야 한다
      */
     @Transactional(readOnly = true)
-    public List<PendingSignup> pending(AuthPrincipal me) {
-        return enrollmentRepository.findCurrentByAcademyId(scopeOf(me)).stream()
+    public List<PendingSignup> pending(AuthPrincipal me, Long requestedAcademyId) {
+        return enrollmentRepository
+                .findCurrentByAcademyId(me.requireAcademyScope(requestedAcademyId)).stream()
                 .map(e -> accountRepository.findByStudentId(e.getStudent().getId())
                         .filter(a -> a.getStatus() == AccountStatus.PENDING)
                         .map(a -> new PendingSignup(e, a))
@@ -114,16 +118,6 @@ public class StudentSignupApprovalService {
     private Account requireAccount(Student student) {
         return accountRepository.findByStudentId(student.getId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
-    }
-
-    private Long scopeOf(AuthPrincipal me) {
-        Long academyId = me.academyScopeFilter();
-        if (academyId == null) {
-            // 전 지점 권한자는 지점을 골라야 한다. 전 지점 대기목록을 한 번에 뿌리면
-            // 어느 지점 건인지 구분 없이 승인 버튼이 눌린다
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        return academyId;
     }
 
     /** 승인 대기 1건. */

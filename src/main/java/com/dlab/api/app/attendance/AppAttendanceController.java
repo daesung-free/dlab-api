@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 앱 — 출결 · 상벌점 · 사유출결 조회 (A-18).
@@ -26,6 +27,7 @@ import java.util.List;
  *
  * <p><b>태깅은 키오스크가, 정정은 관리자 웹이 한다.</b> 앱이 쓰는 것은 사유 신청뿐이다.
  */
+@Tag(name = "앱 · 출결·상벌점 조회 (A-18)")
 @RestController
 @RequestMapping("/api/v1/app/attendance")
 @RequiredArgsConstructor
@@ -87,7 +89,7 @@ public class AppAttendanceController {
     @PostMapping("/absence-reasons")
     public ApiResponse<AttendanceResponse.AbsenceReasonRow> submitAbsenceReason(
             @CurrentAccount AuthPrincipal me,
-            @Valid @RequestBody AbsenceReasonRequests.Submit request) {
+            @Valid @RequestBody AbsenceReasonRequests.AbsenceReasonSubmit request) {
 
         Long enrollmentId = scopeResolver.requireStudent(me.accountId(), "사유 신청").getId();
         return ApiResponse.success(AttendanceResponse.AbsenceReasonRow.from(

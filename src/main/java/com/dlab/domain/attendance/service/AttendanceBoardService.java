@@ -96,11 +96,12 @@ public class AttendanceBoardService {
      * "오늘 결석 몇 명"을 셀 수 없다 — 안 온 사람을 찾는 게 이 화면의 목적이다.
      *
      * @param classId 담당 반 필터. 담임은 자기 반만 본다. {@code null}이면 전체
+     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이고, 전 지점 권한자는 지정해야 한다
      */
-    public List<AttendanceRow> board(AuthPrincipal me, LocalDate date, Long classId) {
-        Long academyId = academyOf(me);
+    public List<AttendanceRow> board(AuthPrincipal me, Long academyId, LocalDate date, Long classId) {
+        Long scope = me.requireAcademyScope(academyId);
 
-        List<StudentEnrollment> targets = enrollmentRepository.findCurrentByAcademyId(academyId)
+        List<StudentEnrollment> targets = enrollmentRepository.findCurrentByAcademyId(scope)
                 .stream()
                 .filter(e -> e.getEnrollmentStatus() == EnrollmentStatus.ENROLLED)
                 .toList();
@@ -108,14 +109,14 @@ public class AttendanceBoardService {
             return List.of();
         }
 
-        Map<Long, List<AttendanceTaggingLog>> logsByEnrollment = logsOf(academyId, date);
+        Map<Long, List<AttendanceTaggingLog>> logsByEnrollment = logsOf(scope, date);
         Map<Long, AttendanceDailyStatus> confirmed = confirmedOf(targets, date);
         Map<Long, ClassAssignment> classes = classesOf(targets);
-        Map<Long, String> seats = seatsOf(academyId);
+        Map<Long, String> seats = seatsOf(scope);
         Map<Long, String> guardianPhones = guardianPhonesOf(targets);
 
         var periods = periodMasterRepository.findByDayType(
-                academyId, targets.get(0).getYear(), DayType.of(date));
+                scope, targets.get(0).getYear(), DayType.of(date));
         LocalTime until = date.equals(LocalDate.now(clock))
                 ? LocalTime.now(clock)
                 : LocalTime.MAX;
@@ -294,15 +295,6 @@ public class AttendanceBoardService {
         return result;
     }
 
-    private Long academyOf(AuthPrincipal me) {
-        Long academyId = me.academyScopeFilter();
-        if (academyId == null) {
-            throw new com.dlab.common.exception.BusinessException(
-                    com.dlab.common.exception.ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        return academyId;
-    }
-
     /** 화면(`Attendance.tsx`)이 쓰는 상태값. 우리 {@link DailyStatus}와 축이 다르다. */
     public enum ScreenStatus {
         ON_TIME, LATE, ABSENT, OUT, EARLY_LEAVE
@@ -341,9 +333,10 @@ public class AttendanceBoardService {
      * 메신저로 재전달되므로 화면보다 기준을 높게 잡는다 — 화면은 토글로 볼 수 있지만
      * 파일은 상위 관리자가 명시 요청해야 원본이 나간다.
      */
-    public byte[] export(AuthPrincipal me, LocalDate date, Long classId, boolean unmask) {
+    public byte[] export(AuthPrincipal me, Long academyId, LocalDate date, Long classId,
+                         boolean unmask) {
         boolean raw = unmask && com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me);
-        List<AttendanceRow> rows = board(me, date, classId);
+        List<AttendanceRow> rows = board(me, academyId, date, classId);
 
         return excelExporter.export("출결현황", EXPORT_MAPPING, rows, r -> java.util.Arrays.asList(
                 r.studentNo(),

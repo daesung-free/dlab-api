@@ -74,6 +74,7 @@ public class KioskAttendanceService {
     private final PeriodMasterRepository periodMasterRepository;
     private final AttendancePolicy attendancePolicy;
     private final PenaltyRuleEngine penaltyRuleEngine;
+    private final com.dlab.domain.attendance.service.StaffAttendanceService staffAttendanceService;
     private final Clock clock;
 
     /**
@@ -87,6 +88,14 @@ public class KioskAttendanceService {
         StudentEnrollment enrollment = requireEnrollment(academyId, rfidNo);
         LocalDateTime at = parseTagDt(tagDt);
         LocalDate date = at.toLocalDate();
+
+        // ★ 직원은 여기서 갈라진다. 아래 전부가 학생 전제다 —
+        //   교시로 지각·하원을 가르고, 확정 배치가 결석을 만들고, 상벌점 규칙이 붙는다.
+        //   직원에겐 교시가 없고 결석·벌점도 없으므로 근태로만 남긴다
+        if (enrollment.getGrade().isStaff()) {
+            return TagResult.accepted(enrollment,
+                    staffAttendanceService.record(enrollment, at).toDsaEvent());
+        }
 
         List<AttendanceTaggingLog> todayLogs = todayLogs(enrollment.getId(), date);
         boolean explicit = conGn != null && !conGn.isBlank();

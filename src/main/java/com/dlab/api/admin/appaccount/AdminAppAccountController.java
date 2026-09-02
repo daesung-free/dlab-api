@@ -5,6 +5,7 @@ import com.dlab.domain.user.service.AppAccountAdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * 관리자 웹 — 앱 계정 관리 (F-4.12-1).
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
  * <p>경로는 시트의 {@code /api/v1/app-accounts}가 아니라 {@code /api/v1/admin/app-accounts}다.
  * 관리자 웹이 호출하는 API는 예외 없이 {@code /admin} 아래에 둔다(CLAUDE.md §5).
  */
+@Tag(name = "관리자 · 앱 계정 (F-4.12-1)")
 @RestController
 @RequestMapping("/api/v1/admin/app-accounts")
 @RequiredArgsConstructor

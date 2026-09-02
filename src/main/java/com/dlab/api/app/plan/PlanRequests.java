@@ -18,7 +18,7 @@ public final class PlanRequests {
      * 그대로 쓰면 화면에서 정렬만 바꿔도 순번이 시각과 어긋난다.
      */
     public record SaveDay(
-            @NotNull @Valid List<Item> items) {
+            @NotNull @Valid List<PlanItemInput> items) {
 
         public List<LearningPlanService.ItemCommand> toCommands() {
             return items.stream()
@@ -29,7 +29,7 @@ public final class PlanRequests {
         }
     }
 
-    public record Item(
+    public record PlanItemInput(
             @NotNull LocalTime startTime,
             /* 상한 720분은 오타(6000분 등)로 통계가 통째로 망가지는 것을 막는다 */
             @Min(1) @Max(720) short durationMinutes,

@@ -62,11 +62,14 @@ public class StudyTimeRecalculationService {
      * {@link DailyAttendanceConfirmService}의 책임이고, 여기서 같이 만들면
      * 결석 판정이 두 곳에서 나온다.
      *
+     * @param requestedAcademyId 다시 계산할 지점. <b>비우면 내 지점</b>이고,
+     *                           전 지점 권한자는 지정해야 한다
      * @return 갱신한 행 수
      */
     @Transactional
-    public int recalculate(AuthPrincipal me, LocalDate from, LocalDate to) {
-        Long academyId = academyOf(me);
+    public int recalculate(AuthPrincipal me, Long requestedAcademyId,
+                           LocalDate from, LocalDate to) {
+        Long academyId = me.requireAcademyScope(requestedAcademyId);
         LocalDate today = LocalDate.now(clock);
         LocalDate end = to.isBefore(today) ? to : today.minusDays(1);
 
@@ -124,11 +127,4 @@ public class StudyTimeRecalculationService {
         return updated;
     }
 
-    private Long academyOf(AuthPrincipal me) {
-        Long academyId = me.academyScopeFilter();
-        if (academyId == null) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "지점을 지정해야 합니다.");
-        }
-        return academyId;
-    }
 }

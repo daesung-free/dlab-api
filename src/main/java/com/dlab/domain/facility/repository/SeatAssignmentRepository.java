@@ -4,6 +4,7 @@ import com.dlab.domain.facility.entity.SeatAssignment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,6 +18,22 @@ public interface SeatAssignmentRepository extends JpaRepository<SeatAssignment, 
             WHERE a.enrollment.id = :enrollmentId AND a.releasedAt IS NULL AND a.deleted = false
             """)
     Optional<SeatAssignment> findActiveByEnrollmentId(Long enrollmentId);
+
+    /**
+     * 여러 등록 건의 현재 좌석을 <b>한 번에</b> 가져온다.
+     *
+     * <p>목록 화면이 행마다 {@link #findActiveByEnrollmentId}를 부르면 쿼리가 학생 수만큼 나간다.
+     * 키오스크 {@code getStdInfoList}가 {@link #findActiveByAcademyId}로 푸는 것과 같은 방식이되,
+     * 대상이 페이지·반 단위라 등록 건 id로 좁힌다.
+     *
+     * <p><b>학생 명단과 반 명단이 함께 쓴다</b> — 같은 조회를 각자 만들지 말 것.
+     */
+    @Query("""
+            SELECT a FROM SeatAssignment a
+            JOIN FETCH a.seat
+            WHERE a.enrollment.id IN :enrollmentIds AND a.releasedAt IS NULL AND a.deleted = false
+            """)
+    List<SeatAssignment> findActiveByEnrollmentIds(Collection<Long> enrollmentIds);
 
     /** 이 좌석의 현재 사용자. 배정 전 점유 여부 확인에 쓴다. */
     @Query("""

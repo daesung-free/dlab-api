@@ -14,7 +14,33 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
-    # 그룹(app/admin) 순서를 알파벳이 아니라 선언 순서로
+    # 그룹(app/admin) 순서를 알파벳이 아니라 선언 순서로좌석이탈 api 만들었슴다!
+    #
+    #POST /api/v1/kiosk/seat-leaves
+    #  {
+    #    "token": "<기존 DSA 토큰 그대로>",
+    #    "events": [
+    #      { "sourceRowId": 12345,        // 키오스크 seat_leaves 행 ID (필수)
+    #        "rfidNo": "ABC001",          // rfidNo 또는 studentNo
+    #        "studentNo": "2026-0001",
+    #        "areaCd": "A", "seatCd": "A-01",
+    #        "eventType": "LEAVE",        // LEAVE | RETURN
+    #        "occurredAt": "2026-08-18T10:23:00Z" }
+    #    ]
+    #  }
+    #
+    #
+    #응답이 건별로 나갑니당 data 배열에 sourceRowId + status가 들어갑니다..
+    #
+    #ACCEPTED / DUPLICATE / ACCEPTED_UNRESOLVED -> 전송 완료 처리 하심 됩니다
+    #REJECTED -> 값이 잘못된거라 고쳐서 재전송
+    #
+    #Http 200이 OK입니다! 200 받은 행만 전송완료로 표시하고 못 받은 건 다음에 다시 보내주시면 유실이 없을거 같아요
+    #
+    #한 건이 틀려도 나머지는 저장되게 했슴다 통째로 거절하면 큐가 안 빠질거 같아서 ㅠ
+    #학생을 못 찾아도 저장하고, ACCEPTED_UNRESOLVED로 알려주는걸로 했습니다
+    #배열은 최대 500건까지 가능하게 했습니다
+    #응답 형식은 기존 25개(키오스크 관련)이랑 다르게 ApiResponse로 갔습니다
     groups-order: asc
     tags-sorter: alpha
     operations-sorter: alpha
