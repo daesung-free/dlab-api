@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 
 public interface AcademyRepository extends JpaRepository<Academy, Long> {
 
@@ -34,4 +35,7 @@ public interface AcademyRepository extends JpaRepository<Academy, Long> {
             ORDER BY a.acadCd
             """)
     List<Academy> findAllActive();
+
+    /** 홈페이지 입학예약 학원코드로 지점을 찾는다. 키오스크 acadCd와 다른 값이다. */
+    Optional<Academy> findByDlabCdAndDeletedFalse(String dlabCd);
 }
