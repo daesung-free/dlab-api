@@ -212,7 +212,13 @@ public enum ErrorCode {
     EXAM_SUBJECT_NOT_IN_FORM(HttpStatus.BAD_REQUEST, "이 학생의 성적 입력 양식에 없는 과목입니다."),
     GRADE_SUBMISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "제출된 성적이 없습니다."),
     /** 0으로 채우게 두면 진짜 0점과 구분되지 않는다. 사유를 남기고 건너뛴다. */
-    GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요.");
+    GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요."),
+
+    /**
+     * 조건 자체가 성립하지 않는 검색 조합(예: 특정 반 + 반 미배정).
+     * 빈 목록으로 돌려주면 화면이 "해당 학생이 없다"로 읽고 조용히 넘어간다.
+     */
+    CONFLICTING_SEARCH_CONDITION(HttpStatus.BAD_REQUEST, "함께 지정할 수 없는 검색 조건입니다.");
 
     private final HttpStatus status;
     private final String message;
