@@ -1,5 +1,6 @@
 package com.dlab.api.admin.notice;
 
+import jakarta.validation.constraints.NotNull;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
@@ -117,8 +118,8 @@ public class AdminNoticeController {
     public record NoticeUpdateRequest(
             @NotBlank(message = "제목은 필수입니다.") @Size(max = 200) String title,
             @NotBlank(message = "내용은 필수입니다.") String content,
-            boolean pinned,
-            boolean banner,
+            @NotNull(message = "상단 고정 여부는 필수입니다.") Boolean pinned,
+            @NotNull(message = "배너 노출 여부는 필수입니다.") Boolean banner,
             Instant publishedAt,
             Instant expiresAt) {
     }

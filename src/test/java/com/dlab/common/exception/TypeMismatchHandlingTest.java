@@ -1,6 +1,7 @@
 package com.dlab.common.exception;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -10,6 +11,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -54,6 +57,18 @@ class TypeMismatchHandlingTest {
         String byTrack(@RequestParam Track track) {
             return "ok";
         }
+
+        @PostMapping("/api/v1/test/body")
+        String body(@RequestBody Payload payload) {
+            return "ok";
+        }
+    }
+
+    /** 중첩·배열까지 경로가 나오는지 보려고 한 겹 더 둔다. */
+    record Payload(java.time.Instant applyFrom, Track track, java.util.List<Item> items) {
+    }
+
+    record Item(int amount) {
     }
 
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new StubController())
@@ -118,5 +133,50 @@ class TypeMismatchHandlingTest {
     void validYearMonthPasses() throws Exception {
         mvc.perform(get("/api/v1/test/year-month").param("month", "2026-09"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("★ 본문 형식 오류에 어느 필드인지 담긴다 — 없으면 본문 전체를 놓고 원인을 찾아야 한다")
+    void unreadableBodyNamesTheField() throws Exception {
+        mvc.perform(post("/api/v1/test/body").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applyFrom\":\"2026-09-01T00:00:00\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("applyFrom")));
+    }
+
+    @Test
+    @DisplayName("본문 enum 도 허용값 목록을 내린다 — 파라미터와 같은 기준이다")
+    void unreadableBodyListsEnumValues() throws Exception {
+        mvc.perform(post("/api/v1/test/body").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"track\":\"NATURAL\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("track")))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("SCIENCE")));
+    }
+
+    @Test
+    @DisplayName("배열 안쪽 필드도 경로로 찍힌다 — items[0].amount")
+    void unreadableBodyShowsNestedPath() throws Exception {
+        mvc.perform(post("/api/v1/test/body").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"items\":[{\"amount\":\"abc\"}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("items")))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("amount")));
+    }
+
+    @Test
+    @DisplayName("본문 예외 원문은 싣지 않는다 — 엔티티 패키지 경로가 그대로 들어 있다")
+    void unreadableBodyHidesInternalTypes() throws Exception {
+        mvc.perform(post("/api/v1/test/body").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"applyFrom\":\"2026-09-01T00:00:00\"}"))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.not(
+                                org.hamcrest.Matchers.containsString("com.dlab"))));
     }
 }
