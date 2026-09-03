@@ -27,6 +27,20 @@ public interface DailyRoutineResultRepository extends JpaRepository<DailyRoutine
                                       @Param("date") LocalDate date);
 
     /**
+     * 여러 루틴의 그날 결과를 한 번에.
+     *
+     * <p>매트릭스 화면이 루틴마다 조회하면 쿼리가 루틴 수만큼 나간다(월 20개면 20번).
+     */
+    @Query("""
+            SELECT r FROM DailyRoutineResult r
+            JOIN FETCH r.enrollment e
+            JOIN FETCH e.student
+            WHERE r.routine.id IN :routineIds AND r.resultDate = :date AND r.deleted = false
+            """)
+    List<DailyRoutineResult> findGridAll(@Param("routineIds") java.util.Collection<Long> routineIds,
+                                         @Param("date") LocalDate date);
+
+    /**
      * 학생의 그날 결과 — 앱 A-11.
      *
      * <p>상태 필터를 <b>여기서 걸지 않는다</b>. 검수 중인 항목도 "오늘 할 일"로는 보여야 하고,

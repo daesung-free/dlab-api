@@ -176,6 +176,47 @@ class LearningPlanBoardTest {
     }
 
     @Test
+    @DisplayName("★★ 학습계획 차단일은 미작성일에서 빠진다 — 안 빼면 휴원 주간에 전교생이 미작성자가 된다")
+    void planExcludedDaysAreNotCountedAsMissing() {
+        StudentEnrollment minji = enrollment("김민지", "2026-0001", class1);
+        plan(minji, monday, 60);
+
+        // 휴원 이틀. plan_excluded 를 켠 것만 빠진다
+        em.persist(holiday(monday.plusDays(1), "개원기념일 휴원", true));
+        em.persist(holiday(monday.plusDays(2), "휴원", true));
+        em.flush();
+
+        BoardRow row = rowOf(board(null).getContent(), minji);
+        assertThat(row.countedDays()).isEqualTo(5);
+        assertThat(row.missingDays()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("★ 공휴일이라도 켜지 않았으면 그대로 센다 — 학원은 법정공휴일에도 운영한다")
+    void publicHolidayAloneDoesNotReduceMissingDays() {
+        StudentEnrollment minji = enrollment("김민지", "2026-0001", class1);
+        plan(minji, monday, 60);
+
+        em.persist(holiday(monday.plusDays(1), "삼일절", false));
+        em.flush();
+
+        BoardRow row = rowOf(board(null).getContent(), minji);
+        assertThat(row.countedDays()).isEqualTo(7);
+        assertThat(row.missingDays()).isEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("차단일이 없으면 종전과 같다 — 켜기 전에는 값이 바뀌지 않는다")
+    void withoutExcludedDaysNothingChanges() {
+        StudentEnrollment minji = enrollment("김민지", "2026-0001", class1);
+        plan(minji, monday, 60);
+
+        BoardRow row = rowOf(board(null).getContent(), minji);
+        assertThat(row.countedDays()).isEqualTo(7);
+        assertThat(row.missingDays()).isEqualTo(6);
+    }
+
+    @Test
     @DisplayName("계획이 0분이면 이행률은 0% — 나눌 게 없다고 100%로 두면 미작성자가 우등생으로 뜬다")
     void emptyPlanIsZeroPercent() {
         StudentEnrollment minji = enrollment("김민지", "2026-0001", class1);
@@ -281,8 +322,9 @@ class LearningPlanBoardTest {
         long many = countQueries();
 
         assertThat(many).isEqualTo(few);
-        // 재원생 1 + 반 배정 1 + 기간 집계 1
-        assertThat(many).isLessThanOrEqualTo(3);
+        // 재원생 1 + 반 배정 1 + 기간 집계 1 + 학습계획 차단일 1
+        // 전부 고정 쿼리다 — 학생이 늘어도 개수가 그대로인 것이 이 테스트의 요지다
+        assertThat(many).isLessThanOrEqualTo(4);
     }
 
     private long countQueries() {
@@ -298,6 +340,13 @@ class LearningPlanBoardTest {
     }
 
     // ── 픽스처 ────────────────────────────────────────────────
+
+    private com.dlab.domain.holiday.entity.Holiday holiday(LocalDate date, String name,
+                                                          boolean planExcluded) {
+        var h = com.dlab.domain.holiday.entity.Holiday.ofAcademy(bundang.getId(), date, name);
+        h.changePlanExcluded(planExcluded);
+        return h;
+    }
 
     private Page<BoardRow> board(Long classId) {
         return boardService.board(bundang.getId(), monday, sunday, classId, pageable());

@@ -64,18 +64,23 @@ public class AdminHolidayController {
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody HolidayRequest request) {
         var holiday = holidayService.register(
-                me, request.academyId(), request.date(), request.name(), request.type());
+                me, request.academyId(), request.date(), request.name(), request.type(),
+                request.planExcludedOrFalse());
         return ApiResponse.success(HolidayResponse.from(holiday));
     }
 
-    /** 이름만 고친다. 날짜·유형을 바꿀 일이면 지우고 새로 넣는 게 이력상 명확하다. */
+    /**
+     * 이름과 <b>학습계획 차단 여부</b>를 고친다. 날짜·유형을 바꿀 일이면 지우고 새로 넣는 게
+     * 이력상 명확하다.
+     */
     @PatchMapping("/{holidayId}")
     public ApiResponse<HolidayResponse> rename(
             @CurrentAccount AuthPrincipal me,
             @PathVariable Long holidayId,
             @Valid @RequestBody HolidayRequest request) {
         return ApiResponse.success(
-                HolidayResponse.from(holidayService.rename(me, holidayId, request.name())));
+                HolidayResponse.from(holidayService.rename(me, holidayId, request.name(),
+                        request.planExcluded())));
     }
 
     /** 공휴일 삭제(soft). 물리 삭제하면 과거 급식 신청이 어느 규칙으로 계산됐는지 추적이 끊긴다. */

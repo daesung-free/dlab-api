@@ -45,21 +45,27 @@ public class HolidayService {
      */
     @Transactional
     public Holiday register(AuthPrincipal principal, Long academyId, LocalDate date,
-                            String name, HolidayType type) {
+                            String name, HolidayType type, boolean planExcluded) {
         validateWritable(principal, academyId, type);
         validateNotDuplicated(academyId, date);
 
         Holiday holiday = academyId == null
                 ? Holiday.nationwide(date, name, type)
                 : Holiday.ofAcademy(academyId, date, name);
+        holiday.changePlanExcluded(planExcluded);
         // created_by는 SecurityAuditorAware가 채운다 — 여기서 설정하지 않는다.
         return holidayRepository.save(holiday);
     }
 
     @Transactional
-    public Holiday rename(AuthPrincipal principal, Long holidayId, String name) {
+    public Holiday rename(AuthPrincipal principal, Long holidayId, String name,
+                          Boolean planExcluded) {
         Holiday holiday = findWritable(principal, holidayId);
         holiday.rename(name);
+        // null 은 "변경하지 않음"이다 — 이름만 고치려다 차단 설정이 꺼지면 안 된다
+        if (planExcluded != null) {
+            holiday.changePlanExcluded(planExcluded);
+        }
         return holiday;
     }
 

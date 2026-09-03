@@ -24,6 +24,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 데일리 루틴 (F-4.11-1 관리 · 앱 A-11 표시).
@@ -147,6 +148,81 @@ public class DailyRoutineService {
         return targetsOf(routine).stream()
                 .map(enrollment -> new DailyRoutineResult(routine, enrollment, date))
                 .toList();
+    }
+
+    /**
+     * 그날의 <b>모든 루틴</b> 결과 — 학생 × 루틴 매트릭스.
+     *
+     * <p><b>왜 루틴별 조회로는 안 되는가.</b> 화면은 한 표에 루틴이 컬럼으로 펼쳐진다.
+     * 루틴 하나씩 부르면 루틴이 6개면 6번, 월 20개면 20번이 나가고 프론트가 조립까지 해야 한다.
+     *
+     * <p><b>결과가 없는 칸도 빈 값으로 나온다.</b> 행이 있는 것만 주면 "아직 입력 안 함"과
+     * "그 학생은 대상이 아님"이 구분되지 않는다 — 대상 학생은 {@code rows}에 들어오고
+     * 해당 루틴 칸이 비어 있으면 미입력이다.
+     */
+    @Transactional(readOnly = true)
+    public DayMatrix matrix(AuthPrincipal principal, Long requestedAcademyId, LocalDate date) {
+        Long academyId = principal.requireAcademyScope(requestedAcademyId);
+
+        List<DailyRoutine> routines = routineRepository
+                .findByAcademyIdAndYearAndMonthAndDeletedFalseOrderBySortOrderAscIdAsc(
+                        academyId, (short) date.getYear(), (short) date.getMonthValue());
+        if (routines.isEmpty()) {
+            return new DayMatrix(List.of(), List.of());
+        }
+
+        // 루틴마다 결과를 조회하면 쿼리가 루틴 수만큼 나간다. ID 를 모아 한 번에 읽는다
+        List<Long> routineIds = routines.stream().map(DailyRoutine::getId).toList();
+        Map<Long, Map<Long, DailyRoutineResult>> byRoutine = new java.util.HashMap<>();
+        for (DailyRoutineResult r : resultRepository.findGridAll(routineIds, date)) {
+            byRoutine.computeIfAbsent(r.getRoutine().getId(), k -> new java.util.HashMap<>())
+                    .put(r.getEnrollment().getId(), r);
+        }
+
+        // 대상 학생은 루틴마다 다르다(반 지정 루틴이 섞인다). 합집합을 행으로 둔다
+        Map<Long, StudentEnrollment> targets = new java.util.LinkedHashMap<>();
+        Map<Long, java.util.Set<Long>> targetIdsByRoutine = new java.util.HashMap<>();
+        for (DailyRoutine routine : routines) {
+            java.util.Set<Long> ids = new java.util.LinkedHashSet<>();
+            for (StudentEnrollment e : targetsOf(routine)) {
+                targets.putIfAbsent(e.getId(), e);
+                ids.add(e.getId());
+            }
+            targetIdsByRoutine.put(routine.getId(), ids);
+        }
+
+        Map<Long, String> classNames = new java.util.HashMap<>();
+        if (!targets.isEmpty()) {
+            classAssignmentRepository.findActiveFixedByEnrollmentIds(targets.keySet())
+                    .forEach(ca -> classNames.put(ca.getEnrollment().getId(),
+                            ca.getClassMaster().getName()));
+        }
+
+        List<MatrixRow> rows = targets.values().stream()
+                .map(e -> new MatrixRow(e.getId(), e.getStudentNo(),
+                        e.getStudent().getName(), classNames.get(e.getId()),
+                        routines.stream()
+                                .filter(rt -> targetIdsByRoutine
+                                        .getOrDefault(rt.getId(), java.util.Set.of())
+                                        .contains(e.getId()))
+                                .map(rt -> new MatrixCell(rt.getId(),
+                                        byRoutine.getOrDefault(rt.getId(), Map.of()).get(e.getId())))
+                                .toList()))
+                .toList();
+
+        return new DayMatrix(routines, rows);
+    }
+
+    /** @param result {@code null}이면 아직 입력하지 않은 칸이다 */
+    public record MatrixCell(Long routineId, DailyRoutineResult result) {
+    }
+
+    /** @param cells 그 학생이 <b>대상인 루틴만</b> 들어온다 */
+    public record MatrixRow(Long enrollmentId, String studentNo, String studentName,
+                            String className, List<MatrixCell> cells) {
+    }
+
+    public record DayMatrix(List<DailyRoutine> routines, List<MatrixRow> rows) {
     }
 
     /**

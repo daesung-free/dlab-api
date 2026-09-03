@@ -122,9 +122,15 @@ public class PenaltyService {
                 to.plusDays(1).atStartOfDay(zone).toInstant(),
                 category, source);
 
+        // 반 필터를 행마다 조회하면 쿼리가 건수만큼 나간다. 대상 학생을 한 번에 받아 둔다
+        java.util.Set<Long> inClass = classId == null ? null
+                : classAssignmentRepository.findActiveByClassId(classId).stream()
+                        .map(a -> a.getEnrollment().getId())
+                        .collect(java.util.stream.Collectors.toSet());
+
         List<PenaltyPoint> filtered = points.stream()
                 .filter(p -> matchesKeyword(p, keyword))
-                .filter(p -> matchesClass(p, classId))
+                .filter(p -> inClass == null || inClass.contains(p.getEnrollment().getId()))
                 .toList();
 
         int plus = filtered.stream()
@@ -150,16 +156,6 @@ public class PenaltyService {
         String studentNo = p.getEnrollment().getStudentNo();
         return (name != null && name.contains(kw))
                 || (studentNo != null && studentNo.contains(kw));
-    }
-
-    private boolean matchesClass(PenaltyPoint p, Long classId) {
-        if (classId == null) {
-            return true;
-        }
-        return classAssignmentRepository
-                .findActiveFixedByEnrollmentId(p.getEnrollment().getId())
-                .map(a -> a.getClassMaster().getId().equals(classId))
-                .orElse(false);
     }
 
     /**

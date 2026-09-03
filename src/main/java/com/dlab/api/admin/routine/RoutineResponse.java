@@ -5,6 +5,7 @@ import com.dlab.domain.routine.entity.DailyRoutineResult;
 import com.dlab.domain.routine.service.DailyRoutineService;
 
 import java.time.Instant;
+import java.util.List;
 import java.time.LocalDate;
 
 /** 데일리 루틴 응답 DTO. */
@@ -53,6 +54,56 @@ public final class RoutineResponse {
                     r.getSelfScore() == null ? null : (int) r.getSelfScore(),
                     r.getReviewedScore() == null ? null : (int) r.getReviewedScore(),
                     r.getMemo(), r.getReviewedAt());
+        }
+    }
+
+    /**
+     * 학생 × 루틴 매트릭스 (화면 한 표).
+     *
+     * @param routines 컬럼 순서. 화면이 이 순서대로 헤더를 그린다
+     */
+    public record DayMatrix(List<RoutineRef> routines, List<MatrixRow> rows) {
+
+        public static DayMatrix from(com.dlab.domain.routine.service.DailyRoutineService.DayMatrix m) {
+            return new DayMatrix(
+                    m.routines().stream().map(RoutineRef::from).toList(),
+                    m.rows().stream().map(MatrixRow::from).toList());
+        }
+    }
+
+    public record RoutineRef(Long id, String name, String subject, int maxScore) {
+
+        static RoutineRef from(com.dlab.domain.routine.entity.DailyRoutine r) {
+            return new RoutineRef(r.getId(), r.getName(), r.getSubject(), r.getMaxScore());
+        }
+    }
+
+    /** @param cells 그 학생이 <b>대상인 루틴만</b> 들어온다 — 반 지정 루틴이 섞이기 때문이다 */
+    public record MatrixRow(Long enrollmentId, String studentNo, String studentName,
+                            String className, List<MatrixCell> cells) {
+
+        static MatrixRow from(com.dlab.domain.routine.service.DailyRoutineService.MatrixRow r) {
+            return new MatrixRow(r.enrollmentId(), r.studentNo(), r.studentName(),
+                    r.className(), r.cells().stream().map(MatrixCell::from).toList());
+        }
+    }
+
+    /**
+     * @param status {@code null}이면 <b>아직 입력하지 않은 칸</b>이다. 행이 아예 없는 것과
+     *               다르다 — 없는 학생은 애초에 그 루틴 대상이 아니다
+     */
+    public record MatrixCell(Long routineId, Long resultId, String status,
+                             Integer selfScore, Integer reviewedScore, String memo) {
+
+        static MatrixCell from(com.dlab.domain.routine.service.DailyRoutineService.MatrixCell c) {
+            var r = c.result();
+            if (r == null) {
+                return new MatrixCell(c.routineId(), null, null, null, null, null);
+            }
+            return new MatrixCell(c.routineId(), r.getId(), r.getStatus().name(),
+                    r.getSelfScore() == null ? null : (int) r.getSelfScore(),
+                    r.getReviewedScore() == null ? null : (int) r.getReviewedScore(),
+                    r.getMemo());
         }
     }
 
