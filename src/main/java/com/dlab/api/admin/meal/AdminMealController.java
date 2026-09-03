@@ -5,6 +5,7 @@ import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.meal.entity.MealClosure;
 import com.dlab.domain.meal.entity.MealOrder;
+import com.dlab.domain.meal.entity.MealPolicy;
 import com.dlab.domain.meal.entity.MealOrderItem;
 import com.dlab.domain.meal.entity.MealOrderStatus;
 import com.dlab.domain.meal.entity.MealType;
@@ -97,6 +98,23 @@ public class AdminMealController {
         return ApiResponse.empty();
     }
 
+    /**
+     * 신청 마감 규칙 조회 — 이용일 D-n.
+     *
+     * <p><b>미등록이면 404가 아니라 기본값을 내린다.</b> 앱 신청 판정도 미등록을
+     * {@code DEFAULT_DEADLINE_DAYS}로 보고 돌아가므로(MealScheduleService), 화면에
+     * "없음"이 뜨면 실제로 적용되는 값과 어긋난다. 등록 여부는 {@code registered}로 구분한다.
+     */
+    @GetMapping("/policy")
+    public ApiResponse<PolicyResponse> policy(@CurrentAccount AuthPrincipal me,
+                                              @RequestParam(required = false) Long academyId,
+                                              @RequestParam short year) {
+        return ApiResponse.success(mealAdminService.findPolicy(me, academyId, year)
+                .map(PolicyResponse::from)
+                .orElseGet(() -> PolicyResponse.unregistered(
+                        me.requireAcademyScope(academyId), year)));
+    }
+
     /** 신청 마감 규칙 — 이용일 D-n. */
     @PutMapping("/policy")
     public ApiResponse<Short> saveDeadline(@CurrentAccount AuthPrincipal me,
@@ -183,8 +201,26 @@ public class AdminMealController {
 
     public record DeadlineRequest(
             Long academyId,
-            @NotNull short year,
+            @NotNull @NotNull(message = "연도는 필수입니다.") Short year,
             @NotNull(message = "마감 일수는 필수입니다.") Short deadlineDays) {
+    }
+
+    /**
+     * @param registered 지점 정책이 실제로 등록됐는지. {@code false}면 {@code deadlineDays}는
+     *                   서버 기본값이다 — 화면이 "설정 안 함"과 구분해서 보여줄 수 있다.
+     */
+    public record PolicyResponse(Long academyId, short year, short deadlineDays,
+                                 boolean registered) {
+
+        static PolicyResponse from(MealPolicy p) {
+            return new PolicyResponse(p.getAcademy().getId(), p.getYear(),
+                    p.getDeadlineDays(), true);
+        }
+
+        static PolicyResponse unregistered(Long academyId, short year) {
+            return new PolicyResponse(academyId, year,
+                    MealPolicy.DEFAULT_DEADLINE_DAYS, false);
+        }
     }
 
     public record WindowRequest(

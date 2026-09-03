@@ -30,10 +30,15 @@ public final class AdminSurveyRequests {
                          Long classId,
                          @NotBlank @Size(max = 200) String title,
                          String description,
-                         boolean anonymous,
+                         Boolean anonymous,
                          @NotNull Instant opensAt,
                          @NotNull Instant closesAt,
                          @NotEmpty(message = "문항이 비어 있습니다.") List<AdminSurveyQuestion> questions) {
+
+        /** 생략 가능 — 없으면 false. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
+        public boolean anonymousOrFalse() {
+            return anonymous == null ? false : anonymous;
+        }
 
         SurveyService.SurveyCommand toCommand() {
             return new SurveyService.SurveyCommand(

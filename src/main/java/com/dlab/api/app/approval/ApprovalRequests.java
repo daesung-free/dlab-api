@@ -20,7 +20,7 @@ public final class ApprovalRequests {
             @NotNull(message = "우선 승인자를 선택해 주세요.")
             com.dlab.domain.approval.entity.ApproverType preferred,
             @AssertTrue(message = "안내 사항에 동의해야 선택할 수 있습니다.")
-            boolean agreed) {
+            @NotNull(message = "동의 여부는 필수입니다.") Boolean agreed) {
     }
 
     public record Reject(

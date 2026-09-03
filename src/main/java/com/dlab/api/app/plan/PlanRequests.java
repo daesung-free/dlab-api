@@ -1,5 +1,6 @@
 package com.dlab.api.app.plan;
 
+import jakarta.validation.constraints.NotNull;
 import com.dlab.domain.plan.entity.LearningPlanOptionType;
 import com.dlab.domain.plan.service.LearningPlanService;
 import jakarta.validation.Valid;
@@ -43,5 +44,10 @@ public final class PlanRequests {
     public record SaveOption(
             @NotNull LearningPlanOptionType optionType,
             @NotBlank @Size(max = 30) String label,
-            short sortOrder) {}
+            Short sortOrder) {
+
+        /** 생략 가능 — 없으면 (short) 0. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
+        public short sortOrderOrZero() {
+            return sortOrder == null ? (short) 0 : sortOrder;
+        }}
 }

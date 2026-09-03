@@ -138,6 +138,15 @@ public class MealAdminService {
         return scheduleService.closures(requireAcademy(me, academyId).getId(), month);
     }
 
+    /**
+     * 마감 D-n 조회. <b>없으면 비어 있는 값을 돌려준다</b> — 미등록도 정상 상태다
+     * (신청 판정이 기본값으로 돈다). 화면 쪽에서 기본값과 등록값을 구분한다.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<MealPolicy> findPolicy(AuthPrincipal me, Long academyId, short year) {
+        return policyRepository.find(requireAcademy(me, academyId).getId(), year);
+    }
+
     /** 마감 D-n 저장. 없으면 만든다. */
     @Transactional
     public MealPolicy saveDeadline(AuthPrincipal me, Long academyId, short year,

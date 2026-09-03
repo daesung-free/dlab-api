@@ -90,7 +90,7 @@ public class AdminConsultController {
         return ApiResponse.success(LogResponse.from(consultService.update(
                 me, logId, request.consultType(), request.methodOrDefault(),
                 request.consultedAt(), request.placeNote(), request.content(),
-                request.actionPlan(), request.actionDone(), request.nextDueDate(),
+                request.actionPlan(), request.actionDoneOrFalse(), request.nextDueDate(),
                 request.tagIds())));
     }
 
@@ -188,9 +188,14 @@ public class AdminConsultController {
             @Size(max = 100) String placeNote,
             @NotBlank String content,
             String actionPlan,
-            boolean actionDone,
+            Boolean actionDone,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate nextDueDate,
             List<Long> tagIds) {
+
+        /** 생략 가능 — 없으면 false. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
+        public boolean actionDoneOrFalse() {
+            return actionDone == null ? false : actionDone;
+        }
 
         ConsultMethod methodOrDefault() {
             return method == null ? ConsultMethod.FACE : method;
@@ -216,7 +221,7 @@ public class AdminConsultController {
     }
 
     public record TagRequest(
-            @NotNull short year,
+            @NotNull @NotNull(message = "연도는 필수입니다.") Short year,
             /** {@code null}이면 모든 유형에서 쓴다. */
             ConsultType consultType,
             @NotBlank(message = "태그명은 필수입니다.") @Size(max = 50) String name,
@@ -232,7 +237,7 @@ public class AdminConsultController {
             @NotBlank @Size(max = 50) String name,
             Short sortOrder,
             Short maxDisplay,
-            boolean active) {
+            @NotNull(message = "사용 여부는 필수입니다.") Boolean active) {
 
         short sortOrderOrZero() {
             return sortOrder == null ? 0 : sortOrder;

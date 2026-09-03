@@ -34,9 +34,14 @@ public final class ExamFormRequests {
             @NotNull(message = "학년은 필수입니다.") GradeType gradeType,
             @NotNull(message = "시험 구분은 필수입니다.") ExamCode examCode,
             @NotBlank(message = "시험 이름은 필수입니다.") @Size(max = 64) String examName,
-            int sortOrder,
+            Integer sortOrder,
             @NotEmpty(message = "과목이 없는 시험은 만들 수 없습니다.")
             @Valid List<ExamFormSubject> subjects) {
+
+        /** 생략 가능 — 없으면 0. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
+        public int sortOrderOrZero() {
+            return sortOrder == null ? 0 : sortOrder;
+        }
 
         public ExamFormAdminService.Command toCommand() {
             return new ExamFormAdminService.Command(academyId, year, gradeType, examCode,
