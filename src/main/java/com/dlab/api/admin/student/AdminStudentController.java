@@ -153,13 +153,35 @@ public class AdminStudentController {
         return StudentResponse.from(enrollment, studentListEnricher.of(enrollment), me);
     }
 
-    /** 신규 접수. 학번은 서버가 채번한다. */
+    /**
+     * 다음 학번 미리보기 — 등록 폼의 "다음 학번은 …입니다".
+     *
+     * <p><b>예약이 아니다.</b> 등록 시점에 다시 계산하므로 두 사람이 같은 번호를 볼 수 있다.
+     * 화면은 "예정"으로 표시하고, <b>이 값을 등록 요청에 실어 보내지 않는다</b>.
+     */
+    @GetMapping("/next-student-no")
+    public ApiResponse<String> nextStudentNo(@CurrentAccount AuthPrincipal me,
+                                             @RequestParam(required = false) Long academyId,
+                                             @RequestParam short year) {
+        return ApiResponse.success(studentService.previewStudentNo(
+                me.requireAcademyScope(academyId), year, me));
+    }
+
+    /**
+     * 신규 접수. 학번은 서버가 채번한다.
+     *
+     * <p>상세 정보(생년월일·성별·출신학교·주소)와 등원일을 <b>함께 받아 한 번에 끝낸다</b> —
+     * 등록과 수정으로 나누면 뒤가 실패했을 때 학생만 남고, 화면은 "저장 실패"로만 알려
+     * 담당자가 다시 등록해 중복이 생긴다.
+     */
     @PostMapping
     public ApiResponse<StudentResponse> admit(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody StudentRequests.Admit request) {
         return ApiResponse.success(single(studentService.admit(
                 request.academyId(), request.year().shortValue(), request.name(),
-                request.phone(), request.grade(), request.track(), me), me));
+                request.phone(), request.grade(), request.track(),
+                request.birthDate(), request.gender(), request.schoolName(),
+                request.address(), request.admissionDate(), me), me));
     }
 
     /** 학생 정보 수정. 보내지 않은 필드는 그대로 둔다 — 부분 수정이라 {@code PATCH}다. */

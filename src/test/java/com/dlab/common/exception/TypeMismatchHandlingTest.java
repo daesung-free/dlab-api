@@ -179,4 +179,14 @@ class TypeMismatchHandlingTest {
                         .value(org.hamcrest.Matchers.not(
                                 org.hamcrest.Matchers.containsString("com.dlab"))));
     }
+
+    @Test
+    @DisplayName("★ 필수 파라미터가 없으면 500이 아니라 400이고, 어느 값인지 담긴다")
+    void missingRequiredParamIsBadRequest() throws Exception {
+        mvc.perform(get("/api/v1/test/type-mismatch"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("year")));
+    }
 }

@@ -137,7 +137,8 @@ class ConcurrencyTest {
     void studentNoNeverDuplicates() throws Exception {
         int succeeded = runConcurrently(THREADS, () ->
                 studentService.admit(academyId, (short) 2026, "동시접수", "010-0000-0000",
-                        GradeType.N_SU, TrackType.SCIENCE, principal));
+                        GradeType.N_SU, TrackType.SCIENCE,
+                        null, null, null, null, null, principal));
 
         List<String> numbers = tx.execute(status -> em.createQuery("""
                 SELECT e.studentNo FROM StudentEnrollment e

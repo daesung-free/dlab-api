@@ -61,6 +61,7 @@ public class LearningPlanBoardService {
      */
     public record BoardRow(Long enrollmentId, String studentNo, String studentName,
                            Long classId, String className,
+                           Long homeroomTeacherId, String homeroomTeacherName,
                            int plannedMinutes, int doneMinutes, int completionRate,
                            long totalItems, long doneItems,
                            long plannedDays, long missingDays) {
@@ -128,6 +129,8 @@ public class LearningPlanBoardService {
                 enrollment.getStudent().getName(),
                 clazz == null ? null : clazz.id(),
                 clazz == null ? null : clazz.name(),
+                clazz == null ? null : clazz.homeroomTeacherId(),
+                clazz == null ? null : clazz.homeroomTeacherName(),
                 aggregate.plannedMinutes(),
                 aggregate.doneMinutes(),
                 completionRate(aggregate),

@@ -18,6 +18,8 @@ public final class AdminPlanBoardResponse {
      *
      * @param doneMinutes 이행(O)으로 체크된 <b>계획</b> 시간이다. 출결 기반 순공시간과 다른
      *                    값이므로 같은 자리에 섞어 보여주면 안 된다
+     * @param homeroomTeacherName 담임. <b>반에 붙어 있어</b> 반 미배정 학생은 비어 있다.
+     *                            담임이 자기 반 미작성자를 보는 화면이라 필요하다
      * @param missingDays 조회 기간 중 계획을 한 줄도 안 쓴 날 수
      */
     public record LearningPlanBoardRow(
@@ -26,6 +28,8 @@ public final class AdminPlanBoardResponse {
             String studentName,
             Long classId,
             String className,
+            Long homeroomTeacherId,
+            String homeroomTeacherName,
             int plannedMinutes,
             int doneMinutes,
             int completionRate,
@@ -38,6 +42,7 @@ public final class AdminPlanBoardResponse {
             return new LearningPlanBoardRow(
                     row.enrollmentId(), row.studentNo(), row.studentName(),
                     row.classId(), row.className(),
+                    row.homeroomTeacherId(), row.homeroomTeacherName(),
                     row.plannedMinutes(), row.doneMinutes(), row.completionRate(),
                     row.totalItems(), row.doneItems(),
                     row.plannedDays(), row.missingDays());

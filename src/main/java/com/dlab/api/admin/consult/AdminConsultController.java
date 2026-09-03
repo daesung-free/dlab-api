@@ -6,11 +6,14 @@ import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.consult.entity.ConsultLog;
 import com.dlab.domain.consult.entity.ConsultMethod;
 import com.dlab.domain.consult.entity.ConsultTag;
+import com.dlab.domain.consult.entity.ParentShare;
 import com.dlab.domain.consult.entity.ConsultType;
 import com.dlab.domain.consult.service.ConsultService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 import java.util.List;
@@ -79,7 +82,7 @@ public class AdminConsultController {
                 me, request.enrollmentId(), request.teacherId(), request.consultType(),
                 request.methodOrDefault(), request.consultedAt(), request.placeNote(),
                 request.content(), request.actionPlan(), request.nextDueDate(),
-                request.tagIds())));
+                request.tagIds(), request.parentShareOrNone(), request.durationMinutes())));
     }
 
     /** 상담 일지 수정. */
@@ -91,7 +94,7 @@ public class AdminConsultController {
                 me, logId, request.consultType(), request.methodOrDefault(),
                 request.consultedAt(), request.placeNote(), request.content(),
                 request.actionPlan(), request.actionDoneOrFalse(), request.nextDueDate(),
-                request.tagIds())));
+                request.tagIds(), request.parentShareOrNone(), request.durationMinutes())));
     }
 
     /** 삭제(soft). 상담 이력은 다음 상담의 근거라 물리 삭제하지 않는다. */
@@ -164,7 +167,7 @@ public class AdminConsultController {
 
     public record WriteRequest(
             @NotNull(message = "학생은 필수입니다.") Long enrollmentId,
-            /** 미지정이면 그 학생의 담임이 상담자가 된다. */
+            /** 미지정이면 <b>로그인한 본인</b>, 그것도 아니면 그 학생의 담임이 상담자가 된다. */
             Long teacherId,
             @NotNull(message = "상담 유형은 필수입니다.") ConsultType consultType,
             ConsultMethod method,
@@ -174,10 +177,17 @@ public class AdminConsultController {
             @NotBlank(message = "상담 내용은 필수입니다.") String content,
             String actionPlan,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate nextDueDate,
-            List<Long> tagIds) {
+            List<Long> tagIds,
+            /** 생략하면 공유하지 않는다 — 기본을 공유로 두면 의식하지 못한 채 열린다. */
+            ParentShare parentShare,
+            @Positive @Max(600) Short durationMinutes) {
 
         ConsultMethod methodOrDefault() {
             return method == null ? ConsultMethod.FACE : method;
+        }
+
+        ParentShare parentShareOrNone() {
+            return parentShare == null ? ParentShare.NONE : parentShare;
         }
     }
 
@@ -190,7 +200,13 @@ public class AdminConsultController {
             String actionPlan,
             Boolean actionDone,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate nextDueDate,
-            List<Long> tagIds) {
+            List<Long> tagIds,
+            ParentShare parentShare,
+            @Positive @Max(600) Short durationMinutes) {
+
+        ParentShare parentShareOrNone() {
+            return parentShare == null ? ParentShare.NONE : parentShare;
+        }
 
         /** 생략 가능 — 없으면 false. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
         public boolean actionDoneOrFalse() {
@@ -206,7 +222,8 @@ public class AdminConsultController {
                               String teacherName, ConsultType consultType, ConsultMethod method,
                               LocalDate consultedAt, String placeNote, String content,
                               String actionPlan, boolean actionDone, LocalDate nextDueDate,
-                              List<String> tags) {
+                              List<String> tags, ParentShare parentShare,
+                              Short durationMinutes) {
 
         static LogResponse from(ConsultLog l) {
             return new LogResponse(l.getId(), l.getEnrollment().getId(),
@@ -216,12 +233,13 @@ public class AdminConsultController {
                     l.getConsultType(), l.getMethod(), l.getConsultedAt(),
                     l.getPlaceNote(), l.getContent(), l.getActionPlan(), l.isActionDone(),
                     l.getNextDueDate(),
-                    l.tagList().stream().map(ConsultTag::getName).toList());
+                    l.tagList().stream().map(ConsultTag::getName).toList(),
+                    l.getParentShare(), l.getDurationMinutes());
         }
     }
 
     public record TagRequest(
-            @NotNull @NotNull(message = "연도는 필수입니다.") Short year,
+            @NotNull(message = "연도는 필수입니다.") Short year,
             /** {@code null}이면 모든 유형에서 쓴다. */
             ConsultType consultType,
             @NotBlank(message = "태그명은 필수입니다.") @Size(max = 50) String name,

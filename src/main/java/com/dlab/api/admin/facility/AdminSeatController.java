@@ -165,12 +165,17 @@ public class AdminSeatController {
      * "배정됐지만 미등원"과 "빈자리"가 구분되지 않는다.
      *
      * <p>재실은 <b>서버가 계산해서 내린다.</b> 화면이 출결 로그와 좌석을 조합하면
-     * 새로고침마다 값이 흔들린다. 학생 이름은 마스킹된 값이다.
+     * 새로고침마다 값이 흔들린다.
+     *
+     * <p>학생 이름은 기본이 마스킹이고 {@code unmask=true}는 <b>상위 관리자에게만</b> 먹는다.
+     * 실제 적용 여부는 응답의 {@code masked}로 알려준다 — 다른 목록과 같은 규칙이다.
      */
     @GetMapping("/layout")
     public ApiResponse<List<SeatCellResponse>> layout(@CurrentAccount AuthPrincipal me,
-                                                      @RequestParam Long studyAreaId) {
-        return ApiResponse.success(seatLayoutService.layout(me, studyAreaId).stream()
+                                                      @RequestParam Long studyAreaId,
+                                                      @RequestParam(defaultValue = "false")
+                                                      boolean unmask) {
+        return ApiResponse.success(seatLayoutService.layout(me, studyAreaId, unmask).stream()
                 .map(SeatCellResponse::from)
                 .toList());
     }
@@ -199,12 +204,16 @@ public class AdminSeatController {
             SeatPresence presence,
             Long enrollmentId,
             String studentNo,
-            String studentName) {
+            String studentName,
+            Long classId,
+            String className,
+            boolean masked) {
 
         public static SeatCellResponse from(SeatLayoutService.SeatCell c) {
             return new SeatCellResponse(c.seatId(), c.seatCd(), c.seatNm(),
                     c.xPos(), c.yPos(), c.assignmentState(), c.presence(),
-                    c.enrollmentId(), c.studentNo(), c.studentName());
+                    c.enrollmentId(), c.studentNo(), c.studentName(),
+                    c.classId(), c.className(), c.masked());
         }
     }
 
