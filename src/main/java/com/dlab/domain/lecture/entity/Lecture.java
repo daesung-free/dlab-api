@@ -73,6 +73,20 @@ public class Lecture extends BaseEntity {
     @Column(nullable = false)
     private int fee = 0;
 
+    /**
+     * 담당 강사.
+     *
+     * <p>⚠️ {@code teacher}는 <b>담당선생님(사감)만</b> 들어가는 테이블이다. 외부 강사를
+     * 세우는 특강이 있으면 여기로는 담을 수 없다 — 그때 확장한다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "teacher_id")
+    private com.dlab.domain.user.entity.Teacher teacher;
+
+    public void changeTeacher(com.dlab.domain.user.entity.Teacher teacher) {
+        this.teacher = teacher;
+    }
+
     public Lecture(Academy academy, short year, LectureType lectureType, String name) {
         this.academy = academy;
         this.year = year;

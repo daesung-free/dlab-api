@@ -95,7 +95,7 @@ class ConsultFlowTest {
                              LocalDate at, LocalDate nextDue, List<Long> tagIds) {
         ConsultLog log = consultService.write(admin, target.getId(), null, type,
                 ConsultMethod.FACE, at, "20분 · 상담실 2", "상담 내용", "주간 복습",
-                nextDue, tagIds);
+                nextDue, tagIds, null, null);
         em.flush();
         return log;
     }
@@ -141,7 +141,7 @@ class ConsultFlowTest {
         assertThat(log.tagList()).hasSize(2);
 
         consultService.update(admin, log.getId(), ConsultType.LIFE, ConsultMethod.PHONE,
-                today, null, "수정", null, true, null, List.of(late.getId()));
+                today, null, "수정", null, true, null, List.of(late.getId()), null, null);
         em.flush();
         em.clear();
 
@@ -197,7 +197,8 @@ class ConsultFlowTest {
                 List.of(Role.BRANCH_ADMIN), false);
 
         assertThatThrownBy(() -> consultService.write(ilsanAdmin, minji.getId(), null,
-                ConsultType.REGULAR, ConsultMethod.FACE, today, null, "내용", null, null, List.of()))
+                ConsultType.REGULAR, ConsultMethod.FACE, today, null, "내용", null, null,
+                List.of(), null, null))
                 .isInstanceOf(BusinessException.class);
     }
 

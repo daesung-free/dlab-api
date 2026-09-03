@@ -94,7 +94,7 @@ class SeatLayoutTest {
     private SeatCell cellOf(String seatCd) {
         em.flush();
         em.clear();
-        return seatLayoutService.layout(admin, areaA.getId()).stream()
+        return seatLayoutService.layout(admin, areaA.getId(), false).stream()
                 .filter(c -> c.seatCd().equals(seatCd)).findFirst().orElseThrow();
     }
 
@@ -115,7 +115,7 @@ class SeatLayoutTest {
         SeatMaster taken = seat("A-02", 2, 1);
         assign(taken, "김민지", "2026-0001");
 
-        assertThat(seatLayoutService.layout(admin, areaA.getId())).hasSize(2);
+        assertThat(seatLayoutService.layout(admin, areaA.getId(), false)).hasSize(2);
         assertThat(cellOf("A-01").assignmentState()).isEqualTo("UNASSIGNED");
         assertThat(cellOf("A-01").presence()).isEqualTo(SeatPresence.EMPTY);
     }
@@ -211,7 +211,7 @@ class SeatLayoutTest {
         AuthPrincipal ilsanAdmin = AuthPrincipal.of(2L, "EMPLOYEE", ilsan.getId(),
                 List.of(Role.BRANCH_ADMIN), false);
 
-        assertThatThrownBy(() -> seatLayoutService.layout(ilsanAdmin, areaA.getId()))
+        assertThatThrownBy(() -> seatLayoutService.layout(ilsanAdmin, areaA.getId(), false))
                 .isInstanceOf(BusinessException.class);
     }
 

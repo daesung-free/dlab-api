@@ -118,9 +118,12 @@ public class LearningPlanBoardRepository {
         QClassMaster classMaster = QClassMaster.classMaster;
 
         List<Tuple> rows = queryFactory
-                .select(assignment.enrollment.id, classMaster.id, classMaster.name)
+                .select(assignment.enrollment.id, classMaster.id, classMaster.name,
+                        classMaster.homeroomTeacher.id, classMaster.homeroomTeacher.name)
                 .from(assignment)
                 .join(assignment.classMaster, classMaster)
+                // 담임이 없는 반이 있어 left join 이다 — inner 로 하면 그 반 학생이 통째로 빠진다
+                .leftJoin(classMaster.homeroomTeacher)
                 .where(assignment.academy.id.eq(academyId),
                         assignment.classType.eq(ClassType.FIXED),
                         assignment.active.isTrue(),
@@ -130,13 +133,20 @@ public class LearningPlanBoardRepository {
         Map<Long, ClassRef> result = new HashMap<>();
         for (Tuple row : rows) {
             result.put(row.get(assignment.enrollment.id),
-                    new ClassRef(row.get(classMaster.id), row.get(classMaster.name)));
+                    new ClassRef(row.get(classMaster.id), row.get(classMaster.name),
+                            row.get(classMaster.homeroomTeacher.id),
+                            row.get(classMaster.homeroomTeacher.name)));
         }
         return result;
     }
 
-    /** 목록에 표시할 반. 미배정 학생은 이 값이 없다. */
-    public record ClassRef(Long id, String name) {
+    /**
+     * 목록에 표시할 반. 미배정 학생은 이 값이 없다.
+     *
+     * <p>담임은 <b>반에 붙어 있다</b>(반 배정 시 자동으로 따라온다). 학생별로 따로 들고
+     * 있지 않으므로 반이 없으면 담임도 없다.
+     */
+    public record ClassRef(Long id, String name, Long homeroomTeacherId, String homeroomTeacherName) {
     }
 
     private static int intOf(Long value) {

@@ -31,7 +31,9 @@ public final class LectureRequests {
             Instant applyTo,
             LocalDate startDate,
             LocalDate endDate,
-            @PositiveOrZero Integer fee) {
+            @PositiveOrZero Integer fee,
+            /** 담당 강사. {@code null}은 "변경하지 않음"이라 <b>해제는 이 값으로 못 한다.</b> */
+            Long teacherId) {
     }
 
     public record LectureChangeStatus(@NotNull(message = "상태는 필수입니다.") LectureStatus status) {

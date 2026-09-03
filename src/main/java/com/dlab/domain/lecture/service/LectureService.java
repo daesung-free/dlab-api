@@ -39,6 +39,8 @@ public class LectureService {
     private final LectureApplicationRepository applicationRepository;
     private final LectureAttendanceRepository attendanceRepository;
     private final AcademyRepository academyRepository;
+    private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.user.repository.TeacherRepository teacherRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final com.dlab.domain.user.service.AppScopeResolver scopeResolver;
     private final Clock clock;
@@ -89,7 +91,8 @@ public class LectureService {
     @Transactional
     public Lecture update(Long lectureId, String name, String description, Integer capacity,
                           Instant applyFrom, Instant applyTo, LocalDate startDate,
-                          LocalDate endDate, Integer fee, AuthPrincipal principal) {
+                          LocalDate endDate, Integer fee, Long teacherId,
+                          AuthPrincipal principal) {
         Lecture lecture = require(lectureId, principal);
         // ★ 정원을 현재 확정 인원보다 낮추지 못하게 막는다.
         //   허용하면 이미 확정된 학생이 정원 밖으로 밀려나는데, 누구를 뺄지 정할 방법이 없다.
@@ -102,6 +105,13 @@ public class LectureService {
             }
         }
         lecture.update(name, description, capacity, applyFrom, applyTo, startDate, endDate, fee);
+        if (teacherId != null) {
+            lecture.changeTeacher(teacherRepository.findById(teacherId)
+                    .filter(t -> !t.isDeleted())
+                    .filter(t -> t.getAcademy().getId().equals(lecture.getAcademy().getId()))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND,
+                            "선생님을 찾을 수 없습니다.")));
+        }
         return lecture;
     }
 
@@ -251,6 +261,34 @@ public class LectureService {
     public List<LectureApplication> roster(Long lectureId, AuthPrincipal principal) {
         require(lectureId, principal);
         return applicationRepository.findRoster(lectureId);
+    }
+
+    /**
+     * 신청자 명단 + 반. 명단에서 <b>어느 반 학생인지</b>를 알 수 없으면
+     * 담임에게 넘길 때 다시 대조해야 한다.
+     *
+     * <p>반을 신청자마다 조회하면 쿼리가 인원수만큼 나가므로 한 번에 받아 붙인다.
+     */
+    @Transactional(readOnly = true)
+    public List<RosterEntry> rosterDetailed(Long lectureId, AuthPrincipal principal) {
+        List<LectureApplication> applications = roster(lectureId, principal);
+
+        List<Long> enrollmentIds = applications.stream()
+                .map(a -> a.getEnrollment().getId()).toList();
+        java.util.Map<Long, String> classNames = new java.util.HashMap<>();
+        if (!enrollmentIds.isEmpty()) {
+            classAssignmentRepository.findActiveFixedByEnrollmentIds(enrollmentIds)
+                    .forEach(ca -> classNames.put(ca.getEnrollment().getId(),
+                            ca.getClassMaster().getName()));
+        }
+
+        return applications.stream()
+                .map(a -> new RosterEntry(a, classNames.get(a.getEnrollment().getId())))
+                .toList();
+    }
+
+    /** @param className 고정반. 미배정이면 비어 있다 */
+    public record RosterEntry(LectureApplication application, String className) {
     }
 
     @Transactional(readOnly = true)

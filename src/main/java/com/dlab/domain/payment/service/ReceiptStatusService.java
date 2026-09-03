@@ -43,6 +43,7 @@ public class ReceiptStatusService {
     private static final LocalDate LATEST = LocalDate.of(2999, 12, 31);
 
     private final BillingRepository billingRepository;
+    private final com.dlab.domain.payment.repository.PaymentTransactionRepository transactionRepository;
     private final ExcelExporter excelExporter;
 
     /**
@@ -60,8 +61,21 @@ public class ReceiptStatusService {
         LocalDate start = from != null ? from : EARLIEST;
         LocalDate end = to != null ? to : LATEST;
 
-        return billingRepository.findWithReceived(scope, year, start, end).stream()
-                .map(r -> Row.of((Billing) r[0], ((Number) r[1]).intValue()))
+        List<Object[]> raw = billingRepository.findWithReceived(scope, year, start, end);
+
+        // 청구마다 거래를 조회하면 쿼리가 행 수만큼 나간다. ID를 모아 한 번에 읽는다
+        List<Long> billingIds = raw.stream().map(r -> ((Billing) r[0]).getId()).toList();
+        Map<Long, List<com.dlab.domain.payment.entity.PaymentTransaction>> paymentsByBilling =
+                billingIds.isEmpty() ? Map.of()
+                        : transactionRepository.findActiveByBillingIds(billingIds).stream()
+                                .collect(Collectors.groupingBy(t -> t.getBilling().getId()));
+
+        return raw.stream()
+                .map(r -> {
+                    Billing b = (Billing) r[0];
+                    return Row.of(b, ((Number) r[1]).intValue(),
+                            paymentsByBilling.getOrDefault(b.getId(), List.of()));
+                })
                 .filter(row -> type == null || row.billing().getBillingType() == type)
                 .filter(row -> !unpaidOnly || row.unpaid() > 0)
                 .toList();
@@ -135,11 +149,17 @@ public class ReceiptStatusService {
         return me.requireAcademyScope(academyId);
     }
 
-    /** @param received 취소되지 않은 수납 합계 */
-    public record Row(Billing billing, int received) {
+    /**
+     * @param received 취소되지 않은 수납 합계
+     * @param payments 살아 있는 수납 거래. <b>언제 무엇으로 냈는지</b>는 청구 한 줄로는
+     *                 알 수 없어 함께 내린다 — 화면 상단의 결제수단별 집계가 이 값을 쓴다
+     */
+    public record Row(Billing billing, int received,
+                      List<com.dlab.domain.payment.entity.PaymentTransaction> payments) {
 
-        static Row of(Billing billing, int received) {
-            return new Row(billing, received);
+        static Row of(Billing billing, int received,
+                      List<com.dlab.domain.payment.entity.PaymentTransaction> payments) {
+            return new Row(billing, received, payments);
         }
 
         /** 과납이어도 음수로 내려가지 않는다 — 미납액 합계가 줄어들면 안 된다. */

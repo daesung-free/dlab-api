@@ -75,15 +75,24 @@ public class StudentService {
      * 등록 건을 새 트랜잭션에서 넣을 때 <b>아직 커밋되지 않은 사람을 참조</b>해 FK가 깨진다.
      */
     public StudentEnrollment admit(Long academyId, short year, String name, String phone,
-                                   GradeType grade, TrackType track, AuthPrincipal principal) {
+                                   GradeType grade, TrackType track,
+                                   LocalDate birthDate, String gender, String schoolName,
+                                   String address, LocalDate admissionDate,
+                                   AuthPrincipal principal) {
         if (!principal.canAccessAcademy(academyId)) {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        if (admissionDate != null && admissionDate.isAfter(LocalDate.now(clock))) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "등원일을 미래로 지정할 수 없습니다.");
         }
         return withStudentNoRetry(() -> {
             Academy academy = academyRepository.findById(academyId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
             Student student = studentRepository.save(new Student(generateUniqueCode(), name, phone));
-            return enroll(academy, year, student, grade, track);
+            // 상세는 같은 트랜잭션에서 채운다 — 등록 후 따로 보내면 중간에 실패했을 때
+            // 학생만 남고 상세가 비는 상태가 되고, 담당자는 그걸 알 방법이 없다
+            student.updateProfile(null, null, birthDate, gender, schoolName, address);
+            return enroll(academy, year, student, grade, track, admissionDate);
         });
     }
 
@@ -118,7 +127,7 @@ public class StudentService {
                                          String address, GradeType grade, TrackType track) {
         Student student = studentRepository.save(new Student(generateUniqueCode(), name, phone));
         student.updateProfile(null, null, birthDate, gender, schoolName, address);
-        return enroll(academy, year, student, grade, track);
+        return enroll(academy, year, student, grade, track, null);
     }
 
     /** 학생 정보 수정. {@code null} 인자는 변경하지 않는다. */
@@ -159,7 +168,7 @@ public class StudentService {
                 // 재배정과 같은 이유 — is_current 부분 유니크가 있다면 순서를 강제해야 한다
                 enrollmentRepository.flush();
             });
-            return enroll(academy, year, student, grade, track);
+            return enroll(academy, year, student, grade, track, null);
         });
     }
 
@@ -175,16 +184,32 @@ public class StudentService {
      * 재시도 지점 바깥으로 예외가 새어나간다.
      */
     private StudentEnrollment enroll(Academy academy, short year, Student student,
-                                     GradeType grade, TrackType track) {
+                                     GradeType grade, TrackType track,
+                                     LocalDate admissionDate) {
         String studentNo = nextStudentNo(academy.getId(), year);
         StudentEnrollment enrollment = enrollmentRepository.save(
                 new StudentEnrollment(student, academy, year, studentNo, null, grade));
         enrollment.changeTrack(track);
         // ★ 채우지 않으면 등원일 검색·재원기간 산정이 전부 빈 값을 보게 된다.
-        //   소급 입력(며칠 뒤 등록)은 아직 경로가 없다 — 필요해지면 수정 API에 열어준다
-        enrollment.recordAdmission(LocalDate.now(clock));
+        //   소급 등록(이미 다니던 학생을 나중에 넣는 경우)이 실제로 있어 지정도 받는다
+        enrollment.recordAdmission(admissionDate == null ? LocalDate.now(clock) : admissionDate);
         enrollmentRepository.flush();
         return enrollment;
+    }
+
+    /**
+     * 다음 학번 미리보기.
+     *
+     * <p>⚠️ <b>예약이 아니다.</b> 등록 시점에 다시 계산하므로, 두 사람이 동시에 화면을 열면
+     * 같은 번호가 보이고 실제로는 한 명만 그 번호를 갖는다(유니크 제약이 심판이다).
+     * 화면에 "예정"이라고 적어야 하고, 이 값을 등록 요청에 실어 보내면 안 된다.
+     */
+    @Transactional(readOnly = true)
+    public String previewStudentNo(Long academyId, short year, AuthPrincipal principal) {
+        if (!principal.canAccessAcademy(academyId)) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        return nextStudentNo(academyId, year);
     }
 
     /** {@code year + %04d}. 요구사항 F-4.1-3 — 매년 초기화되므로 연도별로 1부터 센다. */

@@ -219,6 +219,50 @@ public class GlobalExceptionHandler {
                         "날짜 형식이 올바르지 않습니다: " + abbreviate(e.getParsedString())));
     }
 
+    /**
+     * 필수 파라미터·경로변수·헤더 누락.
+     *
+     * <p><b>처리하지 않으면 catch-all이 잡아 500으로 나간다.</b> 실제로
+     * {@code /learning-plans/options}를 {@code year} 없이 부르면 500이었다 —
+     * 값 하나를 빠뜨린 클라이언트 잘못인데 "서버 오류"가 돌아오면 원인을 못 찾는다.
+     *
+     * <p>{@link org.springframework.web.bind.ServletRequestBindingException}으로 한 번에 받는다.
+     * 누락은 파라미터·경로변수·헤더·쿠키·행렬변수로 갈리는데 <b>전부 이 타입 아래</b>라,
+     * 하나씩 잡으면 새 종류가 생길 때마다 500이 다시 샌다.
+     *
+     * <p>어느 값이 빠졌는지는 <b>{@code MissingRequestValueException}일 때만</b> 싣는다 —
+     * 그 아래에만 이름이 있고, 상위 타입은 메시지에 내부 정보가 섞일 수 있다.
+     */
+    @ExceptionHandler(org.springframework.web.bind.ServletRequestBindingException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingValue(
+            org.springframework.web.bind.ServletRequestBindingException e) {
+        log.warn("요청 값 바인딩 실패: {}", e.getMessage());
+
+        String message = "필수 요청 값이 없습니다";
+        if (e instanceof org.springframework.web.bind.MissingRequestValueException missing) {
+            String name = nameOf(missing);
+            if (name != null) {
+                message = "필수 요청 값이 없습니다: '" + name + "'";
+            }
+        }
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
+                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST, message + "."));
+    }
+
+    /** 누락 종류마다 이름을 담는 자리가 달라서 갈라 본다. */
+    private static String nameOf(org.springframework.web.bind.MissingRequestValueException e) {
+        if (e instanceof org.springframework.web.bind.MissingServletRequestParameterException p) {
+            return p.getParameterName();
+        }
+        if (e instanceof org.springframework.web.bind.MissingPathVariableException v) {
+            return v.getVariableName();
+        }
+        if (e instanceof org.springframework.web.bind.MissingRequestHeaderException h) {
+            return h.getHeaderName();
+        }
+        return null;
+    }
+
     /** 사용자가 보낸 값을 메시지에 실을 수 있는 길이로 자른다. */
     private static String abbreviate(Object value) {
         if (value == null) {
