@@ -4,6 +4,7 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.privacy.Masking;
 import com.dlab.common.privacy.PersonalDataPolicy;
+import com.dlab.common.search.PageSlicer;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
@@ -56,7 +57,9 @@ public class AdminPenaltyController {
             @RequestParam(required = false) PenaltyCategory category,
             @RequestParam(required = false) PenaltySource source,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long classId) {
+            @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
 
         LocalDate start = from == null ? LocalDate.now().withDayOfMonth(1) : from;
         LocalDate end = to == null ? LocalDate.now() : to;
@@ -64,12 +67,23 @@ public class AdminPenaltyController {
         var board = penaltyService.board(me, academyId, start, end, category, source, keyword, classId);
         boolean raw = PersonalDataPolicy.canViewRaw(me);
 
-        return ApiResponse.success(new PenaltyBoardResponse(
-                board.rows().stream().map(p -> PenaltyRowResponse.of(p, raw)).toList(),
-                Map.of("plusTotal", (long) board.plusTotal(),
-                        "minusTotal", (long) board.minusTotal(),
-                        "autoCount", board.autoCount()),
-                !raw));
+        List<PenaltyRowResponse> all = board.rows().stream()
+                .map(p -> PenaltyRowResponse.of(p, raw)).toList();
+
+        // summary 는 페이지 합계가 아니라 필터 전체 기준이다 — 상단 통계 타일이
+        // 페이지를 넘길 때마다 값이 바뀌면 "이번 달 벌점 합계"라는 의미가 사라진다
+        Map<String, Long> summary = Map.of(
+                "plusTotal", (long) board.plusTotal(),
+                "minusTotal", (long) board.minusTotal(),
+                "autoCount", board.autoCount());
+
+        if (size == null) {
+            return ApiResponse.success(new PenaltyBoardResponse(all, summary, !raw));
+        }
+        var sliced = PageSlicer.of(all, page, size);
+        return ApiResponse.success(
+                new PenaltyBoardResponse(sliced.getContent(), summary, !raw),
+                ApiResponse.PageMeta.of(sliced));
     }
 
     /**

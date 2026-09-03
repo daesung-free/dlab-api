@@ -14,7 +14,9 @@ public record HolidayResponse(
         boolean nationwide,
         LocalDate date,
         String name,
-        HolidayType type
+        HolidayType type,
+        /** 학습계획 미작성 집계에서 빠지는 날인지. 급식 판정과 별개 축이다 */
+        boolean planExcluded
 ) {
 
     public static HolidayResponse from(Holiday holiday) {
@@ -24,6 +26,7 @@ public record HolidayResponse(
                 holiday.isNationwide(),
                 holiday.getHolidayDate(),
                 holiday.getName(),
-                holiday.getHolidayType());
+                holiday.getHolidayType(),
+                holiday.isPlanExcluded());
     }
 }
