@@ -33,6 +33,21 @@ public interface QnaOfflineSlotRepository extends JpaRepository<QnaOfflineSlot, 
     List<QnaOfflineSlot> findByDate(@Param("academyId") Long academyId,
                                     @Param("date") LocalDate date);
 
+    /**
+     * 기간 조회. 화면이 <b>주간 그리드</b>라 하루씩 부르면 매번 5회가 나간다.
+     */
+    @Query("""
+            SELECT s FROM QnaOfflineSlot s
+            LEFT JOIN FETCH s.teacher
+            WHERE s.academy.id = :academyId
+              AND s.slotDate BETWEEN :from AND :to
+              AND s.deleted = false
+            ORDER BY s.slotDate, s.startTime, s.id
+            """)
+    List<QnaOfflineSlot> findByDateRange(@Param("academyId") Long academyId,
+                                         @Param("from") LocalDate from,
+                                         @Param("to") LocalDate to);
+
     /** 개설 시 중복 확인. 같은 날 같은 시각에 같은 상담실을 두 번 열지 않는다. */
     boolean existsByAcademyIdAndSlotDateAndStartTimeAndRoomAndDeletedFalse(
             Long academyId, LocalDate slotDate, LocalTime startTime, String room);

@@ -380,4 +380,61 @@ class NoticeFlowTest {
                 scopeResolver.resolve(account.getId(), seojun.getStudent().getId()))
                 .isInstanceOf(BusinessException.class);
     }
+
+    // ── 열람 기록 (API_GAPS 13-2) ─────────────────────────────
+
+    @Test
+    @DisplayName("★ 같은 공지를 여러 번 열어도 한 번만 센다 — 앱은 화면 진입마다 부른다")
+    void repeatedReadCountsOnce() {
+        Notice notice = noticeService.createForBranch(
+                branchAdmin, bundang.getId(), "지점 공지", "본문");
+        em.flush();
+
+        noticeService.markRead(minji.getId(), notice.getId());
+        noticeService.markRead(minji.getId(), notice.getId());
+        noticeService.markRead(minji.getId(), notice.getId());
+        em.flush();
+
+        assertThat(noticeService.readCounts(List.of(notice.getId())))
+                .containsEntry(notice.getId(), 1L);
+    }
+
+    @Test
+    @DisplayName("학생마다 따로 센다")
+    void countsPerStudent() {
+        Notice notice = noticeService.createForBranch(
+                branchAdmin, bundang.getId(), "지점 공지", "본문");
+        em.flush();
+
+        noticeService.markRead(minji.getId(), notice.getId());
+        noticeService.markRead(seojun.getId(), notice.getId());
+        em.flush();
+
+        assertThat(noticeService.readCounts(List.of(notice.getId())))
+                .containsEntry(notice.getId(), 2L);
+    }
+
+    @Test
+    @DisplayName("★★ 내게 안 보이는 공지는 읽음 처리도 안 된다 — 번호를 바꿔 열람 수를 부풀릴 수 있다")
+    void cannotMarkReadOnInvisibleNotice() {
+        Notice classNotice = noticeService.createForClass(
+                branchAdmin, class1.getId(), "1반 공지", "본문");
+        em.flush();
+
+        // seojun 은 반 미배정이라 이 공지가 보이지 않는다
+        assertThatThrownBy(() -> noticeService.markRead(seojun.getId(), classNotice.getId()))
+                .isInstanceOf(BusinessException.class);
+
+        assertThat(noticeService.readCounts(List.of(classNotice.getId()))).isEmpty();
+    }
+
+    @Test
+    @DisplayName("아무도 안 읽은 공지는 목록에 없다 — 화면이 0으로 채운다")
+    void unreadNoticeHasNoEntry() {
+        Notice notice = noticeService.createForBranch(
+                branchAdmin, bundang.getId(), "지점 공지", "본문");
+        em.flush();
+
+        assertThat(noticeService.readCounts(List.of(notice.getId()))).isEmpty();
+    }
 }

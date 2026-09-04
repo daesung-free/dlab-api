@@ -32,18 +32,26 @@ public final class QnaResponse {
                     s.getTeacher() == null ? null : s.getTeacher().getName(),
                     s.getRoom(), s.getCapacity(), view.reserved(),
                     view.isFull(), s.isClosed(), s.getMemo(),
-                    view.reservations().stream().map(QnaReservation::from).toList());
+                    view.reservations().stream()
+                            .map(r -> QnaReservation.of(r, view.classNameOf(r))).toList());
         }
     }
 
+    /** @param className 고정반. 반 미배정이면 비어 있다 */
     public record QnaReservation(Long id, Long studentId, String studentNo, String studentName,
-                              String question, Instant reservedAt, Instant canceledAt) {
+                              String className, String question,
+                              Instant reservedAt, Instant canceledAt) {
 
         public static QnaReservation from(QnaOfflineReservation r) {
+            return of(r, null);
+        }
+
+        public static QnaReservation of(QnaOfflineReservation r, String className) {
             return new QnaReservation(r.getId(),
                     r.getEnrollment().getStudent().getId(),
                     r.getEnrollment().getStudentNo(),
                     r.getEnrollment().getStudent().getName(),
+                    className,
                     r.getQuestion(), r.getReservedAt(), r.getCanceledAt());
         }
     }

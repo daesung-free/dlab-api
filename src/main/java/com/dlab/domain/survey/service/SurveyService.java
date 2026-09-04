@@ -61,6 +61,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SurveyService {
 
     private final SurveyRepository surveyRepository;
+    private final com.dlab.common.excel.ExcelExporter excelExporter;
     private final SurveyResponseRepository responseRepository;
     private final SurveyParticipantRepository participantRepository;
     private final AccountRepository accountRepository;
@@ -176,6 +177,57 @@ public class SurveyService {
     }
 
     // ── 관리자: 집계 ─────────────────────────────────────
+
+    /**
+     * 원시 응답 내려받기.
+     *
+     * <p><b>집계만으로는 부족한 설문이 있다.</b> 가채점처럼 개별 응답을 봐야 하는 경우가
+     * 그렇다 — 평균만 보면 누가 어느 과목을 몇 점 적었는지 알 수 없다.
+     *
+     * <p>⚠️ <b>익명 설문은 응답자 칸을 비운다.</b> 익명은 화면에서 이름을 가리는 게 아니라
+     * 응답 행에 응답자를 저장하지 않는 구조라, 여기서도 채울 값이 없다. 채우려 들면
+     * 익명이라고 안내하고 받은 응답의 신원을 되돌리는 셈이 된다.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportResponses(AuthPrincipal me, Long surveyId) {
+        Survey survey = requireReadable(me, surveyId);
+        List<SurveyQuestion> questions = survey.activeQuestions();
+        List<SurveyResponse> responses = responseRepository.findBySurvey(surveyId);
+
+        List<String> headers = new ArrayList<>(List.of("제출시각", "학번", "이름"));
+        questions.forEach(q -> headers.add(q.getTitle()));
+
+        byte[] bytes = excelExporter.export("설문응답", headers, responses, r -> {
+            List<String> row = new ArrayList<>();
+            row.add(r.getSubmittedAt() == null ? "" : r.getSubmittedAt().toString());
+            // 익명이면 enrollment 자체가 비어 있다 — 화면·엑셀 어디서도 복원되지 않는다
+            row.add(r.getEnrollment() == null ? "" : r.getEnrollment().getStudentNo());
+            row.add(r.getEnrollment() == null ? "" : r.getEnrollment().getStudentName());
+
+            for (SurveyQuestion q : questions) {
+                row.add(r.activeAnswers().stream()
+                        .filter(a -> a.getQuestion().getId().equals(q.getId()))
+                        .map(SurveyService::answerText)
+                        // 복수 선택은 한 칸에 모은다 — 문항마다 열 수가 달라지면 표가 깨진다
+                        .collect(Collectors.joining(", ")));
+            }
+            return row;
+        });
+
+        log.info("설문 응답 내려받기: surveyId={}, {}건 (익명={})",
+                surveyId, responses.size(), survey.isAnonymous());
+        return bytes;
+    }
+
+    private static String answerText(com.dlab.domain.survey.entity.SurveyAnswer a) {
+        if (a.getOption() != null) {
+            return a.getOption().getLabel();
+        }
+        if (a.getNumberValue() != null) {
+            return a.getNumberValue().toPlainString();
+        }
+        return a.getTextValue() == null ? "" : a.getTextValue();
+    }
 
     /**
      * 결과 집계.
