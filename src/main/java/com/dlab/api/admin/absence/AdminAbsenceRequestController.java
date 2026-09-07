@@ -79,7 +79,8 @@ public class AdminAbsenceRequestController {
                                       @Valid @RequestBody AbsenceRegisterRequest request) {
         return ApiResponse.success(absenceReasonService.register(
                 me, request.enrollmentId(), request.date(), request.type(),
-                request.reason(), request.startTime(), request.endTime()).getId());
+                request.reason(), request.startTime(), request.endTime(),
+                request.categoryId()).getId());
     }
 
     /**
@@ -92,7 +93,9 @@ public class AdminAbsenceRequestController {
             @NotNull AbsenceReasonType type,
             @Size(max = 500) String reason,
             LocalTime startTime,
-            LocalTime endTime
+            LocalTime endTime,
+            /** 사유 카테고리(병결·가정사 등). 비워도 된다 — 등록된 게 없을 수 있다 */
+            Long categoryId
     ) {
     }
 
@@ -112,6 +115,7 @@ public class AdminAbsenceRequestController {
             AbsenceReasonType type,
             String period,
             String reason,
+            String categoryName,
             ApproverType approverType,
             ApprovalStatus status,
             boolean escalationCandidate
@@ -120,7 +124,7 @@ public class AdminAbsenceRequestController {
             return new AbsenceRowResponse(
                     r.id(), r.approvalRequestId(), r.submittedAt(), r.studentNo(),
                     raw ? r.name() : Masking.name(r.name()),
-                    r.className(), r.type(), r.period(), r.reason(),
+                    r.className(), r.type(), r.period(), r.reason(), r.categoryName(),
                     r.approverType(), r.status(), r.escalationCandidate());
         }
     }

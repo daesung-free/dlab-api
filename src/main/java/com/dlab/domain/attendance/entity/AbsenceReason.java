@@ -32,6 +32,20 @@ public class AbsenceReason extends BaseEntity {
     @JoinColumn(name = "academy_id", nullable = false)
     private Academy academy;
 
+    /**
+     * 사유 카테고리(병결·가정사 등).
+     *
+     * <p><b>{@code null}이 정상이다</b> — 카테고리가 하나도 등록되지 않은 상태에서도
+     * 사유 제출이 되어야 한다. 필수로 걸면 값이 확정될 때까지 앱에서 사유를 못 낸다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private AbsenceReasonCategory category;
+
+    public void changeCategory(AbsenceReasonCategory category) {
+        this.category = category;
+    }
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "enrollment_id", nullable = false)
     private StudentEnrollment enrollment;

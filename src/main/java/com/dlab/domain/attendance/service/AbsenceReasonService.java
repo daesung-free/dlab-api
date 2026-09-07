@@ -51,6 +51,7 @@ public class AbsenceReasonService {
     private final AbsenceReasonRepository absenceReasonRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.attendance.repository.AbsenceReasonCategoryRepository categoryRepository;
     private final ApprovalService approvalService;
     private final Clock clock;
 
@@ -67,12 +68,13 @@ public class AbsenceReasonService {
     @Transactional
     public AbsenceReason register(AuthPrincipal me, Long enrollmentId, LocalDate date,
                                   AbsenceReasonType type, String reasonText,
-                                  LocalTime startTime, LocalTime endTime) {
+                                  LocalTime startTime, LocalTime endTime, Long categoryId) {
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
         validatePeriod(type, startTime, endTime);
 
         AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
                 enrollment.getAcademy(), enrollment, date, type, reasonText, startTime, endTime));
+        applyCategory(reason, categoryId, enrollment);
 
         ApprovalRequest approval = approvalService.create(enrollment, RequestType.ABSENCE_REASON);
         reason.linkApproval(approval);
@@ -96,7 +98,7 @@ public class AbsenceReasonService {
     @Transactional
     public AbsenceReason submitByStudent(Long enrollmentId, LocalDate date,
                                          AbsenceReasonType type, String reasonText,
-                                         LocalTime startTime, LocalTime endTime) {
+                                         LocalTime startTime, LocalTime endTime, Long categoryId) {
         StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .filter(e -> !e.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
@@ -105,12 +107,36 @@ public class AbsenceReasonService {
 
         AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
                 enrollment.getAcademy(), enrollment, date, type, reasonText, startTime, endTime));
+        applyCategory(reason, categoryId, enrollment);
 
         ApprovalRequest approval = approvalService.create(enrollment, RequestType.ABSENCE_REASON);
         reason.linkApproval(approval);
 
         log.info("사유신청 제출(앱): enrollmentId={}, 유형={}, 일자={}", enrollmentId, type, date);
         return reason;
+    }
+
+    /**
+     * 카테고리 연결.
+     *
+     * <p><b>비워도 된다</b> — 카테고리가 하나도 등록되지 않은 상태에서도 사유 제출이
+     * 되어야 한다. 다만 보냈다면 <b>그 지점에서 쓸 수 있는 것</b>인지는 확인한다.
+     * 안 그러면 id 를 바꿔 다른 지점 카테고리가 붙는다.
+     */
+    private void applyCategory(AbsenceReason reason, Long categoryId,
+                               StudentEnrollment enrollment) {
+        if (categoryId == null) {
+            return;
+        }
+        var category = categoryRepository.findActiveById(categoryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "사유 카테고리를 찾을 수 없습니다."));
+        boolean usable = category.getAcademy() == null
+                || category.getAcademy().getId().equals(enrollment.getAcademy().getId());
+        if (!usable) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        reason.changeCategory(category);
     }
 
     /**
@@ -261,6 +287,7 @@ public class AbsenceReasonService {
                 r.getReasonType(),
                 r.periodLabel(),
                 r.getReasonText(),
+                r.getCategory() == null ? null : r.getCategory().getName(),
                 approverType,
                 statusOf(r),
                 escalationCandidate);
@@ -310,6 +337,8 @@ public class AbsenceReasonService {
             AbsenceReasonType type,
             String period,
             String reason,
+            /** 사유 카테고리(병결 등). 안 고르고 냈으면 비어 있다 */
+            String categoryName,
             ApproverType approverType,
             ApprovalStatus status,
             boolean escalationCandidate
