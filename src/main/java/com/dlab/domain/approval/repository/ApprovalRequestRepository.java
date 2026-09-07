@@ -18,6 +18,30 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
     List<ApprovalRequest> findByAcademyIdAndStatusOrderByRequestedAtAsc(Long academyId, ApprovalStatus status);
 
     /**
+     * 관리자 현황 — 지점 단위. <b>담임 개인 대기열과 다른 질의다.</b>
+     *
+     * <p>담임용은 "내가 처리할 것"이고 이쪽은 "지금 몇 건이 밀려 있나"다.
+     * 그래서 상태를 지정하지 않으면 처리된 건까지 함께 본다 — 대기 건만 주면
+     * "오늘 몇 건이 들어왔나"를 셀 수 없다.
+     *
+     * @param academyId 전 지점 권한자가 지점을 안 고르면 {@code null}이고, 그때는 전 지점이다
+     */
+    @Query("""
+            SELECT r FROM ApprovalRequest r
+            JOIN FETCH r.enrollment e
+            JOIN FETCH e.student
+            JOIN FETCH r.approvalItem i
+            WHERE r.deleted = false
+              AND (:academyId IS NULL OR r.academy.id = :academyId)
+              AND (:status IS NULL OR r.status = :status)
+              AND (:requestType IS NULL OR i.requestType = :requestType)
+              AND r.requestedAt >= :from AND r.requestedAt < :to
+            ORDER BY r.requestedAt DESC
+            """)
+    List<ApprovalRequest> findBoard(Long academyId, ApprovalStatus status,
+                                    RequestType requestType, Instant from, Instant to);
+
+    /**
      * 이 학부모 계정이 승인해야 할 대기 건.
      * 연결된 자녀(사람) 기준이라 등록 건이 바뀌어도 계속 보인다.
      */

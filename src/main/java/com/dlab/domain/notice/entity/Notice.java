@@ -146,6 +146,37 @@ public class Notice extends BaseEntity {
         this.expiresAt = expiresAt;
     }
 
+    /**
+     * 부분 수정 — <b>{@code null}은 "변경하지 않음"</b>이다.
+     *
+     * <p>상단 고정 하나를 켜려고 본문까지 함께 보내면, <b>목록이 낡았을 때 남이 고친 본문이
+     * 되돌아간다.</b> 고정·배너는 본문과 무관한 조작이라 따로 바꿀 수 있어야 한다.
+     *
+     * <p>⚠️ 그래서 <b>예약·만료 시각을 이 경로로는 지울 수 없다</b>({@code null}이 "지움"이
+     * 아니라 "그대로"다). 지우려면 {@link #schedule}을 타는 전체 수정을 쓴다.
+     */
+    public void patch(String title, String content, Boolean pinned, Boolean banner,
+                      Instant publishedAt, Instant expiresAt) {
+        if (title != null) {
+            this.title = title;
+        }
+        if (content != null) {
+            this.content = content;
+        }
+        if (pinned != null) {
+            this.pinned = pinned;
+        }
+        if (banner != null) {
+            this.banner = banner;
+        }
+        if (publishedAt != null) {
+            this.publishedAt = publishedAt;
+        }
+        if (expiresAt != null) {
+            this.expiresAt = expiresAt;
+        }
+    }
+
     public void schedule(Instant publishedAt, Instant expiresAt) {
         this.publishedAt = publishedAt;
         this.expiresAt = expiresAt;
