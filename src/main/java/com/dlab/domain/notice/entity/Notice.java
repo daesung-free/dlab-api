@@ -1,11 +1,14 @@
 package com.dlab.domain.notice.entity;
 
+import com.dlab.domain.audit.AuditEntityListener;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.ClassMaster;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EntityListeners;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
@@ -33,8 +36,10 @@ import lombok.NoArgsConstructor;
  * 상태 컬럼을 두면 예약 발행 시각이 지나도 <b>배치가 돌기 전까지 안 보인다</b>.
  */
 @Getter
+@Audited("공지")
 @Entity
 @Table(name = "notice")
+@EntityListeners(AuditEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Notice extends BaseEntity {
 

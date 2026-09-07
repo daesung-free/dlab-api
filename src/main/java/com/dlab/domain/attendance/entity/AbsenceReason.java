@@ -1,5 +1,7 @@
 package com.dlab.domain.attendance.entity;
 
+import com.dlab.domain.audit.AuditEntityListener;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.approval.entity.ApprovalRequest;
 import com.dlab.domain.user.entity.Academy;
@@ -19,8 +21,10 @@ import java.time.LocalDate;
  * 미등원 알림 배치는 사유가 있는 학생을 대상에서 제외한다(무단결석만 알림).
  */
 @Getter
+@Audited("사유 신청")
 @Entity
 @Table(name = "absence_reason")
+@EntityListeners(AuditEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AbsenceReason extends BaseEntity {
 

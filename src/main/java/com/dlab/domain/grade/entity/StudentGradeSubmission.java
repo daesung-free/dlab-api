@@ -1,5 +1,7 @@
 package com.dlab.domain.grade.entity;
 
+import com.dlab.domain.audit.AuditEntityListener;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -24,8 +26,10 @@ import java.util.List;
  * 그래서 {@link #examSkipped} + 사유로 남기고 점수 행은 만들지 않는다.
  */
 @Getter
+@Audited("성적")
 @Entity
 @Table(name = "student_grade_submission")
+@EntityListeners(AuditEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class StudentGradeSubmission extends BaseEntity {
 

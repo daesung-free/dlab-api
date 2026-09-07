@@ -1,5 +1,7 @@
 package com.dlab.domain.user.entity;
 
+import com.dlab.domain.audit.AuditEntityListener;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -18,8 +20,10 @@ import java.time.LocalDate;
  * 이 엔티티를 참조해야 한다.
  */
 @Getter
+@Audited("학생 등록")
 @Entity
 @Table(name = "student_enrollment")
+@EntityListeners(AuditEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class StudentEnrollment extends BaseEntity {
 
