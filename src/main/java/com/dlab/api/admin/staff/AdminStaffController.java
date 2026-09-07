@@ -4,7 +4,7 @@ import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.user.entity.AccountStatus;
 import com.dlab.common.security.CurrentAccount;
-import com.dlab.domain.audit.service.ChangeLogService;
+import com.dlab.domain.audit.AuditLogRepository;
 import com.dlab.domain.user.service.StaffAccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,7 +29,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminStaffController {
 
     private final StaffAccountService staffAccountService;
-    private final ChangeLogService changeLogService;
+    private final AuditLogRepository auditLogRepository;
 
     /**
      * 계정 목록 (F-4.10-2 사용자 관리).
@@ -108,29 +108,29 @@ public class AdminStaffController {
     /**
      * 계정 권한·상태 변경 이력 (사용자 관리 화면의 '권한 수정시간').
      *
-     * <p>표 자체는 범용이라 나중에 <b>전 화면 변경 이력 조회(F-4.10-8)</b>가 같은 표를
-     * 읽는다 — 지금 권한만 쌓아두면 그 화면이 생길 때 옮길 것이 없다.
+     * <p>감사 로그(F-C-1)와 <b>같은 표를 읽는다</b> — 계정 이력만 따로 쌓으면 표가 두 벌이
+     * 되고, 전 화면 이력 조회가 그걸 다시 합쳐야 한다.
+     *
+     * <p>다만 <b>적재 경로는 다르다</b>. 역할은 {@code account_role} 조인 테이블이라
+     * {@code @Audited} 엔티티 리스너에 안 걸려서 서비스가 직접 남긴다.
      */
     @GetMapping("/accounts/{accountId}/history")
-    public ApiResponse<List<ChangeLogRow>> accountHistory(@PathVariable Long accountId) {
-        return ApiResponse.success(
-                java.util.stream.Stream.concat(
-                        changeLogService.historyOf(
-                                ChangeLogService.TARGET_ACCOUNT_ROLE, accountId).stream(),
-                        changeLogService.historyOf(
-                                ChangeLogService.TARGET_ACCOUNT_STATUS, accountId).stream())
-                        .sorted(java.util.Comparator.comparing(
-                                com.dlab.domain.audit.entity.ChangeLog::getCreatedAt).reversed())
-                        .map(ChangeLogRow::from).toList());
+    public ApiResponse<List<AccountHistoryRow>> accountHistory(@PathVariable Long accountId) {
+        return ApiResponse.success(auditLogRepository.findByEntity("Account", accountId).stream()
+                .map(AccountHistoryRow::from).toList());
     }
 
-    /** @param changedBy 행위자 계정 id. 배치·시스템 경로면 {@code 0}이다 */
-    public record ChangeLogRow(Long id, String action, String beforeValue, String afterValue,
-                               Long changedBy, java.time.Instant changedAt) {
+    /**
+     * @param changes  {@code [{"field":"roles","before":"STAFF","after":"TEACHER"}]} 형태의 JSON
+     * @param actorId  행위자 계정 id. 배치·시스템 경로면 비어 있다
+     */
+    public record AccountHistoryRow(Long id, String action, String changes,
+                                    Long actorId, String actorName,
+                                    java.time.Instant occurredAt) {
 
-        static ChangeLogRow from(com.dlab.domain.audit.entity.ChangeLog log) {
-            return new ChangeLogRow(log.getId(), log.getAction(), log.getBeforeValue(),
-                    log.getAfterValue(), log.getCreatedBy(), log.getCreatedAt());
+        static AccountHistoryRow from(com.dlab.domain.audit.AuditLog log) {
+            return new AccountHistoryRow(log.getId(), log.getAction().name(), log.getChanges(),
+                    log.getActorId(), log.getActorName(), log.getOccurredAt());
         }
     }
 

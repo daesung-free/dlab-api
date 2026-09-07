@@ -4,7 +4,8 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
-import com.dlab.domain.audit.service.ChangeLogService;
+import com.dlab.domain.audit.AuditEntityListener;
+import com.dlab.domain.audit.AuditRecorder;
 import com.dlab.domain.user.entity.*;
 import com.dlab.domain.user.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -30,14 +31,23 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StaffAccountService {
 
+    /** 감사 로그의 대상 이름. 화면이 이 값으로 계정 이력을 걸러 본다. */
+    private static final String AUDIT_ACCOUNT = "Account";
+
     private final TeacherRepository teacherRepository;
     private final EmployeeRepository employeeRepository;
     private final AccountRepository accountRepository;
     private final AccountRoleRepository accountRoleRepository;
     private final AcademyRepository academyRepository;
     private final PasswordEncoder passwordEncoder;
-    /** 권한·상태 변경을 이력으로 남긴다 — 안 남기면 그 기간은 나중에 복구할 수 없다. */
-    private final ChangeLogService changeLogService;
+    /**
+     * 권한·상태 변경을 감사 로그로 남긴다 — 안 남기면 그 기간은 나중에 복구할 수 없다.
+     *
+     * <p><b>{@code @Audited} 리스너로는 안 잡힌다</b> — 역할은 {@code account_role}
+     * 조인 테이블에 있어 엔티티 라이프사이클을 타지 않고, 계정 상태 변경도 "무엇에서
+     * 무엇으로"를 남겨야 화면이 쓸 수 있다. 그래서 여기서 직접 부른다.
+     */
+    private final AuditRecorder auditRecorder;
 
     @Transactional(readOnly = true)
     public List<Teacher> teachers(Long academyId, AuthPrincipal principal) {
@@ -201,9 +211,9 @@ public class StaffAccountService {
             throw new BusinessException(ErrorCode.ACCOUNT_NOT_PENDING);
         }
         account.approve();
-        changeLogService.record(academyIdOf(account), null,
-                ChangeLogService.TARGET_ACCOUNT_STATUS, accountId, account.getLoginId(),
-                "APPROVE", AccountStatus.PENDING.name(), AccountStatus.ACTIVE.name());
+        auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
+                AuditEntityListener.Change.of("status",
+                        AccountStatus.PENDING.name(), AccountStatus.ACTIVE.name()));
         return account;
     }
 
@@ -219,9 +229,9 @@ public class StaffAccountService {
         verifyAccountScope(account, principal);
         AccountStatus before = account.getStatus();
         account.deactivate();
-        changeLogService.record(academyIdOf(account), null,
-                ChangeLogService.TARGET_ACCOUNT_STATUS, accountId, account.getLoginId(),
-                "WITHDRAW", before.name(), account.getStatus().name());
+        auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
+                AuditEntityListener.Change.of("status",
+                        before.name(), account.getStatus().name()));
         return account;
     }
 
@@ -273,10 +283,9 @@ public class StaffAccountService {
         accountRoleRepository.deleteByAccountId(accountId);
         grantRoles(accountId, roles);
 
-        changeLogService.record(targetAcademyId, null,
-                ChangeLogService.TARGET_ACCOUNT_ROLE, accountId, account.getLoginId(),
-                "REPLACE_ROLES", joinRoles(before),
-                joinRoles(roles.stream().map(Role::name).collect(Collectors.toSet())));
+        auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, targetAcademyId,
+                AuditEntityListener.Change.of("roles", joinRoles(before),
+                        joinRoles(roles.stream().map(Role::name).collect(Collectors.toSet()))));
     }
 
     /** 화면에 그대로 찍히는 값이라 순서를 고정한다 — 안 그러면 같은 역할 집합이 매번 달라 보인다. */
