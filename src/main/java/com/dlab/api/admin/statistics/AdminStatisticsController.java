@@ -58,6 +58,33 @@ public class AdminStatisticsController {
     }
 
     /**
+     * 반별·계열별·월별 인원 (F-C-2 학원생 현황).
+     *
+     * <p><b>대시보드 개요와 축이 다르다.</b> {@code GET /statistics}는 "지금 전체가 어떤가"
+     * 하나뿐이라 "어디에 몇 명인가"를 못 그린다. 전 원생을 내려받아 화면에서 세는 방식은
+     * 원생 수가 늘수록 그대로 느려진다.
+     *
+     * <p><b>축마다 채워지는 칸이 다르다</b> — 정원·충원율은 반에만 있고,
+     * 증감은 월별에만 있다. 없는 축에서 0으로 채우면 화면이 "정원 0명"·"증감 없음"으로
+     * 잘못 읽는다.
+     *
+     * @param groupBy {@code CLASS} 반별 · {@code TRACK} 계열별 · {@code MONTH} 월별 추이
+     * @param asOf    월별에서 "오늘"을 대신할 기준일. 비우면 오늘이다
+     */
+    @GetMapping("/students")
+    public ApiResponse<List<StatisticsService.GroupRow>> students(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam short year,
+            @RequestParam StatisticsService.GroupBy groupBy,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOf) {
+
+        return ApiResponse.success(
+                statisticsService.group(me, academyId, year, groupBy, asOf));
+    }
+
+    /**
      * 순공시간 랭킹 엑셀.
      *
      * <p><b>이름을 마스킹하지 않는다</b> — 관리자 전용 통계이고, 마스킹하면 누가 상위인지

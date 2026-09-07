@@ -166,4 +166,87 @@ class StatisticsTest {
         assertThat(ranking.get(0).studentName()).isEqualTo("김민지");
         assertThat(ranking.get(0).studyMinutes()).isEqualTo(880);
     }
+
+    // ── 반별·계열별·월별 (F-C-2) ─────────────────────────────
+
+    @Test
+    @DisplayName("★ 정원이 없는 반은 충원율을 내지 않는다 — 0이면 \"아무도 없음\", 100이면 \"만석\"으로 읽힌다")
+    void classWithoutCapacityHasNoFillRate() {
+        var withCapacity = classOf("1반", (short) 10);
+        var withoutCapacity = classOf("2반", null);
+        assign(minji, withCapacity);
+        assign(seojun, withoutCapacity);
+        em.flush();
+
+        var rows = statisticsService.group(superAdmin(), bundang.getId(), (short) 2026,
+                StatisticsService.GroupBy.CLASS, null);
+
+        var first = rows.stream().filter(r -> r.label().equals("1반")).findFirst().orElseThrow();
+        var second = rows.stream().filter(r -> r.label().equals("2반")).findFirst().orElseThrow();
+
+        assertThat(first.capacity()).isEqualTo(10L);
+        assertThat(first.fillRate()).isEqualTo(10L);
+        assertThat(second.capacity()).isNull();
+        assertThat(second.fillRate()).isNull();
+    }
+
+    @Test
+    @DisplayName("계열이 안 정해진 학생도 센다 — 빼면 합계가 전체 인원과 안 맞는다")
+    void unassignedTrackIsCounted() {
+        var rows = statisticsService.group(superAdmin(), bundang.getId(), (short) 2026,
+                StatisticsService.GroupBy.TRACK, null);
+
+        assertThat(rows).extracting(StatisticsService.GroupRow::key).contains("UNASSIGNED");
+        assertThat(rows.stream().mapToLong(StatisticsService.GroupRow::count).sum()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("★★ 월별은 지금 상태가 아니라 그때 재원이던 인원을 센다 — 퇴원생이 과거 달에서 빠지면 안 된다")
+    void monthlyCountsWhoWasEnrolledThen() {
+        // 3월 입학 → 5월 퇴원. 지금 상태만 보면 3·4월에서도 사라진다
+        minji.recordAdmission(LocalDate.of(2026, 3, 2));
+        minji.markWithdrawn(LocalDate.of(2026, 5, 20));
+        seojun.recordAdmission(LocalDate.of(2026, 3, 2));
+        em.flush();
+
+        var rows = statisticsService.group(superAdmin(), bundang.getId(), (short) 2026,
+                StatisticsService.GroupBy.MONTH, LocalDate.of(2026, 6, 30));
+
+        assertThat(row(rows, "2026-03").count()).isEqualTo(2);
+        assertThat(row(rows, "2026-04").count()).isEqualTo(2);
+        // 5월 말에는 이미 나갔다
+        assertThat(row(rows, "2026-05").count()).isEqualTo(1);
+        assertThat(row(rows, "2026-05").delta()).isEqualTo(-1);
+    }
+
+    @Test
+    @DisplayName("첫 달은 증감이 비어 있다 — 비교 대상이 없다")
+    void firstMonthHasNoDelta() {
+        minji.recordAdmission(LocalDate.of(2026, 1, 2));
+        em.flush();
+
+        var rows = statisticsService.group(superAdmin(), bundang.getId(), (short) 2026,
+                StatisticsService.GroupBy.MONTH, LocalDate.of(2026, 3, 31));
+
+        assertThat(row(rows, "2026-01").delta()).isNull();
+        assertThat(row(rows, "2026-02").delta()).isEqualTo(0);
+    }
+
+    private StatisticsService.GroupRow row(List<StatisticsService.GroupRow> rows, String key) {
+        return rows.stream().filter(r -> r.key().equals(key)).findFirst().orElseThrow();
+    }
+
+    private com.dlab.domain.user.entity.ClassMaster classOf(String name, Short capacity) {
+        var clazz = new com.dlab.domain.user.entity.ClassMaster(
+                bundang, (short) 2026, name, com.dlab.domain.user.entity.ClassType.FIXED, null);
+        clazz.updateDetails(name, capacity, false);
+        em.persist(clazz);
+        return clazz;
+    }
+
+    private void assign(StudentEnrollment enrollment,
+                        com.dlab.domain.user.entity.ClassMaster clazz) {
+        em.persist(new com.dlab.domain.user.entity.ClassAssignment(
+                bundang, enrollment, clazz, com.dlab.domain.user.entity.ClassType.FIXED));
+    }
 }
