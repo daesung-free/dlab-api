@@ -1,5 +1,7 @@
 package com.dlab.domain.penalty.entity;
 
+import com.dlab.domain.audit.AuditEntityListener;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -19,8 +21,10 @@ import java.time.LocalDate;
  * 동시 실행을 막을 수 없다. {@code idempotencyKey}의 DB 유니크 제약이 최종 방어선이다.
  */
 @Getter
+@Audited("상벌점")
 @Entity
 @Table(name = "penalty_point")
+@EntityListeners(AuditEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PenaltyPoint extends BaseEntity {
 

@@ -1,5 +1,7 @@
 package com.dlab.domain.payment.entity;
 
+import com.dlab.domain.audit.AuditEntityListener;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -23,8 +25,10 @@ import lombok.NoArgsConstructor;
  * 매번 다시 계산하면 <b>할인 정책이 바뀔 때 과거 청구액이 소급해서 바뀐다.</b>
  */
 @Getter
+@Audited("청구")
 @Entity
 @Table(name = "billing")
+@EntityListeners(AuditEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Billing extends BaseEntity {
 
