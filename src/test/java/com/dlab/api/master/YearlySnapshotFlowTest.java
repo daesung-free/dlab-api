@@ -75,7 +75,7 @@ class YearlySnapshotFlowTest {
 
         Employee admin = new Employee(academy, "상위관리자");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "YSADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "YSADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         grantRole(adminAccount.getId(), "SUPER_ADMIN");
@@ -352,7 +352,7 @@ class YearlySnapshotFlowTest {
     void branchAdminCannotCopy() throws Exception {
         Employee branchAdmin = new Employee(academy, "지점관리자");
         em.persist(branchAdmin);
-        Account account = Account.forEmployee(branchAdmin, "YSBRC", passwordEncoder.encode(PASSWORD));
+        Account account = Account.forEmployee(branchAdmin, "YSBRC", passwordEncoder.encode(PASSWORD), false);
         em.persist(account);
         em.flush();
         grantRole(account.getId(), "BRANCH_ADMIN");

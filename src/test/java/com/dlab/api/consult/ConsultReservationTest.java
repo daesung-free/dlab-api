@@ -56,7 +56,7 @@ class ConsultReservationTest {
 
         homeroom = new Teacher(bundang, "김담임", "010-9999-0001");
         em.persist(homeroom);
-        em.persist(Account.forTeacher(homeroom, "teacher-hr", "hash"));
+        em.persist(Account.forTeacher(homeroom, "teacher-hr", "hash", false));
 
         otherTeacher = new Teacher(bundang, "박담임", "010-9999-0002");
         em.persist(otherTeacher);

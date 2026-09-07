@@ -58,7 +58,7 @@ class StudentSearchSortTest {
 
         Employee admin = new Employee(academy, "행정쌤");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "SSADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "SSADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         em.createNativeQuery("""

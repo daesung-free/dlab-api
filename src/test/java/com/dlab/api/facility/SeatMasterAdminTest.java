@@ -60,7 +60,7 @@ class SeatMasterAdminTest {
 
         Employee admin = new Employee(academy, "관리자");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "SMADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "SMADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         grantRole(adminAccount.getId(), "BRANCH_ADMIN");

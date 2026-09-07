@@ -59,7 +59,7 @@ class AppSettingsFlowTest {
         Employee employee = new Employee(academy, "본사관리자");
         em.persist(employee);
         Account adminAccount = Account.forEmployee(employee, superAdminId,
-                passwordEncoder.encode(PASSWORD));
+                passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         em.createNativeQuery("""

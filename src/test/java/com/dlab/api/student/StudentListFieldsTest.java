@@ -74,7 +74,7 @@ class StudentListFieldsTest {
 
         Employee admin = new Employee(academy, "행정쌤");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "SLADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "SLADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         grantRole(adminAccount.getId(), "BRANCH_ADMIN");
@@ -285,7 +285,7 @@ class StudentListFieldsTest {
         Employee staff = new Employee(academy, "행정보조");
         em.persist(staff);
         Account staffAccount =
-                Account.forEmployee(staff, "SLSTF", passwordEncoder.encode(PASSWORD));
+                Account.forEmployee(staff, "SLSTF", passwordEncoder.encode(PASSWORD), false);
         em.persist(staffAccount);
         em.flush();
         grantRole(staffAccount.getId(), "STAFF");

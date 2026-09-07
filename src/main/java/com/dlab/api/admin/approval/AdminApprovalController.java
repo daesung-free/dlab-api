@@ -25,7 +25,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/v1/admin/approvals")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('TEACHER')")
+// ★ 담임뿐 아니라 관리자도 처리한다 (F-4.1-6 "실시간 확인/수정·승인").
+//   담임만 열어두면 관리자 웹의 승인 대기 화면이 조회 전용이 된다.
+//   실제 승인 자격(그 요청의 담임 본인인가 / 같은 지점 직원인가)은
+//   ApprovalService.resolveApproverType 이 다시 확인한다 — 여기는 화면 진입만 연다.
+//   ⚠️ 어디까지 열지는 I-12(승인 주체 매트릭스) 대기다.
+@PreAuthorize("hasAnyRole('TEACHER','SUPER_ADMIN','BRANCH_ADMIN')")
 public class AdminApprovalController {
 
     private final ApprovalService approvalService;

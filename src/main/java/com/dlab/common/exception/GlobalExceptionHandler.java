@@ -199,6 +199,55 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 필수 쿼리 파라미터 누락 — {@code /masters/course-types}를 {@code academyId} 없이 부른 경우.
+     *
+     * <p>바로 위 핸들러가 <b>"값이 틀린" 경우</b>만 잡고 <b>"값이 아예 없는" 경우</b>는
+     * 안 잡아서, 그동안 catch-all로 떨어져 <b>500 INTERNAL_ERROR</b>가 나갔다.
+     * {@code ?year=abc}는 400인데 {@code ?}를 통째로 빼면 500이 되는, 설명하기 어려운 상태였다.
+     *
+     * <p>클라이언트가 뭘 빠뜨렸는지 알려주는 게 목적이라 <b>파라미터 이름을 싣는다</b>.
+     * 이름만으로는 원인을 못 찾아 화면 개발자가 서버를 의심하며 시간을 쓴다.
+     *
+     * <p>{@code MissingServletRequestPartException}(멀티파트 누락)도 같이 받는다 —
+     * 성적표·합격증 업로드가 붙으면 같은 유형이 생긴다.
+     */
+    @ExceptionHandler({org.springframework.web.bind.MissingServletRequestParameterException.class,
+            org.springframework.web.multipart.support.MissingServletRequestPartException.class})
+    public ResponseEntity<ApiResponse<Void>> handleMissingParameter(Exception e) {
+        String name = e instanceof org.springframework.web.bind.MissingServletRequestParameterException missing
+                ? missing.getParameterName()
+                : ((org.springframework.web.multipart.support.MissingServletRequestPartException) e)
+                        .getRequestPartName();
+
+        log.warn("필수 파라미터 누락: {}", name);
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
+                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST,
+                        "필수 파라미터 '%s' 이(가) 없습니다.".formatted(name)));
+    }
+
+    /**
+     * {@code @RequestParam}에 붙은 제약 위반 — {@code @Min}·{@code @Size} 등.
+     *
+     * <p>본문({@code @RequestBody})은 {@link MethodArgumentNotValidException}이 잡지만
+     * <b>파라미터 쪽은 다른 예외</b>라 역시 catch-all로 새어 500이 된다.
+     */
+    @ExceptionHandler(org.springframework.web.method.annotation.HandlerMethodValidationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleParameterValidation(
+            org.springframework.web.method.annotation.HandlerMethodValidationException e) {
+
+        String message = e.getParameterValidationResults().stream()
+                .flatMap(result -> result.getResolvableErrors().stream())
+                .map(org.springframework.context.MessageSourceResolvable::getDefaultMessage)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.joining(", "));
+
+        log.warn("파라미터 검증 실패: {}", message);
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
+                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST,
+                        message.isEmpty() ? "파라미터 값이 올바르지 않습니다." : message));
+    }
+
+    /**
      * 날짜·시각 형식 오류 — <b>바인딩을 통과한 뒤 본문에서 파싱하다 터진 경우</b>.
      *
      * <p>파라미터를 {@code String}으로 받아 메서드 안에서 {@code YearMonth.parse()} 같은 것을

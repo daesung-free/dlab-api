@@ -67,6 +67,9 @@ public class AttendanceBoardService {
     private final Clock clock;
 
     /** 화면 표기 그대로. 코드값을 그대로 내리면 받는 사람이 못 읽는다. */
+    /** 기간 조회 상한. 행이 학생×날짜라 넘어가면 화면이 감당하지 못한다. */
+    private static final int MAX_RANGE_DAYS = 31;
+
     private static final Map<ScreenStatus, String> STATUS_LABELS = Map.of(
             ScreenStatus.ON_TIME, "정상 등원",
             ScreenStatus.LATE, "지각",
@@ -98,6 +101,31 @@ public class AttendanceBoardService {
      * @param classId 담당 반 필터. 담임은 자기 반만 본다. {@code null}이면 전체
      * @param academyId 조회할 지점. <b>비우면 내 지점</b>이고, 전 지점 권한자는 지정해야 한다
      */
+    /**
+     * 기간 출결 현황.
+     *
+     * <p>★ <b>행이 학생×날짜로 늘어난다.</b> 하루 조회는 "재원생 1인 1행"이라 결석자를
+     * 셀 수 있는데, 기간은 그 성질이 사라진다 — 화면 상단 통계의 의미도 달라진다.
+     *
+     * <p><b>범위를 {@value #MAX_RANGE_DAYS}일로 제한한다.</b> 300명 × 한 달이면 9천 행이고
+     * 그 이상은 화면이 감당하지 못한다. 페이징이 없는 응답이라 더 크게 열면 조용히 느려진다.
+     */
+    public List<AttendanceRow> board(AuthPrincipal me, Long academyId,
+                                     LocalDate from, LocalDate to, Long classId) {
+        if (from.isAfter(to)) {
+            throw new com.dlab.common.exception.BusinessException(com.dlab.common.exception.ErrorCode.INVALID_REQUEST, "조회 기간이 올바르지 않습니다.");
+        }
+        long days = java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1;
+        if (days > MAX_RANGE_DAYS) {
+            throw new com.dlab.common.exception.BusinessException(com.dlab.common.exception.ErrorCode.INVALID_REQUEST,
+                    "조회 기간은 최대 %d일입니다.".formatted(MAX_RANGE_DAYS));
+        }
+
+        return from.datesUntil(to.plusDays(1))
+                .flatMap(d -> board(me, academyId, d, classId).stream())
+                .toList();
+    }
+
     public List<AttendanceRow> board(AuthPrincipal me, Long academyId, LocalDate date, Long classId) {
         Long scope = me.requireAcademyScope(academyId);
 
@@ -129,6 +157,7 @@ public class AttendanceBoardService {
                     ClassAssignment assignment = classes.get(e.getId());
 
                     return new AttendanceRow(
+                            date,
                             e.getId(),
                             e.getStudentNo(),
                             e.getStudent().getName(),
@@ -304,7 +333,9 @@ public class AttendanceBoardService {
      * @param studyMinutes 순공시간(분). 확정 전이면 조회 시점까지만 센다
      * @param excused      사유 승인 여부. 상태와 <b>직교하는 축</b>이다
      */
+    /** @param date 그 행의 일자. 하루 조회에서도 채워진다 — 기간 조회와 모양이 같아야 한다 */
     public record AttendanceRow(
+            LocalDate date,
             Long enrollmentId,
             String studentNo,
             String name,

@@ -23,16 +23,19 @@ public interface AccountRoleRepository extends Repository<com.dlab.domain.user.e
     Set<String> findRoleNamesByAccountId(Long accountId);
 
     /**
-     * 여러 계정의 역할을 <b>한 번에</b>.
+     * 여러 계정의 역할을 한 번에.
      *
-     * <p>직원 목록이 행마다 역할을 조회하면 쿼리가 인원수만큼 나간다.
+     * <p>사용자 관리 목록이 계정마다 {@link #findRoleNamesByAccountId}를 부르면
+     * 목록 크기만큼 쿼리가 나간다.
+     *
+     * @return {@code [accountId, roleName]}
      */
     @Query(value = """
             SELECT ar.account_id, r.name FROM account_role ar
             JOIN role r ON r.id = ar.role_id
             WHERE ar.account_id IN (:accountIds) AND r.is_deleted = false
             """, nativeQuery = true)
-    List<Object[]> findRoleNamesByAccountIds(java.util.Collection<Long> accountIds);
+    java.util.List<Object[]> findRoleNamesByAccountIds(java.util.Collection<Long> accountIds);
 
     /** 역할 부여. 이미 있으면 무시한다(PK 충돌 방지). */
     @Modifying(clearAutomatically = true)

@@ -60,7 +60,8 @@ public class AdminLectureController {
             @PathVariable Long lectureId,
             @Valid @RequestBody LectureRequests.LectureUpdate request) {
         return ApiResponse.success(LectureResponse.LectureDetail.from(lectureService.update(
-                lectureId, request.name(), request.description(), request.capacity(),
+                lectureId, request.name(), request.code(),
+                request.description(), request.capacity(),
                 request.applyFrom(), request.applyTo(), request.startDate(), request.endDate(),
                 request.fee(), request.teacherId(), me)));
     }

@@ -21,6 +21,9 @@ public enum NotificationEvent {
     APPROVAL_HANDED_OVER,
     /** 우선 승인자가 직원이라 직원이 승인함 — 학부모에겐 통지만 나간다 */
     APPROVAL_APPROVED_BY_STAFF_PRIMARY,
+
+    /** 관리자가 데스크에서 대리 처리. 담임 승인과 문구가 달라야 한다. */
+    APPROVAL_APPROVED_BY_ADMIN,
     APPROVAL_REJECTED,
     /** 학생이 상담을 예약함 — 담임에게 (F-4.11-4 "선택한 일정에 알림 연동") */
     CONSULT_RESERVED,

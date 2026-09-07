@@ -40,6 +40,11 @@ public class LockerMaster extends BaseEntity {
         this.lockerNo = lockerNo;
     }
 
+    /** 칸 이름표만 바꾸는 것이라 배정은 유지된다. */
+    public void rename(String lockerNo) {
+        this.lockerNo = lockerNo;
+    }
+
     public void assign(StudentEnrollment enrollment) {
         this.assignedEnrollment = enrollment;
     }

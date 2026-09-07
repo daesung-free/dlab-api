@@ -25,6 +25,7 @@ public final class LectureRequests {
     /** {@code null}은 "변경하지 않음"이다. */
     public record LectureUpdate(
             @Size(max = 100) String name,
+            @Size(max = 30) String code,
             String description,
             @Positive(message = "정원은 1명 이상이어야 합니다.") Integer capacity,
             Instant applyFrom,

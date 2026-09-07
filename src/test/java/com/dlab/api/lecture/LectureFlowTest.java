@@ -61,7 +61,7 @@ class LectureFlowTest {
 
         Employee admin = new Employee(academy, "관리자");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "LCADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "LCADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         em.createNativeQuery("""
