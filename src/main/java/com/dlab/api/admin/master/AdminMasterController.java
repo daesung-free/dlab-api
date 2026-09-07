@@ -51,8 +51,11 @@ public class AdminMasterController {
     /** 학과 목록. 지점·연도 범위가 자동으로 걸린다({@code SearchScope}). */
     @GetMapping("/departments")
     public ApiResponse<List<MasterResponses.Department>> departments(
-            @CurrentAccount AuthPrincipal me, @RequestParam(required = false) Integer year) {
-        return ApiResponse.success(masterDataService.departments(SearchScope.of(me, year)).stream()
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam(required = false) Integer year) {
+        return ApiResponse.success(masterDataService
+                .departments(SearchScope.of(me, year, academyId)).stream()
                 .map(MasterResponses.Department::from).toList());
     }
 

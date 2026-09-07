@@ -46,6 +46,8 @@ public record StudentResponse(
         String schoolName,
         short year,
         GradeType grade,
+        /** N수 차수 — 1=재수, 2=삼수. {@code grade}가 N_SU 가 아니면 비어 있다 */
+        Short retakeCount,
         TrackType track,
         EnrollmentStatus enrollmentStatus,
         LocalDate admissionDate,
@@ -75,6 +77,7 @@ public record StudentResponse(
                 s.getSchoolName(),
                 e.getYear(),
                 e.getGrade(),
+                e.getRetakeCount(),
                 e.getTrack(),
                 e.getEnrollmentStatus(),
                 e.getAdmissionDate(),

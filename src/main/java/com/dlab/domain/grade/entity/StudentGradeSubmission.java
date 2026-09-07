@@ -62,6 +62,27 @@ public class StudentGradeSubmission extends BaseEntity {
     @Column(name = "submitted_at")
     private Instant submittedAt;
 
+    /**
+     * 마지막으로 고친 직원.
+     *
+     * <p><b>{@code createdBy}로는 답이 안 된다</b> — 그건 {@code updatable = false}라
+     * 최초 작성자(= 학생)만 남는다. 이 값이 장학 취소 판정의 근거이므로, 학생 입력값을
+     * 직원이 고쳤다면 그 사실이 남아야 한다.
+     *
+     * <p>{@code null}이면 학생이 낸 그대로다.
+     */
+    @Column(name = "modified_by")
+    private Long modifiedBy;
+
+    @Column(name = "modified_at")
+    private Instant modifiedAt;
+
+    /** 직원이 고쳤음을 기록한다. 학생 본인 입력 경로에서는 부르지 않는다. */
+    public void markModifiedBy(Long accountId, Instant at) {
+        this.modifiedBy = accountId;
+        this.modifiedAt = at;
+    }
+
     @OneToMany(mappedBy = "submission", cascade = CascadeType.ALL, orphanRemoval = false)
     private List<StudentExamScore> scores = new ArrayList<>();
 

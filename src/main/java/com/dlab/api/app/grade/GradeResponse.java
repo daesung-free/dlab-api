@@ -56,8 +56,13 @@ public final class GradeResponse {
      * @param examSkipped {@code true}면 <b>모른다고 체크한 것</b>이지 미입력이 아니다.
      *                    이때 {@code scores}는 비어 있고 {@code skipReason}이 채워진다
      */
+    /**
+     * @param modifiedBy 마지막으로 고친 <b>직원</b> 계정. {@code null}이면 학생이 낸 그대로다 —
+     *                   이 값이 장학 판정의 근거라 화면이 "직원 확인됨"을 표시할 수 있어야 한다
+     */
     public record Submission(BigDecimal mainSubjectAverage, boolean examSkipped,
                              String skipReason, Instant submittedAt,
+                             Long modifiedBy, Instant modifiedAt,
                              List<ExamResult> exams) {
 
         public static Submission from(StudentGradeSubmission submission,
@@ -72,7 +77,8 @@ public final class GradeResponse {
                     .toList();
 
             return new Submission(submission.getMainSubjectAverage(), submission.isExamSkipped(),
-                    submission.getSkipReason(), submission.getSubmittedAt(), exams);
+                    submission.getSkipReason(), submission.getSubmittedAt(),
+                    submission.getModifiedBy(), submission.getModifiedAt(), exams);
         }
     }
 

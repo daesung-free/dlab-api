@@ -165,6 +165,7 @@ public class StudentSearchRepository {
                 classAssigned(cond.unassignedClass()),
                 seatAssigned(cond.unassignedSeat()),
                 lockerAssigned(cond.unassignedLocker()),
+                SearchPredicates.eq(e.retakeCount, cond.retakeCount()),
                 hasScholarship(cond.hasScholarship(), cond.scholarshipType())
         };
     }
