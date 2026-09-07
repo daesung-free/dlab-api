@@ -28,6 +28,8 @@ public final class AbsenceReasonRequests {
                          @NotBlank(message = "사유를 입력해 주세요.")
                          @Size(max = 500) String reasonText,
                          @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime startTime,
-                         @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime endTime) {
+                         @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime endTime,
+                         /** 사유 카테고리(병결·가정사 등). 비워도 된다 — 등록된 게 없을 수 있다 */
+                         Long categoryId) {
     }
 }

@@ -67,6 +67,23 @@ public class FirewallRequest extends BaseEntity {
     @Column(name = "unlock_status", nullable = false, length = 20)
     private UnlockStatus unlockStatus = UnlockStatus.WAITING;
 
+    /**
+     * 학생이 지정한 해제 구간.
+     *
+     * <p><b>{@code null}이면 승인 즉시 시작</b>이다(종전 방식). 값이 있으면 그 시각이 되어야
+     * 열린다 — "3시에 쓸 건데 미리 신청"이 되어야 한다는 요청이다.
+     *
+     * <p>⚠️ <b>실제 해제는 아직 붙어 있지 않다.</b> 승인 확정 후 {@link #activate}를 부르는
+     * 경로도, Nebula {@code unlock} 호출도 없다(E-1 자격증명 대기 — 지금은 {@code block}만
+     * 목업으로 있다). 그래서 <b>이 값은 저장·표시까지만 유효하고</b>, 예약 시작 배치는
+     * 해제 연동이 붙을 때 함께 만든다. 지금 배치만 먼저 만들면 부를 대상이 없다.
+     */
+    @Column(name = "requested_start_at")
+    private Instant requestedStartAt;
+
+    @Column(name = "requested_end_at")
+    private Instant requestedEndAt;
+
     public FirewallRequest(Academy academy, StudentEnrollment enrollment,
                            ApprovalRequest approvalRequest, short requestedMinutes, String reason) {
         this.academy = academy;
@@ -76,10 +93,37 @@ public class FirewallRequest extends BaseEntity {
         this.reason = reason;
     }
 
-    /** 승인 확정 후 실제 해제 구간을 기록한다. */
+    /**
+     * 구간 지정 신청.
+     *
+     * <p>{@code requestedMinutes}는 구간에서 계산해 함께 채운다 — 두 값이 어긋나면
+     * 어느 쪽이 진실인지 판정할 수 없다.
+     */
+    public void requestWindow(Instant startAt, Instant endAt) {
+        this.requestedStartAt = startAt;
+        this.requestedEndAt = endAt;
+        this.requestedMinutes = (short) java.time.Duration.between(startAt, endAt).toMinutes();
+    }
+
+    /** 지정 구간이 있는 신청인가. */
+    public boolean hasRequestedWindow() {
+        return requestedStartAt != null;
+    }
+
+    /**
+     * 승인 확정 후 실제 해제 구간을 기록한다.
+     *
+     * <p><b>지정 구간이 있으면 그 구간을 쓴다.</b> 승인 시각부터 열면 학생이 적어낸
+     * 시간대와 어긋나 "15시에 열어달라"가 13시에 열리는 일이 생긴다.
+     */
     public void activate(Instant startAt) {
-        this.unlockStartAt = startAt;
-        this.unlockEndAt = startAt.plusSeconds(requestedMinutes * 60L);
+        if (hasRequestedWindow()) {
+            this.unlockStartAt = requestedStartAt;
+            this.unlockEndAt = requestedEndAt;
+        } else {
+            this.unlockStartAt = startAt;
+            this.unlockEndAt = startAt.plusSeconds(requestedMinutes * 60L);
+        }
         this.unlockStatus = UnlockStatus.ACTIVE;
     }
 

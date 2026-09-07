@@ -75,7 +75,7 @@ class AbsenceRequestFlowTest {
     }
 
     private AbsenceRequestRow register(AbsenceReasonType type, LocalTime start, LocalTime end) {
-        absenceReasonService.register(admin, minji.getId(), today, type, "병원", start, end);
+        absenceReasonService.register(admin, minji.getId(), today, type, "병원", start, end, null);
         em.flush();
         em.clear();
         return absenceReasonService.list(admin, null, today, today, null).get(0);
@@ -121,7 +121,7 @@ class AbsenceRequestFlowTest {
     void outingWithoutEndIsRejected() {
         assertThatThrownBy(() -> absenceReasonService.register(
                 admin, minji.getId(), today, AbsenceReasonType.OUTING,
-                "병원", LocalTime.of(13, 0), null))
+                "병원", LocalTime.of(13, 0), null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("종료");
     }
@@ -131,7 +131,7 @@ class AbsenceRequestFlowTest {
     void reversedRangeIsRejected() {
         assertThatThrownBy(() -> absenceReasonService.register(
                 admin, minji.getId(), today, AbsenceReasonType.OUTING,
-                "병원", LocalTime.of(15, 0), LocalTime.of(13, 0)))
+                "병원", LocalTime.of(15, 0), LocalTime.of(13, 0), null))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -146,7 +146,7 @@ class AbsenceRequestFlowTest {
                 List.of(Role.BRANCH_ADMIN), false);
 
         assertThatThrownBy(() -> absenceReasonService.register(
-                ilsanAdmin, minji.getId(), today, AbsenceReasonType.ABSENCE, "사유", null, null))
+                ilsanAdmin, minji.getId(), today, AbsenceReasonType.ABSENCE, "사유", null, null, null))
                 .isInstanceOf(BusinessException.class);
     }
 
