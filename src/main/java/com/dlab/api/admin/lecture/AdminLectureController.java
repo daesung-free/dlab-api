@@ -60,10 +60,10 @@ public class AdminLectureController {
             @PathVariable Long lectureId,
             @Valid @RequestBody LectureRequests.LectureUpdate request) {
         return ApiResponse.success(LectureResponse.LectureDetail.from(lectureService.update(
-                lectureId, request.name(), request.code(), request.instructorName(),
+                lectureId, request.name(), request.code(),
                 request.description(), request.capacity(),
                 request.applyFrom(), request.applyTo(), request.startDate(), request.endDate(),
-                request.fee(), me)));
+                request.fee(), request.teacherId(), me)));
     }
 
     /**
@@ -114,12 +114,23 @@ public class AdminLectureController {
 
     // ── 명단 (F-4.7) ─────────────────────────────────────────────
 
-    /** 신청자·대기자 명단. 대기 순번은 <b>목록 순서</b>다. */
+    /**
+     * 신청자·대기자 명단. 대기 순번은 <b>목록 순서</b>다.
+     *
+     * <p>연락처는 기본이 마스킹이고 {@code unmask=true}는 <b>상위 관리자에게만</b> 먹는다 —
+     * 다른 목록과 같은 규칙이다.
+     *
+     * <p>⚠️ <b>수납 여부는 아직 못 내린다.</b> 특강비 청구를 만드는 경로가 없어
+     * ({@code BillingType.LECTURE}를 쓰는 곳이 하나도 없다) 실을 값 자체가 없다.
+     * 청구 발행이 붙을 때 같이 나온다.
+     */
     @GetMapping("/{lectureId}/applications")
     public ApiResponse<List<LectureResponse.RosterRow>> roster(
-            @CurrentAccount AuthPrincipal me, @PathVariable Long lectureId) {
-        return ApiResponse.success(lectureService.roster(lectureId, me).stream()
-                .map(LectureResponse.RosterRow::from).toList());
+            @CurrentAccount AuthPrincipal me, @PathVariable Long lectureId,
+            @RequestParam(defaultValue = "false") boolean unmask) {
+        boolean raw = unmask && com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me);
+        return ApiResponse.success(lectureService.rosterDetailed(lectureId, me).stream()
+                .map(e -> LectureResponse.RosterRow.of(e, raw)).toList());
     }
 
     /** 대기 → 확정 수동 승격. 정원을 넘겨도 관리자 판단을 존중한다. */

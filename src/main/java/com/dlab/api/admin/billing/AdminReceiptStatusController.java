@@ -112,12 +112,17 @@ public class AdminReceiptStatusController {
     }
 
     /**
-     * @param unpaid 과납이어도 0에서 멈춘다 — 음수가 섞이면 미납 합계가 줄어든다
+     * @param unpaid   과납이어도 0에서 멈춘다 — 음수가 섞이면 미납 합계가 줄어든다
+     * @param year     청구 기수
+     * @param payments 살아 있는 수납 거래. <b>취소분은 빠진다</b> — 취소까지 세면 화면의
+     *                 결제수단이 "지금 실제로 결제된 수단"과 어긋난다
      */
     public record RowView(Long billingId, String studentNo, String studentName,
                           String name, String billingType, String serviceMonth,
+                          short year,
                           int billedAmount, int receivedAmount, int unpaid,
-                          LocalDate dueDate, String status) {
+                          LocalDate dueDate, String status,
+                          List<PaymentView> payments) {
 
         static RowView from(ReceiptStatusService.Row row) {
             Billing b = row.billing();
@@ -127,8 +132,25 @@ public class AdminReceiptStatusController {
                     b.getName(), b.getBillingType().name(),
                     b.getServiceMonth() == null ? null
                             : "%d-%02d".formatted(b.getServiceYear(), b.getServiceMonth()),
+                    b.getYear(),
                     b.getBilledAmount(), row.received(), row.unpaid(),
-                    b.getDueDate(), b.getStatus().name());
+                    b.getDueDate(), b.getStatus().name(),
+                    row.payments().stream().map(PaymentView::from).toList());
+        }
+    }
+
+    /**
+     * 수납 거래 한 건 — 언제 · 무엇으로 · 얼마.
+     *
+     * @param pgTid PG 거래번호(전표번호). 가상계좌·현금은 비어 있을 수 있다
+     */
+    public record PaymentView(Long id, int amount, String method,
+                              java.time.Instant paidAt, String pgTid) {
+
+        static PaymentView from(com.dlab.domain.payment.entity.PaymentTransaction t) {
+            return new PaymentView(t.getId(), t.getAmount(),
+                    t.getMethod() == null ? null : t.getMethod().name(),
+                    t.getPaidAt(), t.getPgTid());
         }
     }
 

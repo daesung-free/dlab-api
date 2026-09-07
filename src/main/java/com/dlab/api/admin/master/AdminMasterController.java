@@ -52,11 +52,13 @@ public class AdminMasterController {
     /** 학과 목록. 지점·연도 범위가 자동으로 걸린다({@code SearchScope}). */
     @GetMapping("/departments")
     public ApiResponse<List<MasterResponses.Department>> departments(
-            @CurrentAccount AuthPrincipal me, @RequestParam(required = false) Integer year,
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Boolean active) {
-        return ApiResponse.success(
-                masterDataService.departments(SearchScope.of(me, year), active).stream()
-                        .map(MasterResponses.Department::from).toList());
+        return ApiResponse.success(masterDataService
+                .departments(SearchScope.of(me, year, academyId), active).stream()
+                .map(MasterResponses.Department::from).toList());
     }
 
     /** 학과 등록. 지점·연도 단위라 <b>전년도 복사 대상</b>이다. */

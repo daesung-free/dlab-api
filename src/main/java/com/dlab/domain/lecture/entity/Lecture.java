@@ -78,14 +78,18 @@ public class Lecture extends BaseEntity {
     private String code;
 
     /**
-     * 담당 강사명.
+     * 담당 강사.
      *
-     * <p><b>{@code teacher} FK가 아니다</b> — 그 표에는 담당선생님(사감)만 들어가는데
-     * 특강 강사는 외부에서 부르는 경우가 있어, FK로 묶으면 그런 강사는 등록 자체가 안 된다.
-     * 지금 강사로 하는 일은 목록 표시뿐이라 문자열로 충분하다.
+     * <p>⚠️ {@code teacher}는 <b>담당선생님(사감)만</b> 들어가는 테이블이다. 외부 강사를
+     * 세우는 특강이 있으면 여기로는 담을 수 없다 — 그때 확장한다.
      */
-    @Column(name = "instructor_name", length = 50)
-    private String instructorName;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "teacher_id")
+    private com.dlab.domain.user.entity.Teacher teacher;
+
+    public void changeTeacher(com.dlab.domain.user.entity.Teacher teacher) {
+        this.teacher = teacher;
+    }
 
     public Lecture(Academy academy, short year, LectureType lectureType, String name) {
         this.academy = academy;
@@ -95,7 +99,7 @@ public class Lecture extends BaseEntity {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
-    public void update(String name, String code, String instructorName, String description,
+    public void update(String name, String code, String description,
                        Integer capacity, Instant applyFrom, Instant applyTo,
                        LocalDate startDate, LocalDate endDate, Integer fee) {
         if (name != null) {
@@ -103,9 +107,6 @@ public class Lecture extends BaseEntity {
         }
         if (code != null) {
             this.code = code;
-        }
-        if (instructorName != null) {
-            this.instructorName = instructorName;
         }
         if (description != null) {
             this.description = description;

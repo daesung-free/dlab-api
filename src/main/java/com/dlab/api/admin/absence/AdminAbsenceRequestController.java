@@ -45,18 +45,27 @@ public class AdminAbsenceRequestController {
             @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) ApprovalStatus status) {
+            @RequestParam(required = false) ApprovalStatus status,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
 
         LocalDate start = from == null ? LocalDate.now().withDayOfMonth(1) : from;
         LocalDate end = to == null ? LocalDate.now() : to;
 
         boolean raw = PersonalDataPolicy.canViewRaw(me);
-        return ApiResponse.success(new ListResponse(
-                absenceReasonService.list(me, academyId, start, end, status).stream()
-                        .map(r -> AbsenceRowResponse.of(r, raw))
-                        .toList(),
-                absenceReasonService.summary(me, academyId, start, end),
-                !raw));
+        List<AbsenceRowResponse> all = absenceReasonService.list(me, academyId, start, end, status)
+                .stream().map(r -> AbsenceRowResponse.of(r, raw)).toList();
+
+        // summary 는 페이지 합계가 아니라 필터 전체 기준이다 — 탭 건수가 페이지마다
+        // 바뀌면 "대기 3건"이 무슨 뜻인지 알 수 없다
+        var summary = absenceReasonService.summary(me, academyId, start, end);
+
+        if (size == null) {
+            return ApiResponse.success(new ListResponse(all, summary, !raw));
+        }
+        var sliced = com.dlab.common.search.PageSlicer.of(all, page, size);
+        return ApiResponse.success(new ListResponse(sliced.getContent(), summary, !raw),
+                ApiResponse.PageMeta.of(sliced));
     }
 
     /**

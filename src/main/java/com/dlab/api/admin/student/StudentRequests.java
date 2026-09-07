@@ -13,13 +13,30 @@ public final class StudentRequests {
     }
 
     /** 신규 접수. 학번은 서버가 채번하므로 받지 않는다. */
+    /**
+     * 신규 접수 등록.
+     *
+     * <p><b>상세 정보를 여기서 함께 받는다.</b> 등록과 수정으로 나눠 두 번 보내면, ①이 성공하고
+     * ②가 실패했을 때 <b>학생은 이미 등록됐는데 화면은 "저장 실패"만 알리게 되어</b> 담당자가
+     * 다시 등록하고 중복 학생이 생긴다.
+     *
+     * @param admissionDate 등원일. 생략하면 등록일이다. <b>중도 입학·소급 등록</b>에서
+     *                      실제 등원일과 어긋나면 교습비 일할 계산까지 틀어진다
+     */
     public record Admit(
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") @Min(2000) @Max(2100) Integer year,
             @NotBlank(message = "이름은 필수입니다.") @Size(max = 20) String name,
             @Size(max = 20) String phone,
             @NotNull(message = "학년 구분은 필수입니다.") GradeType grade,
-            TrackType track) {
+            /** N수 차수 — 1=재수, 2=삼수. N수가 아니면 비운다 */
+            @Min(1) @Max(10) Short retakeCount,
+            TrackType track,
+            LocalDate birthDate,
+            @Size(max = 1) String gender,
+            @Size(max = 64) String schoolName,
+            @Size(max = 200) String address,
+            LocalDate admissionDate) {
     }
 
     /**
@@ -36,6 +53,7 @@ public final class StudentRequests {
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,
             GradeType grade,
+            @Min(1) @Max(10) Short retakeCount,
             TrackType track,
             EnrollmentStatus status) {
     }

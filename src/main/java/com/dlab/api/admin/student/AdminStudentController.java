@@ -100,6 +100,7 @@ public class AdminStudentController {
     @GetMapping
     public ApiResponse<List<StudentResponse>> search(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) GradeType grade,
@@ -117,13 +118,14 @@ public class AdminStudentController {
             @RequestParam(required = false) Boolean unassignedLocker,
             @RequestParam(required = false) Boolean hasScholarship,
             @RequestParam(required = false) String scholarshipType,
+            @RequestParam(required = false) Short retakeCount,
             @PageableDefault(size = 20) Pageable pageable) {
 
         Page<StudentEnrollment> page = studentService.search(
-                SearchScope.of(me, year),
+                SearchScope.of(me, year, academyId),
                 condition(keyword, grade, track, status, classId, teacherId, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
-                        unassignedLocker, hasScholarship, scholarshipType),
+                        unassignedLocker, hasScholarship, scholarshipType, retakeCount),
                 pageable);
 
         var extras = studentListEnricher.of(page.getContent());
@@ -135,10 +137,11 @@ public class AdminStudentController {
                                              String schoolName, LocalDate admittedFrom,
                                              LocalDate admittedTo, Boolean unassignedClass,
                                              Boolean unassignedSeat, Boolean unassignedLocker,
-                                             Boolean hasScholarship, String scholarshipType) {
+                                             Boolean hasScholarship, String scholarshipType,
+                                             Short retakeCount) {
         return new StudentSearchCondition(keyword, grade, track, status, classId, teacherId,
                 schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
-                unassignedLocker, hasScholarship, scholarshipType);
+                unassignedLocker, hasScholarship, scholarshipType, retakeCount);
     }
 
     /** 학생 상세. 목록과 <b>같은 필드</b>를 내린다 — 화면이 목록에서 상세로 넘어갈 때 값이 사라지면 안 된다. */
@@ -153,13 +156,35 @@ public class AdminStudentController {
         return StudentResponse.from(enrollment, studentListEnricher.of(enrollment), me);
     }
 
-    /** 신규 접수. 학번은 서버가 채번한다. */
+    /**
+     * 다음 학번 미리보기 — 등록 폼의 "다음 학번은 …입니다".
+     *
+     * <p><b>예약이 아니다.</b> 등록 시점에 다시 계산하므로 두 사람이 같은 번호를 볼 수 있다.
+     * 화면은 "예정"으로 표시하고, <b>이 값을 등록 요청에 실어 보내지 않는다</b>.
+     */
+    @GetMapping("/next-student-no")
+    public ApiResponse<String> nextStudentNo(@CurrentAccount AuthPrincipal me,
+                                             @RequestParam(required = false) Long academyId,
+                                             @RequestParam short year) {
+        return ApiResponse.success(studentService.previewStudentNo(
+                me.requireAcademyScope(academyId), year, me));
+    }
+
+    /**
+     * 신규 접수. 학번은 서버가 채번한다.
+     *
+     * <p>상세 정보(생년월일·성별·출신학교·주소)와 등원일을 <b>함께 받아 한 번에 끝낸다</b> —
+     * 등록과 수정으로 나누면 뒤가 실패했을 때 학생만 남고, 화면은 "저장 실패"로만 알려
+     * 담당자가 다시 등록해 중복이 생긴다.
+     */
     @PostMapping
     public ApiResponse<StudentResponse> admit(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody StudentRequests.Admit request) {
         return ApiResponse.success(single(studentService.admit(
                 request.academyId(), request.year().shortValue(), request.name(),
-                request.phone(), request.grade(), request.track(), me), me));
+                request.phone(), request.grade(), request.retakeCount(), request.track(),
+                request.birthDate(), request.gender(), request.schoolName(),
+                request.address(), request.admissionDate(), me), me));
     }
 
     /** 학생 정보 수정. 보내지 않은 필드는 그대로 둔다 — 부분 수정이라 {@code PATCH}다. */
@@ -170,7 +195,7 @@ public class AdminStudentController {
         return ApiResponse.success(single(studentService.update(
                 enrollmentId, request.name(), request.phone(), request.birthDate(),
                 request.gender(), request.schoolName(), request.address(), request.grade(),
-                request.track(), request.status(), me), me));
+                request.retakeCount(), request.track(), request.status(), me), me));
     }
 
     // ── 상태 관리 (F-4.1-8) ──
@@ -231,6 +256,7 @@ public class AdminStudentController {
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) GradeType grade,
@@ -247,12 +273,13 @@ public class AdminStudentController {
             @RequestParam(required = false) Boolean unassignedSeat,
             @RequestParam(required = false) Boolean unassignedLocker,
             @RequestParam(required = false) Boolean hasScholarship,
-            @RequestParam(required = false) String scholarshipType) {
+            @RequestParam(required = false) String scholarshipType,
+            @RequestParam(required = false) Short retakeCount) {
 
-        byte[] file = studentExportService.export(SearchScope.of(me, year),
+        byte[] file = studentExportService.export(SearchScope.of(me, year, academyId),
                 condition(keyword, grade, track, status, classId, teacherId, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
-                        unassignedLocker, hasScholarship, scholarshipType));
+                        unassignedLocker, hasScholarship, scholarshipType, retakeCount));
 
         String filename = URLEncoder.encode("학생명단.xlsx", StandardCharsets.UTF_8);
         return ResponseEntity.ok()

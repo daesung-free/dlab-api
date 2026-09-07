@@ -58,9 +58,28 @@ public class ConsultLog extends BaseEntity {
     @Column(name = "consulted_at", nullable = false)
     private LocalDate consultedAt;
 
-    /** "20분 · 상담실 2" 같은 자유 입력(화면 그대로). */
+    /** 장소 메모. 소요시간은 {@link #durationMinutes}로 따로 받는다. */
     @Column(name = "place_note", length = 100)
     private String placeNote;
+
+    /**
+     * 학부모 공유 범위.
+     *
+     * <p><b>기본이 {@code NONE}이다.</b> 공유를 기본으로 두면 작성자가 의식하지 못한 채
+     * 학부모 앱에 열린다 — 학생과 나눈 말을 그대로 전달하면 안 되는 상담이 실제로 있다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "parent_share", nullable = false, length = 20)
+    private ParentShare parentShare = ParentShare.NONE;
+
+    /**
+     * 소요시간(분).
+     *
+     * <p>{@code placeNote}에 "20분 · 상담실 2"처럼 섞여 있던 것을 숫자로 뺐다 —
+     * 문자열이면 "평균 상담 시간"을 셀 수 없다.
+     */
+    @Column(name = "duration_minutes")
+    private Short durationMinutes;
 
     @Column(nullable = false, columnDefinition = "text")
     private String content;
@@ -93,7 +112,8 @@ public class ConsultLog extends BaseEntity {
 
     public void update(ConsultType consultType, ConsultMethod method, LocalDate consultedAt,
                        String placeNote, String content, String actionPlan,
-                       boolean actionDone, LocalDate nextDueDate) {
+                       boolean actionDone, LocalDate nextDueDate,
+                       ParentShare parentShare, Short durationMinutes) {
         this.consultType = consultType;
         this.method = method;
         this.consultedAt = consultedAt;
@@ -102,6 +122,8 @@ public class ConsultLog extends BaseEntity {
         this.actionPlan = actionPlan;
         this.actionDone = actionDone;
         this.nextDueDate = nextDueDate;
+        this.parentShare = parentShare == null ? ParentShare.NONE : parentShare;
+        this.durationMinutes = durationMinutes;
     }
 
     /**

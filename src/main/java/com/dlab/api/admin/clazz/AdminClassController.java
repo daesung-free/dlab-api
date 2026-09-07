@@ -39,8 +39,10 @@ public class AdminClassController {
      */
     @GetMapping
     public ApiResponse<List<ClassResponse>> search(@CurrentAccount AuthPrincipal me,
+                                                   @RequestParam(required = false) Long academyId,
                                                    @RequestParam(required = false) Integer year) {
-        return ApiResponse.success(classService.searchWithMemberCount(SearchScope.of(me, year)).stream()
+        return ApiResponse.success(classService
+                .searchWithMemberCount(SearchScope.of(me, year, academyId)).stream()
                 .map(ClassResponse::from)
                 .toList());
     }

@@ -103,6 +103,29 @@ public class AdminSurveyController {
     }
 
     /** 제출자 목록. 익명 설문이어도 <b>누가 냈는지</b>는 알 수 있다 — 미제출자 독려용이다. */
+    /**
+     * 원시 응답 내려받기 (엑셀).
+     *
+     * <p>집계만으로는 부족한 설문이 있다 — 가채점처럼 개별 응답을 봐야 하는 경우다.
+     *
+     * <p>⚠️ <b>익명 설문은 학번·이름 칸이 빈다.</b> 익명은 응답 행에 응답자를 저장하지
+     * 않는 구조라 되돌릴 값 자체가 없다.
+     */
+    @GetMapping("/{surveyId}/responses/export")
+    public org.springframework.http.ResponseEntity<org.springframework.core.io.ByteArrayResource>
+            exportResponses(@CurrentAccount AuthPrincipal me, @PathVariable Long surveyId) {
+
+        byte[] bytes = surveyService.exportResponses(me, surveyId);
+        String filename = java.net.URLEncoder.encode("설문응답_%d.xlsx".formatted(surveyId),
+                java.nio.charset.StandardCharsets.UTF_8);
+
+        return org.springframework.http.ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename*=UTF-8''" + filename)
+                .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
+                .body(new org.springframework.core.io.ByteArrayResource(bytes));
+    }
+
     @GetMapping("/{surveyId}/participants")
     public ApiResponse<List<AdminSurveyResponses.Participant>> participants(
             @CurrentAccount AuthPrincipal me, @PathVariable Long surveyId) {

@@ -69,8 +69,8 @@ public final class SeatRequests {
             @NotBlank(message = "좌석번호는 필수입니다.")
             @Size(max = 50, message = "좌석번호는 50자까지입니다.") String seatCd,
             @Size(max = 50, message = "좌석 이름은 50자까지입니다.") String seatNm,
-            @Min(0) int xPos,
-            @Min(0) int yPos) {
+            @Min(0) @NotNull(message = "X 좌표는 필수입니다.") Integer xPos,
+            @Min(0) @NotNull(message = "Y 좌표는 필수입니다.") Integer yPos) {
     }
 
     /**
@@ -89,8 +89,8 @@ public final class SeatRequests {
      */
     public record SeatGridCreate(
             @NotNull(message = "구역은 필수입니다.") Long studyAreaId,
-            @Min(value = 1, message = "행은 1 이상이어야 합니다.") @Max(100) int rows,
-            @Min(value = 1, message = "열은 1 이상이어야 합니다.") @Max(100) int columns,
+            @Min(value = 1, message = "행은 1 이상이어야 합니다.") @Max(100) @NotNull(message = "행 수는 필수입니다.") Integer rows,
+            @Min(value = 1, message = "열은 1 이상이어야 합니다.") @Max(100) @NotNull(message = "열 수는 필수입니다.") Integer columns,
             @NotBlank(message = "좌석번호 접두어는 필수입니다.")
             @Size(max = 30, message = "접두어는 30자까지입니다.") String seatCdPrefix,
             @Min(0) Integer startNumber,

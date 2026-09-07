@@ -4,6 +4,7 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.privacy.Masking;
 import com.dlab.common.privacy.PersonalDataPolicy;
+import com.dlab.common.search.PageSlicer;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
@@ -62,7 +63,9 @@ public class AdminPenaltyController {
             @RequestParam(required = false) List<PenaltySource> source,
             @RequestParam(required = false) EnrollmentStatus enrollmentStatus,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long classId) {
+            @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
 
         LocalDate start = from == null ? LocalDate.now().withDayOfMonth(1) : from;
         LocalDate end = to == null ? LocalDate.now() : to;
@@ -71,14 +74,25 @@ public class AdminPenaltyController {
                 source, enrollmentStatus, keyword, classId);
         boolean raw = PersonalDataPolicy.canViewRaw(me);
 
-        return ApiResponse.success(new PenaltyBoardResponse(
-                board.rows().stream()
-                        .map(p -> PenaltyRowResponse.of(p, raw, board.granterNames(), board.classNames()))
-                        .toList(),
-                Map.of("plusTotal", (long) board.plusTotal(),
-                        "minusTotal", (long) board.minusTotal(),
-                        "autoCount", board.autoCount()),
-                !raw));
+        // 반·부여자 이름은 한 번에 조회해 Map으로 붙인다(행마다 부르면 목록 크기만큼 쿼리)
+        List<PenaltyRowResponse> all = board.rows().stream()
+                .map(p -> PenaltyRowResponse.of(p, raw, board.granterNames(), board.classNames()))
+                .toList();
+
+        // summary 는 페이지 합계가 아니라 필터 전체 기준이다 — 상단 통계 타일이
+        // 페이지를 넘길 때마다 값이 바뀌면 "이번 달 벌점 합계"라는 의미가 사라진다
+        Map<String, Long> summary = Map.of(
+                "plusTotal", (long) board.plusTotal(),
+                "minusTotal", (long) board.minusTotal(),
+                "autoCount", board.autoCount());
+
+        if (size == null) {
+            return ApiResponse.success(new PenaltyBoardResponse(all, summary, !raw));
+        }
+        var sliced = PageSlicer.of(all, page, size);
+        return ApiResponse.success(
+                new PenaltyBoardResponse(sliced.getContent(), summary, !raw),
+                ApiResponse.PageMeta.of(sliced));
     }
 
     /**

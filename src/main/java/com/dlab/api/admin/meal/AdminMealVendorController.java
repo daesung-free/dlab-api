@@ -1,5 +1,6 @@
 package com.dlab.api.admin.meal;
 
+import jakarta.validation.constraints.NotNull;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
@@ -111,7 +112,7 @@ public class AdminMealVendorController {
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") Short year,
             @NotNull(message = "업체는 필수입니다.") Long vendorId,
-            @Positive(message = "단가는 1원 이상이어야 합니다.") int unitPrice) {
+            @Positive(message = "단가는 1원 이상이어야 합니다.") @NotNull(message = "단가는 필수입니다.") Integer unitPrice) {
     }
 
     public record VendorView(Long id, String name, String contactName,

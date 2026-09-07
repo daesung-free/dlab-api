@@ -143,9 +143,15 @@ public class PenaltyService {
         //   반 필터도 여기서 같이 쓴다
         java.util.Map<Long, String> classes = classNamesOf(points);
 
+        // 반 필터를 행마다 조회하면 쿼리가 건수만큼 나간다. 대상 학생을 한 번에 받아 둔다
+        java.util.Set<Long> inClass = classId == null ? null
+                : classAssignmentRepository.findActiveByClassId(classId).stream()
+                        .map(a -> a.getEnrollment().getId())
+                        .collect(java.util.stream.Collectors.toSet());
+
         List<PenaltyPoint> filtered = points.stream()
                 .filter(p -> matchesKeyword(p, keyword))
-                .filter(p -> matchesClass(p, classes, classId))
+                .filter(p -> inClass == null || inClass.contains(p.getEnrollment().getId()))
                 .toList();
 
         int plus = filtered.stream()
@@ -217,16 +223,9 @@ public class PenaltyService {
                         (x, y) -> x));
     }
 
-    /** 반 필터. 미배정 학생은 반 조건이 걸리면 빠진다. */
-    private boolean matchesClass(PenaltyPoint p, java.util.Map<Long, String> classes, Long classId) {
-        if (classId == null) {
-            return true;
-        }
-        return classAssignmentRepository
-                .findActiveFixedByEnrollmentId(p.getEnrollment().getId())
-                .map(a -> a.getClassMaster().getId().equals(classId))
-                .orElse(false);
-    }
+    // ★ 반 필터를 행마다 조회하던 matchesClass 는 뺐다 — 위 inClass 집합이 같은 일을
+    //   쿼리 한 번으로 한다. 둘 다 두면 목록 크기만큼 쿼리가 나가는 쪽이 남는다.
+
 
     /**
      * @param plusTotal  상점 합계(양수)

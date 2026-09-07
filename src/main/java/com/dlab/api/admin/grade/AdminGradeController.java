@@ -99,4 +99,51 @@ public class AdminGradeController {
         return ApiResponse.success(GradeResponse.Submission.from(
                 gradeService.of(enrollment), examFormService.formOf(enrollment)));
     }
+
+    // ── 직원 수정 (0826 회신 · API_GAPS 12-1) ──────────────────
+
+    /**
+     * 내신 성적 직원 수정.
+     *
+     * <p>0826 회신이 <i>"처음 입력시 학생, 이후 수정시에는 직원을 통해서"</i>로 정했다.
+     * 학생이 앱을 못 쓰거나 잘못 넣은 값을 고칠 경로가 없었다.
+     *
+     * <p><b>누가 고쳤는지 남는다</b>({@code modifiedBy}) — 이 값이 장학 취소 판정의
+     * 근거라, 학생 입력값을 직원이 고쳤다면 그 사실이 드러나야 한다.
+     */
+    @PutMapping("/students/{enrollmentId}/grades/school-record")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<GradeResponse.Submission> updateSchoolRecord(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long enrollmentId,
+            @Valid @RequestBody com.dlab.api.app.grade.GradeRequests.SchoolRecord request) {
+
+        StudentEnrollment enrollment = studentService.get(enrollmentId, me);
+        gradeService.saveSchoolRecord(enrollment, request.mainSubjectAverage());
+        return ApiResponse.success(GradeResponse.Submission.from(
+                gradeService.markModified(enrollment, me.accountId()),
+                examFormService.formOf(enrollment)));
+    }
+
+    /**
+     * 모의고사 성적 직원 수정. <b>보낸 회차만</b> 교체된다 — 앱과 같은 규칙이다.
+     */
+    @PutMapping("/students/{enrollmentId}/grades/exam-scores")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<GradeResponse.Submission> updateExamScores(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long enrollmentId,
+            @Valid @RequestBody com.dlab.api.app.grade.GradeRequests.ExamScores request) {
+
+        StudentEnrollment enrollment = studentService.get(enrollmentId, me);
+        var inputs = request.scores().stream()
+                .map(sc -> new com.dlab.domain.grade.service.StudentGradeService.ScoreInput(
+                        sc.examSubjectId(), sc.standardScore(), sc.percentile(), sc.gradeLevel()))
+                .toList();
+
+        gradeService.saveExamScores(enrollment, inputs);
+        return ApiResponse.success(GradeResponse.Submission.from(
+                gradeService.markModified(enrollment, me.accountId()),
+                examFormService.formOf(enrollment)));
+    }
 }

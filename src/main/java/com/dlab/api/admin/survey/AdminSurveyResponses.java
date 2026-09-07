@@ -16,17 +16,39 @@ public final class AdminSurveyResponses {
     private AdminSurveyResponses() {
     }
 
+    /**
+     * @param status 서버가 판정한 진행 상태 — {@code SCHEDULED}(아직 안 열림) ·
+     *               {@code OPEN} · {@code CLOSED}. <b>화면이 시각을 비교하지 않는다</b>:
+     *               클라이언트 시계가 어긋나면 같은 설문이 사람마다 다르게 보인다.
+     *
+     *               <p>조기 마감({@code PATCH /surveys/&#123;id&#125;/close})은
+     *               {@code closesAt}을 지금으로 당기는 방식이라, 원래 마감 시각이
+     *               <b>덮어써진다</b> — "예정 마감이 언제였나"는 남지 않는다.
+     */
     public record AdminSurveySummary(Long id, SurveyType surveyType, SurveyScope scope,
                           Long academyId, Long classId,
                           String title, String description, boolean anonymous,
-                          Instant opensAt, Instant closesAt, int questionCount) {
+                          Instant opensAt, Instant closesAt, int questionCount,
+                          String status) {
 
         static AdminSurveySummary from(Survey s) {
+            return from(s, Instant.now());
+        }
+
+        static AdminSurveySummary from(Survey s, Instant now) {
             return new AdminSurveySummary(s.getId(), s.getSurveyType(), s.getScope(),
                     s.getAcademy() != null ? s.getAcademy().getId() : null,
                     s.getClassMaster() != null ? s.getClassMaster().getId() : null,
                     s.getTitle(), s.getDescription(), s.isAnonymous(),
-                    s.getOpensAt(), s.getClosesAt(), s.activeQuestions().size());
+                    s.getOpensAt(), s.getClosesAt(), s.activeQuestions().size(),
+                    statusOf(s, now));
+        }
+
+        private static String statusOf(Survey s, Instant now) {
+            if (s.getOpensAt() != null && now.isBefore(s.getOpensAt())) {
+                return "SCHEDULED";
+            }
+            return s.getClosesAt() != null && !now.isBefore(s.getClosesAt()) ? "CLOSED" : "OPEN";
         }
     }
 

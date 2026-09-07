@@ -259,7 +259,7 @@ public class AdminAttendanceController {
                                            @PathVariable Long enrollmentId,
                                            @Valid @RequestBody StatusCorrectionRequest request) {
         correctionService.correctStatus(me, enrollmentId, request.date(),
-                request.status(), request.excused(), request.reason());
+                request.status(), request.excusedOrFalse(), request.reason());
         return ApiResponse.success(null);
     }
 
@@ -268,8 +268,13 @@ public class AdminAttendanceController {
             @NotNull(message = "일자는 필수입니다.")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @NotNull(message = "상태는 필수입니다.") DailyStatus status,
-            boolean excused,
+            Boolean excused,
             @NotBlank(message = "정정 사유는 필수입니다.") @Size(max = 200) String reason) {
+
+        /** 생략 가능 — 없으면 false. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
+        public boolean excusedOrFalse() {
+            return excused == null ? false : excused;
+        }
     }
 
     /**

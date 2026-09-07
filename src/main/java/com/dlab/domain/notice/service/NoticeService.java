@@ -6,6 +6,7 @@ import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
 import com.dlab.domain.notice.entity.Notice;
 import com.dlab.domain.notice.entity.NoticeAuthorType;
+import com.dlab.domain.notice.entity.NoticeRead;
 import com.dlab.domain.notice.entity.NoticeScope;
 import com.dlab.domain.notice.repository.NoticeRepository;
 import com.dlab.domain.user.entity.Account;
@@ -20,7 +21,9 @@ import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -53,6 +56,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class NoticeService {
 
     private final NoticeRepository noticeRepository;
+    private final com.dlab.domain.notice.repository.NoticeReadRepository noticeReadRepository;
     private final AccountRepository accountRepository;
     private final ClassMasterRepository classMasterRepository;
     private final com.dlab.domain.user.repository.AcademyRepository academyRepository;
@@ -147,6 +151,58 @@ public class NoticeService {
         Notice notice = requireWritable(me, id);
         notice.update(title, content, pinned, banner, publishedAt, expiresAt);
         return notice;
+    }
+
+    /**
+     * 부분 수정 — 보내지 않은 필드는 그대로 둔다.
+     *
+     * <p>상단 고정만 켜려고 본문을 함께 보내는 구조였는데, 화면 목록이 낡았으면
+     * <b>버튼 한 번에 남의 수정이 덮어써진다.</b>
+     */
+    @Transactional
+    public Notice patch(AuthPrincipal me, Long id, String title, String content,
+                        Boolean pinned, Boolean banner,
+                        Instant publishedAt, Instant expiresAt) {
+        Notice notice = requireWritable(me, id);
+        notice.patch(title, content, pinned, banner, publishedAt, expiresAt);
+        return notice;
+    }
+
+    /**
+     * 열람 기록.
+     *
+     * <p><b>중복 호출이 정상 경로다</b> — 앱이 상세 화면에 들어올 때마다 부른다.
+     * 이미 있으면 아무것도 하지 않는다(최초 열람 시각을 덮어쓰지 않는다).
+     *
+     * <p><b>내게 보이는 공지인지 먼저 확인한다</b> — 안 그러면 번호를 바꿔가며
+     * 남의 반 공지를 읽음 처리해 열람 수를 부풀릴 수 있다.
+     */
+    @Transactional
+    public void markRead(Long enrollmentId, Long noticeId) {
+        Notice notice = readOne(enrollmentId, noticeId);
+        if (noticeReadRepository.existsByNoticeIdAndEnrollmentId(noticeId, enrollmentId)) {
+            return;
+        }
+        StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.STUDENT_NOT_FOUND));
+        try {
+            noticeReadRepository.save(new NoticeRead(notice, enrollment, Instant.now(clock)));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 같은 학생이 동시에 두 번 열었다. 유니크 제약이 막아준 것이라 정상이다
+            log.debug("공지 열람 중복: noticeId={}, enrollmentId={}", noticeId, enrollmentId);
+        }
+    }
+
+    /** 공지별 열람 수. 목록이 공지마다 세면 쿼리가 행 수만큼 나가서 한 번에 받는다. */
+    @Transactional(readOnly = true)
+    public Map<Long, Long> readCounts(List<Long> noticeIds) {
+        if (noticeIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Long> result = new HashMap<>();
+        noticeReadRepository.countByNoticeIds(noticeIds)
+                .forEach(row -> result.put((Long) row[0], (Long) row[1]));
+        return result;
     }
 
     /** 삭제(soft). 물리 삭제하면 "그때 무슨 공지가 나갔나"에 답할 수 없다. */

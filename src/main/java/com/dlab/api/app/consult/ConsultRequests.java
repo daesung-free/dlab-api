@@ -1,5 +1,6 @@
 package com.dlab.api.app.consult;
 
+import jakarta.validation.constraints.NotNull;
 import com.dlab.domain.consult.entity.ConsultType;
 import jakarta.validation.constraints.*;
 import java.time.LocalDate;
@@ -19,9 +20,9 @@ public final class ConsultRequests {
             @NotNull LocalDate date,
             @NotNull LocalTime from,
             @NotNull LocalTime to,
-            @Min(1) @Max(240) int intervalMinutes,
+            @Min(1) @Max(240) @NotNull(message = "슬롯 간격은 필수입니다.") Integer intervalMinutes,
             /* 1:1이 기본. 학부모 상담에 부모가 함께 오는 경우가 있어 열어둔다 */
-            @Min(1) @Max(10) short capacity,
+            @Min(1) @Max(10) @NotNull(message = "정원은 필수입니다.") Short capacity,
             @Size(max = 50) String place) {}
 
     /** 노출 켜기/끄기. 삭제가 아니라 이미 잡힌 예약은 유효하다. */

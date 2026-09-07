@@ -12,6 +12,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -80,6 +81,21 @@ public class AppNoticeController {
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(
                 AppNoticeResponse.from(noticeService.readOne(enrollmentId, id)));
+    }
+
+    /**
+     * 열람 처리.
+     *
+     * <p><b>상세 화면에 들어올 때마다 불러도 된다</b> — 이미 읽은 건은 아무 일도 하지 않고,
+     * 최초 열람 시각을 덮어쓰지 않는다.
+     */
+    @PostMapping("/{id}/read")
+    public ApiResponse<Void> markRead(@CurrentAccount AuthPrincipal me,
+                                      @PathVariable Long id,
+                                      @RequestParam(required = false) Long studentId) {
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
+        noticeService.markRead(enrollmentId, id);
+        return ApiResponse.empty();
     }
 
     /**

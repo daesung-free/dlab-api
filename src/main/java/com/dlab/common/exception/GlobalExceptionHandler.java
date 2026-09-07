@@ -79,16 +79,86 @@ public class GlobalExceptionHandler {
      * {@code "track":"NATURAL"}(정답은 {@code SCIENCE}) 하나에 서버 오류가 났다 —
      * 앱 쪽 오타인데 응답이 500이면 서버를 의심하며 시간을 쓰게 된다.
      *
-     * <p>응답 본문에는 <b>원문 메시지를 싣지 않는다</b> — Jackson 메시지에 엔티티
-     * 패키지 경로가 그대로 들어 있다. 대신 <b>서버 로그에 남기므로</b> 어느 필드가
-     * 문제였는지는 로그에서 확인한다.
+     * <p>응답 본문에 <b>원문 메시지는 싣지 않는다</b> — Jackson 메시지에 엔티티
+     * 패키지 경로가 그대로 들어 있다. 대신 <b>필드 경로만 뽑아서</b> 싣는다.
+     * "요청 본문 형식이 올바르지 않습니다"만 나가면 화면은 어느 필드가 문제인지
+     * 알 수 없어, 스펙대로 보냈는데 막혔을 때 원인을 찾는 데 시간이 걸린다.
      */
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Void>> handleUnreadable(
             org.springframework.http.converter.HttpMessageNotReadableException e) {
         log.warn("요청 본문을 읽을 수 없음: {}", e.getMessage());
+
+        StringBuilder message = new StringBuilder("요청 본문 형식이 올바르지 않습니다");
+        var mapping = mappingCauseOf(e);
+        String field = fieldPathOf(mapping);
+        if (field != null) {
+            message.append(" — '").append(field).append('\'');
+        }
+        String allowed = allowedValuesOf(mapping);
+        if (allowed != null) {
+            message.append(". 허용값: ").append(allowed);
+        }
+        message.append('.');
+
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
-                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST, "요청 본문 형식이 올바르지 않습니다."));
+                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST, message.toString()));
+    }
+
+    /**
+     * 원인 사슬에서 Jackson 예외를 찾는다. Spring이 한 겹 감싸므로 직접 원인만 봐서는 놓친다.
+     *
+     * <p>⚠️ <b>{@code tools.jackson}(Jackson 3)이다</b> — {@code com.fasterxml.jackson}
+     * (Jackson 2)도 클래스패스에 있어 그쪽으로 잡으면 <b>컴파일은 통과하는데 런타임에
+     * 항상 못 찾는다.</b> 실제로 그렇게 짰다가 필드명이 안 붙었다. 필드 접근자 이름도
+     * 다르다({@code getFieldName()} → {@code getPropertyName()}).
+     */
+    private static tools.jackson.databind.DatabindException mappingCauseOf(Throwable e) {
+        for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
+            if (t instanceof tools.jackson.databind.DatabindException jme) {
+                return jme;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Jackson 예외에서 <b>필드 경로만</b> 뽑는다 — {@code applyFrom}, {@code items[2].amount}.
+     *
+     * <p>원문 메시지는 못 싣지만(내부 타입·패키지 경로가 그대로 들어 있다) 필드 이름은
+     * 우리가 정한 API 계약이라 실어도 된다. 이게 없으면 화면은 <b>어느 필드가 문제인지
+     * 모른 채</b> 본문 전체를 놓고 원인을 찾아야 한다.
+     */
+    private static String fieldPathOf(tools.jackson.databind.DatabindException jme) {
+        if (jme == null || jme.getPath().isEmpty()) {
+            return null;
+        }
+        StringBuilder path = new StringBuilder();
+        for (var ref : jme.getPath()) {
+            if (ref.getPropertyName() != null) {
+                if (!path.isEmpty()) {
+                    path.append('.');
+                }
+                path.append(ref.getPropertyName());
+            } else if (ref.getIndex() >= 0) {
+                path.append('[').append(ref.getIndex()).append(']');
+            }
+        }
+        return path.isEmpty() ? null : path.toString();
+    }
+
+    /** enum에 없는 값이면 허용값 목록을 붙인다 — 타입 불일치 처리와 같은 이유다. */
+    private static String allowedValuesOf(tools.jackson.databind.DatabindException jme) {
+        if (!(jme instanceof tools.jackson.databind.exc.InvalidFormatException ife)) {
+            return null;
+        }
+        Class<?> target = ife.getTargetType();
+        if (target == null || !target.isEnum()) {
+            return null;
+        }
+        return Arrays.stream(target.getEnumConstants())
+                .map(String::valueOf)
+                .collect(Collectors.joining(", "));
     }
 
     /**
@@ -196,6 +266,50 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
                 .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST,
                         "날짜 형식이 올바르지 않습니다: " + abbreviate(e.getParsedString())));
+    }
+
+    /**
+     * 필수 파라미터·경로변수·헤더 누락.
+     *
+     * <p><b>처리하지 않으면 catch-all이 잡아 500으로 나간다.</b> 실제로
+     * {@code /learning-plans/options}를 {@code year} 없이 부르면 500이었다 —
+     * 값 하나를 빠뜨린 클라이언트 잘못인데 "서버 오류"가 돌아오면 원인을 못 찾는다.
+     *
+     * <p>{@link org.springframework.web.bind.ServletRequestBindingException}으로 한 번에 받는다.
+     * 누락은 파라미터·경로변수·헤더·쿠키·행렬변수로 갈리는데 <b>전부 이 타입 아래</b>라,
+     * 하나씩 잡으면 새 종류가 생길 때마다 500이 다시 샌다.
+     *
+     * <p>어느 값이 빠졌는지는 <b>{@code MissingRequestValueException}일 때만</b> 싣는다 —
+     * 그 아래에만 이름이 있고, 상위 타입은 메시지에 내부 정보가 섞일 수 있다.
+     */
+    @ExceptionHandler(org.springframework.web.bind.ServletRequestBindingException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingValue(
+            org.springframework.web.bind.ServletRequestBindingException e) {
+        log.warn("요청 값 바인딩 실패: {}", e.getMessage());
+
+        String message = "필수 요청 값이 없습니다";
+        if (e instanceof org.springframework.web.bind.MissingRequestValueException missing) {
+            String name = nameOf(missing);
+            if (name != null) {
+                message = "필수 요청 값이 없습니다: '" + name + "'";
+            }
+        }
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
+                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST, message + "."));
+    }
+
+    /** 누락 종류마다 이름을 담는 자리가 달라서 갈라 본다. */
+    private static String nameOf(org.springframework.web.bind.MissingRequestValueException e) {
+        if (e instanceof org.springframework.web.bind.MissingServletRequestParameterException p) {
+            return p.getParameterName();
+        }
+        if (e instanceof org.springframework.web.bind.MissingPathVariableException v) {
+            return v.getVariableName();
+        }
+        if (e instanceof org.springframework.web.bind.MissingRequestHeaderException h) {
+            return h.getHeaderName();
+        }
+        return null;
     }
 
     /** 사용자가 보낸 값을 메시지에 실을 수 있는 길이로 자른다. */

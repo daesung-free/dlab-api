@@ -63,7 +63,8 @@ class StudentNoResetTest {
 
     private StudentEnrollment admit(Academy target, short year, String name) {
         StudentEnrollment enrollment = studentService.admit(
-                target.getId(), year, name, null, GradeType.N_SU, null, principal);
+                target.getId(), year, name, null, GradeType.N_SU, null, null,
+                null, null, null, null, null, principal);
         em.flush();
         return enrollment;
     }

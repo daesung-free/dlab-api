@@ -64,6 +64,23 @@ public class StudentEnrollment extends BaseEntity {
     @Column(length = 10)
     private TrackType track;
 
+    /**
+     * N수 차수 — 1=재수, 2=삼수, 3=사수.
+     *
+     * <p><b>{@link GradeType}에 넣지 않았다.</b> 그쪽은 시험 양식의 축이라 값을 더하면
+     * 양식이 학년 수만큼 곱해져 늘고 연도마다 다시 넣어야 하는데, <b>재수든 삼수든 치는
+     * 시험은 같다</b> — 축이 다른 값이다. 사수·오수로 계속 늘어나는 것도 enum 에 맞지 않는다.
+     *
+     * <p><b>{@code null}은 "해당 없음이거나 아직 안 받은 것"</b>이다. 0으로 채우면
+     * 현역과 구분되지 않는다.
+     */
+    @Column(name = "retake_count")
+    private Short retakeCount;
+
+    public void changeRetakeCount(Short retakeCount) {
+        this.retakeCount = retakeCount;
+    }
+
     /** 재원 상태. 가입 승인 상태(account.status)와 별개다. */
     @Enumerated(EnumType.STRING)
     @Column(name = "enrollment_status", nullable = false, length = 20)
