@@ -38,13 +38,19 @@ public class AdminHolidayController {
 
     private final HolidayService holidayService;
 
-    /** 기간 조회. 전 지점 공통 + 내 지점 것이 함께 나온다. */
+    /**
+     * 기간 조회.
+     *
+     * <p>지점 계정은 <b>전 지점 공통 + 자기 지점</b>, 본사는 <b>전 지점</b>을 본다.
+     * {@code academyId}를 주면 그 지점으로 좁힌다.
+     */
     @GetMapping
     public ApiResponse<List<HolidayResponse>> list(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @NotNull LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) @NotNull LocalDate to) {
-        List<HolidayResponse> holidays = holidayService.findInRange(me, from, to).stream()
+        List<HolidayResponse> holidays = holidayService.findInRange(me, academyId, from, to).stream()
                 .map(HolidayResponse::from)
                 .toList();
         return ApiResponse.success(holidays);

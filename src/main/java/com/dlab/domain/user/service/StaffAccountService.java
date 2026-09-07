@@ -115,6 +115,65 @@ public class StaffAccountService {
         grantRoles(accountId, roles);
     }
 
+    /**
+     * 직원 목록에 붙일 계정·역할을 <b>한 번에</b> 받는다.
+     *
+     * <p>행마다 조회하면 쿼리가 인원수만큼 나간다. 그리고 <b>계정이 없는 직원이 정상</b>이다 —
+     * 등록만 하고 계정은 나중에 주는 경우가 있어, 없는 것을 오류로 보면 목록이 안 뜬다.
+     */
+    @Transactional(readOnly = true)
+    public StaffAccounts accountsOfTeachers(java.util.List<Long> teacherIds) {
+        if (teacherIds.isEmpty()) {
+            return StaffAccounts.EMPTY;
+        }
+        return bind(accountRepository.findByTeacherIds(teacherIds),
+                a -> a.getTeacher().getId());
+    }
+
+    @Transactional(readOnly = true)
+    public StaffAccounts accountsOfEmployees(java.util.List<Long> employeeIds) {
+        if (employeeIds.isEmpty()) {
+            return StaffAccounts.EMPTY;
+        }
+        return bind(accountRepository.findByEmployeeIds(employeeIds),
+                a -> a.getEmployee().getId());
+    }
+
+    private StaffAccounts bind(java.util.List<com.dlab.domain.user.entity.Account> accounts,
+                               java.util.function.Function<
+                                       com.dlab.domain.user.entity.Account, Long> ownerId) {
+        java.util.Map<Long, com.dlab.domain.user.entity.Account> byOwner = new java.util.HashMap<>();
+        accounts.forEach(a -> byOwner.put(ownerId.apply(a), a));
+
+        java.util.Map<Long, Set<String>> rolesByAccount = new java.util.HashMap<>();
+        if (!accounts.isEmpty()) {
+            accountRoleRepository.findRoleNamesByAccountIds(
+                    accounts.stream().map(com.dlab.domain.user.entity.Account::getId).toList())
+                    .forEach(row -> rolesByAccount
+                            .computeIfAbsent(((Number) row[0]).longValue(),
+                                    k -> new java.util.LinkedHashSet<>())
+                            .add((String) row[1]));
+        }
+        return new StaffAccounts(byOwner, rolesByAccount);
+    }
+
+    /** @param byOwner 선생님·직원 id → 계정. <b>없을 수 있다</b>(계정 미발급) */
+    public record StaffAccounts(java.util.Map<Long, com.dlab.domain.user.entity.Account> byOwner,
+                                java.util.Map<Long, Set<String>> rolesByAccount) {
+
+        static final StaffAccounts EMPTY = new StaffAccounts(java.util.Map.of(), java.util.Map.of());
+
+        public com.dlab.domain.user.entity.Account accountOf(Long ownerId) {
+            return byOwner.get(ownerId);
+        }
+
+        public Set<String> rolesOf(Long ownerId) {
+            var account = byOwner.get(ownerId);
+            return account == null ? Set.of()
+                    : rolesByAccount.getOrDefault(account.getId(), Set.of());
+        }
+    }
+
     @Transactional(readOnly = true)
     public Set<String> rolesOf(Long accountId) {
         return accountRoleRepository.findRoleNamesByAccountId(accountId);

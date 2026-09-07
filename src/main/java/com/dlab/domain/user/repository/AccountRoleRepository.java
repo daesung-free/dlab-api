@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -20,6 +21,18 @@ public interface AccountRoleRepository extends Repository<com.dlab.domain.user.e
             WHERE ar.account_id = :accountId AND r.is_deleted = false
             """, nativeQuery = true)
     Set<String> findRoleNamesByAccountId(Long accountId);
+
+    /**
+     * 여러 계정의 역할을 <b>한 번에</b>.
+     *
+     * <p>직원 목록이 행마다 역할을 조회하면 쿼리가 인원수만큼 나간다.
+     */
+    @Query(value = """
+            SELECT ar.account_id, r.name FROM account_role ar
+            JOIN role r ON r.id = ar.role_id
+            WHERE ar.account_id IN (:accountIds) AND r.is_deleted = false
+            """, nativeQuery = true)
+    List<Object[]> findRoleNamesByAccountIds(java.util.Collection<Long> accountIds);
 
     /** 역할 부여. 이미 있으면 무시한다(PK 충돌 방지). */
     @Modifying(clearAutomatically = true)

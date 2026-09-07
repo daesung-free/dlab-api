@@ -164,7 +164,17 @@ public class NotificationTemplate extends BaseEntity {
      * 어느 하나라도 빠지면 이력만 남기고 건너뛴다.
      */
     public boolean isSendable() {
-        return active && contentConfirmed && reviewStatus.canSend();
+        if (!active || !contentConfirmed) {
+            return false;
+        }
+        // ★ 알림톡은 NOT_REQUIRED 로 통과시키지 않는다.
+        //   카카오는 사전 승인 문안만 받으므로, 심사를 안 거친 알림톡은 실제로 거절된다 —
+        //   화면은 "나감"인데 안 나가고 원인이 우리 쪽에 안 남는다.
+        //   실제로 마이그레이션 순서 때문에 알림톡 2건이 NOT_REQUIRED 로 들어가 있었다.
+        if (channel == NotificationChannel.KAKAO_ALIMTALK) {
+            return reviewStatus == ReviewStatus.APPROVED;
+        }
+        return reviewStatus.canSend();
     }
 
     public Set<String> requiredVariableSet() {
