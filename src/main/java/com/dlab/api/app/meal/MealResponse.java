@@ -3,6 +3,7 @@ package com.dlab.api.app.meal;
 import com.dlab.domain.meal.entity.MealClosure;
 import com.dlab.domain.meal.entity.MealOrder;
 import com.dlab.domain.meal.entity.MealOrderItem;
+import com.dlab.domain.meal.entity.MealType;
 import com.dlab.domain.meal.entity.MealOrderWindow;
 
 import java.time.LocalDate;
@@ -52,15 +53,39 @@ public final class MealResponse {
      *
      * @param items 유효 항목만. 취소분은 빠진다 — 달력에 취소한 날이 신청된 것처럼 보이면 안 된다
      */
-    public record Order(Long orderId, String month, String status, List<MealItem> items) {
+    public record Order(Long orderId, String month, String status,
+                        MealCount count, List<MealItem> items) {
 
         public static Order from(MealOrder order) {
             if (order == null) {
                 return null;
             }
+            var items = order.activeItems();
             return new Order(order.getId(), order.month().toString(),
                     order.getStatus().name(),
-                    order.activeItems().stream().map(MealItem::from).toList());
+                    MealCount.of(items),
+                    items.stream().map(MealItem::from).toList());
+        }
+    }
+
+    /**
+     * 식수 집계.
+     *
+     * <p><b>일수가 아니라 식수다.</b> 하루에 점심·저녁을 함께 신청하면 1일이지만 2식이라,
+     * "신청 15일"과 "총 22식"이 다른 값이 된다. 금액도 식수에 붙으므로 신청자가 보기에
+     * 식수 쪽이 실제와 맞는다.
+     *
+     * <p>화면이 세지 않게 서버가 내린다 — 취소분을 뺀 기준이 화면마다 갈리면
+     * 같은 신청이 다른 숫자로 보인다.
+     */
+    public record MealCount(int lunch, int dinner, int total) {
+
+        public static MealCount of(List<MealOrderItem> items) {
+            int lunch = (int) items.stream()
+                    .filter(i -> i.getMealType() == MealType.LUNCH).count();
+            int dinner = (int) items.stream()
+                    .filter(i -> i.getMealType() == MealType.DINNER).count();
+            return new MealCount(lunch, dinner, lunch + dinner);
         }
     }
 

@@ -92,7 +92,9 @@ public final class AttendanceResponse {
      *
      * @param approvalStatus 승인 상태. {@code null}이면 승인 절차를 안 타는 건이다
      */
+    /** @param categoryName 사유 카테고리(병결 등). 안 고르고 냈으면 비어 있다 */
     public record AbsenceReasonRow(Long id, LocalDate date, String reasonType, String reasonText,
+                                   Long categoryId, String categoryName,
                                    String period, String approvalStatus, Instant submittedAt) {
 
         public static AbsenceReasonRow from(AbsenceReason r) {
@@ -101,9 +103,20 @@ public final class AttendanceResponse {
                     r.getAttendanceDate(),
                     r.getReasonType().name(),
                     r.getReasonText(),
+                    r.getCategory() == null ? null : r.getCategory().getId(),
+                    r.getCategory() == null ? null : r.getCategory().getName(),
                     r.periodLabel(),
                     r.getApprovalRequest() == null ? null : r.getApprovalRequest().getStatus().name(),
                     r.getSubmittedAt());
+        }
+    }
+
+    /** 사유 카테고리 — 신청 화면 드롭다운. */
+    public record AbsenceCategory(Long id, String name) {
+
+        public static AbsenceCategory from(
+                com.dlab.domain.attendance.entity.AbsenceReasonCategory c) {
+            return new AbsenceCategory(c.getId(), c.getName());
         }
     }
 }

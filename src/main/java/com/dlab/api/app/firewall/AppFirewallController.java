@@ -34,6 +34,7 @@ public class AppFirewallController {
                                                 @Valid @RequestBody FirewallRequests.FirewallCreate request) {
         return ApiResponse.success(FirewallResponse.from(
                 firewallRequestService.createForAccount(
-                        principal.accountId(), request.requestedMinutes(), request.reason())));
+                        principal.accountId(), request.minutesOrZero(), request.reason(),
+                        request.startAt(), request.endAt())));
     }
 }
