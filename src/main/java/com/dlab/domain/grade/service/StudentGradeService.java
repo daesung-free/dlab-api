@@ -53,6 +53,20 @@ public class StudentGradeService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.GRADE_SUBMISSION_NOT_FOUND));
     }
 
+    /**
+     * 직원이 고친 것으로 표시한다.
+     *
+     * <p>0826 회신이 <i>"처음 입력시 학생, 이후 수정시에는 직원을 통해서"</i>로 정했다.
+     * 이 값이 <b>장학 취소 판정의 근거</b>라, 학생 입력값을 직원이 고쳤다면 그 사실이 남아야 한다.
+     * {@code createdBy}는 {@code updatable = false}라 최초 작성자(= 학생)만 남는다.
+     */
+    @Transactional
+    public StudentGradeSubmission markModified(StudentEnrollment enrollment, Long accountId) {
+        StudentGradeSubmission submission = mine(enrollment);
+        submission.markModifiedBy(accountId, Instant.now(clock));
+        return submission;
+    }
+
     /** 내신 주요교과평균. 값 하나뿐이라 별도 흐름을 두지 않는다. */
     @Transactional
     public StudentGradeSubmission saveSchoolRecord(StudentEnrollment enrollment,

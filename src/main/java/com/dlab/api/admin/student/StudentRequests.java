@@ -29,6 +29,8 @@ public final class StudentRequests {
             @NotBlank(message = "이름은 필수입니다.") @Size(max = 20) String name,
             @Size(max = 20) String phone,
             @NotNull(message = "학년 구분은 필수입니다.") GradeType grade,
+            /** N수 차수 — 1=재수, 2=삼수. N수가 아니면 비운다 */
+            @Min(1) @Max(10) Short retakeCount,
             TrackType track,
             LocalDate birthDate,
             @Size(max = 1) String gender,
@@ -51,6 +53,7 @@ public final class StudentRequests {
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,
             GradeType grade,
+            @Min(1) @Max(10) Short retakeCount,
             TrackType track,
             EnrollmentStatus status) {
     }

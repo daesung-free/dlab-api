@@ -75,7 +75,7 @@ public class StudentService {
      * 등록 건을 새 트랜잭션에서 넣을 때 <b>아직 커밋되지 않은 사람을 참조</b>해 FK가 깨진다.
      */
     public StudentEnrollment admit(Long academyId, short year, String name, String phone,
-                                   GradeType grade, TrackType track,
+                                   GradeType grade, Short retakeCount, TrackType track,
                                    LocalDate birthDate, String gender, String schoolName,
                                    String address, LocalDate admissionDate,
                                    AuthPrincipal principal) {
@@ -92,7 +92,13 @@ public class StudentService {
             // 상세는 같은 트랜잭션에서 채운다 — 등록 후 따로 보내면 중간에 실패했을 때
             // 학생만 남고 상세가 비는 상태가 되고, 담당자는 그걸 알 방법이 없다
             student.updateProfile(null, null, birthDate, gender, schoolName, address);
-            return enroll(academy, year, student, grade, track, admissionDate);
+            StudentEnrollment enrollment = enroll(academy, year, student, grade, track,
+                    admissionDate);
+            // N수가 아니면 차수를 받지 않는다 — 현역에 "재수 1"이 박히면 통계가 어긋난다
+            if (grade == GradeType.N_SU) {
+                enrollment.changeRetakeCount(retakeCount);
+            }
+            return enrollment;
         });
     }
 
@@ -134,7 +140,8 @@ public class StudentService {
     @Transactional
     public StudentEnrollment update(Long enrollmentId, String name, String phone, LocalDate birthDate,
                                     String gender, String schoolName, String address, GradeType grade,
-                                    TrackType track, EnrollmentStatus status, AuthPrincipal principal) {
+                                    Short retakeCount, TrackType track, EnrollmentStatus status,
+                                    AuthPrincipal principal) {
         StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
         if (!principal.canAccessAcademy(enrollment.getAcademy().getId())) {
@@ -142,6 +149,12 @@ public class StudentService {
         }
         enrollment.getStudent().updateProfile(name, phone, birthDate, gender, schoolName, address);
         enrollment.updateEnrollment(grade, track, status);
+        // N수에서 벗어나면 차수를 지운다 — 남겨두면 현역인데 "재수 1"이 붙는다
+        if (enrollment.getGrade() != GradeType.N_SU) {
+            enrollment.changeRetakeCount(null);
+        } else if (retakeCount != null) {
+            enrollment.changeRetakeCount(retakeCount);
+        }
         return enrollment;
     }
 

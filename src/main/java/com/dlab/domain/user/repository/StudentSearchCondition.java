@@ -62,7 +62,9 @@ public record StudentSearchCondition(
         Boolean unassignedSeat,
         Boolean unassignedLocker,
         Boolean hasScholarship,
-        String scholarshipType
+        String scholarshipType,
+        /** N수 차수 — 1=재수, 2=삼수. {@code grade=N_SU} 안에서만 의미가 있다 */
+        Short retakeCount
 ) {
 
     public StudentSearchCondition {
@@ -82,6 +84,6 @@ public record StudentSearchCondition(
     /** 조건 없음. 전체 조회·테스트용. */
     public static StudentSearchCondition none() {
         return new StudentSearchCondition(null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
     }
 }

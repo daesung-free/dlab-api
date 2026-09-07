@@ -100,6 +100,7 @@ public class AdminStudentController {
     @GetMapping
     public ApiResponse<List<StudentResponse>> search(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) GradeType grade,
@@ -117,13 +118,14 @@ public class AdminStudentController {
             @RequestParam(required = false) Boolean unassignedLocker,
             @RequestParam(required = false) Boolean hasScholarship,
             @RequestParam(required = false) String scholarshipType,
+            @RequestParam(required = false) Short retakeCount,
             @PageableDefault(size = 20) Pageable pageable) {
 
         Page<StudentEnrollment> page = studentService.search(
-                SearchScope.of(me, year),
+                SearchScope.of(me, year, academyId),
                 condition(keyword, grade, track, status, classId, teacherId, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
-                        unassignedLocker, hasScholarship, scholarshipType),
+                        unassignedLocker, hasScholarship, scholarshipType, retakeCount),
                 pageable);
 
         var extras = studentListEnricher.of(page.getContent());
@@ -135,10 +137,11 @@ public class AdminStudentController {
                                              String schoolName, LocalDate admittedFrom,
                                              LocalDate admittedTo, Boolean unassignedClass,
                                              Boolean unassignedSeat, Boolean unassignedLocker,
-                                             Boolean hasScholarship, String scholarshipType) {
+                                             Boolean hasScholarship, String scholarshipType,
+                                             Short retakeCount) {
         return new StudentSearchCondition(keyword, grade, track, status, classId, teacherId,
                 schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
-                unassignedLocker, hasScholarship, scholarshipType);
+                unassignedLocker, hasScholarship, scholarshipType, retakeCount);
     }
 
     /** 학생 상세. 목록과 <b>같은 필드</b>를 내린다 — 화면이 목록에서 상세로 넘어갈 때 값이 사라지면 안 된다. */
@@ -179,7 +182,7 @@ public class AdminStudentController {
                                               @Valid @RequestBody StudentRequests.Admit request) {
         return ApiResponse.success(single(studentService.admit(
                 request.academyId(), request.year().shortValue(), request.name(),
-                request.phone(), request.grade(), request.track(),
+                request.phone(), request.grade(), request.retakeCount(), request.track(),
                 request.birthDate(), request.gender(), request.schoolName(),
                 request.address(), request.admissionDate(), me), me));
     }
@@ -192,7 +195,7 @@ public class AdminStudentController {
         return ApiResponse.success(single(studentService.update(
                 enrollmentId, request.name(), request.phone(), request.birthDate(),
                 request.gender(), request.schoolName(), request.address(), request.grade(),
-                request.track(), request.status(), me), me));
+                request.retakeCount(), request.track(), request.status(), me), me));
     }
 
     // ── 상태 관리 (F-4.1-8) ──
@@ -253,6 +256,7 @@ public class AdminStudentController {
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) GradeType grade,
@@ -269,12 +273,13 @@ public class AdminStudentController {
             @RequestParam(required = false) Boolean unassignedSeat,
             @RequestParam(required = false) Boolean unassignedLocker,
             @RequestParam(required = false) Boolean hasScholarship,
-            @RequestParam(required = false) String scholarshipType) {
+            @RequestParam(required = false) String scholarshipType,
+            @RequestParam(required = false) Short retakeCount) {
 
-        byte[] file = studentExportService.export(SearchScope.of(me, year),
+        byte[] file = studentExportService.export(SearchScope.of(me, year, academyId),
                 condition(keyword, grade, track, status, classId, teacherId, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
-                        unassignedLocker, hasScholarship, scholarshipType));
+                        unassignedLocker, hasScholarship, scholarshipType, retakeCount));
 
         String filename = URLEncoder.encode("학생명단.xlsx", StandardCharsets.UTF_8);
         return ResponseEntity.ok()
