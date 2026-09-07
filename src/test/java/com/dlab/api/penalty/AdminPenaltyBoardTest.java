@@ -85,14 +85,14 @@ class AdminPenaltyBoardTest {
     private PenaltyService.PenaltyBoard board() {
         em.flush();
         em.clear();
-        return penaltyService.board(admin, null, today, today, null, null, null, null);
+        return penaltyService.board(admin, null, today, today, null, null, null, null, null);
     }
 
     @Test
     @DisplayName("★ 선택 일괄 부여 — 여러 명에게 한 번에 준다")
     void grantsToMultipleStudentsAtOnce() {
         List<PenaltyPoint> granted = penaltyService.grantManually(
-                admin, List.of(minji.getId(), seojun.getId()), late, "지각 확인");
+                admin, List.of(minji.getId(), seojun.getId()), late, "지각 확인", null);
 
         assertThat(granted).hasSize(2);
         assertThat(board().rows()).hasSize(2);
@@ -101,7 +101,7 @@ class AdminPenaltyBoardTest {
     @Test
     @DisplayName("★ 점수는 항목 값 그대로 복사된다 — 나중에 항목을 바꿔도 과거가 안 변한다")
     void pointIsCopiedFromItemAtGrantTime() {
-        penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
         em.flush();
 
         // 벌점은 음수로 저장된다 — 항목에 2로 넣어도 -2다. 통계가 부호로 상점·벌점을 가른다
@@ -112,7 +112,7 @@ class AdminPenaltyBoardTest {
     @Test
     @DisplayName("사유를 안 적으면 항목명이 들어간다")
     void reasonDefaultsToItemName() {
-        penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
 
         assertThat(board().rows()).first()
                 .satisfies(p -> assertThat(p.getReason()).isEqualTo("지각"));
@@ -121,17 +121,16 @@ class AdminPenaltyBoardTest {
     @Test
     @DisplayName("★ 합계는 조회 조건 기준이다 — 필터를 걸면 같이 줄어야 한다")
     void summaryFollowsFilter() {
-        penaltyService.grantManually(admin, List.of(minji.getId(), seojun.getId()), late, null);
-        penaltyService.grantManually(admin, List.of(minji.getId()), perfect, null);
+        penaltyService.grantManually(admin, List.of(minji.getId(), seojun.getId()), late, null, null);
+        penaltyService.grantManually(admin, List.of(minji.getId()), perfect, null, null);
         em.flush();
         em.clear();
 
-        var all = penaltyService.board(admin, null, today, today, null, null, null, null);
+        var all = penaltyService.board(admin, null, today, today, null, null, null, null, null);
         assertThat(all.plusTotal()).isEqualTo(3);
         assertThat(all.minusTotal()).isEqualTo(-4);   // 벌점은 음수로 표시
 
-        var demeritOnly = penaltyService.board(
-                admin, null, today, today, PenaltyCategory.DEMERIT, null, null, null);
+        var demeritOnly = penaltyService.board(admin, null, today, today, PenaltyCategory.DEMERIT, null, null, null, null);
         assertThat(demeritOnly.rows()).hasSize(2);
         assertThat(demeritOnly.plusTotal()).isZero();
     }
@@ -139,7 +138,7 @@ class AdminPenaltyBoardTest {
     @Test
     @DisplayName("★ 벌점 합계는 음수로 내린다 — 화면이 카테고리를 다시 안 본다")
     void demeritTotalIsNegative() {
-        penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
 
         assertThat(board().minusTotal()).isEqualTo(-2);
     }
@@ -147,28 +146,26 @@ class AdminPenaltyBoardTest {
     @Test
     @DisplayName("이름·학번으로 거른다")
     void filtersByKeyword() {
-        penaltyService.grantManually(admin, List.of(minji.getId(), seojun.getId()), late, null);
+        penaltyService.grantManually(admin, List.of(minji.getId(), seojun.getId()), late, null, null);
         em.flush();
         em.clear();
 
-        assertThat(penaltyService.board(admin, null, today, today, null, null, "김민지", null).rows())
+        assertThat(penaltyService.board(admin, null, today, today, null, null, null, "김민지", null).rows())
                 .hasSize(1);
-        assertThat(penaltyService.board(admin, null, today, today, null, null, "2026-0002", null).rows())
+        assertThat(penaltyService.board(admin, null, today, today, null, null, null, "2026-0002", null).rows())
                 .hasSize(1);
     }
 
     @Test
     @DisplayName("부여 방식으로 거른다 — 자동 규칙은 I-5 확정 전까지 0건이다")
     void filtersBySource() {
-        penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
         em.flush();
         em.clear();
 
-        assertThat(penaltyService.board(
-                admin, null, today, today, null, PenaltySource.MANUAL, null, null).rows()).hasSize(1);
-        assertThat(penaltyService.board(
-                admin, null, today, today, null, PenaltySource.KIOSK, null, null).rows()).isEmpty();
-        assertThat(penaltyService.board(admin, null, today, today, null, null, null, null).autoCount())
+        assertThat(penaltyService.board(admin, null, today, today, null, List.of(PenaltySource.MANUAL), null, null, null).rows()).hasSize(1);
+        assertThat(penaltyService.board(admin, null, today, today, null, List.of(PenaltySource.KIOSK), null, null, null).rows()).isEmpty();
+        assertThat(penaltyService.board(admin, null, today, today, null, null, null, null, null).autoCount())
                 .isZero();
     }
 
@@ -176,7 +173,7 @@ class AdminPenaltyBoardTest {
     @DisplayName("★ 취소는 soft delete — 누가 왜 취소했는지 추적이 끊기면 안 된다")
     void revokeIsSoftDelete() {
         PenaltyPoint granted = penaltyService
-                .grantManually(admin, List.of(minji.getId()), late, null).get(0);
+                .grantManually(admin, List.of(minji.getId()), late, null, null).get(0);
         em.flush();
 
         penaltyService.revoke(admin, granted.getId());
@@ -185,6 +182,55 @@ class AdminPenaltyBoardTest {
         assertThat(board().rows()).isEmpty();
         // 행 자체는 남아 있다
         assertThat(em.find(PenaltyPoint.class, granted.getId())).isNotNull();
+    }
+
+    @Test
+    @DisplayName("★★ source 를 여러 개 받는다 — 화면의 '자동'이 KIOSK+ROUTINE 두 값의 OR라 단일값으론 못 보낸다")
+    void sourceAcceptsMultipleValues() {
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
+        em.flush();
+
+        assertThat(penaltyService.board(admin, null, today, today, null,
+                List.of(PenaltySource.KIOSK, PenaltySource.ROUTINE), null, null, null).rows())
+                .isEmpty();
+        assertThat(penaltyService.board(admin, null, today, today, null,
+                List.of(PenaltySource.KIOSK, PenaltySource.MANUAL), null, null, null).rows())
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("★ 발생일을 지정할 수 있다 — 어제 일을 오늘 넣는 경우가 실제로 있다")
+    void grantAcceptsOccurredDate() {
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, today.minusDays(1));
+        em.flush();
+
+        // 오늘 조회에는 안 나오고
+        assertThat(board().rows()).isEmpty();
+        // 어제 조회에 나온다
+        assertThat(penaltyService.board(admin, null, today.minusDays(1), today.minusDays(1),
+                null, null, null, null, null).rows()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("★ 미래 일자로는 부여할 수 없다")
+    void futureGrantIsRejected() {
+        assertThatThrownBy(() -> penaltyService.grantManually(
+                admin, List.of(minji.getId()), late, null, today.plusDays(1)))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("★ 재원 상태로 거른다 — 화면 조건이 전체/재원생/퇴원생 3종이다")
+    void filtersByEnrollmentStatus() {
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
+        em.flush();
+
+        assertThat(penaltyService.board(admin, null, today, today, null, null,
+                com.dlab.domain.user.entity.EnrollmentStatus.ENROLLED, null, null).rows())
+                .hasSize(1);
+        assertThat(penaltyService.board(admin, null, today, today, null, null,
+                com.dlab.domain.user.entity.EnrollmentStatus.WITHDRAWN, null, null).rows())
+                .isEmpty();
     }
 
     @Test
@@ -198,14 +244,14 @@ class AdminPenaltyBoardTest {
                 List.of(Role.BRANCH_ADMIN), false);
 
         assertThatThrownBy(() -> penaltyService.grantManually(
-                ilsanAdmin, List.of(minji.getId()), late, null))
+                ilsanAdmin, List.of(minji.getId()), late, null, null))
                 .isInstanceOf(BusinessException.class);
     }
 
     @Test
     @DisplayName("★ 오늘 부여분이 오늘 조회에 나온다 — 끝 날짜가 빠지면 확인이 안 된다")
     void todayGrantAppearsInTodayRange() {
-        penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
 
         assertThat(board().rows()).hasSize(1);
     }
@@ -216,14 +262,13 @@ class AdminPenaltyBoardTest {
     @Test
     @DisplayName("★ 본사가 지점을 고르면 그 지점 상벌점이 보인다 — 예전엔 400이라 화면이 안 열렸다")
     void headOfficeSeesPickedAcademy() {
-        penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
         em.flush();
         em.clear();
         AuthPrincipal headOffice = AuthPrincipal.of(9L, "EMPLOYEE", null,
                 List.of(Role.SUPER_ADMIN), true);
 
-        assertThat(penaltyService.board(headOffice, bundang.getId(), today, today,
-                null, null, null, null).rows()).hasSize(1);
+        assertThat(penaltyService.board(headOffice, bundang.getId(), today, today, null, null, null, null, null).rows()).hasSize(1);
     }
 
     @Test
@@ -232,8 +277,7 @@ class AdminPenaltyBoardTest {
         AuthPrincipal headOffice = AuthPrincipal.of(9L, "EMPLOYEE", null,
                 List.of(Role.SUPER_ADMIN), true);
 
-        assertThatThrownBy(() -> penaltyService.board(headOffice, null, today, today,
-                null, null, null, null))
+        assertThatThrownBy(() -> penaltyService.board(headOffice, null, today, today, null, null, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.INVALID_REQUEST);
     }
@@ -241,7 +285,7 @@ class AdminPenaltyBoardTest {
     @Test
     @DisplayName("지점 관리자는 안 골라도 자기 지점이 보인다")
     void branchAdminDefaultsToOwnAcademy() {
-        penaltyService.grantManually(admin, List.of(minji.getId()), late, null);
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
 
         assertThat(board().rows()).hasSize(1);
     }
@@ -253,8 +297,7 @@ class AdminPenaltyBoardTest {
         em.persist(ilsan);
         em.flush();
 
-        assertThatThrownBy(() -> penaltyService.board(admin, ilsan.getId(), today, today,
-                null, null, null, null))
+        assertThatThrownBy(() -> penaltyService.board(admin, ilsan.getId(), today, today, null, null, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
     }

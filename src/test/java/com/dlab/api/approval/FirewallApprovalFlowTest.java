@@ -56,7 +56,7 @@ class FirewallApprovalFlowTest {
 
         Teacher teacher = new Teacher(academy, "담임쌤", "010-1000-0000");
         em.persist(teacher);
-        Account teacherAccount = Account.forTeacher(teacher, "FWT", passwordEncoder.encode(PASSWORD));
+        Account teacherAccount = Account.forTeacher(teacher, "FWT", passwordEncoder.encode(PASSWORD), false);
         em.persist(teacherAccount);
         em.flush();
         // RBAC 5단계 role은 V1 seed로 들어가 있다. 담당선생님 = TEACHER.
@@ -81,6 +81,22 @@ class FirewallApprovalFlowTest {
         em.persist(guardian);
         em.persist(new StudentGuardianLink(student, guardian, (short) 1));
         em.persist(Account.forGuardian(guardian, "FWPAR", passwordEncoder.encode(PASSWORD)));
+
+        // 관리자 대리승인 확인용 — 같은 지점 직원과 다른 지점 직원
+        Employee admin = new Employee(academy, "데스크직원");
+        em.persist(admin);
+        Account adminAccount = Account.forEmployee(admin, "FWADM", passwordEncoder.encode(PASSWORD), false);
+        em.persist(adminAccount);
+
+        Academy other = new Academy("FW02", "다른지점", LocalTime.of(9, 0));
+        em.persist(other);
+        Employee otherAdmin = new Employee(other, "타지점직원");
+        em.persist(otherAdmin);
+        Account otherAccount = Account.forEmployee(otherAdmin, "FWOTH", passwordEncoder.encode(PASSWORD), false);
+        em.persist(otherAccount);
+        em.flush();
+        grantRole(adminAccount.getId(), "BRANCH_ADMIN");
+        grantRole(otherAccount.getId(), "BRANCH_ADMIN");
 
         // 승인 정책: 학부모 1차 → 10분 → 담당선생님
         em.persist(new ApprovalItem(academy, (short) 2026, RequestType.FIREWALL_UNLOCK,
@@ -162,6 +178,43 @@ class FirewallApprovalFlowTest {
                         .header("Authorization", token("FWT")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.resolutionCase").value("STAFF_BEFORE_TIMEOUT"));
+    }
+
+    @Test
+    @DisplayName("★★ 관리자가 대리 승인할 수 있다 — 막으면 관리자 승인 화면이 조회 전용이 된다")
+    void adminApprovesAsProxy() throws Exception {
+        long id = createRequest();
+
+        mvc.perform(post("/api/v1/admin/approvals/{id}/approve", id)
+                        .header("Authorization", token("FWADM")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("APPROVED"))
+                // ★ 담임 케이스로 흘리면 "담임이 승인했습니다"가 나가는데 담임은 본 적도 없다
+                .andExpect(jsonPath("$.data.resolutionCase").value("ADMIN_PROXY"));
+    }
+
+    @Test
+    @DisplayName("★ 관리자는 반려도 할 수 있다")
+    void adminCanReject() throws Exception {
+        long id = createRequest();
+
+        mvc.perform(post("/api/v1/admin/approvals/{id}/reject", id)
+                        .header("Authorization", token("FWADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"reason":"사유 불충분"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("REJECTED"));
+    }
+
+    @Test
+    @DisplayName("★★ 다른 지점 관리자는 대리 승인할 수 없다")
+    void adminOfAnotherBranchCannotApprove() throws Exception {
+        long id = createRequest();
+
+        mvc.perform(post("/api/v1/admin/approvals/{id}/approve", id)
+                        .header("Authorization", token("FWOTH")))
+                .andExpect(status().isForbidden());
     }
 
     @Test

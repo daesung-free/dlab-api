@@ -64,7 +64,7 @@ class AuditLogTest {
         Long accountId = tx.execute(status -> {
             Employee employee = employeeRepository.save(new Employee(academy, "감사행정"));
             return accountRepository.save(
-                    Account.forEmployee(employee, "audit" + code, "x")).getId();
+                    Account.forEmployee(employee, "audit" + code, "x", false)).getId();
         });
 
         admin = AuthPrincipal.of(accountId, "EMPLOYEE", null, List.of(Role.SUPER_ADMIN), true);

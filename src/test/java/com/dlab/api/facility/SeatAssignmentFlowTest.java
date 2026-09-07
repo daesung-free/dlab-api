@@ -58,7 +58,7 @@ class SeatAssignmentFlowTest {
 
         Employee admin = new Employee(academy, "관리자");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "SEADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "SEADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         grantRole(adminAccount.getId(), "BRANCH_ADMIN");

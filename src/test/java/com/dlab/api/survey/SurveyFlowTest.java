@@ -103,13 +103,13 @@ class SurveyFlowTest {
         seojun = enroll("박서준", "2026-0002", bundang);
         em.flush();
 
-        headOffice = principal(account(Account.forEmployee(hq, "hq", "x")),
+        headOffice = principal(account(Account.forEmployee(hq, "hq", "x", false)),
                 null, List.of(Role.SUPER_ADMIN), true);
-        branchAdmin = principal(account(Account.forEmployee(staff, "staff", "x")),
+        branchAdmin = principal(account(Account.forEmployee(staff, "staff", "x", false)),
                 bundang.getId(), List.of(Role.BRANCH_ADMIN), false);
-        homeroomTeacher = principal(account(Account.forTeacher(homeroom, "t1", "x")),
+        homeroomTeacher = principal(account(Account.forTeacher(homeroom, "t1", "x", false)),
                 bundang.getId(), List.of(Role.TEACHER), false);
-        otherTeacher = principal(account(Account.forTeacher(another, "t2", "x")),
+        otherTeacher = principal(account(Account.forTeacher(another, "t2", "x", false)),
                 bundang.getId(), List.of(Role.TEACHER), false);
     }
 
@@ -519,7 +519,7 @@ class SurveyFlowTest {
         Employee ilsanStaff = new Employee(ilsan, "일산행정");
         em.persist(ilsanStaff);
         AuthPrincipal ilsanAdmin = principal(
-                account(Account.forEmployee(ilsanStaff, "i1", "x")),
+                account(Account.forEmployee(ilsanStaff, "i1", "x", false)),
                 ilsan.getId(), List.of(Role.BRANCH_ADMIN), false);
 
         assertThatThrownBy(() -> surveyService.results(ilsanAdmin, survey.getId()))

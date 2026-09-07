@@ -60,7 +60,7 @@ class SavedSearchFlowTest {
     private void createAdmin(String loginId, String name) {
         Employee admin = new Employee(academy, name);
         em.persist(admin);
-        Account account = Account.forEmployee(admin, loginId, passwordEncoder.encode(PASSWORD));
+        Account account = Account.forEmployee(admin, loginId, passwordEncoder.encode(PASSWORD), false);
         em.persist(account);
         em.flush();
         em.createNativeQuery("""

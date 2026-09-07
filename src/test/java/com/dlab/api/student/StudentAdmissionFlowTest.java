@@ -54,7 +54,7 @@ class StudentAdmissionFlowTest {
 
         Employee admin = new Employee(academy, "행정쌤");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "STADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "STADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         grantRole(adminAccount.getId(), "BRANCH_ADMIN");

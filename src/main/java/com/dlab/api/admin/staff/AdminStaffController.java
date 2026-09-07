@@ -2,7 +2,9 @@ package com.dlab.api.admin.staff;
 
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
+import com.dlab.domain.user.entity.AccountStatus;
 import com.dlab.common.security.CurrentAccount;
+import com.dlab.domain.audit.AuditLogRepository;
 import com.dlab.domain.user.service.StaffAccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,28 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminStaffController {
 
     private final StaffAccountService staffAccountService;
+    private final AuditLogRepository auditLogRepository;
+
+    /**
+     * 계정 목록 (F-4.10-2 사용자 관리).
+     *
+     * <p><b>사람 목록({@code /teachers}·{@code /employees})과 용도가 다르다.</b>
+     * 저쪽은 담임 지정·승인자 선택용이라 이름·연락처만 주고, 이쪽은 <b>로그인 아이디·
+     * 계정 상태·권한·잠금 여부</b>를 보여준다.
+     *
+     * <p><b>학생·학부모 계정은 안 나온다</b> — 가입 승인(F-4.12-1)에서 따로 다루고,
+     * 섞으면 목록이 수백 건이 되어 관리자를 찾을 수 없다.
+     *
+     * @param academyId 전 지점 권한자만 의미가 있다. 비우면 전 지점
+     * @param status 계정 상태 필터. 비우면 전체
+     */
+    @GetMapping("/accounts")
+    public ApiResponse<List<StaffAccountService.AccountRow>> accounts(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam(required = false) AccountStatus status) {
+        return ApiResponse.success(staffAccountService.accounts(academyId, status, me));
+    }
 
     /** 담당선생님(사감) 목록. 반 담임·승인 에스컬레이션 대상이 여기서 나온다. */
     @GetMapping("/teachers")
@@ -79,5 +103,60 @@ public class AdminStaffController {
                                                  @Valid @RequestBody StaffRequests.ReplaceRoles request) {
         staffAccountService.replaceRoles(accountId, request.roles(), me);
         return ApiResponse.success(staffAccountService.rolesOf(accountId));
+    }
+
+    /**
+     * 계정 권한·상태 변경 이력 (사용자 관리 화면의 '권한 수정시간').
+     *
+     * <p>감사 로그(F-C-1)와 <b>같은 표를 읽는다</b> — 계정 이력만 따로 쌓으면 표가 두 벌이
+     * 되고, 전 화면 이력 조회가 그걸 다시 합쳐야 한다.
+     *
+     * <p>다만 <b>적재 경로는 다르다</b>. 역할은 {@code account_role} 조인 테이블이라
+     * {@code @Audited} 엔티티 리스너에 안 걸려서 서비스가 직접 남긴다.
+     */
+    @GetMapping("/accounts/{accountId}/history")
+    public ApiResponse<List<AccountHistoryRow>> accountHistory(@PathVariable Long accountId) {
+        return ApiResponse.success(auditLogRepository.findByEntity("Account", accountId).stream()
+                .map(AccountHistoryRow::from).toList());
+    }
+
+    /**
+     * @param changes  {@code [{"field":"roles","before":"STAFF","after":"TEACHER"}]} 형태의 JSON
+     * @param actorId  행위자 계정 id. 배치·시스템 경로면 비어 있다
+     */
+    public record AccountHistoryRow(Long id, String action, String changes,
+                                    Long actorId, String actorName,
+                                    java.time.Instant occurredAt) {
+
+        static AccountHistoryRow from(com.dlab.domain.audit.AuditLog log) {
+            return new AccountHistoryRow(log.getId(), log.getAction().name(), log.getChanges(),
+                    log.getActorId(), log.getActorName(), log.getOccurredAt());
+        }
+    }
+
+    /**
+     * 계정 승인 (승인대기 → 사용).
+     *
+     * <p>지점이 만든 계정은 승인 전까지 <b>로그인 자체가 막힌다</b>. 본사만 승인할 수
+     * 있다 — 지점이 자기가 만든 계정을 스스로 승인하면 절차가 아무것도 막지 못한다.
+     */
+    @PostMapping("/accounts/{accountId}/approve")
+    public ApiResponse<Void> approveAccount(@CurrentAccount AuthPrincipal me,
+                                            @PathVariable Long accountId) {
+        staffAccountService.approve(accountId, me);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * 계정 탈퇴 처리.
+     *
+     * <p><b>계정을 지우지 않는다</b> — 지난 로그인 이력과 이 계정이 남긴 작업 기록이
+     * 감사 대상이다. 되살릴 일이 있으면 승인으로 다시 올린다.
+     */
+    @PostMapping("/accounts/{accountId}/withdraw")
+    public ApiResponse<Void> withdrawAccount(@CurrentAccount AuthPrincipal me,
+                                             @PathVariable Long accountId) {
+        staffAccountService.withdraw(accountId, me);
+        return ApiResponse.empty();
     }
 }

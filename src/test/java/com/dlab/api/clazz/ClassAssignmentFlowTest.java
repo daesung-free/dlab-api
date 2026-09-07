@@ -75,7 +75,7 @@ class ClassAssignmentFlowTest {
         // 반 관리는 지점 관리자 권한
         Employee admin = new Employee(academy, "행정쌤");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "CLADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "CLADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
 
         Student student = new Student("CLSTU01", "배정학생", "010-2000-0000");

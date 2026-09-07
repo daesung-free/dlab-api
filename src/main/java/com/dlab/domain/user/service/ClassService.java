@@ -101,6 +101,27 @@ public class ClassService {
     }
 
     /**
+     * 반 삭제(soft).
+     *
+     * <p><b>배정된 학생이 있으면 거부한다.</b> 그냥 지우면 그 학생들의 배정 행이
+     * 없는 반을 가리킨 채 남아 <b>"반이 있는데 목록에 안 보이는" 학생</b>이 된다.
+     * 화면에서 해제가 먼저다.
+     *
+     * <p>물리 삭제하지 않는 이유는 다른 마스터와 같다 — 과거 학생이 어느 반이었는지가
+     * 이력으로 남아야 한다. 지난 기수 반은 대부분 삭제가 아니라 그대로 두는 게 맞다.
+     */
+    @Transactional
+    public void delete(Long classId, AuthPrincipal principal) {
+        ClassMaster classMaster = loadAccessible(classId, principal);
+        int assigned = classAssignmentRepository.findActiveByClassId(classId).size();
+        if (assigned > 0) {
+            throw new BusinessException(ErrorCode.CLASS_HAS_MEMBERS,
+                    "배정된 학생 %d명을 먼저 해제해 주세요.".formatted(assigned));
+        }
+        classMaster.markDeleted();
+    }
+
+    /**
      * 반 학생 명단 (F-4.1-4 반 배정 · F-4.10-3 배정 관리).
      *
      * <p><b>좌석은 행마다 조회하지 않는다.</b> 반 하나에 수십 명이라 학생 수만큼 쿼리가 나간다 —

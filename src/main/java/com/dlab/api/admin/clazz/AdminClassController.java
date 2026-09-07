@@ -83,6 +83,18 @@ public class AdminClassController {
                 ClassResponse.from(classService.assignHomeroom(classId, request.teacherId(), me)));
     }
 
+    /**
+     * 반 삭제(soft).
+     *
+     * <p><b>배정된 학생이 있으면 409다</b> — 해제가 먼저다. 그냥 지우면 그 학생들이
+     * 없는 반을 가리킨 채 남는다.
+     */
+    @DeleteMapping("/{classId}")
+    public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me, @PathVariable Long classId) {
+        classService.delete(classId, me);
+        return ApiResponse.empty();
+    }
+
     /** 학생 배정. 기존 배정은 비활성으로 내려가고 이력이 남는다. */
     @PostMapping("/{classId}/students")
     public ApiResponse<ClassResponse.Member> assignStudent(@CurrentAccount AuthPrincipal me,
