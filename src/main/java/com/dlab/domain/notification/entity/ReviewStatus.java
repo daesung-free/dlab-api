@@ -19,7 +19,13 @@ public enum ReviewStatus {
     /** 반려. 사유를 보고 문구를 고쳐 재제출한다. */
     REJECTED;
 
-    /** 이 상태에서 실제 알림톡을 보낼 수 있는가. */
+    /**
+     * 이 상태에서 보낼 수 있는가.
+     *
+     * <p>⚠️ <b>채널을 모르는 판정이다.</b> {@code NOT_REQUIRED}는 심사가 없는 채널(FCM)을
+     * 위한 값인데, 알림톡이 실수로 그 상태면 여기서는 통과한다 — 채널까지 보는 판정은
+     * {@link NotificationTemplate#isSendable()}에 있다. 이 메서드만 보고 판단하지 말 것.
+     */
     public boolean canSend() {
         return this == NOT_REQUIRED || this == APPROVED;
     }

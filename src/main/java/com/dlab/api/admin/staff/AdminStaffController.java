@@ -56,16 +56,28 @@ public class AdminStaffController {
     @GetMapping("/teachers")
     public ApiResponse<List<StaffResponse>> teachers(@CurrentAccount AuthPrincipal me,
                                                      @RequestParam Long academyId) {
-        return ApiResponse.success(staffAccountService.teachers(academyId, me).stream()
-                .map(StaffResponse::from).toList());
+        var teachers = staffAccountService.teachers(academyId, me);
+        var accounts = staffAccountService.accountsOfTeachers(
+                teachers.stream().map(com.dlab.domain.user.entity.Teacher::getId).toList());
+
+        return ApiResponse.success(teachers.stream()
+                .map(t -> StaffResponse.of(t, accounts.accountOf(t.getId()),
+                        accounts.rolesOf(t.getId())))
+                .toList());
     }
 
     /** 행정선생님 목록. 학생 가입 승인·전체공지 작성이 이쪽이다. */
     @GetMapping("/employees")
     public ApiResponse<List<StaffResponse>> employees(@CurrentAccount AuthPrincipal me,
                                                       @RequestParam Long academyId) {
-        return ApiResponse.success(staffAccountService.employees(academyId, me).stream()
-                .map(StaffResponse::from).toList());
+        var employees = staffAccountService.employees(academyId, me);
+        var accounts = staffAccountService.accountsOfEmployees(
+                employees.stream().map(com.dlab.domain.user.entity.Employee::getId).toList());
+
+        return ApiResponse.success(employees.stream()
+                .map(e -> StaffResponse.of(e, accounts.accountOf(e.getId()),
+                        accounts.rolesOf(e.getId())))
+                .toList());
     }
 
     /**

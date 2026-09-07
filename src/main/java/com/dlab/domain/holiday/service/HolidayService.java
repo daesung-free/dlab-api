@@ -31,10 +31,20 @@ public class HolidayService {
     private final HolidayRepository holidayRepository;
 
     /** 기간 조회. 전 지점 공통 + 해당 지점 것을 함께 돌려준다. */
-    public List<Holiday> findInRange(AuthPrincipal principal, LocalDate from, LocalDate to) {
-        Long academyId = principal.academyScopeFilter();
+    /**
+     * 기간 조회.
+     *
+     * <p><b>본사는 전 지점을 본다.</b> 전에는 {@code academyScopeFilter()}가 {@code null}인
+     * 것을 "공통만 보라"로 읽어, 본사 계정에서 지점 휴일이 통째로 안 보였다 —
+     * 다른 목록은 전부 반대로 동작한다({@code null} = 필터 없음).
+     *
+     * @param requestedAcademyId 지점을 골라 좁힌다. 지점 관리자가 남의 지점을 넣으면 거절된다
+     */
+    public List<Holiday> findInRange(AuthPrincipal principal, Long requestedAcademyId,
+                                     LocalDate from, LocalDate to) {
+        Long academyId = principal.resolveAcademyScope(requestedAcademyId);
         return academyId == null
-                ? holidayRepository.findNationwideInRange(from, to)
+                ? holidayRepository.findAllInRange(from, to)
                 : holidayRepository.findInRange(academyId, from, to);
     }
 

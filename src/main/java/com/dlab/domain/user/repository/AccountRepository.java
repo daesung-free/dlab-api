@@ -3,6 +3,7 @@ package com.dlab.domain.user.repository;
 import com.dlab.domain.user.entity.Account;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,6 +43,12 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     Optional<Account> findByTeacherId(Long teacherId);
 
+    /** 목록 화면이 직원마다 계정을 조회하지 않게 한 번에 받는다. */
+    @Query("SELECT a FROM Account a WHERE a.teacher.id IN :teacherIds AND a.deleted = false")
+    List<Account> findByTeacherIds(@Param("teacherIds") java.util.Collection<Long> teacherIds);
+
+    @Query("SELECT a FROM Account a WHERE a.employee.id IN :employeeIds AND a.deleted = false")
+    List<Account> findByEmployeeIds(@Param("employeeIds") java.util.Collection<Long> employeeIds);
     /**
      * 계정 ID → 표시 이름.
      *
