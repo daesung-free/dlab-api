@@ -63,7 +63,7 @@ class DailyRoutineFlowTest {
 
         Employee admin = new Employee(academy, "관리자");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "RTADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "RTADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         em.createNativeQuery("""

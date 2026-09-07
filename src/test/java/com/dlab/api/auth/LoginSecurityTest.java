@@ -77,13 +77,13 @@ class LoginSecurityTest {
             Teacher teacher = new Teacher(academy, "대상선생님", "010-0000-0000");
             em.persist(teacher);
             Account target = Account.forTeacher(teacher, userLoginId,
-                    passwordEncoder.encode(PASSWORD));
+                    passwordEncoder.encode(PASSWORD), false);
             em.persist(target);
 
             Employee admin = new Employee(academy, "관리자");
             em.persist(admin);
             Account adminAccount = Account.forEmployee(admin, adminLoginId,
-                    passwordEncoder.encode(PASSWORD));
+                    passwordEncoder.encode(PASSWORD), false);
             em.persist(adminAccount);
             em.flush();
 

@@ -22,9 +22,16 @@ public final class LectureRequests {
             @NotBlank(message = "특강명은 필수입니다.") @Size(max = 100) String name) {
     }
 
-    /** {@code null}은 "변경하지 않음"이다. */
+    /**
+     * {@code null}은 "변경하지 않음"이다.
+     *
+     * @param instructorName 담당 강사명. <b>직원 목록과 묶지 않는다</b> — 외부 강사가
+     *                       있어 FK로 박으면 그런 강사는 등록 자체를 못 한다
+     */
     public record LectureUpdate(
             @Size(max = 100) String name,
+            @Size(max = 30) String code,
+            @Size(max = 50) String instructorName,
             String description,
             @Positive(message = "정원은 1명 이상이어야 합니다.") Integer capacity,
             Instant applyFrom,

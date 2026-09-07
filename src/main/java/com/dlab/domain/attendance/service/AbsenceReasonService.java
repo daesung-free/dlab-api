@@ -226,8 +226,19 @@ public class AbsenceReasonService {
         List<AbsenceRequestRow> pending =
                 list(me, requestedAcademyId, from, to, ApprovalStatus.PENDING);
 
+        // ★ 상태별 건수는 화면 탭에 붙는 숫자다(승인 대기 2 / 승인 완료 5 / 반려 1).
+        //   여기서 안 주면 화면이 전량을 받아 직접 세는데, 목록에 페이징이 들어오는
+        //   순간 그 수가 "현재 페이지 안의 건수"로 바뀐다 — 20건씩 잘리면
+        //   '승인 완료 5'가 실제로는 40건인 상태가 되고, 에러도 안 나고 눈에도 안 띈다.
         Map<String, Long> counts = new LinkedHashMap<>();
         counts.put("pending", (long) pending.size());
+        counts.put("approved",
+                (long) list(me, requestedAcademyId, from, to, ApprovalStatus.APPROVED).size());
+        counts.put("rejected",
+                (long) list(me, requestedAcademyId, from, to, ApprovalStatus.REJECTED).size());
+        // 취소 탭은 건이 있을 때만 뜬다 — 값이 없으면 그 행들이 어느 탭에도 안 잡혀 사라진다
+        counts.put("canceled",
+                (long) list(me, requestedAcademyId, from, to, ApprovalStatus.CANCELED).size());
         counts.put("waitingParent", pending.stream()
                 .filter(r -> r.approverType() == ApproverType.PARENT).count());
         counts.put("waitingTeacher", pending.stream()

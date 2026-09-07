@@ -72,7 +72,7 @@ class PrimaryApproverFlowTest {
 
         Teacher teacher = new Teacher(academy, "담임쌤", "010-1000-0001");
         em.persist(teacher);
-        teacherAccount = Account.forTeacher(teacher, "PATCH01", "x");
+        teacherAccount = Account.forTeacher(teacher, "PATCH01", "x", false);
         em.persist(teacherAccount);
 
         ClassMaster classMaster = new ClassMaster(academy, year, "1반", ClassType.FIXED, teacher);

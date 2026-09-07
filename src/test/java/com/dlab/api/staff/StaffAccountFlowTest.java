@@ -56,7 +56,7 @@ class StaffAccountFlowTest {
 
         Employee admin = new Employee(academy, "지점관리자");
         em.persist(admin);
-        Account adminAccount = Account.forEmployee(admin, "SFADM", passwordEncoder.encode(PASSWORD));
+        Account adminAccount = Account.forEmployee(admin, "SFADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(adminAccount);
         em.flush();
         grantRole(adminAccount.getId(), "BRANCH_ADMIN");
@@ -127,6 +127,62 @@ class StaffAccountFlowTest {
         mvc.perform(get("/api/v1/admin/staff/employees").header("Authorization", token("SFADM"))
                         .param("academyId", academyId.toString()))
                 .andExpect(jsonPath("$.data[?(@.name=='새행정')].deptName").value("교무부"));
+    }
+
+    @Test
+    @DisplayName("★★ 계정 목록에 로그인 아이디·상태·권한이 나온다 — 사람 목록만으론 사용자 관리 화면을 못 그린다")
+    void accountListCarriesLoginAndRoles() throws Exception {
+        mvc.perform(post("/api/v1/admin/staff/employees")
+                        .header("Authorization", token("SFADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"name":"목록행정","deptName":"교무부","positionName":"주임",
+                                 "loginId":"LISTE","password":"%s","roles":["STAFF","READONLY"]}"""
+                                .formatted(academyId, PASSWORD)))
+                .andExpect(status().isOk());
+        em.flush();
+
+        mvc.perform(get("/api/v1/admin/staff/accounts").header("Authorization", token("SFADM"))
+                        .param("academyId", academyId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].name").value("목록행정"))
+                .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].accountType").value("EMPLOYEE"))
+                .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].deptName").value("교무부"))
+                .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].locked").value(false))
+                .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].roles.length()").value(2));
+    }
+
+    @Test
+    @DisplayName("★★ 학생·학부모 계정은 목록에 안 나온다 — 섞이면 수백 건이 되어 관리자를 못 찾는다")
+    void accountListExcludesStudentsAndParents() throws Exception {
+        Student student = new Student("SFSTU01", "목록학생", "010-7000-0000");
+        em.persist(student);
+        Account studentAccount = Account.forStudent(student, "LISTSTU", passwordEncoder.encode(PASSWORD));
+        em.persist(studentAccount);
+        em.flush();
+
+        mvc.perform(get("/api/v1/admin/staff/accounts").header("Authorization", token("SFADM"))
+                        .param("academyId", academyId.toString()))
+                .andExpect(jsonPath("$.data[?(@.loginId=='LISTSTU')]").isEmpty());
+    }
+
+    @Test
+    @DisplayName("★ 지점 관리자는 다른 지점 계정을 볼 수 없다 — academyId를 바꿔 보내도 자기 지점이다")
+    void accountListIsScopedToOwnAcademy() throws Exception {
+        mvc.perform(post("/api/v1/admin/staff/employees")
+                        .header("Authorization", token("SFADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"name":"우리지점","loginId":"MINE","password":"%s",
+                                 "roles":["STAFF"]}""".formatted(academyId, PASSWORD)))
+                .andExpect(status().isOk());
+        em.flush();
+
+        mvc.perform(get("/api/v1/admin/staff/accounts").header("Authorization", token("SFADM"))
+                        .param("academyId", otherAcademyId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.loginId=='MINE')]").isNotEmpty());
     }
 
     @Test

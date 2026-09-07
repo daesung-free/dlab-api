@@ -26,6 +26,15 @@ public enum BillingItemType {
     /** 특강비. 환불 규정 미확정. */
     LECTURE(RefundMethod.NONE),
 
+    /**
+     * 등록비 — 입학 시 1회. F-4.8-1이 "카드·가상계좌·등록비 통합 매출"을 요구한다.
+     *
+     * <p>환불이 {@link RefundMethod#NONE}인 것은 <b>규정을 아직 못 받았기 때문</b>이지
+     * 환불이 없다는 뜻이 아니다. 0820 규정은 교습비·독서실비만 다룬다 —
+     * 받으면 여기 산식을 붙인다.
+     */
+    REGISTRATION(RefundMethod.NONE),
+
     ETC(RefundMethod.NONE);
 
     private final RefundMethod refundMethod;

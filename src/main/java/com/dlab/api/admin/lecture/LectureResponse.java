@@ -17,7 +17,12 @@ public final class LectureResponse {
      * @param visible 앱 노출 여부. {@code status}와 별개 축이다
      * @param fee     ⚠️ 안내용 금액. 결제 연동이 없어 이 값으로 수납되지 않는다
      */
-    public record LectureDetail(Long id, String lectureType, String name, String description,
+    /**
+     * @param instructorName 담당 강사명. 자유 문자열이다 — 외부 강사가 있어 직원 목록과
+     *                       묶지 않았다
+     */
+    public record LectureDetail(Long id, String lectureType, String name, String code,
+                         String instructorName, String description,
                          String status, boolean visible, Integer capacity,
                          Instant applyFrom, Instant applyTo,
                          LocalDate startDate, LocalDate endDate, int fee,
@@ -28,7 +33,8 @@ public final class LectureResponse {
         }
 
         public static LectureDetail of(Lecture l, Long confirmed, Long waitlisted) {
-            return new LectureDetail(l.getId(), l.getLectureType().name(), l.getName(), l.getDescription(),
+            return new LectureDetail(l.getId(), l.getLectureType().name(), l.getName(),
+                    l.getCode(), l.getInstructorName(), l.getDescription(),
                     l.getStatus().name(), l.isVisible(), l.getCapacity(),
                     l.getApplyFrom(), l.getApplyTo(), l.getStartDate(), l.getEndDate(), l.getFee(),
                     confirmed, waitlisted);

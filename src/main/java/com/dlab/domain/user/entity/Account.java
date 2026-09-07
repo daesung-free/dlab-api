@@ -105,14 +105,28 @@ public class Account extends BaseEntity {
         return account;
     }
 
-    public static Account forEmployee(Employee employee, String loginId, String passwordHash) {
-        Account account = new Account(AccountType.EMPLOYEE, loginId, passwordHash, AccountStatus.ACTIVE);
+    /**
+     * 직원 계정.
+     *
+     * <p>요구사항정의서 3시트가 계정 상태를 <b>"승인대기 → 승인 / 탈퇴"</b>로 정의한다.
+     * 다만 <b>누가 만들었는지에 따라 시작 상태가 다르다</b> — 본사가 만든 계정까지
+     * 본사가 다시 승인하는 것은 절차만 하나 늘리는 일이라, 승인은 <b>지점이 만든 계정을
+     * 본사가 확인하는</b> 통로로 둔다.
+     *
+     * @param pending {@code true}면 승인 전까지 로그인이 막힌다({@code verifyLoginAllowed})
+     */
+    public static Account forEmployee(Employee employee, String loginId, String passwordHash,
+                                      boolean pending) {
+        Account account = new Account(AccountType.EMPLOYEE, loginId, passwordHash,
+                pending ? AccountStatus.PENDING : AccountStatus.ACTIVE);
         account.employee = employee;
         return account;
     }
 
-    public static Account forTeacher(Teacher teacher, String loginId, String passwordHash) {
-        Account account = new Account(AccountType.TEACHER, loginId, passwordHash, AccountStatus.ACTIVE);
+    public static Account forTeacher(Teacher teacher, String loginId, String passwordHash,
+                                     boolean pending) {
+        Account account = new Account(AccountType.TEACHER, loginId, passwordHash,
+                pending ? AccountStatus.PENDING : AccountStatus.ACTIVE);
         account.teacher = teacher;
         return account;
     }

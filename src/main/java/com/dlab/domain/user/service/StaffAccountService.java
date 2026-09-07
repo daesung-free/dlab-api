@@ -4,6 +4,7 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
+import com.dlab.domain.audit.service.ChangeLogService;
 import com.dlab.domain.user.entity.*;
 import com.dlab.domain.user.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 직원·선생님 계정과 권한 관리 (요구사항 F-4.10-2).
@@ -33,6 +36,8 @@ public class StaffAccountService {
     private final AccountRoleRepository accountRoleRepository;
     private final AcademyRepository academyRepository;
     private final PasswordEncoder passwordEncoder;
+    /** 권한·상태 변경을 이력으로 남긴다 — 안 남기면 그 기간은 나중에 복구할 수 없다. */
+    private final ChangeLogService changeLogService;
 
     @Transactional(readOnly = true)
     public List<Teacher> teachers(Long academyId, AuthPrincipal principal) {
@@ -44,6 +49,78 @@ public class StaffAccountService {
     public List<Employee> employees(Long academyId, AuthPrincipal principal) {
         verifyAccess(academyId, principal);
         return employeeRepository.findByAcademyId(academyId);
+    }
+
+    /**
+     * 계정 목록 (F-4.10-2 사용자 관리).
+     *
+     * <p><b>사람 목록({@link #teachers}·{@link #employees})과 다르다.</b> 저쪽은 담임 지정·
+     * 승인자 선택용이라 이름·연락처만 주는데, 사용자 관리 화면은 <b>로그인 아이디·계정
+     * 상태·권한·잠금 여부</b>를 보여주는 곳이다.
+     *
+     * <p>역할은 한 번에 조회한다 — 계정마다 부르면 목록 크기만큼 쿼리가 나간다.
+     */
+    @Transactional(readOnly = true)
+    public List<AccountRow> accounts(Long academyId, AccountStatus status,
+                                     AuthPrincipal principal) {
+        Long scope = academyId;
+        if (!principal.allAcademy()) {
+            // 전 지점 권한이 없으면 요청 값과 무관하게 자기 지점으로 고정한다
+            scope = principal.academyScopeFilter();
+        } else if (academyId != null) {
+            verifyAccess(academyId, principal);
+        }
+
+        List<Account> accounts = accountRepository.findStaffAccounts(scope, status);
+        if (accounts.isEmpty()) {
+            return List.of();
+        }
+
+        Map<Long, Set<String>> rolesByAccount = accountRoleRepository
+                .findRoleNamesByAccountIds(accounts.stream().map(Account::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        r -> ((Number) r[0]).longValue(),
+                        Collectors.mapping(r -> (String) r[1], Collectors.toSet())));
+
+        return accounts.stream()
+                .map(a -> AccountRow.of(a, rolesByAccount.getOrDefault(a.getId(), Set.of())))
+                .toList();
+    }
+
+    /**
+     * 계정 한 줄.
+     *
+     * @param academyId  소속에서 나온다. 계정 자체에는 지점이 없다
+     * @param locked     로그인 실패 5회로 잠긴 상태. <b>자동 해제가 없다</b> — 관리자가 푼다
+     * @param mustChangePassword 임시 비밀번호 상태. 바꾸기 전에는 다른 API가 전부 막힌다
+     */
+    public record AccountRow(Long accountId, String loginId, AccountType accountType,
+                             AccountStatus status, Set<String> roles,
+                             Long personId, String name, String phone,
+                             String deptName, String positionName,
+                             Long academyId, String academyName,
+                             boolean locked, boolean mustChangePassword,
+                             java.time.Instant lastLoginAt) {
+
+        static AccountRow of(Account a, Set<String> roles) {
+            Teacher t = a.getTeacher();
+            Employee e = a.getEmployee();
+
+            Long personId = t != null ? t.getId() : e != null ? e.getId() : null;
+            String name = t != null ? t.getName() : e != null ? e.getName() : null;
+            // 연락처는 사람 쪽에 있다 — 계정에는 없다. 선생님·직원 어느 쪽이든 꺼낸다
+            String phone = t != null ? t.getPhone() : e != null ? e.getPhone() : null;
+            var academy = t != null ? t.getAcademy() : e != null ? e.getAcademy() : null;
+
+            return new AccountRow(a.getId(), a.getLoginId(), a.getAccountType(), a.getStatus(),
+                    roles, personId, name, phone,
+                    e == null ? null : e.getDeptName(),
+                    e == null ? null : e.getPositionName(),
+                    academy == null ? null : academy.getId(),
+                    academy == null ? null : academy.getName(),
+                    a.getLockedAt() != null, a.isMustChangePassword(), a.getLastLoginAt());
+        }
     }
 
     /**
@@ -65,8 +142,8 @@ public class StaffAccountService {
         Teacher teacher = teacherRepository.save(new Teacher(academy, name, phone));
         teacher.updateContact(phone, email);
 
-        Account account = accountRepository.save(
-                Account.forTeacher(teacher, loginId, passwordEncoder.encode(rawPassword)));
+        Account account = accountRepository.save(Account.forTeacher(
+                teacher, loginId, passwordEncoder.encode(rawPassword), needsApproval(principal)));
         grantRoles(account.getId(), roles);
         return teacher;
     }
@@ -84,10 +161,88 @@ public class StaffAccountService {
         Employee employee = employeeRepository.save(new Employee(academy, name));
         employee.updateProfile(deptName, positionName, phone, email);
 
-        Account account = accountRepository.save(
-                Account.forEmployee(employee, loginId, passwordEncoder.encode(rawPassword)));
+        Account account = accountRepository.save(Account.forEmployee(
+                employee, loginId, passwordEncoder.encode(rawPassword), needsApproval(principal)));
         grantRoles(account.getId(), roles);
         return employee;
+    }
+
+    /**
+     * 승인이 필요한 계정인가 — <b>지금은 항상 아니다(즉시 활성).</b>
+     *
+     * <p>요구사항정의서 3시트가 계정 상태를 "승인대기 → 승인 / 탈퇴"로 정의하고
+     * {@link #approve}·{@link #withdraw}도 그래서 열어뒀지만, <b>켜는 것은 별개다.</b>
+     *
+     * <p>이 서비스는 <b>계정과 사람을 한 번에 만든다</b> — 따로 만들 수 있게 하면
+     * "담임 지정은 되는데 로그인은 안 되는 선생님"이 생기기 때문이다. 승인을 켜면
+     * 만든 직후가 정확히 그 상태가 된다. 그리고 <b>만드는 사람과 승인하는 사람이 같으면</b>
+     * 절차만 하나 늘 뿐이라, 본사가 지점 계정을 승인하는 운영인지부터 확인해야 한다.
+     *
+     * <p>그때까지는 {@code penalty_rule.active}와 같은 방식이다 — <b>장치는 있고 꺼져 있다.</b>
+     * 켤 때 고칠 곳은 이 메서드 하나다(예: {@code return !principal.allAcademy()}).
+     */
+    private boolean needsApproval(AuthPrincipal principal) {
+        return false;
+    }
+
+    /**
+     * 계정 승인 (PENDING → ACTIVE).
+     *
+     * <p><b>본사만 할 수 있다</b> — 지점이 자기가 만든 계정을 스스로 승인하면 절차가
+     * 아무것도 막지 못한다.
+     */
+    @Transactional
+    public Account approve(Long accountId, AuthPrincipal principal) {
+        if (!principal.allAcademy()) {
+            throw new BusinessException(ErrorCode.ACCOUNT_APPROVAL_FORBIDDEN);
+        }
+        Account account = loadStaffAccount(accountId);
+        if (account.getStatus() != AccountStatus.PENDING) {
+            throw new BusinessException(ErrorCode.ACCOUNT_NOT_PENDING);
+        }
+        account.approve();
+        changeLogService.record(academyIdOf(account), null,
+                ChangeLogService.TARGET_ACCOUNT_STATUS, accountId, account.getLoginId(),
+                "APPROVE", AccountStatus.PENDING.name(), AccountStatus.ACTIVE.name());
+        return account;
+    }
+
+    /**
+     * 계정 탈퇴 (→ WITHDRAWN).
+     *
+     * <p><b>지우지 않는다</b> — 지난 로그인 이력과 이 계정이 남긴 작업 기록이 감사 대상이다.
+     * 되살릴 일이 있으면 승인으로 다시 올린다.
+     */
+    @Transactional
+    public Account withdraw(Long accountId, AuthPrincipal principal) {
+        Account account = loadStaffAccount(accountId);
+        verifyAccountScope(account, principal);
+        AccountStatus before = account.getStatus();
+        account.deactivate();
+        changeLogService.record(academyIdOf(account), null,
+                ChangeLogService.TARGET_ACCOUNT_STATUS, accountId, account.getLoginId(),
+                "WITHDRAW", before.name(), account.getStatus().name());
+        return account;
+    }
+
+    /** 학생·학부모 계정은 이 화면 대상이 아니다 — 가입·승인 흐름이 통째로 다르다. */
+    private Account loadStaffAccount(Long accountId) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        if (account.getAccountType() != AccountType.EMPLOYEE
+                && account.getAccountType() != AccountType.TEACHER) {
+            throw new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND);
+        }
+        return account;
+    }
+
+    private void verifyAccountScope(Account account, AuthPrincipal principal) {
+        Teacher t = account.getTeacher();
+        Employee e = account.getEmployee();
+        Academy academy = t != null ? t.getAcademy() : e != null ? e.getAcademy() : null;
+        if (academy != null) {
+            verifyAccess(academy.getId(), principal);
+        }
     }
 
     /**
@@ -111,8 +266,22 @@ public class StaffAccountService {
             throw new BusinessException(ErrorCode.FORBIDDEN, "상위 관리자 권한은 부여할 수 없습니다.");
         }
 
+        // ★ 지우기 전에 읽는다 — 지운 뒤엔 "무엇이었는지"를 알 방법이 없다.
+        //   이게 없으면 "누가 이 계정에서 SUPER_ADMIN을 뺐나"에 답할 수 없다.
+        Set<String> before = accountRoleRepository.findRoleNamesByAccountId(accountId);
+
         accountRoleRepository.deleteByAccountId(accountId);
         grantRoles(accountId, roles);
+
+        changeLogService.record(targetAcademyId, null,
+                ChangeLogService.TARGET_ACCOUNT_ROLE, accountId, account.getLoginId(),
+                "REPLACE_ROLES", joinRoles(before),
+                joinRoles(roles.stream().map(Role::name).collect(Collectors.toSet())));
+    }
+
+    /** 화면에 그대로 찍히는 값이라 순서를 고정한다 — 안 그러면 같은 역할 집합이 매번 달라 보인다. */
+    private String joinRoles(Set<String> roles) {
+        return roles.stream().sorted().collect(Collectors.joining(", "));
     }
 
     @Transactional(readOnly = true)

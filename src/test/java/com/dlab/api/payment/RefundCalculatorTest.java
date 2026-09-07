@@ -52,6 +52,25 @@ class RefundCalculatorTest {
     class FullPrice {
 
         @Test
+        @DisplayName("★ 교습 시작 전이면 전액 환불된다 — 1/3 구간으로 떨어지면 안 된다")
+        void beforeStartIsFullRefund() {
+            Billing b = billing(660_000, 0, 90_000);
+
+            // 하루도 안 다녔다. 학원법 반환기준 첫 행이 '교습 시작 전 = 전액'이다.
+            // 이 분기가 없으면 0*3 <= 31 이 참이라 1/3 구간으로 떨어져 220,000원을 뗀다.
+            var result = RefundCalculator.calculate(itemsOf(b), MARCH_DAYS, 0);
+
+            var tuition = result.items().get(0);
+            assertThat(tuition.deduction()).isZero();
+            assertThat(tuition.refund()).isEqualTo(660_000);
+
+            // 독서실비도 쓴 날이 없으니 전액이다(일할 × 0일)
+            var studyRoom = result.items().get(1);
+            assertThat(studyRoom.deduction()).isZero();
+            assertThat(studyRoom.refund()).isEqualTo(90_000);
+        }
+
+        @Test
         @DisplayName("이용기간 1/3 이내면 교습비 2/3가 환불된다")
         void withinOneThird() {
             Billing b = billing(660_000, 0, 90_000);
@@ -116,6 +135,22 @@ class RefundCalculatorTest {
     @Nested
     @DisplayName("★ 할인받은 학생 — 차감이 정상가 기준이다")
     class Discounted {
+
+        @Test
+        @DisplayName("★ 할인받았어도 교습 시작 전이면 납부액이 그대로 돌아간다")
+        void beforeStartRefundsWhatWasPaid() {
+            // 50% 할인 — 330,000원 납부
+            Billing b = billing(660_000, 330_000, 90_000);
+
+            var result = RefundCalculator.calculate(itemsOf(b), MARCH_DAYS, 0);
+            var tuition = result.items().get(0);
+
+            // 차감이 0이라 정상가 기준 차감이 걸리지 않는다 — 추가 징수도 없다.
+            // (이 분기가 없으면 330,000 − 220,000 = 110,000만 돌려주게 된다)
+            assertThat(tuition.deduction()).isZero();
+            assertThat(tuition.refund()).isEqualTo(330_000);
+            assertThat(result.requiresAdditionalPayment()).isFalse();
+        }
 
         @Test
         @DisplayName("1/3 이내면 할인받아도 환불이 남는다")
@@ -219,13 +254,16 @@ class RefundCalculatorTest {
         }
 
         @Test
-        @DisplayName("첫날 퇴원이면 전액에 가깝게 돌아온다")
+        @DisplayName("★ 사용일수 0은 '교습 시작 전'이라 교습비도 전액이다")
         void dayZero() {
             Billing b = billing(660_000, 0, 90_000);
 
             var result = RefundCalculator.calculate(itemsOf(b), MARCH_DAYS, 0);
 
-            assertThat(result.items().get(0).refund()).isEqualTo(440_000);   // 교습비는 2/3가 상한
+            // 이 테스트는 원래 440,000(2/3)을 기대하며 "교습비는 2/3가 상한"이라고 적고
+            // 있었다. 학원법 반환기준의 첫 행(교습 시작 전 = 전액)을 놓친 것이라,
+            // 하루도 안 다닌 학생에게서 1/3을 떼는 동작이 테스트로 굳어 있었다.
+            assertThat(result.items().get(0).refund()).isEqualTo(660_000);
             assertThat(result.items().get(1).refund()).isEqualTo(90_000);    // 독서실비는 전액
         }
 

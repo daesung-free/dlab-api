@@ -87,7 +87,8 @@ public class LectureService {
     }
 
     @Transactional
-    public Lecture update(Long lectureId, String name, String description, Integer capacity,
+    public Lecture update(Long lectureId, String name, String code, String instructorName,
+                          String description, Integer capacity,
                           Instant applyFrom, Instant applyTo, LocalDate startDate,
                           LocalDate endDate, Integer fee, AuthPrincipal principal) {
         Lecture lecture = require(lectureId, principal);
@@ -101,7 +102,8 @@ public class LectureService {
                         "이미 확정된 인원(%d명)보다 적은 정원으로 줄일 수 없습니다.".formatted(confirmed));
             }
         }
-        lecture.update(name, description, capacity, applyFrom, applyTo, startDate, endDate, fee);
+        lecture.update(name, code, instructorName, description, capacity, applyFrom, applyTo,
+                startDate, endDate, fee);
         return lecture;
     }
 

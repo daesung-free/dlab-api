@@ -68,7 +68,7 @@ class NotificationTemplateFlowTest {
     private void createAdmin(Academy academy, String loginId, String role) {
         Employee employee = new Employee(academy, loginId);
         em.persist(employee);
-        Account account = Account.forEmployee(employee, loginId, passwordEncoder.encode(PASSWORD));
+        Account account = Account.forEmployee(employee, loginId, passwordEncoder.encode(PASSWORD), false);
         em.persist(account);
         em.flush();
         em.createNativeQuery("""

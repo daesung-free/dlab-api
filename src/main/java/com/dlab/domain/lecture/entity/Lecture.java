@@ -73,6 +73,20 @@ public class Lecture extends BaseEntity {
     @Column(nullable = false)
     private int fee = 0;
 
+    /** 선택. 이름이 바뀌어도 유지되는 키다 — 지점·연도 안에서 유일하다. */
+    @Column(length = 30)
+    private String code;
+
+    /**
+     * 담당 강사명.
+     *
+     * <p><b>{@code teacher} FK가 아니다</b> — 그 표에는 담당선생님(사감)만 들어가는데
+     * 특강 강사는 외부에서 부르는 경우가 있어, FK로 묶으면 그런 강사는 등록 자체가 안 된다.
+     * 지금 강사로 하는 일은 목록 표시뿐이라 문자열로 충분하다.
+     */
+    @Column(name = "instructor_name", length = 50)
+    private String instructorName;
+
     public Lecture(Academy academy, short year, LectureType lectureType, String name) {
         this.academy = academy;
         this.year = year;
@@ -81,11 +95,17 @@ public class Lecture extends BaseEntity {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
-    public void update(String name, String description, Integer capacity,
-                       Instant applyFrom, Instant applyTo,
+    public void update(String name, String code, String instructorName, String description,
+                       Integer capacity, Instant applyFrom, Instant applyTo,
                        LocalDate startDate, LocalDate endDate, Integer fee) {
         if (name != null) {
             this.name = name;
+        }
+        if (code != null) {
+            this.code = code;
+        }
+        if (instructorName != null) {
+            this.instructorName = instructorName;
         }
         if (description != null) {
             this.description = description;
