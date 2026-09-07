@@ -42,6 +42,7 @@ public class StatisticsService {
     private static final int RANKING_SIZE = 10;
 
     private final StatisticsRepository repository;
+    private final java.time.Clock clock;
 
     /**
      * 조회 지점 결정.
@@ -60,6 +61,92 @@ public class StatisticsService {
     }
 
     /** 대시보드 한 번에. 화면이 카드 여러 개를 한 화면에 띄운다. */
+    /**
+     * 반별·계열별·월별 집계 (F-C-2 학원생 현황).
+     *
+     * <p><b>대시보드 개요와 축이 다르다.</b> {@code overview}는 "지금 전체가 어떤가"이고
+     * 이쪽은 "어디에 몇 명인가"다 — 전 원생을 내려받아 화면에서 세면 원생 수가 늘수록
+     * 그대로 느려진다.
+     */
+    @Transactional(readOnly = true)
+    public List<GroupRow> group(AuthPrincipal me, Long academyId, short year,
+                                GroupBy groupBy, LocalDate asOf) {
+        Long scope = resolveScope(me, academyId);
+        return switch (groupBy) {
+            case CLASS -> byClass(scope, year);
+            case TRACK -> byTrack(scope, year);
+            case MONTH -> byMonth(scope, year, asOf);
+        };
+    }
+
+    private List<GroupRow> byClass(Long scope, short year) {
+        return repository.countByClass(scope, year).stream()
+                .map(r -> {
+                    Short capacity = (Short) r[2];
+                    long count = ((Number) r[3]).longValue();
+                    return new GroupRow(String.valueOf(r[0]), (String) r[1],
+                            count,
+                            capacity == null ? null : (long) capacity,
+                            // 정원이 없으면 충원율을 내지 않는다 — 0으로 두면 화면이
+                            // "아무도 없음"으로, 100으로 두면 "만석"으로 잘못 읽는다
+                            capacity == null || capacity == 0 ? null
+                                    : Math.round(count * 100.0 / capacity),
+                            null);
+                })
+                .toList();
+    }
+
+    private List<GroupRow> byTrack(Long scope, short year) {
+        return repository.countByTrack(scope, year).stream()
+                .map(r -> new GroupRow(
+                        r[0] == null ? "UNASSIGNED" : String.valueOf(r[0]),
+                        // 계열이 안 정해진 학생을 빼면 합계가 전체 인원과 안 맞는다
+                        r[0] == null ? "미지정" : String.valueOf(r[0]),
+                        ((Number) r[1]).longValue(), null, null, null))
+                .toList();
+    }
+
+    /**
+     * 월별 추이 — 그 달 <b>말일 기준</b> 재원 인원과 전월 대비 증감.
+     *
+     * <p>이번 달은 말일이 아직 안 왔으므로 <b>오늘 기준</b>으로 센다. 말일로 세면
+     * 아직 오지 않은 퇴원까지 반영돼 이번 달만 값이 튄다.
+     */
+    private List<GroupRow> byMonth(Long scope, short year, LocalDate asOf) {
+        LocalDate today = asOf == null ? LocalDate.now(clock) : asOf;
+        List<GroupRow> rows = new java.util.ArrayList<>();
+        Long previous = null;
+
+        for (int month = 1; month <= 12; month++) {
+            java.time.YearMonth ym = java.time.YearMonth.of(year, month);
+            if (ym.isAfter(java.time.YearMonth.from(today))) {
+                break;
+            }
+            LocalDate at = ym.equals(java.time.YearMonth.from(today)) ? today : ym.atEndOfMonth();
+            long count = repository.countEnrolledAt(scope, year, at);
+
+            rows.add(new GroupRow("%d-%02d".formatted(year, month), "%d월".formatted(month),
+                    count, null, null, previous == null ? null : count - previous));
+            previous = count;
+        }
+        return rows;
+    }
+
+    /**
+     * @param key      반 id · 계열 코드 · {@code yyyy-MM}. 화면이 정렬·연결에 쓴다
+     * @param capacity 반에만 있다. 정원이 안 정해진 반은 비어 있다
+     * @param fillRate 충원율(%). 정원이 없으면 비어 있다 — 0이나 100으로 채우면 오독된다
+     * @param delta    전월 대비 증감. 월별에만 있고, 첫 달은 비교 대상이 없어 비어 있다
+     */
+    public record GroupRow(String key, String label, long count,
+                           Long capacity, Long fillRate, Long delta) {
+    }
+
+    /** 집계 축. */
+    public enum GroupBy {
+        CLASS, TRACK, MONTH
+    }
+
     public Overview overview(AuthPrincipal me, Long academyId, short year,
                              LocalDate from, LocalDate to) {
         Long scope = resolveScope(me, academyId);

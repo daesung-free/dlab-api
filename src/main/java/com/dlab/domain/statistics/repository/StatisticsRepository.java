@@ -33,6 +33,76 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
     List<Object[]> countByEnrollmentStatus(@Param("academyId") Long academyId,
                                            @Param("year") short year);
 
+    /**
+     * 반별 인원·정원 (F-C-2 학원생 현황).
+     *
+     * <p><b>정원이 없는 반이 있다</b>({@code capacity}가 선택값). 그때 충원율은 계산하지
+     * 않는다 — 0으로 나누거나 100%로 두면 화면이 "정원 초과"·"만석"으로 잘못 읽는다.
+     *
+     * <p><b>미배정 학생은 여기 안 나온다.</b> 반이 없으니 반별 집계에 자리가 없다 —
+     * 그 수는 {@code /students?unassignedClass=true}로 따로 센다.
+     *
+     * @return {@code [classId, className, capacity, 인원]}
+     */
+    @Query("""
+            SELECT c.id, c.name, c.capacity, COUNT(a)
+            FROM ClassAssignment a
+            JOIN a.classMaster c
+            JOIN a.enrollment e
+            WHERE (:academyId IS NULL OR a.academy.id = :academyId)
+              AND c.year = :year
+              AND a.classType = com.dlab.domain.user.entity.ClassType.FIXED
+              AND a.active = true
+              AND a.deleted = false
+              AND e.enrollmentStatus = com.dlab.domain.user.entity.EnrollmentStatus.ENROLLED
+              AND e.deleted = false
+            GROUP BY c.id, c.name, c.capacity
+            ORDER BY c.name
+            """)
+    List<Object[]> countByClass(@Param("academyId") Long academyId, @Param("year") short year);
+
+    /**
+     * 계열별 인원.
+     *
+     * <p>계열이 안 정해진 학생이 있어 {@code track}이 {@code null}인 행이 나온다 —
+     * 빼면 합계가 전체 인원과 안 맞는다.
+     *
+     * @return {@code [track, 인원]}
+     */
+    @Query("""
+            SELECT e.track, COUNT(e)
+            FROM StudentEnrollment e
+            WHERE (:academyId IS NULL OR e.academy.id = :academyId)
+              AND e.year = :year
+              AND e.current = true
+              AND e.deleted = false
+              AND e.enrollmentStatus = com.dlab.domain.user.entity.EnrollmentStatus.ENROLLED
+            GROUP BY e.track
+            """)
+    List<Object[]> countByTrack(@Param("academyId") Long academyId, @Param("year") short year);
+
+    /**
+     * 그 시점에 재원 중이던 인원 — 월별 추이용.
+     *
+     * <p><b>지금 상태로 세지 않는다.</b> {@code enrollmentStatus}는 현재 값이라 3월 인원을
+     * 물어도 지금 퇴원한 학생이 빠져, 과거 월이 실제보다 적게 나온다.
+     * <b>입학일·퇴원일 구간</b>으로 판정해야 그 달의 실제 인원이 나온다.
+     *
+     * <p>입학일이 없는 행은 세지 않는다 — 접수만 하고 등원일이 안 정해진 상태다.
+     */
+    @Query("""
+            SELECT COUNT(e)
+            FROM StudentEnrollment e
+            WHERE (:academyId IS NULL OR e.academy.id = :academyId)
+              AND e.year = :year
+              AND e.deleted = false
+              AND e.admissionDate IS NOT NULL
+              AND e.admissionDate <= :at
+              AND (e.withdrawalDate IS NULL OR e.withdrawalDate > :at)
+            """)
+    long countEnrolledAt(@Param("academyId") Long academyId, @Param("year") short year,
+                         @Param("at") LocalDate at);
+
     /** 출결 — 확정된 일자 상태별 건수. */
     @Query("""
             SELECT d.finalStatus, COUNT(d)
