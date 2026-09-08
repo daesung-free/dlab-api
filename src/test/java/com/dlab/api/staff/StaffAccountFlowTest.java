@@ -94,22 +94,32 @@ class StaffAccountFlowTest {
     @Test
     @DisplayName("★ 지점이 만든 계정은 승인 전까지 로그인이 막힌다 — 본사가 승인해야 열린다")
     void branchCreatedAccountNeedsApproval() throws Exception {
-        mvc.perform(post("/api/v1/admin/staff/teachers")
+        // 비밀번호는 서버가 만들어 응답으로 딱 한 번 돌려준다 —
+        // 관리자가 정해주면 그 비밀번호를 관리자가 계속 알고 있게 된다
+        String created = mvc.perform(post("/api/v1/admin/staff/teachers")
                         .header("Authorization", token("SFADM"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"academyId":%d,"name":"새담임","phone":"010-1111-1111",
-                                 "email":"t@dlab.kr","loginId":"NEWT","password":"%s","roles":["TEACHER"]}"""
-                                .formatted(academyId, PASSWORD)))
+                                 "email":"t@dlab.kr","loginId":"NEWT","roles":["TEACHER"]}"""
+                                .formatted(academyId)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.kind").value("TEACHER"));
+                .andExpect(jsonPath("$.data.staff.kind").value("TEACHER"))
+                // 만들어진 계정을 함께 돌려준다 — 없으면 화면이 방금 만든 행을 못 그린다
+                .andExpect(jsonPath("$.data.accountId").isNumber())
+                .andExpect(jsonPath("$.data.loginId").value("NEWT"))
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.pendingApproval").value(true))
+                .andReturn().getResponse().getContentAsString();
+        String temporary = objectMapper.readTree(created).path("data")
+                .path("temporaryPassword").asString();
         em.flush();
 
         // 계정과 사람은 한 번에 만들어지지만, 지점이 만든 건 승인 전까지 못 쓴다
         mvc.perform(post("/api/v1/admin/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"loginId":"NEWT","password":"%s"}""".formatted(PASSWORD)))
+                                {"loginId":"NEWT","password":"%s"}""".formatted(temporary)))
                 .andExpect(status().is4xxClientError());
 
         Long accountId = ((Number) em.createNativeQuery(
@@ -130,14 +140,108 @@ class StaffAccountFlowTest {
         String body = mvc.perform(post("/api/v1/admin/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"loginId":"NEWT","password":"%s"}""".formatted(PASSWORD)))
+                                {"loginId":"NEWT","password":"%s"}""".formatted(temporary)))
+                .andExpect(status().isOk())
+                // 임시 비밀번호라 첫 로그인에서 변경을 강제한다
+                .andExpect(jsonPath("$.data.mustChangePassword").value(true))
+                .andReturn().getResponse().getContentAsString();
+        String access = objectMapper.readTree(body).path("data").path("accessToken").asString();
+
+        // 바꾸기 전에는 다른 API 가 막힌다 — 강제 변경이 말뿐이면 의미가 없다
+        mvc.perform(get("/api/v1/admin/approvals").header("Authorization", "Bearer " + access))
+                .andExpect(status().is4xxClientError());
+
+        String changed = mvc.perform(post("/api/v1/admin/auth/password")
+                        .header("Authorization", "Bearer " + access)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"currentPassword":"%s","newPassword":"%s"}"""
+                                .formatted(temporary, PASSWORD)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
+        em.flush();
+
+        // 변경하면 토큰이 새로 나온다 — 옛 토큰은 그대로 쓰지 않는다
+        String renewed = objectMapper.readTree(changed).path("data").path("accessToken").asString();
 
         // 역할이 토큰에 실려야 승인 API를 쓸 수 있다
-        String access = objectMapper.readTree(body).path("data").path("accessToken").asString();
-        mvc.perform(get("/api/v1/admin/approvals").header("Authorization", "Bearer " + access))
+        mvc.perform(get("/api/v1/admin/approvals").header("Authorization", "Bearer " + renewed))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("★ 지점 관리자는 자기보다 상위 역할을 만들 수 없다 — 승인 화면을 통한 권한 상승을 막는다")
+    void cannotGrantHigherRole() throws Exception {
+        // 승인 대기로 걸리긴 하지만, 본사가 승인 화면에서 요청된 역할을 못 보고 눌러주면
+        // 전 지점 권한이 그대로 넘어간다
+        mvc.perform(post("/api/v1/admin/staff/employees")
+                        .header("Authorization", token("SFADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"name":"승격시도","loginId":"ESCAL",
+                                 "roles":["SUPER_ADMIN"]}""".formatted(academyId)))
+                .andExpect(status().isForbidden());
+
+        // 같은 층은 막지 않는다 — 지점이 지점 관리자를 만드는 것은 정상 운영이고
+        // 그건 승인 절차가 거른다
+        mvc.perform(post("/api/v1/admin/staff/employees")
+                        .header("Authorization", token("SFADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"name":"동급","loginId":"PEER",
+                                 "roles":["BRANCH_ADMIN"]}""".formatted(academyId)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("아이디 중복확인 · 역할 목록 — 폼이 저장 전에 확인할 수 있어야 한다")
+    void formSupportApis() throws Exception {
+        mvc.perform(get("/api/v1/admin/staff/login-id-available")
+                        .header("Authorization", token("SFADM"))
+                        .param("loginId", "NEVER_USED_ID"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.available").value(true));
+
+        mvc.perform(get("/api/v1/admin/staff/login-id-available")
+                        .header("Authorization", token("SFADM"))
+                        .param("loginId", "SFADM"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.available").value(false));
+
+        // grantable 은 "지금 로그인한 사람이 줄 수 있는가"다 — 지점 관리자에게 SUPER_ADMIN 은 false
+        mvc.perform(get("/api/v1/admin/staff/roles").header("Authorization", token("SFADM")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].code").value("SUPER_ADMIN"))
+                .andExpect(jsonPath("$.data[0].displayName").value("본사 최고관리자"))
+                .andExpect(jsonPath("$.data[0].grantable").value(false))
+                .andExpect(jsonPath("$.data[1].code").value("BRANCH_ADMIN"))
+                .andExpect(jsonPath("$.data[1].grantable").value(true));
+    }
+
+    @Test
+    @DisplayName("인적사항을 고칠 수 있다 — 오타 때문에 탈퇴시키고 새로 만들지 않는다")
+    void updateProfile() throws Exception {
+        String created = mvc.perform(post("/api/v1/admin/staff/employees")
+                        .header("Authorization", token("SFADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"name":"오타김","deptName":"운영팀",
+                                 "loginId":"TYPO","roles":["STAFF"]}""".formatted(academyId)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long id = objectMapper.readTree(created).path("data").path("staff").path("id").asLong();
+        em.flush();
+
+        mvc.perform(patch("/api/v1/admin/staff/employees/{id}", id)
+                        .header("Authorization", token("SFADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"정상김","positionName":"팀장"}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("정상김"))
+                .andExpect(jsonPath("$.data.positionName").value("팀장"))
+                // 비운 값은 바꾸지 않는다 — 이름만 고치려다 부서가 지워지면 안 된다
+                .andExpect(jsonPath("$.data.deptName").value("운영팀"));
     }
 
     @Test

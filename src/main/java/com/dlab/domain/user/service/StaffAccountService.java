@@ -3,6 +3,7 @@ package com.dlab.domain.user.service;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
+import com.dlab.common.security.PasswordPolicy;
 import com.dlab.common.security.Role;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.AuditRecorder;
@@ -140,11 +141,12 @@ public class StaffAccountService {
      * 로그인은 안 되는 상태가 된다. 한 번에 만든다.
      */
     @Transactional
-    public Teacher createTeacher(Long academyId, String name, String phone, String email,
-                                 String loginId, String rawPassword,
-                                 Set<Role> roles, AuthPrincipal principal) {
+    public Created<Teacher> createTeacher(Long academyId, String name, String phone, String email,
+                                          String loginId, Set<Role> roles,
+                                          AuthPrincipal principal) {
         verifyAccess(academyId, principal);
         verifyLoginIdAvailable(loginId);
+        verifyGrantable(roles, principal);
 
         Academy academy = academyRepository.findById(academyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
@@ -152,18 +154,22 @@ public class StaffAccountService {
         Teacher teacher = teacherRepository.save(new Teacher(academy, name, phone));
         teacher.updateContact(phone, email);
 
+        String temporary = PasswordPolicy.generateTemporary();
         Account account = accountRepository.save(Account.forTeacher(
-                teacher, loginId, passwordEncoder.encode(rawPassword), needsApproval(principal)));
+                teacher, loginId, passwordEncoder.encode(temporary), needsApproval(principal)));
+        account.issueTemporaryPassword(passwordEncoder.encode(temporary));
         grantRoles(account.getId(), roles);
-        return teacher;
+        return new Created<>(teacher, account, temporary);
     }
 
     @Transactional
-    public Employee createEmployee(Long academyId, String name, String deptName, String positionName,
-                                   String phone, String email, String loginId, String rawPassword,
-                                   Set<Role> roles, AuthPrincipal principal) {
+    public Created<Employee> createEmployee(Long academyId, String name, String deptName,
+                                            String positionName, String phone, String email,
+                                            String loginId, Set<Role> roles,
+                                            AuthPrincipal principal) {
         verifyAccess(academyId, principal);
         verifyLoginIdAvailable(loginId);
+        verifyGrantable(roles, principal);
 
         Academy academy = academyRepository.findById(academyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
@@ -171,10 +177,90 @@ public class StaffAccountService {
         Employee employee = employeeRepository.save(new Employee(academy, name));
         employee.updateProfile(deptName, positionName, phone, email);
 
+        String temporary = PasswordPolicy.generateTemporary();
         Account account = accountRepository.save(Account.forEmployee(
-                employee, loginId, passwordEncoder.encode(rawPassword), needsApproval(principal)));
+                employee, loginId, passwordEncoder.encode(temporary), needsApproval(principal)));
+        account.issueTemporaryPassword(passwordEncoder.encode(temporary));
         grantRoles(account.getId(), roles);
+        return new Created<>(employee, account, temporary);
+    }
+
+    /**
+     * 등록 결과 — 사람 + 계정 + 임시 비밀번호.
+     *
+     * <p>사람만 돌려주면 화면이 방금 만든 행을 그릴 수 없다. 실제로 응답의
+     * {@code accountId}·{@code loginId}가 비어 있어 프론트가 저장 후 목록을 다시 불렀다.
+     *
+     * <p><b>임시 비밀번호는 여기서 딱 한 번만 나간다.</b> 저장하지 않으므로 놓치면
+     * 재발급해야 한다 — 저장해두면 그 자체가 유출 경로가 된다.
+     */
+    public record Created<T>(T staff, Account account, String temporaryPassword) {
+    }
+
+    /**
+     * 자기보다 높은 역할은 줄 수 없다.
+     *
+     * <p>이게 없으면 <b>지점 관리자가 {@code SUPER_ADMIN} 계정을 요청</b>할 수 있다.
+     * 승인 대기로 걸리긴 하지만, 본사가 승인 화면에서 요청된 역할을 못 보고 눌러주면
+     * 전 지점 권한이 그대로 넘어간다.
+     *
+     * <p>같은 층은 허용한다 — 지점 관리자가 지점 관리자를 만드는 것은 정상 운영이고,
+     * 그건 승인 절차가 거른다.
+     */
+    private void verifyGrantable(Set<Role> roles, AuthPrincipal principal) {
+        int mine = principal.roles().stream().mapToInt(Role::rank).min().orElse(Integer.MAX_VALUE);
+        roles.stream().filter(r -> r.rank() < mine).findFirst().ifPresent(r -> {
+            throw new BusinessException(ErrorCode.FORBIDDEN,
+                    "자신보다 상위 역할(%s)은 부여할 수 없습니다.".formatted(r.displayName()));
+        });
+    }
+
+    /**
+     * 로그인 아이디 사용 가능 여부. 폼에서 저장 전에 확인한다.
+     *
+     * <p><b>등록 시 검사와 같은 판정을 쓴다.</b> 두 벌로 두면 한쪽만 바뀌어
+     * "중복확인은 통과했는데 저장이 실패"하는 상태가 된다.
+     */
+    @Transactional(readOnly = true)
+    public boolean loginIdAvailable(String loginId) {
+        return accountRepository.findByLoginId(loginId).isEmpty();
+    }
+
+    /**
+     * 인적사항 수정.
+     *
+     * <p>없으면 <b>오타 하나에 탈퇴 처리하고 새로 만드는 수밖에 없어</b>
+     * {@code WITHDRAWN} 계정이 목록에 쌓인다. 로그인 아이디는 여기서 못 바꾼다 —
+     * 계정 식별자라 바꾸면 감사 로그의 주체가 끊긴다.
+     */
+    @Transactional
+    public Employee updateEmployee(Long employeeId, String name, String deptName,
+                                   String positionName, String phone, String email,
+                                   AuthPrincipal principal) {
+        Employee employee = employeeRepository.findById(employeeId)
+                .filter(e -> !e.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND));
+        verifyAccess(employee.getAcademy().getId(), principal);
+        if (name != null) {
+            employee.rename(name);
+        }
+        employee.patchProfile(deptName, positionName, phone, email);
         return employee;
+    }
+
+    @Transactional
+    public Teacher updateTeacher(Long teacherId, String name, String phone, String email,
+                                 AuthPrincipal principal) {
+        Teacher teacher = teacherRepository.findById(teacherId)
+                .filter(t -> !t.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND,
+                        "선생님을 찾을 수 없습니다."));
+        verifyAccess(teacher.getAcademy().getId(), principal);
+        if (name != null) {
+            teacher.rename(name);
+        }
+        teacher.patchContact(phone, email);
+        return teacher;
     }
 
     /**
@@ -272,10 +358,9 @@ public class StaffAccountService {
             verifyAccess(targetAcademyId, principal);
         }
 
-        // SUPER_ADMIN 부여는 상위 관리자만 — 지점 관리자가 스스로를 승격할 수 없어야 한다
-        if (roles.contains(Role.SUPER_ADMIN) && !principal.hasRole(Role.SUPER_ADMIN)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN, "상위 관리자 권한은 부여할 수 없습니다.");
-        }
+        // 등록과 같은 상한을 건다. SUPER_ADMIN 만 막으면 TEACHER 가 BRANCH_ADMIN 을
+        // 달아주는 경로가 남는다 — 여기와 등록이 다른 규칙을 쓰면 한쪽으로 새 나간다
+        verifyGrantable(roles, principal);
 
         // ★ 지우기 전에 읽는다 — 지운 뒤엔 "무엇이었는지"를 알 방법이 없다.
         //   이게 없으면 "누가 이 계정에서 SUPER_ADMIN을 뺐나"에 답할 수 없다.

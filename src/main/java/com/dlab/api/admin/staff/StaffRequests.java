@@ -17,7 +17,6 @@ public final class StaffRequests {
             @Size(max = 20) String phone,
             @Email(message = "이메일 형식이 올바르지 않습니다.") @Size(max = 128) String email,
             @NotBlank(message = "로그인 아이디는 필수입니다.") @Size(max = 50) String loginId,
-            @NotBlank(message = "비밀번호는 필수입니다.") @Size(min = 8, message = "비밀번호는 8자 이상이어야 합니다.") String password,
             @NotEmpty(message = "역할은 하나 이상 필요합니다.") Set<Role> roles) {
     }
 
@@ -30,8 +29,26 @@ public final class StaffRequests {
             @Size(max = 20) String phone,
             @Email(message = "이메일 형식이 올바르지 않습니다.") @Size(max = 128) String email,
             @NotBlank(message = "로그인 아이디는 필수입니다.") @Size(max = 50) String loginId,
-            @NotBlank(message = "비밀번호는 필수입니다.") @Size(min = 8, message = "비밀번호는 8자 이상이어야 합니다.") String password,
             @NotEmpty(message = "역할은 하나 이상 필요합니다.") Set<Role> roles) {
+    }
+
+    /**
+     * 인적사항 수정. {@code null}은 "변경하지 않음"이다.
+     *
+     * <p><b>로그인 아이디는 없다.</b> 계정 식별자라 바꾸면 감사 로그의 주체가 끊긴다.
+     */
+    public record UpdateTeacher(
+            @Size(max = 20) String name,
+            @Size(max = 20) String phone,
+            @Email(message = "이메일 형식이 올바르지 않습니다.") @Size(max = 128) String email) {
+    }
+
+    public record UpdateEmployee(
+            @Size(max = 20) String name,
+            @Size(max = 32) String deptName,
+            @Size(max = 32) String positionName,
+            @Size(max = 20) String phone,
+            @Email(message = "이메일 형식이 올바르지 않습니다.") @Size(max = 128) String email) {
     }
 
     public record ReplaceRoles(
