@@ -4,6 +4,7 @@ import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.user.entity.AccountStatus;
 import com.dlab.common.security.CurrentAccount;
+import com.dlab.common.security.Role;
 import com.dlab.domain.audit.AuditLogRepository;
 import com.dlab.domain.user.service.StaffAccountService;
 import jakarta.validation.Valid;
@@ -87,21 +88,95 @@ public class AdminStaffController {
      * 곧 "담당선생님 보장"이 된다. 합치면 배정할 때마다 역할을 검사해야 한다.
      */
     @PostMapping("/teachers")
-    public ApiResponse<StaffResponse> createTeacher(@CurrentAccount AuthPrincipal me,
-                                                    @Valid @RequestBody StaffRequests.CreateTeacher request) {
-        return ApiResponse.success(StaffResponse.from(staffAccountService.createTeacher(
+    public ApiResponse<StaffCreated> createTeacher(@CurrentAccount AuthPrincipal me,
+                                                   @Valid @RequestBody StaffRequests.CreateTeacher request) {
+        var created = staffAccountService.createTeacher(
                 request.academyId(), request.name(), request.phone(), request.email(),
-                request.loginId(), request.password(), request.roles(), me)));
+                request.loginId(), request.roles(), me);
+        return ApiResponse.success(toCreated(StaffResponse.of(
+                created.staff(), created.account(), roleNames(request.roles())), created,
+                roleNames(request.roles())));
     }
 
     /** 행정선생님 등록. */
     @PostMapping("/employees")
-    public ApiResponse<StaffResponse> createEmployee(@CurrentAccount AuthPrincipal me,
-                                                     @Valid @RequestBody StaffRequests.CreateEmployee request) {
-        return ApiResponse.success(StaffResponse.from(staffAccountService.createEmployee(
+    public ApiResponse<StaffCreated> createEmployee(@CurrentAccount AuthPrincipal me,
+                                                    @Valid @RequestBody StaffRequests.CreateEmployee request) {
+        var created = staffAccountService.createEmployee(
                 request.academyId(), request.name(), request.deptName(), request.positionName(),
-                request.phone(), request.email(), request.loginId(), request.password(),
-                request.roles(), me)));
+                request.phone(), request.email(), request.loginId(), request.roles(), me);
+        return ApiResponse.success(toCreated(StaffResponse.of(
+                created.staff(), created.account(), roleNames(request.roles())), created,
+                roleNames(request.roles())));
+    }
+
+    /**
+     * 인적사항 수정.
+     *
+     * <p>없으면 <b>오타 하나에 탈퇴 처리하고 새로 만드는 수밖에 없어</b>
+     * {@code WITHDRAWN} 계정이 목록에 쌓인다.
+     */
+    @PatchMapping("/teachers/{teacherId}")
+    public ApiResponse<StaffResponse> updateTeacher(@CurrentAccount AuthPrincipal me,
+                                                    @PathVariable Long teacherId,
+                                                    @Valid @RequestBody StaffRequests.UpdateTeacher request) {
+        return ApiResponse.success(StaffResponse.from(staffAccountService.updateTeacher(
+                teacherId, request.name(), request.phone(), request.email(), me)));
+    }
+
+    @PatchMapping("/employees/{employeeId}")
+    public ApiResponse<StaffResponse> updateEmployee(@CurrentAccount AuthPrincipal me,
+                                                     @PathVariable Long employeeId,
+                                                     @Valid @RequestBody StaffRequests.UpdateEmployee request) {
+        return ApiResponse.success(StaffResponse.from(staffAccountService.updateEmployee(
+                employeeId, request.name(), request.deptName(), request.positionName(),
+                request.phone(), request.email(), me)));
+    }
+
+    /**
+     * 로그인 아이디 사용 가능 여부.
+     *
+     * <p>없으면 <b>폼을 다 채우고 저장을 눌러야</b> 중복인지 알 수 있다.
+     */
+    @GetMapping("/login-id-available")
+    public ApiResponse<LoginIdAvailability> loginIdAvailable(@RequestParam String loginId) {
+        return ApiResponse.success(
+                new LoginIdAvailability(loginId, staffAccountService.loginIdAvailable(loginId)));
+    }
+
+    /**
+     * 역할 목록.
+     *
+     * <p>화면이 5개를 하드코딩하면 <b>한글 표기가 화면마다 갈린다.</b>
+     * {@code grantable}은 <b>지금 로그인한 사람이 부여할 수 있는가</b>다 —
+     * 자기보다 상위 역할은 서버가 거절하므로, 고를 수 없게 표시하면 헛수고가 준다.
+     */
+    @GetMapping("/roles")
+    public ApiResponse<List<RoleOption>> roles(@CurrentAccount AuthPrincipal me) {
+        int mine = me.roles().stream().mapToInt(Role::rank).min().orElse(Integer.MAX_VALUE);
+        return ApiResponse.success(java.util.Arrays.stream(Role.values())
+                .map(r -> new RoleOption(r.name(), r.displayName(), r.description(),
+                        r.rank() >= mine))
+                .toList());
+    }
+
+    private StaffCreated toCreated(StaffResponse staff,
+                                   StaffAccountService.Created<?> created,
+                                   Set<String> roles) {
+        return StaffCreated.of(staff, created.account(), roles, created.temporaryPassword());
+    }
+
+    private Set<String> roleNames(Set<Role> roles) {
+        return roles.stream().map(Role::name).collect(java.util.stream.Collectors.toSet());
+    }
+
+    /** @param available {@code false}면 이미 쓰이는 아이디다 */
+    public record LoginIdAvailability(String loginId, boolean available) {
+    }
+
+    /** @param grantable 지금 로그인한 사람이 이 역할을 부여할 수 있는가 */
+    public record RoleOption(String code, String displayName, String description,
+                             boolean grantable) {
     }
 
     /**
