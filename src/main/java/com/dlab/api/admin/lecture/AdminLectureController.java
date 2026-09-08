@@ -63,7 +63,7 @@ public class AdminLectureController {
                 lectureId, request.name(), request.code(),
                 request.description(), request.capacity(),
                 request.applyFrom(), request.applyTo(), request.startDate(), request.endDate(),
-                request.fee(), request.teacherId(), me)));
+                request.fee(), request.teacherId(), request.categoryId(), me)));
     }
 
     /**

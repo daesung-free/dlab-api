@@ -41,6 +41,7 @@ public class LectureService {
     private final AcademyRepository academyRepository;
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
     private final com.dlab.domain.user.repository.TeacherRepository teacherRepository;
+    private final com.dlab.domain.lecture.repository.LectureCategoryRepository categoryRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final com.dlab.domain.user.service.AppScopeResolver scopeResolver;
     private final Clock clock;
@@ -92,7 +93,7 @@ public class LectureService {
     public Lecture update(Long lectureId, String name, String code,
                           String description, Integer capacity,
                           Instant applyFrom, Instant applyTo, LocalDate startDate,
-                          LocalDate endDate, Integer fee, Long teacherId,
+                          LocalDate endDate, Integer fee, Long teacherId, Long categoryId,
                           AuthPrincipal principal) {
         Lecture lecture = require(lectureId, principal);
         // ★ 정원을 현재 확정 인원보다 낮추지 못하게 막는다.
@@ -108,6 +109,19 @@ public class LectureService {
         lecture.update(name, code, description, capacity, applyFrom, applyTo,
                 startDate, endDate, fee);
 
+        // 유형은 그 지점에서 쓸 수 있는 것인지 확인한다 — 안 그러면 id 를 바꿔
+        // 다른 지점 유형이 붙는다(사유 카테고리와 같은 규칙)
+        if (categoryId != null) {
+            var category = categoryRepository.findActiveById(categoryId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                            "특강 유형을 찾을 수 없습니다."));
+            boolean usable = category.isCommon()
+                    || category.getAcademy().getId().equals(lecture.getAcademy().getId());
+            if (!usable) {
+                throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+            }
+            lecture.changeCategory(category);
+        }
         if (teacherId != null) {
             lecture.changeTeacher(teacherRepository.findById(teacherId)
                     .filter(t -> !t.isDeleted())

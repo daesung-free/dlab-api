@@ -78,6 +78,20 @@ public class Lecture extends BaseEntity {
     private String code;
 
     /**
+     * 유형 세분류(단과·실전·해설).
+     *
+     * <p><b>비어 있을 수 있다</b> — 유형이 하나도 등록되지 않은 상태에서도 특강 등록이
+     * 되어야 하고, 설명회는 애초에 세분류가 없다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private LectureCategory category;
+
+    public void changeCategory(LectureCategory category) {
+        this.category = category;
+    }
+
+    /**
      * 담당 강사.
      *
      * <p>⚠️ {@code teacher}는 <b>담당선생님(사감)만</b> 들어가는 테이블이다. 외부 강사를

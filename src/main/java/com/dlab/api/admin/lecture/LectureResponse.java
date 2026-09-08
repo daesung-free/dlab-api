@@ -23,6 +23,7 @@ public final class LectureResponse {
                          Instant applyFrom, Instant applyTo,
                          LocalDate startDate, LocalDate endDate, int fee,
                          Long teacherId, String teacherName,
+                         Long categoryId, String categoryName,
                          Long confirmedCount, Long waitlistedCount) {
 
         public static LectureDetail from(Lecture l) {
@@ -36,6 +37,8 @@ public final class LectureResponse {
                     l.getApplyFrom(), l.getApplyTo(), l.getStartDate(), l.getEndDate(), l.getFee(),
                     l.getTeacher() == null ? null : l.getTeacher().getId(),
                     l.getTeacher() == null ? null : l.getTeacher().getName(),
+                    l.getCategory() == null ? null : l.getCategory().getId(),
+                    l.getCategory() == null ? null : l.getCategory().getName(),
                     confirmed, waitlisted);
         }
 

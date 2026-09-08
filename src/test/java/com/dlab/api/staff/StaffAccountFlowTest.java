@@ -61,6 +61,14 @@ class StaffAccountFlowTest {
         em.flush();
         grantRole(adminAccount.getId(), "BRANCH_ADMIN");
 
+        // 본사 — 지점이 만든 계정을 승인하는 쪽이다
+        Employee hq = new Employee(academy, "본사관리자");
+        em.persist(hq);
+        Account hqAccount = Account.forEmployee(hq, "SFHQ", passwordEncoder.encode(PASSWORD), false);
+        em.persist(hqAccount);
+        em.flush();
+        grantRole(hqAccount.getId(), "SUPER_ADMIN");
+
         academyId = academy.getId();
         otherAcademyId = other.getId();
     }
@@ -84,8 +92,8 @@ class StaffAccountFlowTest {
     }
 
     @Test
-    @DisplayName("★ 선생님을 등록하면 그 계정으로 바로 로그인된다")
-    void createTeacherAndLogin() throws Exception {
+    @DisplayName("★ 지점이 만든 계정은 승인 전까지 로그인이 막힌다 — 본사가 승인해야 열린다")
+    void branchCreatedAccountNeedsApproval() throws Exception {
         mvc.perform(post("/api/v1/admin/staff/teachers")
                         .header("Authorization", token("SFADM"))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -97,7 +105,28 @@ class StaffAccountFlowTest {
                 .andExpect(jsonPath("$.data.kind").value("TEACHER"));
         em.flush();
 
-        // 계정과 사람을 따로 만들면 "담임 지정은 되는데 로그인은 안 되는" 상태가 생긴다
+        // 계정과 사람은 한 번에 만들어지지만, 지점이 만든 건 승인 전까지 못 쓴다
+        mvc.perform(post("/api/v1/admin/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"NEWT","password":"%s"}""".formatted(PASSWORD)))
+                .andExpect(status().is4xxClientError());
+
+        Long accountId = ((Number) em.createNativeQuery(
+                        "SELECT id FROM account WHERE login_id = 'NEWT'").getSingleResult())
+                .longValue();
+
+        // 승인은 본사만 — 지점이 자기가 만든 계정을 스스로 승인하면 절차가 무의미하다
+        mvc.perform(post("/api/v1/admin/staff/accounts/" + accountId + "/approve")
+                        .header("Authorization", token("SFADM")))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/v1/admin/staff/accounts/" + accountId + "/approve")
+                        .header("Authorization", token("SFHQ")))
+                .andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
         String body = mvc.perform(post("/api/v1/admin/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -147,7 +176,8 @@ class StaffAccountFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].name").value("목록행정"))
                 .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].accountType").value("EMPLOYEE"))
-                .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].status").value("ACTIVE"))
+                // 지점 관리자가 만든 계정이라 승인 대기다 — 본사 승인 뒤 ACTIVE 가 된다
+                .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].status").value("PENDING"))
                 .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].deptName").value("교무부"))
                 .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].locked").value(false))
                 .andExpect(jsonPath("$.data[?(@.loginId=='LISTE')].roles.length()").value(2));
