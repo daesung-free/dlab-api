@@ -107,6 +107,33 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
                          String rejectReason);
 
     /**
+     * <b>승인된 건을 되돌린다</b>(직원 철회).
+     *
+     * <p>승인 전 취소와 다르다 — 그쪽은 신청자가 스스로 거두는 것이고, 이쪽은
+     * <b>이미 승인이 난 뒤에 직원이 판단해서</b> 무르는 것이다.
+     *
+     * <p><b>학생에게 이 경로를 주지 않는다.</b> 사유 신청은 승인되면 그 시간 결석·조퇴가
+     * 무단이 아니게 되어 벌점을 면한다 — 학생이 직접 되돌릴 수 있으면
+     * <b>승인만 받고 취소해 벌점을 피하는 길</b>이 생긴다.
+     *
+     * <p>{@code APPROVED}일 때만 걸린다. 반려·이미 철회된 건을 또 되돌릴 수는 없다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ApprovalRequest r
+               SET r.status          = com.dlab.domain.approval.entity.ApprovalStatus.CANCELED,
+                   r.resolvedAt      = :revokedAt,
+                   r.resolverType    = :resolverType,
+                   r.resolverAccount = :resolver,
+                   r.rejectReason    = :reason,
+                   r.updatedAt       = :revokedAt
+             WHERE r.id = :id
+               AND r.status = com.dlab.domain.approval.entity.ApprovalStatus.APPROVED
+            """)
+    int revokeIfApproved(Long id, Instant revokedAt, ApproverType resolverType,
+                         Account resolver, String reason);
+
+    /**
      * 자동 재승인 요청 대상 — 학부모 우선인데 타임아웃이 지나도록 무응답이고 아직 안 보낸 건.
      *
      * <p>{@code reminder_sent_at IS NULL}이 <b>"1회만"의 실제 보장</b>이다.
