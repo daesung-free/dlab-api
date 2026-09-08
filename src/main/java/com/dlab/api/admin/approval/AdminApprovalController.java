@@ -67,4 +67,35 @@ public class AdminApprovalController {
         return ApiResponse.success(ApprovalResponse.from(
                 approvalService.reject(id, principal.accountId(), request.reason())));
     }
+
+    /**
+     * 승인 철회 — <b>승인된 건을 되돌린다</b>.
+     *
+     * <p>앱의 취소({@code DELETE /app/.../absence-reasons/{id}})와 다르다.
+     * 그쪽은 <b>승인 전까지만</b> 되고 신청자가 스스로 거두는 것이다.
+     *
+     * <p><b>학생에게 이 경로를 주지 않는다.</b> 사유 신청이 승인되면 그 시간 결석·조퇴가
+     * 무단이 아니게 되어 벌점을 면하는데, 학생이 직접 되돌릴 수 있으면
+     * <b>승인만 받고 취소해서 벌점을 피하는 길</b>이 생긴다.
+     *
+     * <p>그리고 취소 사유에 따라 옳은 결과가 반대다 — "병원에 안 가게 됐다"면 정상
+     * 등원이니 벌점이 없는 게 맞고, "잘못 신청했다"면 원래 무단이라 붙는 게 맞다.
+     * 사람이 판단해야 하는 자리다.
+     *
+     * <p><b>사유는 필수</b>다. 승인을 되돌린 기록에 이유가 없으면 나중에 "왜 무른 거냐"에
+     * 답할 수 없다.
+     */
+    @PostMapping("/{id}/revoke")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER')")
+    public ApiResponse<Void> revoke(@CurrentAccount AuthPrincipal principal,
+                                    @PathVariable Long id,
+                                    @Valid @RequestBody RevokeRequest request) {
+        approvalService.revoke(id, principal, request.reason());
+        return ApiResponse.empty();
+    }
+
+    public record RevokeRequest(
+            @jakarta.validation.constraints.NotBlank(message = "철회 사유는 필수입니다.")
+            @jakarta.validation.constraints.Size(max = 200) String reason) {
+    }
 }

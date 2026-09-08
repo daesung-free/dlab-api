@@ -313,4 +313,67 @@ class PrimaryApproverFlowTest {
         assertThat(requestRepository.findReminderTargets(
                 Instant.now(clock).plus(1, ChronoUnit.HOURS))).isEmpty();
     }
+
+    // ── 승인 철회 (앱 시안 p4 · 3) ────────────────────────────
+
+    @Test
+    @DisplayName("★★ 승인된 건을 직원이 되돌린다 — 학생이 못 하는 이유는 벌점 회피 때문이다")
+    void staffRevokesApproved() {
+        ApprovalRequest r = request();
+        approvalService.approve(r.getId(), guardianAccount.getId());
+        em.flush();
+        em.clear();
+
+        approvalService.revoke(r.getId(), staffPrincipal(), "학생이 정상 등원함");
+        em.flush();
+        em.clear();
+
+        ApprovalRequest after = requestRepository.findById(r.getId()).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ApprovalStatus.CANCELED);
+        assertThat(after.getRejectReason()).isEqualTo("학생이 정상 등원함");
+        // 신청자 취소와 갈리는 지점 — 그쪽은 이 자리가 비어 있다
+        assertThat(after.getResolverAccount()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("★ 대기중인 건은 철회가 아니라 반려다 — 승인된 것만 되돌린다")
+    void pendingCannotBeRevoked() {
+        ApprovalRequest r = request();
+        em.flush();
+
+        assertThatThrownBy(() -> approvalService.revoke(r.getId(), staffPrincipal(), "사유"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("★ 사유 없이는 철회할 수 없다 — 나중에 \"왜 무른 거냐\"에 답해야 한다")
+    void revokeRequiresReason() {
+        ApprovalRequest r = request();
+        approvalService.approve(r.getId(), guardianAccount.getId());
+        em.flush();
+
+        assertThatThrownBy(() -> approvalService.revoke(r.getId(), staffPrincipal(), "  "))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("다른 지점 건은 철회하지 못한다")
+    void cannotRevokeOtherAcademy() {
+        ApprovalRequest r = request();
+        approvalService.approve(r.getId(), guardianAccount.getId());
+        em.flush();
+
+        var other = com.dlab.common.security.AuthPrincipal.of(
+                teacherAccount.getId(), "TEACHER", academy.getId() + 999,
+                java.util.List.of(com.dlab.common.security.Role.BRANCH_ADMIN), false);
+
+        assertThatThrownBy(() -> approvalService.revoke(r.getId(), other, "사유"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    private com.dlab.common.security.AuthPrincipal staffPrincipal() {
+        return com.dlab.common.security.AuthPrincipal.of(
+                teacherAccount.getId(), "TEACHER", academy.getId(),
+                java.util.List.of(com.dlab.common.security.Role.TEACHER), false);
+    }
 }

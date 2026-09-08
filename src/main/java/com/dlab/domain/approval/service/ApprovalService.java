@@ -3,6 +3,7 @@ package com.dlab.domain.approval.service;
 import com.dlab.common.config.TimeConfig;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
+import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.approval.entity.*;
 import com.dlab.domain.approval.repository.ApprovalItemRepository;
 import com.dlab.domain.approval.repository.ApproverPreferenceRepository;
@@ -268,6 +269,51 @@ public class ApprovalService {
             throw new BusinessException(ErrorCode.APPROVAL_ALREADY_PROCESSED);
         }
         log.info("승인 요청 신청자 취소: requestId={}", requestId);
+    }
+
+    /**
+     * 승인 철회 — <b>직원이 승인된 건을 되돌린다</b>.
+     *
+     * <p><b>학생에게 이 경로를 주지 않는 이유.</b> 사유 신청은 승인되면 그 시간 결석·조퇴가
+     * 무단이 아니게 되어 벌점을 면한다. 학생이 직접 되돌릴 수 있으면 <b>승인만 받고
+     * 취소해서 벌점을 피하는 길</b>이 생긴다 — 결석은 그대로인데 벌점만 사라진다.
+     *
+     * <p>그리고 <b>취소 사유에 따라 옳은 결과가 반대</b>다. "병원에 안 가게 됐다"면 정상
+     * 등원이니 벌점이 없는 게 맞고, "잘못 신청했다"면 원래 무단이라 붙는 게 맞다.
+     * 사람이 판단해야 하는 자리라 직원 경로로 둔다.
+     *
+     * <p><b>사유를 필수로 받는다.</b> 승인을 되돌린 기록에 이유가 없으면 나중에
+     * "왜 무른 거냐"에 답할 수 없다 — 학생·학부모와 다툼이 생기는 지점이다.
+     *
+     * <p>{@code CANCELED}로 남기되 <b>{@code resolverAccount}를 채운다</b> —
+     * 신청자 취소({@link #cancelByRequester})는 그 자리가 비어 있어, 같은 상태값이라도
+     * "누가 거뒀는지"로 갈린다.
+     */
+    @Transactional
+    public void revoke(Long requestId, AuthPrincipal me, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "철회 사유는 필수입니다.");
+        }
+        ApprovalRequest request = approvalRequestRepository.findById(requestId)
+                .filter(r -> !r.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
+                        "승인 요청을 찾을 수 없습니다."));
+        if (!me.canAccessAcademy(request.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+
+        Account actor = accountRepository.findById(me.accountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+
+        int updated = approvalRequestRepository.revokeIfApproved(
+                requestId, Instant.now(clock), ApproverType.TEACHER, actor, reason);
+        if (updated == 0) {
+            // 승인된 건이 아니다 — 대기중이면 반려를, 이미 철회됐으면 아무것도 하지 않는다
+            throw new BusinessException(ErrorCode.APPROVAL_ALREADY_PROCESSED,
+                    "승인된 요청만 철회할 수 있습니다.");
+        }
+
+        log.info("승인 철회: requestId={}, 처리자={}, 사유={}", requestId, me.accountId(), reason);
     }
 
     /** 담당선생님은 반 배정 → 반 담임으로 자동 결정된다. 미배정이거나 담임 미지정이면 null. */
