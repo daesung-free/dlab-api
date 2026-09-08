@@ -59,6 +59,8 @@ docs/*
 # 공유용 문서만 예외로 추적
 !docs/roadmap.md
 !docs/entity-design.md
+# 발주 확인용 — 확정되면 화면·서버 권한이 이 표와 1:1로 맞춰진다
+!docs/permission-matrix.md
 # 구현 현황 — status.md 는 scripts/status-report.py 가 뽑고, notes 는 손으로 적는다.
 # 생성물이지만 커밋한다 — 스크립트를 돌리지 않는 사람도 표를 봐야 한다.
 !docs/status.md
