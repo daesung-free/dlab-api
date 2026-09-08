@@ -73,6 +73,20 @@ public class Lecture extends BaseEntity {
     @Column(nullable = false)
     private int fee = 0;
 
+    /**
+     * 특강 유형 — 단과 · 실전 · 해설 …
+     *
+     * <p><b>{@code null}이 정상이다.</b> 유형이 하나도 등록되지 않은 상태에서도 특강을
+     * 열 수 있어야 한다 — 필수로 걸면 마스터를 채우기 전까지 개설이 막힌다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private LectureCategory category;
+
+    public void changeCategory(LectureCategory category) {
+        this.category = category;
+    }
+
     /** 선택. 이름이 바뀌어도 유지되는 키다 — 지점·연도 안에서 유일하다. */
     @Column(length = 30)
     private String code;

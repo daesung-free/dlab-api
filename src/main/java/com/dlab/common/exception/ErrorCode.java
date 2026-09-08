@@ -101,6 +101,7 @@ public enum ErrorCode {
     LECTURE_ALREADY_APPLIED(HttpStatus.CONFLICT, "이미 신청한 특강입니다."),
     LECTURE_ALREADY_CANCELED(HttpStatus.CONFLICT, "이미 취소된 신청입니다."),
     LECTURE_CAPACITY_BELOW_CONFIRMED(HttpStatus.BAD_REQUEST, "확정 인원보다 적은 정원으로 줄일 수 없습니다."),
+    LECTURE_CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "특강 유형을 찾을 수 없습니다."),
 
     // 질의응답 대면 (F-4.11-7 · A-13)
     QNA_SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "상담 타임을 찾을 수 없습니다."),

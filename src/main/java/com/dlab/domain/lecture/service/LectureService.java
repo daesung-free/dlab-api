@@ -38,6 +38,7 @@ public class LectureService {
     private final LectureSessionRepository sessionRepository;
     private final LectureApplicationRepository applicationRepository;
     private final LectureAttendanceRepository attendanceRepository;
+    private final com.dlab.domain.lecture.repository.LectureCategoryRepository categoryRepository;
     private final AcademyRepository academyRepository;
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
     private final com.dlab.domain.user.repository.TeacherRepository teacherRepository;
@@ -61,11 +62,14 @@ public class LectureService {
 
     @Transactional
     public Lecture create(Long academyId, short year, LectureType type, String name,
-                          AuthPrincipal principal) {
+                          Long categoryId, AuthPrincipal principal) {
         verifyAccess(academyId, principal);
         Academy academy = academyRepository.findById(academyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
         Lecture lecture = lectureRepository.save(new Lecture(academy, year, type, name));
+        if (categoryId != null) {
+            lecture.changeCategory(requireCategory(categoryId, academyId));
+        }
         log.info("특강 생성: id={}, name={}", lecture.getId(), name);
         return lecture;
     }
@@ -92,7 +96,7 @@ public class LectureService {
     public Lecture update(Long lectureId, String name, String code,
                           String description, Integer capacity,
                           Instant applyFrom, Instant applyTo, LocalDate startDate,
-                          LocalDate endDate, Integer fee, Long teacherId,
+                          LocalDate endDate, Integer fee, Long teacherId, Long categoryId,
                           AuthPrincipal principal) {
         Lecture lecture = require(lectureId, principal);
         // ★ 정원을 현재 확정 인원보다 낮추지 못하게 막는다.
@@ -115,7 +119,23 @@ public class LectureService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND,
                             "선생님을 찾을 수 없습니다.")));
         }
+        if (categoryId != null) {
+            lecture.changeCategory(requireCategory(categoryId, lecture.getAcademy().getId()));
+        }
         return lecture;
+    }
+
+    /**
+     * 특강 유형 조회.
+     *
+     * <p><b>전 지점 공통({@code academyId is null})도 받는다.</b> 유형 대부분이 공통이고,
+     * 지점 것만 허용하면 지점마다 같은 유형을 다시 만들어야 한다.
+     */
+    private com.dlab.domain.lecture.entity.LectureCategory requireCategory(Long categoryId, Long academyId) {
+        return categoryRepository.findActiveById(categoryId)
+                .filter(c -> c.getAcademy() == null
+                        || c.getAcademy().getId().equals(academyId))
+                .orElseThrow(() -> new BusinessException(ErrorCode.LECTURE_CATEGORY_NOT_FOUND));
     }
 
     /**

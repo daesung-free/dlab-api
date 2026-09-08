@@ -104,6 +104,65 @@ class LectureFlowTest {
         return token(phone, "/api/v1/app/auth/login");
     }
 
+    @Test
+    @DisplayName("특강 유형은 관리자가 추가하고, 특강에 붙였다 바꿀 수 있다")
+    void lectureCategory() throws Exception {
+        String token = adminToken();
+
+        // 유형 두 개를 만든다 — 단과·실전이 고정값이 아니라 행이라는 것이 이 기능의 요지다
+        long 단과 = createCategory(token, "단과");
+        long 실전 = createCategory(token, "실전");
+
+        // 등록 시점에 붙인다
+        String body = mvc.perform(post("/api/v1/admin/lectures")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"year":%d,"name":"유형특강","categoryId":%d}"""
+                                .formatted(academyId, YEAR, 단과)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryId").value(단과))
+                .andExpect(jsonPath("$.data.categoryName").value("단과"))
+                .andReturn().getResponse().getContentAsString();
+        long id = objectMapper.readTree(body).path("data").path("id").asLong();
+        em.flush();
+
+        // 나중에 바꿀 수 있다
+        mvc.perform(patch("/api/v1/admin/lectures/{id}", id)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"categoryId":%d}""".formatted(실전)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryName").value("실전"));
+    }
+
+    @Test
+    @DisplayName("유형 없이도 특강을 연다 — 마스터가 비어 있다고 개설이 막히면 안 된다")
+    void lectureWithoutCategory() throws Exception {
+        mvc.perform(post("/api/v1/admin/lectures")
+                        .header("Authorization", adminToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"year":%d,"name":"유형없는특강"}"""
+                                .formatted(academyId, YEAR)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.categoryId").doesNotExist());
+    }
+
+    private long createCategory(String token, String name) throws Exception {
+        String body = mvc.perform(post("/api/v1/admin/lecture-categories")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"year":%d,"name":"%s"}"""
+                                .formatted(academyId, YEAR, name)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        em.flush();
+        return objectMapper.readTree(body).path("data").path("id").asLong();
+    }
+
     /** 특강 생성 → 정원 설정 → OPEN → 노출. 신청 가능한 상태로 만든다. */
     private long openLecture(Integer capacity) throws Exception {
         String token = adminToken();

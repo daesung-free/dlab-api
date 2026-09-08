@@ -50,7 +50,7 @@ public class AdminLectureController {
             @Valid @RequestBody LectureRequests.LectureCreate request) {
         return ApiResponse.success(LectureResponse.LectureDetail.from(lectureService.create(
                 request.academyId(), request.year().shortValue(),
-                request.lectureType(), request.name(), me)));
+                request.lectureType(), request.name(), request.categoryId(), me)));
     }
 
     /** 특강 수정. 비운 항목은 변경하지 않는다. */
@@ -63,7 +63,7 @@ public class AdminLectureController {
                 lectureId, request.name(), request.code(),
                 request.description(), request.capacity(),
                 request.applyFrom(), request.applyTo(), request.startDate(), request.endDate(),
-                request.fee(), request.teacherId(), me)));
+                request.fee(), request.teacherId(), request.categoryId(), me)));
     }
 
     /**

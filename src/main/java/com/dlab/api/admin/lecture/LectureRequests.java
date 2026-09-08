@@ -19,7 +19,9 @@ public final class LectureRequests {
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") Integer year,
             LectureType lectureType,
-            @NotBlank(message = "특강명은 필수입니다.") @Size(max = 100) String name) {
+            @NotBlank(message = "특강명은 필수입니다.") @Size(max = 100) String name,
+            /** 특강 유형. {@code null}이면 유형 없이 만든다 — 마스터가 비어 있어도 개설은 돼야 한다. */
+            Long categoryId) {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
@@ -34,7 +36,9 @@ public final class LectureRequests {
             LocalDate endDate,
             @PositiveOrZero Integer fee,
             /** 담당 강사. {@code null}은 "변경하지 않음"이라 <b>해제는 이 값으로 못 한다.</b> */
-            Long teacherId) {
+            Long teacherId,
+            /** 특강 유형. 강사와 같은 규칙이다 — {@code null}은 "변경하지 않음". */
+            Long categoryId) {
     }
 
     public record LectureChangeStatus(@NotNull(message = "상태는 필수입니다.") LectureStatus status) {
