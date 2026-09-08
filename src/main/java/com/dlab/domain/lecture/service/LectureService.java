@@ -62,13 +62,33 @@ public class LectureService {
 
     @Transactional
     public Lecture create(Long academyId, short year, LectureType type, String name,
-                          AuthPrincipal principal) {
+                          Long categoryId, AuthPrincipal principal) {
         verifyAccess(academyId, principal);
         Academy academy = academyRepository.findById(academyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
         Lecture lecture = lectureRepository.save(new Lecture(academy, year, type, name));
+        if (categoryId != null) {
+            lecture.changeCategory(resolveCategory(categoryId, academyId));
+        }
         log.info("특강 생성: id={}, name={}", lecture.getId(), name);
         return lecture;
+    }
+
+    /**
+     * 유형 조회 + 그 지점에서 쓸 수 있는지 확인.
+     *
+     * <p>확인하지 않으면 <b>id 만 바꿔 보내 다른 지점 유형을 붙일 수 있다</b>
+     * (사유 카테고리와 같은 규칙). 전 지점 공통은 어느 지점이든 쓴다.
+     */
+    private com.dlab.domain.lecture.entity.LectureCategory resolveCategory(
+            Long categoryId, Long academyId) {
+        var category = categoryRepository.findActiveById(categoryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "특강 유형을 찾을 수 없습니다."));
+        if (!category.isCommon() && !category.getAcademy().getId().equals(academyId)) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        return category;
     }
 
     @Transactional(readOnly = true)
@@ -109,18 +129,8 @@ public class LectureService {
         lecture.update(name, code, description, capacity, applyFrom, applyTo,
                 startDate, endDate, fee);
 
-        // 유형은 그 지점에서 쓸 수 있는 것인지 확인한다 — 안 그러면 id 를 바꿔
-        // 다른 지점 유형이 붙는다(사유 카테고리와 같은 규칙)
         if (categoryId != null) {
-            var category = categoryRepository.findActiveById(categoryId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
-                            "특강 유형을 찾을 수 없습니다."));
-            boolean usable = category.isCommon()
-                    || category.getAcademy().getId().equals(lecture.getAcademy().getId());
-            if (!usable) {
-                throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
-            }
-            lecture.changeCategory(category);
+            lecture.changeCategory(resolveCategory(categoryId, lecture.getAcademy().getId()));
         }
         if (teacherId != null) {
             lecture.changeTeacher(teacherRepository.findById(teacherId)
