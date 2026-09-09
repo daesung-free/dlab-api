@@ -37,6 +37,20 @@ public class AdminAuthController {
                 authService.login(request.loginId(), request.password())));
     }
 
+    /**
+     * 로그인한 사람이 누구인가.
+     *
+     * <p>헤더에 이름을 띄우고 역할로 메뉴를 가르는 데 쓴다. <b>토큰만으로는 안 된다</b> —
+     * JWT 에는 {@code accountId}·역할·지점 id 뿐이라 이름이 없고, 넣더라도 개명 시 낡는다.
+     *
+     * <p>{@code academyId} 가 비어 있으면 전 지점 권한자다 — 화면이 이 값으로
+     * 지점 선택을 고정할지 열지 정한다.
+     */
+    @GetMapping("/me")
+    public ApiResponse<AuthService.Me> me(@CurrentAccount AuthPrincipal principal) {
+        return ApiResponse.success(authService.me(principal.accountId()));
+    }
+
     /** 액세스 토큰 재발급. Refresh Token은 Redis에 있다. */
     @PostMapping("/refresh")
     public ApiResponse<AuthResponse> refresh(@Valid @RequestBody AuthRequests.Refresh request) {
