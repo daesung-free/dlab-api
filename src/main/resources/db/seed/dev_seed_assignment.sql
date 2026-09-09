@@ -11,14 +11,14 @@
 --     전원을 배정해버리면 그 화면을 확인할 수 없다.
 --   · **빈 좌석·빈 사물함을 남긴다** — 배정 UI 를 눌러볼 수 있어야 한다.
 --
--- 멱등이다. 대상 지점은 분당(academy_id = 8)이고 dev_seed.sql 과 같다.
+-- 멱등이다. 대상 지점은 분당(academy_id = (SELECT id FROM academy WHERE acad_cd = '31'))이고 dev_seed.sql 과 같다.
 
 BEGIN;
 
 -- ── 담임 교사 ─────────────────────────────────────────────
 -- 반에 담임이 없으면 화면이 전부 '미지정'으로 나온다.
 INSERT INTO teacher (academy_id, name, phone, email, hired_date)
-SELECT 8, v.name, v.phone, v.email, DATE '2026-01-02'
+SELECT (SELECT id FROM academy WHERE acad_cd = '31'), v.name, v.phone, v.email, DATE '2026-01-02'
 FROM (VALUES
     ('김담임', '010-1000-0001', 'teacher1@dlab.local'),
     ('이담임', '010-1000-0002', 'teacher2@dlab.local'),
@@ -29,7 +29,7 @@ WHERE NOT EXISTS (SELECT 1 FROM teacher t WHERE t.email = v.email);
 -- ── 반 4개 ────────────────────────────────────────────────
 -- ★ 4번 반은 담임을 비워 둔다 — '미지정' 표시를 화면에서 확인할 수 있어야 한다.
 INSERT INTO class_master (academy_id, year, name, class_type, capacity, homeroom_teacher_id)
-SELECT 8, 2026, v.name, 'FIXED', v.capacity,
+SELECT (SELECT id FROM academy WHERE acad_cd = '31'), 2026, v.name, 'FIXED', v.capacity,
        (SELECT t.id FROM teacher t WHERE t.email = v.teacher_email)
 FROM (VALUES
     ('N수 1반', 14::smallint, 'teacher1@dlab.local'),
@@ -39,7 +39,7 @@ FROM (VALUES
 ) AS v(name, capacity, teacher_email)
 WHERE NOT EXISTS (
     SELECT 1 FROM class_master c
-    WHERE c.academy_id = 8 AND c.year = 2026 AND c.name = v.name AND c.is_deleted = FALSE);
+    WHERE c.academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND c.year = 2026 AND c.name = v.name AND c.is_deleted = FALSE);
 
 -- ── 반 배정 ───────────────────────────────────────────────
 -- ★ 분당 학생 20명 중 12명만 배정한다. 나머지 8명은 미배정으로 남는다.
@@ -47,12 +47,12 @@ WHERE NOT EXISTS (
 WITH target AS (
     SELECT e.id, row_number() OVER (ORDER BY e.student_no) AS rn
     FROM student_enrollment e
-    WHERE e.academy_id = 8 AND e.year = 2026 AND e.is_current = TRUE AND e.is_deleted = FALSE
+    WHERE e.academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND e.year = 2026 AND e.is_current = TRUE AND e.is_deleted = FALSE
 ),
 mapped AS (
     SELECT t.id AS enrollment_id,
            (SELECT c.id FROM class_master c
-             WHERE c.academy_id = 8 AND c.year = 2026 AND c.is_deleted = FALSE
+             WHERE c.academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND c.year = 2026 AND c.is_deleted = FALSE
                AND c.name = CASE
                      WHEN t.rn <= 5  THEN 'N수 1반'
                      WHEN t.rn <= 9  THEN 'N수 2반'
@@ -62,7 +62,7 @@ mapped AS (
     WHERE t.rn <= 12
 )
 INSERT INTO class_assignment (academy_id, enrollment_id, class_id, class_type, assigned_at, is_active)
-SELECT 8, m.enrollment_id, m.class_id, 'FIXED', now(), TRUE
+SELECT (SELECT id FROM academy WHERE acad_cd = '31'), m.enrollment_id, m.class_id, 'FIXED', now(), TRUE
 FROM mapped m
 WHERE m.class_id IS NOT NULL
   AND NOT EXISTS (
@@ -72,21 +72,21 @@ WHERE m.class_id IS NOT NULL
 -- ── 사물함 12칸 ───────────────────────────────────────────
 -- 6칸만 배정하고 나머지는 비워 둔다.
 INSERT INTO locker_master (academy_id, locker_no)
-SELECT 8, v.no
+SELECT (SELECT id FROM academy WHERE acad_cd = '31'), v.no
 FROM (VALUES ('A-01'),('A-02'),('A-03'),('A-04'),('A-05'),('A-06'),
              ('B-01'),('B-02'),('B-03'),('B-04'),('B-05'),('B-06')) AS v(no)
 WHERE NOT EXISTS (
-    SELECT 1 FROM locker_master l WHERE l.academy_id = 8 AND l.locker_no = v.no);
+    SELECT 1 FROM locker_master l WHERE l.academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND l.locker_no = v.no);
 
 WITH free_locker AS (
     SELECT id, row_number() OVER (ORDER BY locker_no) AS rn
     FROM locker_master
-    WHERE academy_id = 8 AND assigned_enrollment_id IS NULL AND is_deleted = FALSE
+    WHERE academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND assigned_enrollment_id IS NULL AND is_deleted = FALSE
 ),
 target AS (
     SELECT id, row_number() OVER (ORDER BY student_no) AS rn
     FROM student_enrollment
-    WHERE academy_id = 8 AND year = 2026 AND is_current = TRUE AND is_deleted = FALSE
+    WHERE academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND year = 2026 AND is_current = TRUE AND is_deleted = FALSE
       AND id NOT IN (SELECT assigned_enrollment_id FROM locker_master
                       WHERE assigned_enrollment_id IS NOT NULL)
 ),
@@ -96,7 +96,7 @@ pair AS (
     SELECT f.id AS locker_id, t.id AS enrollment_id, f.rn
     FROM free_locker f JOIN target t ON t.rn = f.rn
     WHERE f.rn <= GREATEST(0, 6 - (SELECT count(*) FROM locker_master
-                                    WHERE academy_id = 8 AND assigned_enrollment_id IS NOT NULL))
+                                    WHERE academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND assigned_enrollment_id IS NOT NULL))
 )
 UPDATE locker_master l
    SET assigned_enrollment_id = p.enrollment_id
@@ -108,14 +108,14 @@ UPDATE locker_master l
 --   좌석을 쓰는 화면이 3개(배정 관리·좌석배치표·좌석 이탈)라 시드로라도 넣어 둔다.
 --   area_cd 는 키오스크 계약이 쓰는 값이라 DSA 표기(A/B)를 따른다.
 INSERT INTO study_area (academy_id, area_cd, area_nm, sort_order, active)
-SELECT 8, v.cd, v.nm, v.ord, TRUE
+SELECT (SELECT id FROM academy WHERE acad_cd = '31'), v.cd, v.nm, v.ord, TRUE
 FROM (VALUES ('A', 'A구역', 1::smallint), ('B', 'B구역', 2::smallint)) AS v(cd, nm, ord)
 WHERE NOT EXISTS (
-    SELECT 1 FROM study_area s WHERE s.academy_id = 8 AND s.area_cd = v.cd);
+    SELECT 1 FROM study_area s WHERE s.academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND s.area_cd = v.cd);
 
 -- 구역당 20석(4행 × 5열). 좌표는 배치도 그리기용이다.
 INSERT INTO seat_master (academy_id, study_area_id, seat_cd, seat_nm, x_pos, y_pos, usable)
-SELECT 8, s.id,
+SELECT (SELECT id FROM academy WHERE acad_cd = '31'), s.id,
        s.area_cd || lpad(g.n::text, 2, '0'),
        s.area_cd || '-' || lpad(g.n::text, 2, '0'),
        ((g.n - 1) % 5) + 1,
@@ -123,23 +123,23 @@ SELECT 8, s.id,
        TRUE
 FROM study_area s
 CROSS JOIN generate_series(1, 20) AS g(n)
-WHERE s.academy_id = 8
+WHERE s.academy_id = (SELECT id FROM academy WHERE acad_cd = '31')
   AND NOT EXISTS (
     SELECT 1 FROM seat_master m
-    WHERE m.academy_id = 8 AND m.seat_cd = s.area_cd || lpad(g.n::text, 2, '0'));
+    WHERE m.academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND m.seat_cd = s.area_cd || lpad(g.n::text, 2, '0'));
 
 -- 좌석 배정 8석. 나머지는 비워 둔다.
 WITH pair AS (
     SELECT m.id AS seat_id, e.id AS enrollment_id
     FROM (SELECT id, row_number() OVER (ORDER BY seat_cd) AS rn
-            FROM seat_master WHERE academy_id = 8) m
+            FROM seat_master WHERE academy_id = (SELECT id FROM academy WHERE acad_cd = '31')) m
     JOIN (SELECT id, row_number() OVER (ORDER BY student_no) AS rn
             FROM student_enrollment
-           WHERE academy_id = 8 AND year = 2026 AND is_current = TRUE) e ON e.rn = m.rn
+           WHERE academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND year = 2026 AND is_current = TRUE) e ON e.rn = m.rn
     WHERE m.rn <= 8
 )
 INSERT INTO seat_assignment (academy_id, seat_id, enrollment_id, assigned_at)
-SELECT 8, p.seat_id, p.enrollment_id, now()
+SELECT (SELECT id FROM academy WHERE acad_cd = '31'), p.seat_id, p.enrollment_id, now()
 FROM pair p
 WHERE NOT EXISTS (
     SELECT 1 FROM seat_assignment a
@@ -169,10 +169,10 @@ UPDATE student SET address = '경기도 성남시 분당구'
 WITH target AS (
     SELECT e.id, row_number() OVER (ORDER BY e.student_no) AS rn
     FROM student_enrollment e
-    WHERE e.academy_id = 8 AND e.year = 2026 AND e.is_current = TRUE AND e.is_deleted = FALSE
+    WHERE e.academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND e.year = 2026 AND e.is_current = TRUE AND e.is_deleted = FALSE
 )
 INSERT INTO scholarship (academy_id, enrollment_id, scholarship_type, discount_rate)
-SELECT 8, t.id,
+SELECT (SELECT id FROM academy WHERE acad_cd = '31'), t.id,
        CASE t.rn WHEN 1 THEN 'CSAT_100' WHEN 2 THEN 'CSAT_50'
                  WHEN 3 THEN 'KICE_50'  WHEN 4 THEN 'KICE_30'
                  ELSE 'NASIN_50' END,
