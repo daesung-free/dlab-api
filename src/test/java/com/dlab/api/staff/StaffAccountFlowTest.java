@@ -92,6 +92,41 @@ class StaffAccountFlowTest {
     }
 
     @Test
+    @DisplayName("★ /auth/me — 권한이 낮아도 자기가 누구인지는 읽을 수 있어야 한다")
+    void authMe() throws Exception {
+        // 헤더에 이름을 띄우는 용도라 모든 역할이 부를 수 있어야 한다.
+        // /app/me 는 학생·학부모 전용이고 /staff/accounts 는 조회 권한이 필요해서,
+        // 이게 없으면 TEACHER·STAFF·READONLY 는 자기 이름조차 못 읽는다
+        mvc.perform(get("/api/v1/admin/auth/me").header("Authorization", token("SFADM")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.loginId").value("SFADM"))
+                .andExpect(jsonPath("$.data.name").value("지점관리자"))
+                .andExpect(jsonPath("$.data.roles[0]").value("BRANCH_ADMIN"))
+                .andExpect(jsonPath("$.data.academyId").value(academyId))
+                .andExpect(jsonPath("$.data.academyName").value("직원테스트지점"))
+                .andExpect(jsonPath("$.data.mustChangePassword").value(false));
+
+        // 조회 전용 계정도 자기 정보는 읽는다
+        Employee viewer = new Employee(em.find(Academy.class, academyId), "조회전용");
+        em.persist(viewer);
+        Account viewerAccount = Account.forEmployee(
+                viewer, "SFVIEW", passwordEncoder.encode(PASSWORD), false);
+        em.persist(viewerAccount);
+        em.flush();
+        grantRole(viewerAccount.getId(), "READONLY");
+
+        mvc.perform(get("/api/v1/admin/auth/me").header("Authorization", token("SFVIEW")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("조회전용"))
+                .andExpect(jsonPath("$.data.roles[0]").value("READONLY"));
+
+        // 토큰이 없으면 401 — auth/** 가 permitAll 이라 여기만 따로 막아뒀다.
+        // 안 막으면 principal 이 null 로 들어와 500 이 난다
+        mvc.perform(get("/api/v1/admin/auth/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("★ 지점이 만든 계정은 승인 전까지 로그인이 막힌다 — 본사가 승인해야 열린다")
     void branchCreatedAccountNeedsApproval() throws Exception {
         // 비밀번호는 서버가 만들어 응답으로 딱 한 번 돌려준다 —

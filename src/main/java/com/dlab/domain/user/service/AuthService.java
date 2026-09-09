@@ -1,5 +1,6 @@
 package com.dlab.domain.user.service;
 
+import com.dlab.domain.user.entity.Academy;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.*;
@@ -96,6 +97,55 @@ public class AuthService {
         loginAttemptStore.clear(loginId);
         account.recordLogin(Instant.now(clock));
         return issue(account);
+    }
+
+    /**
+     * 로그인한 사람이 누구인가 (관리자 웹 헤더 · 메뉴 구성).
+     *
+     * <p><b>토큰만으로는 답이 안 나온다.</b> JWT 에는 {@code accountId}·역할·지점 id 만 있어
+     * 이름을 넣으려면 개명할 때마다 토큰이 낡는다. 그래서 매번 조회한다.
+     *
+     * <p>다른 경로로는 대신할 수 없다 — {@code /app/me} 는 학생·학부모 전용이고,
+     * {@code /staff/accounts} 는 TEACHER·STAFF·READONLY 에게 막혀 <b>자기 이름조차 못 읽는다.</b>
+     *
+     * <p>{@code academyId} 가 {@code null} 이면 전 지점 권한자다 — 화면이 이 값으로
+     * <b>지점 선택을 고정할지 열지</b> 정한다.
+     */
+    @Transactional(readOnly = true)
+    public Me me(Long accountId) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        // 이름·지점은 사람 쪽에 있다. 직원과 선생님이 다른 테이블인 건
+        // 반 담임·승인 에스컬레이션 FK 가 "담당선생님 보장"이 되게 하기 위해서다
+        String name = null;
+        Academy academy = null;
+        if (account.getEmployee() != null) {
+            name = account.getEmployee().getName();
+            academy = account.getEmployee().getAcademy();
+        } else if (account.getTeacher() != null) {
+            name = account.getTeacher().getName();
+            academy = account.getTeacher().getAcademy();
+        }
+
+        return new Me(
+                account.getId(),
+                account.getLoginId(),
+                name,
+                account.getAccountType().name(),
+                accountRoleRepository.findRoleNamesByAccountId(accountId),
+                academy == null ? null : academy.getId(),
+                academy == null ? null : academy.getAcadNm(),
+                account.isMustChangePassword());
+    }
+
+    /**
+     * @param academyId 전 지점 권한자는 비어 있다
+     * @param name      계정에 사람이 안 붙어 있으면 비어 있다 — 시스템 계정 정도다
+     */
+    public record Me(Long accountId, String loginId, String name, String accountType,
+                     Set<String> roles, Long academyId, String academyName,
+                     boolean mustChangePassword) {
     }
 
     /**
