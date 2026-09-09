@@ -2,6 +2,7 @@ package com.dlab.domain.plan.service;
 
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
+import com.dlab.domain.holiday.entity.Holiday;
 import com.dlab.domain.plan.repository.LearningPlanBoardRepository;
 import com.dlab.domain.plan.repository.LearningPlanBoardRepository.ClassRef;
 import com.dlab.domain.plan.repository.LearningPlanBoardRepository.PlanAggregate;
@@ -46,6 +47,7 @@ public class LearningPlanBoardService {
 
     private final StudentEnrollmentRepository enrollmentRepository;
     private final LearningPlanBoardRepository boardRepository;
+    private final com.dlab.domain.holiday.repository.HolidayRepository holidayRepository;
 
     /**
      * 목록 한 줄.
@@ -57,13 +59,16 @@ public class LearningPlanBoardService {
      * <p><b>{@code completionRate}는 서버가 계산한다.</b> 클라이언트가 나누면 반올림이 갈려
      * 같은 학생의 이행률이 화면마다 다르게 보인다.
      *
-     * @param missingDays 조회 기간 중 계획을 한 줄도 안 쓴 날 수
+     * @param missingDays 계획을 한 줄도 안 쓴 날 수. <b>차단일은 빠진 값</b>이다
+     * @param countedDays 계획을 써야 했던 날 수. 화면이 "3/24일"처럼 분모로 쓴다 —
+     *                    이 값이 없으면 미작성 3이 24일 중 3인지 5일 중 3인지 알 수 없다
      */
     public record BoardRow(Long enrollmentId, String studentNo, String studentName,
                            Long classId, String className,
+                           Long homeroomTeacherId, String homeroomTeacherName,
                            int plannedMinutes, int doneMinutes, int completionRate,
                            long totalItems, long doneItems,
-                           long plannedDays, long missingDays) {
+                           long plannedDays, long missingDays, long countedDays) {
     }
 
     /**
@@ -103,7 +108,7 @@ public class LearningPlanBoardService {
      */
     public Page<BoardRow> board(Long academyId, LocalDate from, LocalDate to,
                                 Long classId, Pageable pageable) {
-        long days = rangeDays(from, to);
+        long days = countedDays(academyId, from, to);
 
         Map<Long, ClassRef> classes = boardRepository.fixedClasses(academyId);
         Map<Long, PlanAggregate> aggregates = boardRepository.aggregate(academyId, from, to);
@@ -120,6 +125,27 @@ public class LearningPlanBoardService {
         return page(rows, pageable);
     }
 
+    /**
+     * 계획을 써야 하는 날 수.
+     *
+     * <p><b>달력 일수가 아니다.</b> 그대로 세면 휴원일마다 전교생이 미작성자로 잡혀
+     * 경고가 무의미해진다 — 이 화면은 손이 필요한 학생을 찾는 곳이다.
+     *
+     * <p>빼는 날은 {@code holiday.plan_excluded}로 등록된 날뿐이다. <b>공휴일을
+     * 그대로 빼지 않는다</b> — 이 학원은 법정공휴일에도 운영하므로, 그러면 운영한 날의
+     * 미작성이 통째로 사라진다("급식 쉬는 날"과 "계획을 안 써도 되는 날"은 다른 개념이다).
+     *
+     * <p>등록된 날이 없으면 달력 일수와 같다 — 켜기 전까지는 종전과 값이 같다.
+     */
+    private long countedDays(Long academyId, LocalDate from, LocalDate to) {
+        long excluded = holidayRepository.findInRange(academyId, from, to).stream()
+                .filter(Holiday::isPlanExcluded)
+                .map(Holiday::getHolidayDate)
+                .distinct()
+                .count();
+        return Math.max(0, rangeDays(from, to) - excluded);
+    }
+
     private BoardRow toRow(StudentEnrollment enrollment, ClassRef clazz,
                            PlanAggregate aggregate, long days) {
         return new BoardRow(
@@ -128,13 +154,16 @@ public class LearningPlanBoardService {
                 enrollment.getStudent().getName(),
                 clazz == null ? null : clazz.id(),
                 clazz == null ? null : clazz.name(),
+                clazz == null ? null : clazz.homeroomTeacherId(),
+                clazz == null ? null : clazz.homeroomTeacherName(),
                 aggregate.plannedMinutes(),
                 aggregate.doneMinutes(),
                 completionRate(aggregate),
                 aggregate.totalItems(),
                 aggregate.doneItems(),
                 aggregate.plannedDays(),
-                days - aggregate.plannedDays());
+                Math.max(0, days - aggregate.plannedDays()),
+                days);
     }
 
     /**

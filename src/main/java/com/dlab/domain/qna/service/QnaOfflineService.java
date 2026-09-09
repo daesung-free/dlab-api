@@ -46,6 +46,7 @@ public class QnaOfflineService {
     private final AcademyRepository academyRepository;
     private final TeacherRepository teacherRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
     private final Clock clock;
 
     /**
@@ -53,11 +54,26 @@ public class QnaOfflineService {
      *
      * @param reserved 유효 예약 수. 정원과 비교해 앱이 "마감"을 표시한다
      */
+    /**
+     * @param classNames 예약자 등록ID → 반 이름. <b>앱 응답에서는 비어 있다</b>
+     *                   (남의 예약 자체가 안 내려간다). 담당 교사가 "어느 반 누가
+     *                   물어보는지"를 목록에서 훑는 화면이라 관리자 쪽에만 채운다
+     */
     public record SlotView(QnaOfflineSlot slot, long reserved,
-                           List<QnaOfflineReservation> reservations) {
+                           List<QnaOfflineReservation> reservations,
+                           Map<Long, String> classNames) {
+
+        public SlotView(QnaOfflineSlot slot, long reserved,
+                        List<QnaOfflineReservation> reservations) {
+            this(slot, reserved, reservations, Map.of());
+        }
 
         public boolean isFull() {
             return reserved >= slot.getCapacity();
+        }
+
+        public String classNameOf(QnaOfflineReservation r) {
+            return classNames.get(r.getEnrollment().getId());
         }
     }
 
@@ -116,23 +132,60 @@ public class QnaOfflineService {
     public List<SlotView> slotsWithReservations(Long academyId, LocalDate date,
                                                 AuthPrincipal principal) {
         verifyAccess(academyId, principal);
-        List<QnaOfflineSlot> slots = slotRepository.findByDate(academyId, date);
+        return withReservations(slotRepository.findByDate(academyId, date));
+    }
+
+    /**
+     * 기간 슬롯 + 예약 현황.
+     *
+     * <p>화면이 <b>주간 그리드</b>라 하루씩 부르면 5회가 매번 나간다. 예약은 슬롯 ID를
+     * 모아 한 번에 읽으므로, 기간이 늘어도 쿼리는 2개로 고정된다.
+     */
+    @Transactional(readOnly = true)
+    public List<SlotView> slotsWithReservations(Long academyId, LocalDate from, LocalDate to,
+                                                AuthPrincipal principal) {
+        verifyAccess(academyId, principal);
+        if (to.isBefore(from)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "종료일이 시작일보다 빠릅니다.");
+        }
+        if (from.plusDays(MAX_RANGE_DAYS).isBefore(to)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "조회 기간은 최대 %d일입니다.".formatted(MAX_RANGE_DAYS));
+        }
+        return withReservations(slotRepository.findByDateRange(academyId, from, to));
+    }
+
+    private List<SlotView> withReservations(List<QnaOfflineSlot> slots) {
         if (slots.isEmpty()) {
             return List.of();
         }
-        Map<Long, List<QnaOfflineReservation>> bySlot = reservationRepository
-                .findBySlotIds(slots.stream().map(QnaOfflineSlot::getId).toList())
-                .stream()
+        List<QnaOfflineReservation> all = reservationRepository
+                .findBySlotIds(slots.stream().map(QnaOfflineSlot::getId).toList());
+
+        Map<Long, List<QnaOfflineReservation>> bySlot = all.stream()
                 .collect(Collectors.groupingBy(r -> r.getSlot().getId()));
+
+        // 예약자마다 반을 조회하면 쿼리가 인원수만큼 나간다. 한 번에 받아 붙인다
+        Map<Long, String> classNames = new java.util.HashMap<>();
+        List<Long> enrollmentIds = all.stream()
+                .map(r -> r.getEnrollment().getId()).distinct().toList();
+        if (!enrollmentIds.isEmpty()) {
+            classAssignmentRepository.findActiveFixedByEnrollmentIds(enrollmentIds)
+                    .forEach(ca -> classNames.put(ca.getEnrollment().getId(),
+                            ca.getClassMaster().getName()));
+        }
 
         return slots.stream()
                 .map(slot -> {
                     List<QnaOfflineReservation> reservations =
                             bySlot.getOrDefault(slot.getId(), List.of());
-                    return new SlotView(slot, reservations.size(), reservations);
+                    return new SlotView(slot, reservations.size(), reservations, classNames);
                 })
                 .toList();
     }
+
+    /** 주간 화면이 기본이라 한 달이면 충분하다. 열어두면 전 기간 조회가 들어온다. */
+    private static final int MAX_RANGE_DAYS = 62;
 
     /**
      * 슬롯 닫기/열기.

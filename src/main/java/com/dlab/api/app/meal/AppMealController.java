@@ -115,7 +115,8 @@ public class AppMealController {
                 .toList();
 
         return ApiResponse.success(new MealResponse.Order(
-                order.getId(), order.month().toString(), order.getStatus().name(), items));
+                order.getId(), order.month().toString(), order.getStatus().name(),
+                MealResponse.MealCount.of(order.activeItems()), items));
     }
 
     /** 항목 단위 취소. 마감(D-n)이 지나면 거절된다 — 관리자는 제한 없이 취소할 수 있다. */

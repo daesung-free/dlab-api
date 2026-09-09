@@ -63,7 +63,7 @@ class AuthFlowIntegrationTest {
         em.persist(academy);
         Teacher teacher = new Teacher(academy, "테스트담임", "010-0000-0000");
         em.persist(teacher);
-        em.persist(Account.forTeacher(teacher, LOGIN_ID, passwordEncoder.encode(PASSWORD)));
+        em.persist(Account.forTeacher(teacher, LOGIN_ID, passwordEncoder.encode(PASSWORD), false));
         em.flush();
     }
 

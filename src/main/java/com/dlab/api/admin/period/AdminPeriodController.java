@@ -119,8 +119,8 @@ public class AdminPeriodController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime startTime,
             @NotNull(message = "종료 시각은 필수입니다.")
             @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime endTime,
-            boolean planable,
-            boolean mandatory) {
+            @NotNull(message = "계획 대상 여부는 필수입니다.") Boolean planable,
+            @NotNull(message = "필수 여부는 필수입니다.") Boolean mandatory) {
     }
 
     public record PeriodUpdateRequest(
@@ -131,8 +131,8 @@ public class AdminPeriodController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime startTime,
             @NotNull(message = "종료 시각은 필수입니다.")
             @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime endTime,
-            boolean planable,
-            boolean mandatory) {
+            @NotNull(message = "계획 대상 여부는 필수입니다.") Boolean planable,
+            @NotNull(message = "필수 여부는 필수입니다.") Boolean mandatory) {
     }
 
     public record PeriodResponse(

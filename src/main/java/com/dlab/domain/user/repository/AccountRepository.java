@@ -3,6 +3,7 @@ package com.dlab.domain.user.repository;
 import com.dlab.domain.user.entity.Account;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -41,4 +42,60 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     Optional<Account> findByEmployeeId(Long employeeId);
 
     Optional<Account> findByTeacherId(Long teacherId);
+
+    /** 목록 화면이 직원마다 계정을 조회하지 않게 한 번에 받는다. */
+    @Query("SELECT a FROM Account a WHERE a.teacher.id IN :teacherIds AND a.deleted = false")
+    List<Account> findByTeacherIds(@Param("teacherIds") java.util.Collection<Long> teacherIds);
+
+    @Query("SELECT a FROM Account a WHERE a.employee.id IN :employeeIds AND a.deleted = false")
+    List<Account> findByEmployeeIds(@Param("employeeIds") java.util.Collection<Long> employeeIds);
+    /**
+     * 계정 ID → 표시 이름.
+     *
+     * <p>직원·선생님·학생 어디에 붙었는지에 따라 이름의 출처가 다르다. 화면이
+     * "누가 했나"를 이름으로 보여주려면 여기서 한 번에 풀어야 한다 —
+     * 행마다 조회하면 목록 크기만큼 쿼리가 나간다.
+     *
+     * @return {@code [accountId, name]}
+     */
+    @Query("""
+            SELECT a.id,
+                   COALESCE(e.name, t.name, s.name)
+            FROM Account a
+            LEFT JOIN a.employee e
+            LEFT JOIN a.teacher t
+            LEFT JOIN a.student s
+            WHERE a.id IN :ids
+            """)
+    java.util.List<Object[]> findDisplayNames(@org.springframework.data.repository.query.Param("ids")
+                                              java.util.Collection<Long> ids);
+
+    /**
+     * 관리자 계정 목록 (F-4.10-2 사용자 관리).
+     *
+     * <p><b>{@code STUDENT}·{@code PARENT}는 뺀다.</b> 이 화면은 직원·강사 계정과 권한을
+     * 다루는 곳이고, 학생·학부모 계정은 가입 승인(F-4.12-1)에서 따로 관리한다 —
+     * 섞으면 목록이 수백 건이 되어 관리자를 찾을 수 없다.
+     *
+     * <p>지점은 소속(직원/선생님)에서 나온다. <b>계정 자체에는 지점이 없다</b> —
+     * 그래서 소속이 없는 계정은 지점 필터에 걸리지 않는다.
+     */
+    @Query("""
+            SELECT a FROM Account a
+            LEFT JOIN FETCH a.employee e
+            LEFT JOIN FETCH e.academy
+            LEFT JOIN FETCH a.teacher t
+            LEFT JOIN FETCH t.academy
+            WHERE a.accountType IN (com.dlab.domain.user.entity.AccountType.EMPLOYEE,
+                                    com.dlab.domain.user.entity.AccountType.TEACHER)
+              AND a.deleted = false
+              AND (:academyId IS NULL
+                   OR e.academy.id = :academyId OR t.academy.id = :academyId)
+              AND (:status IS NULL OR a.status = :status)
+            ORDER BY a.id DESC
+            """)
+    List<Account> findStaffAccounts(
+            @org.springframework.data.repository.query.Param("academyId") Long academyId,
+            @org.springframework.data.repository.query.Param("status")
+            com.dlab.domain.user.entity.AccountStatus status);
 }

@@ -44,6 +44,21 @@ public class Holiday extends BaseEntity {
     @Column(name = "holiday_type", nullable = false, length = 20)
     private HolidayType holidayType;
 
+    /**
+     * 학습계획 미작성 집계에서 빼는 날인가.
+     *
+     * <p><b>급식 판정과 별개 축이다.</b> 이 학원은 법정공휴일에도 운영하므로
+     * 휴일이라고 해서 학습계획을 안 써도 되는 날은 아니다 — 휴원일에만 켠다.
+     *
+     * <p>기본이 꺼짐이라, 등록하기 전까지는 지금과 값이 같다.
+     */
+    @Column(name = "plan_excluded", nullable = false)
+    private boolean planExcluded = false;
+
+    public void changePlanExcluded(boolean planExcluded) {
+        this.planExcluded = planExcluded;
+    }
+
     private Holiday(Long academyId, LocalDate holidayDate, String name, HolidayType holidayType) {
         this.academyId = academyId;
         this.holidayDate = holidayDate;

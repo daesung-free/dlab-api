@@ -3,6 +3,7 @@ package com.dlab.domain.approval.service;
 import com.dlab.common.config.TimeConfig;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
+import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.approval.entity.*;
 import com.dlab.domain.approval.repository.ApprovalItemRepository;
 import com.dlab.domain.approval.repository.ApproverPreferenceRepository;
@@ -270,6 +271,51 @@ public class ApprovalService {
         log.info("승인 요청 신청자 취소: requestId={}", requestId);
     }
 
+    /**
+     * 승인 철회 — <b>직원이 승인된 건을 되돌린다</b>.
+     *
+     * <p><b>학생에게 이 경로를 주지 않는 이유.</b> 사유 신청은 승인되면 그 시간 결석·조퇴가
+     * 무단이 아니게 되어 벌점을 면한다. 학생이 직접 되돌릴 수 있으면 <b>승인만 받고
+     * 취소해서 벌점을 피하는 길</b>이 생긴다 — 결석은 그대로인데 벌점만 사라진다.
+     *
+     * <p>그리고 <b>취소 사유에 따라 옳은 결과가 반대</b>다. "병원에 안 가게 됐다"면 정상
+     * 등원이니 벌점이 없는 게 맞고, "잘못 신청했다"면 원래 무단이라 붙는 게 맞다.
+     * 사람이 판단해야 하는 자리라 직원 경로로 둔다.
+     *
+     * <p><b>사유를 필수로 받는다.</b> 승인을 되돌린 기록에 이유가 없으면 나중에
+     * "왜 무른 거냐"에 답할 수 없다 — 학생·학부모와 다툼이 생기는 지점이다.
+     *
+     * <p>{@code CANCELED}로 남기되 <b>{@code resolverAccount}를 채운다</b> —
+     * 신청자 취소({@link #cancelByRequester})는 그 자리가 비어 있어, 같은 상태값이라도
+     * "누가 거뒀는지"로 갈린다.
+     */
+    @Transactional
+    public void revoke(Long requestId, AuthPrincipal me, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "철회 사유는 필수입니다.");
+        }
+        ApprovalRequest request = approvalRequestRepository.findById(requestId)
+                .filter(r -> !r.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
+                        "승인 요청을 찾을 수 없습니다."));
+        if (!me.canAccessAcademy(request.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+
+        Account actor = accountRepository.findById(me.accountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+
+        int updated = approvalRequestRepository.revokeIfApproved(
+                requestId, Instant.now(clock), ApproverType.TEACHER, actor, reason);
+        if (updated == 0) {
+            // 승인된 건이 아니다 — 대기중이면 반려를, 이미 철회됐으면 아무것도 하지 않는다
+            throw new BusinessException(ErrorCode.APPROVAL_ALREADY_PROCESSED,
+                    "승인된 요청만 철회할 수 있습니다.");
+        }
+
+        log.info("승인 철회: requestId={}, 처리자={}, 사유={}", requestId, me.accountId(), reason);
+    }
+
     /** 담당선생님은 반 배정 → 반 담임으로 자동 결정된다. 미배정이거나 담임 미지정이면 null. */
     private Teacher resolveEscalationTarget(StudentEnrollment enrollment) {
         return classAssignmentRepository.findActiveFixedByEnrollmentId(enrollment.getId())
@@ -295,6 +341,25 @@ public class ApprovalService {
      * 이 계정이 이 요청을 처리할 자격이 있는지 확인하고 승인 주체 유형을 돌려준다.
      * 학부모는 해당 학생에 연결된 경우만, 선생님은 이 요청의 에스컬레이션 대상(또는 상위 관리자)만 가능하다.
      */
+    /**
+     * 대리 처리자의 지점 범위.
+     *
+     * <p>role 은 계정에 붙어 있고 여기서는 계정만 안다. <b>전 지점 권한 여부를 모르므로
+     * 소속 지점이 같은지만 본다</b> — 본사 계정을 막지 않기 위해 소속이 비어 있으면
+     * 통과시킨다. 정밀한 판정은 permission 매트릭스(I-12)가 오면 컨트롤러 쪽에서 건다.
+     */
+    private void verifyAdminScope(ApprovalRequest request, Account approver) {
+        if (approver.getEmployee() == null) {
+            throw new BusinessException(ErrorCode.NOT_AN_APPROVER);
+        }
+        Long approverAcademyId = approver.getEmployee().getAcademy() == null
+                ? null : approver.getEmployee().getAcademy().getId();
+        if (approverAcademyId != null
+                && !approverAcademyId.equals(request.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+    }
+
     private ApproverType resolveApproverType(ApprovalRequest request, Account approver) {
         Long studentId = request.getEnrollment().getStudent().getId();
 
@@ -308,7 +373,6 @@ public class ApprovalService {
         }
 
         // 선생님 승인 — 이 요청의 에스컬레이션 대상 본인만 가능하다.
-        // 상위 관리자 대리승인은 role/permission(§N3)이 서면 그때 열 것.
         if (approver.getAccountType() == AccountType.TEACHER) {
             Teacher teacher = approver.getTeacher();
             Teacher target = request.getEscalationTeacher();
@@ -316,6 +380,18 @@ public class ApprovalService {
                 throw new BusinessException(ErrorCode.NOT_AN_APPROVER);
             }
             return ApproverType.TEACHER;
+        }
+
+        // ★ 관리자 대리 처리 (F-4.1-6).
+        //   요구사항이 "실시간 확인/수정·승인"이고, DSA는 애초에 관리자 직접 처리
+        //   구조만 있었다 — 승인 라우팅은 그것을 확장한 것이지 관리자를 뺀 것이 아니다.
+        //   이걸 막으면 관리자 웹의 승인 대기 화면이 조회 전용이 된다.
+        //
+        //   ⚠️ 어느 role 까지 열지는 I-12(승인 주체 매트릭스) 대기다.
+        //   지금은 지점 범위만 확인한다 — 남의 지점 학생 건을 처리하면 안 된다.
+        if (approver.getAccountType() == AccountType.EMPLOYEE) {
+            verifyAdminScope(request, approver);
+            return ApproverType.ADMIN;
         }
 
         throw new BusinessException(ErrorCode.NOT_AN_APPROVER);
@@ -347,6 +423,7 @@ public class ApprovalService {
             case STAFF_AFTER_TIMEOUT -> NotificationEvent.APPROVAL_APPROVED_AFTER_TIMEOUT;
             case STAFF_BEFORE_TIMEOUT -> NotificationEvent.APPROVAL_APPROVED_BEFORE_TIMEOUT;
             case STAFF_PRIMARY -> NotificationEvent.APPROVAL_APPROVED_BY_STAFF_PRIMARY;
+            case ADMIN_PROXY -> NotificationEvent.APPROVAL_APPROVED_BY_ADMIN;
         };
         notifyAll(event, request, resolvedVariables(request));
     }

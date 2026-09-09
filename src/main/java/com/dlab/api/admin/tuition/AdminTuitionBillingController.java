@@ -1,5 +1,6 @@
 package com.dlab.api.admin.tuition;
 
+import jakarta.validation.constraints.NotNull;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
@@ -51,7 +52,7 @@ public class AdminTuitionBillingController {
                                                  @Valid @RequestBody IssueMonthly request) {
         return ApiResponse.success(BillingView.from(billingService.issueMonthly(
                 me, request.enrollmentId(), request.yearMonth(),
-                request.seatType(), request.discountRate(), request.remainingDays(),
+                request.seatType(), request.discountRateOrZero(), request.remainingDays(),
                 request.dueDate())));
     }
 
@@ -68,7 +69,7 @@ public class AdminTuitionBillingController {
 
         return ApiResponse.success(billingService.issueOnAdmission(
                         me, request.enrollmentId(), request.admissionDate(), request.seatType(),
-                        request.discountRate(), request.remainingDays(), request.dueDate())
+                        request.discountRateOrZero(), request.remainingDays(), request.dueDate())
                 .stream().map(BillingView::from).toList());
     }
 
@@ -96,9 +97,14 @@ public class AdminTuitionBillingController {
             @Pattern(regexp = "\\d{4}-(0[1-9]|1[0-2])",
                     message = "월은 yyyy-MM 형식이어야 합니다.") String month,
             @NotNull(message = "좌석 유형은 필수입니다.") SeatType seatType,
-            @Min(0) @Max(100) int discountRate,
+            @Min(0) @Max(100) Integer discountRate,
             @Min(1) @Max(31) Integer remainingDays,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDate) {
+
+        /** 생략 가능 — 없으면 0. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
+        public int discountRateOrZero() {
+            return discountRate == null ? 0 : discountRate;
+        }
 
         public YearMonth yearMonth() {
             return YearMonth.parse(month);
@@ -110,9 +116,14 @@ public class AdminTuitionBillingController {
             @NotNull(message = "입학일은 필수입니다.")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admissionDate,
             @NotNull(message = "좌석 유형은 필수입니다.") SeatType seatType,
-            @Min(0) @Max(100) int discountRate,
+            @Min(0) @Max(100) Integer discountRate,
             @Min(1) @Max(31) Integer remainingDays,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDate) {
+
+        /** 생략 가능 — 없으면 0. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
+        public int discountRateOrZero() {
+            return discountRate == null ? 0 : discountRate;
+        }
     }
 
     /**

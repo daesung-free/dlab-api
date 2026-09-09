@@ -42,7 +42,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
         "com.dlab.api.kiosk.receipt",
         "com.dlab.api.kiosk.seat",
         "com.dlab.api.kiosk.stats",
-        "com.dlab.api.kiosk.student"
+        "com.dlab.api.kiosk.student",
+        // 홈페이지 입학예약도 같은 응답 계약이다 — ApiResponse로 나가면 홈페이지가 못 읽는다
+        "com.dlab.api.homepage.auth",
+        "com.dlab.api.homepage.admission"
 })
 public class DsaExceptionHandler {
 

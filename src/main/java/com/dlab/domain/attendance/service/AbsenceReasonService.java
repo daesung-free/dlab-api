@@ -51,6 +51,7 @@ public class AbsenceReasonService {
     private final AbsenceReasonRepository absenceReasonRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.attendance.repository.AbsenceReasonCategoryRepository categoryRepository;
     private final ApprovalService approvalService;
     private final Clock clock;
 
@@ -67,12 +68,13 @@ public class AbsenceReasonService {
     @Transactional
     public AbsenceReason register(AuthPrincipal me, Long enrollmentId, LocalDate date,
                                   AbsenceReasonType type, String reasonText,
-                                  LocalTime startTime, LocalTime endTime) {
+                                  LocalTime startTime, LocalTime endTime, Long categoryId) {
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
         validatePeriod(type, startTime, endTime);
 
         AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
                 enrollment.getAcademy(), enrollment, date, type, reasonText, startTime, endTime));
+        applyCategory(reason, categoryId, enrollment);
 
         ApprovalRequest approval = approvalService.create(enrollment, RequestType.ABSENCE_REASON);
         reason.linkApproval(approval);
@@ -96,7 +98,7 @@ public class AbsenceReasonService {
     @Transactional
     public AbsenceReason submitByStudent(Long enrollmentId, LocalDate date,
                                          AbsenceReasonType type, String reasonText,
-                                         LocalTime startTime, LocalTime endTime) {
+                                         LocalTime startTime, LocalTime endTime, Long categoryId) {
         StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .filter(e -> !e.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
@@ -105,12 +107,36 @@ public class AbsenceReasonService {
 
         AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
                 enrollment.getAcademy(), enrollment, date, type, reasonText, startTime, endTime));
+        applyCategory(reason, categoryId, enrollment);
 
         ApprovalRequest approval = approvalService.create(enrollment, RequestType.ABSENCE_REASON);
         reason.linkApproval(approval);
 
         log.info("사유신청 제출(앱): enrollmentId={}, 유형={}, 일자={}", enrollmentId, type, date);
         return reason;
+    }
+
+    /**
+     * 카테고리 연결.
+     *
+     * <p><b>비워도 된다</b> — 카테고리가 하나도 등록되지 않은 상태에서도 사유 제출이
+     * 되어야 한다. 다만 보냈다면 <b>그 지점에서 쓸 수 있는 것</b>인지는 확인한다.
+     * 안 그러면 id 를 바꿔 다른 지점 카테고리가 붙는다.
+     */
+    private void applyCategory(AbsenceReason reason, Long categoryId,
+                               StudentEnrollment enrollment) {
+        if (categoryId == null) {
+            return;
+        }
+        var category = categoryRepository.findActiveById(categoryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "사유 카테고리를 찾을 수 없습니다."));
+        boolean usable = category.getAcademy() == null
+                || category.getAcademy().getId().equals(enrollment.getAcademy().getId());
+        if (!usable) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        reason.changeCategory(category);
     }
 
     /**
@@ -226,8 +252,19 @@ public class AbsenceReasonService {
         List<AbsenceRequestRow> pending =
                 list(me, requestedAcademyId, from, to, ApprovalStatus.PENDING);
 
+        // ★ 상태별 건수는 화면 탭에 붙는 숫자다(승인 대기 2 / 승인 완료 5 / 반려 1).
+        //   여기서 안 주면 화면이 전량을 받아 직접 세는데, 목록에 페이징이 들어오는
+        //   순간 그 수가 "현재 페이지 안의 건수"로 바뀐다 — 20건씩 잘리면
+        //   '승인 완료 5'가 실제로는 40건인 상태가 되고, 에러도 안 나고 눈에도 안 띈다.
         Map<String, Long> counts = new LinkedHashMap<>();
         counts.put("pending", (long) pending.size());
+        counts.put("approved",
+                (long) list(me, requestedAcademyId, from, to, ApprovalStatus.APPROVED).size());
+        counts.put("rejected",
+                (long) list(me, requestedAcademyId, from, to, ApprovalStatus.REJECTED).size());
+        // 취소 탭은 건이 있을 때만 뜬다 — 값이 없으면 그 행들이 어느 탭에도 안 잡혀 사라진다
+        counts.put("canceled",
+                (long) list(me, requestedAcademyId, from, to, ApprovalStatus.CANCELED).size());
         counts.put("waitingParent", pending.stream()
                 .filter(r -> r.approverType() == ApproverType.PARENT).count());
         counts.put("waitingTeacher", pending.stream()
@@ -261,6 +298,7 @@ public class AbsenceReasonService {
                 r.getReasonType(),
                 r.periodLabel(),
                 r.getReasonText(),
+                r.getCategory() == null ? null : r.getCategory().getName(),
                 approverType,
                 statusOf(r),
                 escalationCandidate);
@@ -310,6 +348,8 @@ public class AbsenceReasonService {
             AbsenceReasonType type,
             String period,
             String reason,
+            /** 사유 카테고리(병결 등). 안 고르고 냈으면 비어 있다 */
+            String categoryName,
             ApproverType approverType,
             ApprovalStatus status,
             boolean escalationCandidate

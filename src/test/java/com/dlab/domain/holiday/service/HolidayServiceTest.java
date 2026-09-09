@@ -47,7 +47,7 @@ class HolidayServiceTest {
     @Test
     @DisplayName("본사는 전 지점 공휴일을 등록한다")
     void headquartersRegistersNationwide() {
-        Holiday saved = service.register(headquarters, null, DATE, "광복절", HolidayType.PUBLIC);
+        Holiday saved = service.register(headquarters, null, DATE, "광복절", HolidayType.PUBLIC, false);
 
         assertThat(saved.isNationwide()).isTrue();
         assertThat(saved.getHolidayType()).isEqualTo(HolidayType.PUBLIC);
@@ -57,7 +57,7 @@ class HolidayServiceTest {
     @DisplayName("★ 지점 관리자는 전 지점 공휴일을 등록할 수 없다 — 다른 지점 급식까지 막힌다")
     void branchAdminCannotRegisterNationwide() {
         assertThatThrownBy(() ->
-                service.register(branchAdmin, null, DATE, "광복절", HolidayType.PUBLIC))
+                service.register(branchAdmin, null, DATE, "광복절", HolidayType.PUBLIC, false))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.NATIONWIDE_HOLIDAY_FORBIDDEN);
@@ -66,7 +66,7 @@ class HolidayServiceTest {
     @Test
     @DisplayName("지점 관리자는 자기 지점 자체휴일을 등록한다")
     void branchAdminRegistersOwnAcademyHoliday() {
-        Holiday saved = service.register(branchAdmin, 7L, DATE, "개원기념일", HolidayType.ACADEMY);
+        Holiday saved = service.register(branchAdmin, 7L, DATE, "개원기념일", HolidayType.ACADEMY, false);
 
         assertThat(saved.isNationwide()).isFalse();
         assertThat(saved.getAcademyId()).isEqualTo(7L);
@@ -76,7 +76,7 @@ class HolidayServiceTest {
     @DisplayName("★ 다른 지점에는 등록할 수 없다")
     void cannotRegisterToOtherAcademy() {
         assertThatThrownBy(() ->
-                service.register(branchAdmin, 99L, DATE, "남의 지점", HolidayType.ACADEMY))
+                service.register(branchAdmin, 99L, DATE, "남의 지점", HolidayType.ACADEMY, false))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
@@ -86,7 +86,7 @@ class HolidayServiceTest {
     @DisplayName("지점 휴일에 법정공휴일 유형을 붙일 수 없다 — 같은 날이 지점마다 달라진다")
     void academyHolidayMustBeAcademyType() {
         assertThatThrownBy(() ->
-                service.register(branchAdmin, 7L, DATE, "광복절", HolidayType.PUBLIC))
+                service.register(branchAdmin, 7L, DATE, "광복절", HolidayType.PUBLIC, false))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_REQUEST);
@@ -99,7 +99,7 @@ class HolidayServiceTest {
                 .willReturn(List.of(Holiday.nationwide(DATE, "광복절", HolidayType.PUBLIC)));
 
         assertThatThrownBy(() ->
-                service.register(headquarters, null, DATE, "중복", HolidayType.PUBLIC))
+                service.register(headquarters, null, DATE, "중복", HolidayType.PUBLIC, false))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.HOLIDAY_DUPLICATED);
@@ -112,7 +112,7 @@ class HolidayServiceTest {
         given(repository.findInRange(7L, DATE, DATE))
                 .willReturn(List.of(Holiday.nationwide(DATE, "광복절", HolidayType.PUBLIC)));
 
-        Holiday saved = service.register(branchAdmin, 7L, DATE, "개원기념일", HolidayType.ACADEMY);
+        Holiday saved = service.register(branchAdmin, 7L, DATE, "개원기념일", HolidayType.ACADEMY, false);
 
         assertThat(saved.getAcademyId()).isEqualTo(7L);
     }

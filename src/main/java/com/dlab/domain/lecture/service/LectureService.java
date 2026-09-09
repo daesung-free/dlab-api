@@ -39,6 +39,9 @@ public class LectureService {
     private final LectureApplicationRepository applicationRepository;
     private final LectureAttendanceRepository attendanceRepository;
     private final AcademyRepository academyRepository;
+    private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.user.repository.TeacherRepository teacherRepository;
+    private final com.dlab.domain.lecture.repository.LectureCategoryRepository categoryRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final com.dlab.domain.user.service.AppScopeResolver scopeResolver;
     private final Clock clock;
@@ -59,13 +62,33 @@ public class LectureService {
 
     @Transactional
     public Lecture create(Long academyId, short year, LectureType type, String name,
-                          AuthPrincipal principal) {
+                          Long categoryId, AuthPrincipal principal) {
         verifyAccess(academyId, principal);
         Academy academy = academyRepository.findById(academyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
         Lecture lecture = lectureRepository.save(new Lecture(academy, year, type, name));
+        if (categoryId != null) {
+            lecture.changeCategory(resolveCategory(categoryId, academyId));
+        }
         log.info("특강 생성: id={}, name={}", lecture.getId(), name);
         return lecture;
+    }
+
+    /**
+     * 유형 조회 + 그 지점에서 쓸 수 있는지 확인.
+     *
+     * <p>확인하지 않으면 <b>id 만 바꿔 보내 다른 지점 유형을 붙일 수 있다</b>
+     * (사유 카테고리와 같은 규칙). 전 지점 공통은 어느 지점이든 쓴다.
+     */
+    private com.dlab.domain.lecture.entity.LectureCategory resolveCategory(
+            Long categoryId, Long academyId) {
+        var category = categoryRepository.findActiveById(categoryId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "특강 유형을 찾을 수 없습니다."));
+        if (!category.isCommon() && !category.getAcademy().getId().equals(academyId)) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        return category;
     }
 
     @Transactional(readOnly = true)
@@ -87,9 +110,11 @@ public class LectureService {
     }
 
     @Transactional
-    public Lecture update(Long lectureId, String name, String description, Integer capacity,
+    public Lecture update(Long lectureId, String name, String code,
+                          String description, Integer capacity,
                           Instant applyFrom, Instant applyTo, LocalDate startDate,
-                          LocalDate endDate, Integer fee, AuthPrincipal principal) {
+                          LocalDate endDate, Integer fee, Long teacherId, Long categoryId,
+                          AuthPrincipal principal) {
         Lecture lecture = require(lectureId, principal);
         // ★ 정원을 현재 확정 인원보다 낮추지 못하게 막는다.
         //   허용하면 이미 확정된 학생이 정원 밖으로 밀려나는데, 누구를 뺄지 정할 방법이 없다.
@@ -101,7 +126,19 @@ public class LectureService {
                         "이미 확정된 인원(%d명)보다 적은 정원으로 줄일 수 없습니다.".formatted(confirmed));
             }
         }
-        lecture.update(name, description, capacity, applyFrom, applyTo, startDate, endDate, fee);
+        lecture.update(name, code, description, capacity, applyFrom, applyTo,
+                startDate, endDate, fee);
+
+        if (categoryId != null) {
+            lecture.changeCategory(resolveCategory(categoryId, lecture.getAcademy().getId()));
+        }
+        if (teacherId != null) {
+            lecture.changeTeacher(teacherRepository.findById(teacherId)
+                    .filter(t -> !t.isDeleted())
+                    .filter(t -> t.getAcademy().getId().equals(lecture.getAcademy().getId()))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND,
+                            "선생님을 찾을 수 없습니다.")));
+        }
         return lecture;
     }
 
@@ -251,6 +288,34 @@ public class LectureService {
     public List<LectureApplication> roster(Long lectureId, AuthPrincipal principal) {
         require(lectureId, principal);
         return applicationRepository.findRoster(lectureId);
+    }
+
+    /**
+     * 신청자 명단 + 반. 명단에서 <b>어느 반 학생인지</b>를 알 수 없으면
+     * 담임에게 넘길 때 다시 대조해야 한다.
+     *
+     * <p>반을 신청자마다 조회하면 쿼리가 인원수만큼 나가므로 한 번에 받아 붙인다.
+     */
+    @Transactional(readOnly = true)
+    public List<RosterEntry> rosterDetailed(Long lectureId, AuthPrincipal principal) {
+        List<LectureApplication> applications = roster(lectureId, principal);
+
+        List<Long> enrollmentIds = applications.stream()
+                .map(a -> a.getEnrollment().getId()).toList();
+        java.util.Map<Long, String> classNames = new java.util.HashMap<>();
+        if (!enrollmentIds.isEmpty()) {
+            classAssignmentRepository.findActiveFixedByEnrollmentIds(enrollmentIds)
+                    .forEach(ca -> classNames.put(ca.getEnrollment().getId(),
+                            ca.getClassMaster().getName()));
+        }
+
+        return applications.stream()
+                .map(a -> new RosterEntry(a, classNames.get(a.getEnrollment().getId())))
+                .toList();
+    }
+
+    /** @param className 고정반. 미배정이면 비어 있다 */
+    public record RosterEntry(LectureApplication application, String className) {
     }
 
     @Transactional(readOnly = true)

@@ -65,7 +65,7 @@ class StudentImportFlowTest {
 
         Employee admin = new Employee(academy, "관리자");
         em.persist(admin);
-        Account account = Account.forEmployee(admin, "IMADM", passwordEncoder.encode(PASSWORD));
+        Account account = Account.forEmployee(admin, "IMADM", passwordEncoder.encode(PASSWORD), false);
         em.persist(account);
         em.flush();
         em.createNativeQuery("""

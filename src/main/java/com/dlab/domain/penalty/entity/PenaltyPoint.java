@@ -1,5 +1,7 @@
 package com.dlab.domain.penalty.entity;
 
+import com.dlab.domain.audit.AuditEntityListener;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -19,8 +21,10 @@ import java.time.LocalDate;
  * 동시 실행을 막을 수 없다. {@code idempotencyKey}의 DB 유니크 제약이 최종 방어선이다.
  */
 @Getter
+@Audited("상벌점")
 @Entity
 @Table(name = "penalty_point")
+@EntityListeners(AuditEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PenaltyPoint extends BaseEntity {
 
@@ -60,6 +64,20 @@ public class PenaltyPoint extends BaseEntity {
     public PenaltyPoint(Academy academy, StudentEnrollment enrollment,
                         PenaltyItem penaltyItem, int points, String reason,
                         PenaltySource source, String idempotencyKey) {
+        this(academy, enrollment, penaltyItem, points, reason, source, idempotencyKey, null);
+    }
+
+    /**
+     * @param occurredAt 발생 시각. {@code null}이면 저장 시점이다.
+     *                   <b>어제 일을 오늘 넣는 경우가 실제로 있다</b> — 현재 시각으로
+     *                   박으면 그 건이 어제 조회에서 빠진다
+     */
+    public PenaltyPoint(Academy academy, StudentEnrollment enrollment,
+                        PenaltyItem penaltyItem, int points, String reason,
+                        PenaltySource source, String idempotencyKey, Instant occurredAt) {
+        if (occurredAt != null) {
+            this.occurredAt = occurredAt;
+        }
         this.academy = academy;
         this.enrollment = enrollment;
         this.penaltyItem = penaltyItem;

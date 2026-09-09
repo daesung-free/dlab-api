@@ -72,4 +72,38 @@ public class SeatMaster extends BaseEntity {
     public void enable() {
         this.usable = true;
     }
+
+    /**
+     * 좌석 정보 수정.
+     *
+     * <p><b>{@code seatCd}는 바꾸지 않는다.</b> 키오스크가 이 코드로 좌석을 찾고
+     * ({@code setSeatChgProc}) 좌석 상태 응답을 코드로 머지하기 때문에, 바꾸면 그 자리가
+     * 단말에서 사라진다. 이름·좌표만 고친다.
+     */
+    public void update(String seatNm, Integer xPos, Integer yPos) {
+        if (seatNm != null) {
+            this.seatNm = seatNm;
+        }
+        if (xPos != null) {
+            this.xPos = xPos;
+        }
+        if (yPos != null) {
+            this.yPos = yPos;
+        }
+    }
+
+    /**
+     * 지웠던 좌석을 같은 코드로 되살린다.
+     *
+     * <p>{@code UNIQUE (academy_id, seat_cd)}가 soft delete를 모르기 때문에, 지운 좌석의
+     * 코드로 다시 등록하면 새 행을 넣을 수 없다. 구역·이름·좌표를 새 값으로 덮어 되살린다.
+     */
+    public void reviveAs(StudyArea studyArea, String seatNm, int xPos, int yPos) {
+        restore();
+        this.studyArea = studyArea;
+        this.seatNm = seatNm;
+        this.xPos = xPos;
+        this.yPos = yPos;
+        this.usable = true;
+    }
 }

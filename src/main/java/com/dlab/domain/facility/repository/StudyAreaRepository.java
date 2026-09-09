@@ -31,4 +31,30 @@ public interface StudyAreaRepository extends JpaRepository<StudyArea, Long> {
               AND a.deleted = false
             """)
     Optional<StudyArea> findByAcademyIdAndAreaCd(Long academyId, String areaCd);
+
+    /**
+     * 관리자 구역 목록 — <b>비활성 구역도 포함</b>한다.
+     *
+     * <p>{@link #findActiveByAcademyId(Long)}는 화면에 뿌릴 목록이라 비활성을 뺀다. 관리
+     * 화면에서까지 빼면 <b>한 번 비활성으로 돌린 구역을 다시 켤 방법이 없어진다.</b>
+     */
+    @Query("""
+            SELECT a FROM StudyArea a
+            WHERE a.academy.id = :academyId
+              AND a.deleted = false
+            ORDER BY a.sortOrder ASC, a.areaCd ASC
+            """)
+    List<StudyArea> findAllByAcademyId(Long academyId);
+
+    /**
+     * 지운 구역까지 본다.
+     *
+     * <p>{@code uq_study_area}가 부분 인덱스가 아니라서 <b>지운 구역의 코드도 계속 자리를
+     * 차지한다.</b> 같은 코드로 다시 등록하려면 그 행을 되살려야 하므로 삭제분도 찾는다.
+     */
+    @Query("""
+            SELECT a FROM StudyArea a
+            WHERE a.academy.id = :academyId AND a.areaCd = :areaCd
+            """)
+    Optional<StudyArea> findAnyByAcademyIdAndAreaCd(Long academyId, String areaCd);
 }

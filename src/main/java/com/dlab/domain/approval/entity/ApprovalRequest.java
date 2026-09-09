@@ -154,6 +154,11 @@ public class ApprovalRequest extends BaseEntity {
         if (approverType == ApproverType.PARENT) {
             return ResolutionCase.PARENT_IN_TIME;
         }
+        // 관리자 대리는 타임아웃과 무관하다 — 담임 케이스로 흘리면 담임이 승인했다는
+        // 안내가 나가는데, 담임은 이 건을 본 적도 없다
+        if (approverType == ApproverType.ADMIN) {
+            return ResolutionCase.ADMIN_PROXY;
+        }
         if (primaryApprover == ApproverType.TEACHER) {
             return ResolutionCase.STAFF_PRIMARY;
         }

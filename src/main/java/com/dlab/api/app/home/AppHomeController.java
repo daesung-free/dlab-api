@@ -47,6 +47,7 @@ public class AppHomeController {
     private final DailyRoutineService routineService;
     private final NoticeService noticeService;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.facility.repository.SeatAssignmentRepository seatAssignmentRepository;
     private final Clock clock;
 
     /**
@@ -69,6 +70,11 @@ public class AppHomeController {
                 .map(a -> a.getClassMaster().getName())
                 .orElse(null);
 
+        String seatCd = seatAssignmentRepository
+                .findActiveByEnrollmentId(enrollment.getId())
+                .map(a -> a.getSeat().getSeatCd())
+                .orElse(null);
+
         List<AttendanceQueryService.DailySummary> week = attendanceQueryService.daily(
                 enrollment.getId(), today.with(DayOfWeek.MONDAY), today);
         List<AttendanceQueryService.DailySummary> month = attendanceQueryService.daily(
@@ -81,7 +87,7 @@ public class AppHomeController {
         var monthly = attendanceQueryService.summarize(month);
 
         return ApiResponse.success(new HomeResponse(
-                HomeResponse.Profile.of(enrollment, className),
+                HomeResponse.Profile.of(enrollment, className, seatCd),
                 new HomeResponse.Metrics(
                         weekly.studyMinutes(),
                         monthly.studyMinutes(),

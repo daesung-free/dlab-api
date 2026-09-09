@@ -19,19 +19,32 @@ public final class LectureRequests {
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") Integer year,
             LectureType lectureType,
-            @NotBlank(message = "특강명은 필수입니다.") @Size(max = 100) String name) {
+            @NotBlank(message = "특강명은 필수입니다.") @Size(max = 100) String name,
+            /**
+             * 유형 세분류. 비우면 유형 없이 만든다.
+             *
+             * <p>등록에서도 받는 이유는 <b>화면이 한 번에 저장하기 때문</b>이다.
+             * 수정에만 있으면 등록 폼에서 유형을 골라도 저장이 두 번 나가고,
+             * 두 번째가 실패하면 유형 없는 특강이 남는다.
+             */
+            Long categoryId) {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
     public record LectureUpdate(
             @Size(max = 100) String name,
+            @Size(max = 30) String code,
             String description,
             @Positive(message = "정원은 1명 이상이어야 합니다.") Integer capacity,
             Instant applyFrom,
             Instant applyTo,
             LocalDate startDate,
             LocalDate endDate,
-            @PositiveOrZero Integer fee) {
+            @PositiveOrZero Integer fee,
+            /** 담당 강사. {@code null}은 "변경하지 않음"이라 <b>해제는 이 값으로 못 한다.</b> */
+            Long teacherId,
+            /** 유형 세분류(단과·실전·해설). {@code null}은 "변경하지 않음"이다. */
+            Long categoryId) {
     }
 
     public record LectureChangeStatus(@NotNull(message = "상태는 필수입니다.") LectureStatus status) {

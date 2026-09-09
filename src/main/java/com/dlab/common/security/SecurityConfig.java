@@ -44,14 +44,17 @@ public class SecurityConfig {
     private final RestAccessDeniedHandler accessDeniedHandler;
 
     /**
-     * DSA 호환 구획. 키오스크가 경로를 하드코딩하고 있어 {@code /api/v1} prefix를 붙일 수 없다
-     * (CLAUDE.md §5 경로 규칙의 명시적 예외).
+     * DSA 호환 구획. 상대(키오스크·홈페이지)가 경로를 하드코딩하고 있어 {@code /api/v1}
+     * prefix를 붙일 수 없다 (CLAUDE.md §5 경로 규칙의 명시적 예외).
+     *
+     * <p>{@code /auth2}·{@code /dlab}은 홈페이지 입학예약이다 — 키오스크와 <b>토큰이
+     * 서로 통하지 않는다.</b> 검증은 각 구획의 서비스가 본문 token으로 직접 한다.
      */
     @Bean
     @Order(1)
     public SecurityFilterChain dsaCompatFilterChain(HttpSecurity http) throws Exception {
         return http
-                .securityMatcher("/auth/**", "/kiosk/**")
+                .securityMatcher("/auth/**", "/kiosk/**", "/auth2/**", "/dlab/**")
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

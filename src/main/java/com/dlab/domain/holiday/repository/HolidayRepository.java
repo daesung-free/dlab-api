@@ -23,6 +23,20 @@ public interface HolidayRepository extends JpaRepository<Holiday, Long> {
                               @Param("from") LocalDate from,
                               @Param("to") LocalDate to);
 
+    /**
+     * 전 지점 것을 모두. <b>본사 화면용</b>이다.
+     *
+     * <p>지점 계정은 {@link #findInRange}로 "공통 + 내 지점"을 보고, 본사는 여기로
+     * <b>모든 지점</b>을 본다 — 다른 목록이 전부 그렇게 동작한다.
+     */
+    @Query("""
+            SELECT h FROM Holiday h
+            WHERE h.deleted = false
+              AND h.holidayDate BETWEEN :from AND :to
+            """)
+    List<Holiday> findAllInRange(@Param("from") LocalDate from,
+                                 @Param("to") LocalDate to);
+
     /** 전 지점 공통 휴일만. {@code academyId}가 없는 호출(배치 등)에 쓴다. */
     @Query("""
             SELECT h FROM Holiday h

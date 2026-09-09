@@ -54,4 +54,17 @@ public abstract class BaseEntity {
     public void markDeleted() {
         this.deleted = true;
     }
+
+    /**
+     * soft delete 되돌리기.
+     *
+     * <p><b>유니크 제약이 soft delete를 모르는 테이블</b>에서 필요하다 — 예를 들어
+     * {@code seat_master}의 {@code UNIQUE (academy_id, seat_cd)}는 부분 인덱스가 아니라서
+     * 지운 좌석의 코드가 계속 자리를 차지한다. 그 코드로 다시 등록하려 하면 제약 위반이
+     * 나는데, 사용자 입장에서는 "지웠는데 왜 못 만드나"가 된다. 새 행을 만들지 않고
+     * 기존 행을 되살린다.
+     */
+    public void restore() {
+        this.deleted = false;
+    }
 }

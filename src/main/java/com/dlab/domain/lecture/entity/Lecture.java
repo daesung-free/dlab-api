@@ -73,6 +73,38 @@ public class Lecture extends BaseEntity {
     @Column(nullable = false)
     private int fee = 0;
 
+    /** 선택. 이름이 바뀌어도 유지되는 키다 — 지점·연도 안에서 유일하다. */
+    @Column(length = 30)
+    private String code;
+
+    /**
+     * 유형 세분류(단과·실전·해설).
+     *
+     * <p><b>비어 있을 수 있다</b> — 유형이 하나도 등록되지 않은 상태에서도 특강 등록이
+     * 되어야 하고, 설명회는 애초에 세분류가 없다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private LectureCategory category;
+
+    public void changeCategory(LectureCategory category) {
+        this.category = category;
+    }
+
+    /**
+     * 담당 강사.
+     *
+     * <p>⚠️ {@code teacher}는 <b>담당선생님(사감)만</b> 들어가는 테이블이다. 외부 강사를
+     * 세우는 특강이 있으면 여기로는 담을 수 없다 — 그때 확장한다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "teacher_id")
+    private com.dlab.domain.user.entity.Teacher teacher;
+
+    public void changeTeacher(com.dlab.domain.user.entity.Teacher teacher) {
+        this.teacher = teacher;
+    }
+
     public Lecture(Academy academy, short year, LectureType lectureType, String name) {
         this.academy = academy;
         this.year = year;
@@ -81,11 +113,14 @@ public class Lecture extends BaseEntity {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
-    public void update(String name, String description, Integer capacity,
-                       Instant applyFrom, Instant applyTo,
+    public void update(String name, String code, String description,
+                       Integer capacity, Instant applyFrom, Instant applyTo,
                        LocalDate startDate, LocalDate endDate, Integer fee) {
         if (name != null) {
             this.name = name;
+        }
+        if (code != null) {
+            this.code = code;
         }
         if (description != null) {
             this.description = description;

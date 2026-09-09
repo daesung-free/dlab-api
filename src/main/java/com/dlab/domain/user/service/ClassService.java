@@ -11,8 +11,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -39,6 +43,82 @@ public class ClassService {
     @Transactional(readOnly = true)
     public List<ClassMaster> search(SearchScope scope) {
         return classMasterRepository.search(scope.academyId(), scope.year());
+    }
+
+    /**
+     * 반 목록 + 현재 인원수 (F-4.1-5 "고정반목록(… 정원/원생수)").
+     *
+     * <p><b>인원수를 반마다 세지 않는다.</b> 목록이 한 번에 오는데 반마다 명단을 부르면
+     * 쿼리가 반 개수만큼 나간다 — 지점 반이 20개면 21쿼리다. 반 ID를 모아
+     * <b>GROUP BY 집계 한 번</b>으로 끝내므로 반이 몇 개든 쿼리는 항상 2회다
+     * ({@code StudentListEnricher}·키오스크 학생 목록과 같은 방식).
+     *
+     * <p>배정이 없는 반은 집계에 행이 없다 — 여기서 0으로 채운다. 안 채우면
+     * 화면에 인원수 칸이 비어 "집계가 안 됐다"로 읽힌다.
+     */
+    @Transactional(readOnly = true)
+    public List<ClassSummaryView> searchWithMemberCount(SearchScope scope) {
+        List<ClassMaster> classes = classMasterRepository.search(scope.academyId(), scope.year());
+        if (classes.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, Integer> counts = memberCounts(classes.stream().map(ClassMaster::getId).toList());
+        return classes.stream()
+                .map(c -> new ClassSummaryView(c, counts.getOrDefault(c.getId(), 0)))
+                .toList();
+    }
+
+    /** 반 ID → 현재 인원. 배정이 없는 반은 키 자체가 없다(= 0). */
+    private Map<Long, Integer> memberCounts(List<Long> classIds) {
+        Map<Long, Integer> counts = new HashMap<>();
+        for (Object[] row : classAssignmentRepository.countActiveByClassIds(classIds)) {
+            counts.put((Long) row[0], ((Number) row[1]).intValue());
+        }
+        return counts;
+    }
+
+    /** 목록 한 줄 — 반 + 현재 인원. 인원은 반 엔티티에서 나오지 않아 여기서 붙여 내보낸다. */
+    public record ClassSummaryView(ClassMaster classMaster, int memberCount) {
+    }
+
+    /**
+     * 반 기본정보 수정 (이름·정원).
+     *
+     * <p>담임은 여기서 바꾸지 않는다 — {@code PUT /homeroom}이 이미 있고, 담임 변경은
+     * 승인 에스컬레이션 대상이 바뀌는 별개의 사건이라 축을 섞지 않는다.
+     */
+    @Transactional
+    public ClassMaster update(Long classId, String name, Short capacity, boolean clearCapacity,
+                              AuthPrincipal principal) {
+        ClassMaster classMaster = loadAccessible(classId, principal);
+        if (name != null && !name.equals(classMaster.getName())
+                && classMasterRepository.existsByAcademyIdAndYearAndName(
+                        classMaster.getAcademy().getId(), classMaster.getYear(), name)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "같은 연도에 같은 이름의 반이 있습니다.");
+        }
+        classMaster.updateDetails(name, capacity, clearCapacity);
+        return classMaster;
+    }
+
+    /**
+     * 반 삭제(soft).
+     *
+     * <p><b>배정된 학생이 있으면 거부한다.</b> 그냥 지우면 그 학생들의 배정 행이
+     * 없는 반을 가리킨 채 남아 <b>"반이 있는데 목록에 안 보이는" 학생</b>이 된다.
+     * 화면에서 해제가 먼저다.
+     *
+     * <p>물리 삭제하지 않는 이유는 다른 마스터와 같다 — 과거 학생이 어느 반이었는지가
+     * 이력으로 남아야 한다. 지난 기수 반은 대부분 삭제가 아니라 그대로 두는 게 맞다.
+     */
+    @Transactional
+    public void delete(Long classId, AuthPrincipal principal) {
+        ClassMaster classMaster = loadAccessible(classId, principal);
+        int assigned = classAssignmentRepository.findActiveByClassId(classId).size();
+        if (assigned > 0) {
+            throw new BusinessException(ErrorCode.CLASS_HAS_MEMBERS,
+                    "배정된 학생 %d명을 먼저 해제해 주세요.".formatted(assigned));
+        }
+        classMaster.markDeleted();
     }
 
     /**
@@ -93,7 +173,7 @@ public class ClassService {
 
     @Transactional
     public ClassMaster create(Long academyId, short year, String name,
-                              ClassType classType, Long homeroomTeacherId,
+                              ClassType classType, Long homeroomTeacherId, Short capacity,
                               AuthPrincipal principal) {
         if (!principal.canAccessAcademy(academyId)) {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
@@ -105,8 +185,10 @@ public class ClassService {
         Academy academy = academyRepository.findById(academyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
 
-        return classMasterRepository.save(
-                new ClassMaster(academy, year, name, classType, resolveTeacher(homeroomTeacherId, academyId)));
+        ClassMaster classMaster =
+                new ClassMaster(academy, year, name, classType, resolveTeacher(homeroomTeacherId, academyId));
+        classMaster.changeCapacity(capacity);
+        return classMasterRepository.save(classMaster);
     }
 
     /**
@@ -130,8 +212,14 @@ public class ClassService {
      */
     @Transactional
     public ClassMemberView assignStudent(Long classId, Long enrollmentId, AuthPrincipal principal) {
-        ClassMaster classMaster = loadAccessible(classId, principal);
+        return assignInto(loadAccessible(classId, principal), enrollmentId);
+    }
 
+    /**
+     * 배정 본체. 단건·일괄이 같은 규칙을 타야 해서 분리했다 —
+     * 일괄에만 다른 검증이 들어가면 두 경로로 만든 데이터가 서로 다른 상태가 된다.
+     */
+    private ClassMemberView assignInto(ClassMaster classMaster, Long enrollmentId) {
         StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
 
@@ -160,6 +248,110 @@ public class ClassService {
         return new ClassMemberView(saved,
                 seatCodes(List.of(enrollmentId)).get(enrollmentId),
                 classMaster.getAcademy().getAcadNm());
+    }
+
+    /**
+     * 반 배정 해제 (좌석·사물함 해제와 같은 결).
+     *
+     * <p><b>행을 지우지 않고 비활성으로 내린다</b> — 배정은 이력이라
+     * 지우면 "언제까지 어느 반이었나"를 잃는다. 재배정이 이전 행을 내리는 것과 같은 처리다.
+     *
+     * <p>반을 경로에 함께 받는다. 학생만으로 찾으면 고정반·이동수업반 중 <b>어느 것을 뗄지가
+     * 정해지지 않는다</b>(좌석은 학생당 하나라 학생 ID만으로 충분했다).
+     */
+    @Transactional
+    public void releaseStudent(Long classId, Long enrollmentId, AuthPrincipal principal) {
+        ClassMaster classMaster = loadAccessible(classId, principal);
+        ClassAssignment assignment = classAssignmentRepository
+                .findByClassMasterIdAndEnrollmentIdAndActiveTrue(classMaster.getId(), enrollmentId)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.CLASS_NOT_ASSIGNED));
+        assignment.deactivate();
+    }
+
+    /**
+     * 학생 일괄 배정 (F-4.1-4 "선택 N명 일괄 배정").
+     *
+     * <p><b>★ 전부-아니면-전무가 아니라 건별 결과를 돌려준다.</b> 화면이 목록에서 여러 명을
+     * 골라 보내는데, 한 명이 다른 지점·다른 연도라는 이유로 전부 되돌리면 <b>운영자는 누가
+     * 문제였는지 모른 채 처음부터 다시</b> 골라야 한다. 키오스크 {@code seat-leaves}가
+     * 같은 이유로 건별이다.
+     *
+     * <p><b>부분 성공이 위험하지 않은 이유</b> — 실패 사유가 전부 <b>그 학생 한 명에 대한
+     * 검증</b>(존재·지점·연도)이라 다른 학생의 배정 결과를 바꾸지 않는다. 정원 초과도
+     * 막지 않으므로(아래) "N명을 넣으면 넘친다" 같은 <b>집합 단위 판정이 없다</b> —
+     * 집합 판정이 생기면 그때는 전부-아니면-전무로 바꿔야 한다.
+     *
+     * <p><b>정원은 넘겨도 막지 않는다.</b> 스키마 주석이 명시하듯 정원을 넘겨야 하는 예외가
+     * 실제로 있다. 대신 결과에 초과 여부를 실어 화면이 경고를 띄울 수 있게 한다 —
+     * 조용히 넘기면 아무도 모른다.
+     *
+     * <p>같은 배치에 같은 학생이 두 번 들어오면 뒤엣것은 건너뛴다. 두 번 배정하면
+     * 방금 넣은 행을 스스로 비활성으로 내려 <b>이력에 의미 없는 줄이 남는다.</b>
+     */
+    @Transactional
+    public BulkAssignOutcome assignStudents(Long classId, List<Long> enrollmentIds,
+                                            AuthPrincipal principal) {
+        ClassMaster classMaster = loadAccessible(classId, principal);
+        List<BulkAssignResult> results = new ArrayList<>();
+        Set<Long> seen = new LinkedHashSet<>();
+
+        for (Long enrollmentId : enrollmentIds) {
+            if (enrollmentId == null) {
+                results.add(BulkAssignResult.failed(null, "등록 건은 필수입니다."));
+                continue;
+            }
+            if (!seen.add(enrollmentId)) {
+                results.add(new BulkAssignResult(
+                        enrollmentId, null, BulkAssignResult.Status.DUPLICATE, "같은 요청에 두 번 들어왔습니다."));
+                continue;
+            }
+            try {
+                ClassMemberView view = assignInto(classMaster, enrollmentId);
+                results.add(new BulkAssignResult(enrollmentId,
+                        view.assignment().getEnrollment().getStudentName(),
+                        BulkAssignResult.Status.ASSIGNED, null));
+            } catch (BusinessException e) {
+                // 검증 실패라 아직 아무것도 쓰지 않았다 — 다음 학생 처리에 영향이 없다
+                results.add(BulkAssignResult.failed(enrollmentId, e.getMessage()));
+            }
+        }
+
+        int memberCount = memberCounts(List.of(classMaster.getId()))
+                .getOrDefault(classMaster.getId(), 0);
+        return new BulkAssignOutcome(classMaster, memberCount, results);
+    }
+
+    /**
+     * 일괄 배정 결과 전체. 반 현재 인원·정원을 함께 준다 —
+     * 화면이 직후에 목록을 다시 부르지 않아도 충원율을 갱신할 수 있다.
+     */
+    public record BulkAssignOutcome(ClassMaster classMaster, int memberCount,
+                                    List<BulkAssignResult> results) {
+
+        /** 정원 초과 여부. 정원이 없는 반은 초과라는 개념 자체가 없다. */
+        public boolean overCapacity() {
+            Short capacity = classMaster.getCapacity();
+            return capacity != null && memberCount > capacity;
+        }
+    }
+
+    /** 건별 결과. 화면이 실패한 줄만 다시 고를 수 있어야 한다. */
+    public record BulkAssignResult(Long enrollmentId, String studentName,
+                                   Status status, String message) {
+
+        public enum Status {
+            /** 배정됐다. */
+            ASSIGNED,
+            /** 같은 요청에 중복으로 들어와 건너뛰었다 — 앞엣것이 이미 배정됐으므로 오류가 아니다. */
+            DUPLICATE,
+            /** 배정하지 못했다. 사유는 {@code message}. */
+            FAILED
+        }
+
+        static BulkAssignResult failed(Long enrollmentId, String message) {
+            return new BulkAssignResult(enrollmentId, null, Status.FAILED, message);
+        }
     }
 
     private ClassMaster loadAccessible(Long classId, AuthPrincipal principal) {

@@ -103,6 +103,21 @@ public class AdminRoutineController {
     // ── 결과 (반 단위 그리드) ────────────────────────────────────
 
     /**
+     * 그날의 <b>모든 루틴</b> 결과 — 화면 한 표(학생 × 루틴).
+     *
+     * <p>루틴별 조회({@code /{routineId}/results})를 루틴 수만큼 부르지 않아도 된다.
+     * 월 20개면 20번이 나가고 조립까지 화면이 해야 했다.
+     */
+    @GetMapping("/results")
+    public ApiResponse<RoutineResponse.DayMatrix> matrix(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ApiResponse.success(RoutineResponse.DayMatrix.from(
+                routineService.matrix(me, academyId, date)));
+    }
+
+    /**
      * 그리드 조회.
      *
      * <p><b>아직 입력 안 한 학생도 빈 줄로 나온다</b>({@code id}가 {@code null}).

@@ -37,6 +37,15 @@ public enum DsaCode {
      */
     SEAT_OCCUPIED(103, "이미 사용 중인 좌석입니다.", true),
 
+    /**
+     * 성적표 업로드 실패(홈페이지 3.8).
+     *
+     * <p>{@link #SEAT_OCCUPIED}와 값이 같다 — 규격서가 101~200을 <b>엔드포인트별</b>
+     * 오류 구간으로 쓰기 때문에 같은 숫자가 다른 뜻을 갖는다. 이름을 나눠 어느 쪽인지
+     * 코드에서 드러나게 한다.
+     */
+    FILE_UPLOAD_FAILURE(103, "File Upload Failure", true),
+
     /** 이미 조퇴 처리된 학생의 재태깅. 차단하고 이상 로그를 남긴다. */
     ALREADY_LEFT_EARLY(121, "이미 조퇴 처리되었습니다.", true),
 

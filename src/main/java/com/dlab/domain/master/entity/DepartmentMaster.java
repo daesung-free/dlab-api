@@ -55,4 +55,29 @@ public class DepartmentMaster extends BaseEntity {
         this.copiedFromId = sourceId;
     }
 
+
+    /** 코드 · 비고 · 사용여부. 네 마스터가 같은 세 칸을 공유한다. */
+    @Embedded
+    private MasterAttributes attributes = MasterAttributes.empty();
+
+    public String getCode() {
+        return attributes.getCode();
+    }
+
+    public String getMemo() {
+        return attributes.getMemo();
+    }
+
+    public boolean isActive() {
+        return attributes.isActive();
+    }
+
+    /** {@code null}은 "안 바꿈"이 아니라 "지움"이다 — 화면은 항상 현재 값을 실어 보낸다. */
+    public void updateAttributes(String code, String memo) {
+        this.attributes.update(code, memo);
+    }
+
+    public void changeActive(boolean active) {
+        this.attributes.changeActive(active);
+    }
 }

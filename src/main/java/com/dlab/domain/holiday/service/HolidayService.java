@@ -31,10 +31,20 @@ public class HolidayService {
     private final HolidayRepository holidayRepository;
 
     /** 기간 조회. 전 지점 공통 + 해당 지점 것을 함께 돌려준다. */
-    public List<Holiday> findInRange(AuthPrincipal principal, LocalDate from, LocalDate to) {
-        Long academyId = principal.academyScopeFilter();
+    /**
+     * 기간 조회.
+     *
+     * <p><b>본사는 전 지점을 본다.</b> 전에는 {@code academyScopeFilter()}가 {@code null}인
+     * 것을 "공통만 보라"로 읽어, 본사 계정에서 지점 휴일이 통째로 안 보였다 —
+     * 다른 목록은 전부 반대로 동작한다({@code null} = 필터 없음).
+     *
+     * @param requestedAcademyId 지점을 골라 좁힌다. 지점 관리자가 남의 지점을 넣으면 거절된다
+     */
+    public List<Holiday> findInRange(AuthPrincipal principal, Long requestedAcademyId,
+                                     LocalDate from, LocalDate to) {
+        Long academyId = principal.resolveAcademyScope(requestedAcademyId);
         return academyId == null
-                ? holidayRepository.findNationwideInRange(from, to)
+                ? holidayRepository.findAllInRange(from, to)
                 : holidayRepository.findInRange(academyId, from, to);
     }
 
@@ -45,21 +55,27 @@ public class HolidayService {
      */
     @Transactional
     public Holiday register(AuthPrincipal principal, Long academyId, LocalDate date,
-                            String name, HolidayType type) {
+                            String name, HolidayType type, boolean planExcluded) {
         validateWritable(principal, academyId, type);
         validateNotDuplicated(academyId, date);
 
         Holiday holiday = academyId == null
                 ? Holiday.nationwide(date, name, type)
                 : Holiday.ofAcademy(academyId, date, name);
+        holiday.changePlanExcluded(planExcluded);
         // created_by는 SecurityAuditorAware가 채운다 — 여기서 설정하지 않는다.
         return holidayRepository.save(holiday);
     }
 
     @Transactional
-    public Holiday rename(AuthPrincipal principal, Long holidayId, String name) {
+    public Holiday rename(AuthPrincipal principal, Long holidayId, String name,
+                          Boolean planExcluded) {
         Holiday holiday = findWritable(principal, holidayId);
         holiday.rename(name);
+        // null 은 "변경하지 않음"이다 — 이름만 고치려다 차단 설정이 꺼지면 안 된다
+        if (planExcluded != null) {
+            holiday.changePlanExcluded(planExcluded);
+        }
         return holiday;
     }
 

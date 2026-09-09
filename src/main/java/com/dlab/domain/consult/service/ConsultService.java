@@ -49,6 +49,7 @@ public class ConsultService {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
     private final TeacherRepository teacherRepository;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
     private final com.dlab.domain.user.repository.AcademyRepository academyRepository;
     private final Clock clock;
 
@@ -58,10 +59,12 @@ public class ConsultService {
     public ConsultLog write(AuthPrincipal me, Long enrollmentId, Long teacherId,
                             ConsultType type, ConsultMethod method, LocalDate consultedAt,
                             String placeNote, String content, String actionPlan,
-                            LocalDate nextDueDate, List<Long> tagIds) {
+                            LocalDate nextDueDate, List<Long> tagIds,
+                            com.dlab.domain.consult.entity.ParentShare parentShare,
+                            Short durationMinutes) {
 
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
-        Teacher teacher = resolveTeacher(enrollment, teacherId);
+        Teacher teacher = resolveTeacher(me, enrollment, teacherId);
 
         if (consultedAt.isAfter(LocalDate.now(clock))) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "미래 날짜로 상담을 기록할 수 없습니다.");
@@ -70,7 +73,7 @@ public class ConsultService {
         ConsultLog written = logRepository.save(new ConsultLog(
                 enrollment, teacher, type, method, consultedAt, content));
         written.update(type, method, consultedAt, placeNote, content,
-                actionPlan, false, nextDueDate);
+                actionPlan, false, nextDueDate, parentShare, durationMinutes);
         written.replaceTags(resolveTags(enrollment, tagIds));
 
         log.info("상담 일지 작성: enrollmentId={}, 유형={}, 일자={}",
@@ -82,11 +85,13 @@ public class ConsultService {
     public ConsultLog update(AuthPrincipal me, Long logId, ConsultType type, ConsultMethod method,
                              LocalDate consultedAt, String placeNote, String content,
                              String actionPlan, boolean actionDone, LocalDate nextDueDate,
-                             List<Long> tagIds) {
+                             List<Long> tagIds,
+                             com.dlab.domain.consult.entity.ParentShare parentShare,
+                             Short durationMinutes) {
 
         ConsultLog target = requireLog(me, logId);
         target.update(type, method, consultedAt, placeNote, content, actionPlan,
-                actionDone, nextDueDate);
+                actionDone, nextDueDate, parentShare, durationMinutes);
         target.replaceTags(resolveTags(target.getEnrollment(), tagIds));
         return target;
     }
@@ -244,19 +249,40 @@ public class ConsultService {
     // ── 내부 ──────────────────────────────────────────────────
 
     /**
-     * 상담자 결정.
+     * 상담자 결정 — <b>지정 &gt; 로그인한 본인 &gt; 학생 담임</b> 순이다.
      *
-     * <p>지정하지 않으면 <b>그 학생의 담임</b>이 된다 — 반 배정에서 자동으로 나온다.
+     * <p>화면이 {@code teacherId}를 보낼 방법이 없다. 토큰에는 {@code accountId}만 있고
+     * 그것을 교사와 잇는 API가 없어서, 안 보내면 <b>작성자가 빈 채로 남아</b> 상담 이력에서
+     * "누가 상담했는지"가 사라진다. 그래서 <b>서버가 로그인 주체로 채운다</b> —
+     * 클라이언트가 남의 id를 실어 보낼 수 없다는 점에서도 이쪽이 안전하다.
+     *
+     * <p>담임 폴백은 그대로 둔다. 행정직원이 대신 입력하는 경우가 있어, 그때는 그 학생의
+     * 담임이 상담자가 되는 것이 실제 운영과 맞다.
      */
-    private Teacher resolveTeacher(StudentEnrollment enrollment, Long teacherId) {
+    private Teacher resolveTeacher(AuthPrincipal me, StudentEnrollment enrollment, Long teacherId) {
         if (teacherId != null) {
             return teacherRepository.findById(teacherId)
                     .filter(t -> !t.isDeleted())
                     .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND,
                             "선생님을 찾을 수 없습니다."));
         }
+        Teacher self = loginTeacher(me);
+        if (self != null) {
+            return self;
+        }
         return classAssignmentRepository.findActiveFixedByEnrollmentId(enrollment.getId())
                 .map(ClassAssignment::getHomeroomTeacher)
+                .orElse(null);
+    }
+
+    /** 로그인 주체가 담당선생님이면 그 교사. 행정직원·관리자면 없다. */
+    private Teacher loginTeacher(AuthPrincipal me) {
+        if (me == null || me.accountId() == null) {
+            return null;
+        }
+        return accountRepository.findById(me.accountId())
+                .map(com.dlab.domain.user.entity.Account::getTeacher)
+                .filter(t -> t != null && !t.isDeleted())
                 .orElse(null);
     }
 

@@ -32,6 +32,7 @@ public class PenaltyService {
     private final PenaltyPointRepository pointRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
     private final java.time.Clock clock;
 
     /**
@@ -44,10 +45,21 @@ public class PenaltyService {
     public List<PenaltyPoint> grantManually(AuthPrincipal principal,
                                             List<Long> enrollmentIds,
                                             PenaltyItem item,
-                                            String reason) {
+                                            String reason,
+                                            java.time.LocalDate occurredOn) {
         List<StudentEnrollment> enrollments = enrollmentRepository.findAllById(enrollmentIds);
         if (enrollments.size() != enrollmentIds.size()) {
             throw new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND);
+        }
+
+        // ★ 발생일을 받는다. 어제 일을 오늘 넣는 경우가 실제로 있다 —
+        //   현재 시각으로 박으면 그 건이 오늘 조회에 뜨고 어제 조회에서 빠진다.
+        //   미래는 막는다: 아직 일어나지 않은 일에 벌점을 줄 수 없다
+        java.time.Instant occurredAt = occurredOn == null
+                ? java.time.Instant.now(clock)
+                : occurredOn.atStartOfDay(clock.getZone()).toInstant();
+        if (occurredOn != null && occurredOn.isAfter(java.time.LocalDate.now(clock))) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "미래 일자로는 부여할 수 없습니다.");
         }
 
         List<PenaltyPoint> granted = enrollments.stream()
@@ -60,7 +72,8 @@ public class PenaltyService {
                         item.getPointValue(),
                         reason == null || reason.isBlank() ? item.getItemName() : reason,
                         PenaltySource.MANUAL,
-                        null))
+                        null,
+                        occurredAt))
                 .toList();
 
         // created_by는 SecurityAuditorAware가 채운다 — 여기서 설정하지 않는다.
@@ -111,7 +124,9 @@ public class PenaltyService {
     public PenaltyBoard board(AuthPrincipal principal, Long requestedAcademyId,
                               java.time.LocalDate from,
                               java.time.LocalDate to, PenaltyCategory category,
-                              PenaltySource source, String keyword, Long classId) {
+                              List<PenaltySource> sources,
+                              com.dlab.domain.user.entity.EnrollmentStatus enrollmentStatus,
+                              String keyword, Long classId) {
         Long academyId = principal.requireAcademyScope(requestedAcademyId);
 
         java.time.ZoneId zone = clock.getZone();
@@ -120,11 +135,23 @@ public class PenaltyService {
                 from.atStartOfDay(zone).toInstant(),
                 // 끝 날짜를 포함해야 한다 — 오늘 부여분이 오늘 조회에서 빠지면 확인이 안 된다
                 to.plusDays(1).atStartOfDay(zone).toInstant(),
-                category, source);
+                category,
+                sources == null || sources.isEmpty() ? null : sources,
+                enrollmentStatus);
+
+        // ★ 반 이름을 한 번에 푼다. 행마다 조회하면 목록 크기만큼 쿼리가 나간다 —
+        //   반 필터도 여기서 같이 쓴다
+        java.util.Map<Long, String> classes = classNamesOf(points);
+
+        // 반 필터를 행마다 조회하면 쿼리가 건수만큼 나간다. 대상 학생을 한 번에 받아 둔다
+        java.util.Set<Long> inClass = classId == null ? null
+                : classAssignmentRepository.findActiveByClassId(classId).stream()
+                        .map(a -> a.getEnrollment().getId())
+                        .collect(java.util.stream.Collectors.toSet());
 
         List<PenaltyPoint> filtered = points.stream()
                 .filter(p -> matchesKeyword(p, keyword))
-                .filter(p -> matchesClass(p, classId))
+                .filter(p -> inClass == null || inClass.contains(p.getEnrollment().getId()))
                 .toList();
 
         int plus = filtered.stream()
@@ -138,7 +165,31 @@ public class PenaltyService {
         long auto = filtered.stream()
                 .filter(p -> p.getSource() != PenaltySource.MANUAL).count();
 
-        return new PenaltyBoard(filtered, plus, -minus, auto);
+        return new PenaltyBoard(filtered, plus, -minus, auto,
+                granterNames(filtered), classes);
+    }
+
+    /**
+     * 부여자 계정 ID → 이름.
+     *
+     * <p><b>한 번에 조회한다.</b> 행마다 부르면 목록 크기만큼 쿼리가 나간다.
+     *
+     * <p>배치·스케줄러가 부여한 건은 시스템 계정({@code 0})이라 조회되지 않는다 —
+     * 화면이 {@code null}을 보고 "자동"으로 표시하면 된다.
+     */
+    private java.util.Map<Long, String> granterNames(List<PenaltyPoint> rows) {
+        java.util.Set<Long> ids = rows.stream()
+                .map(PenaltyPoint::getCreatedBy)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return java.util.Map.of();
+        }
+        return accountRepository.findDisplayNames(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        r -> ((Number) r[0]).longValue(),
+                        r -> (String) r[1],
+                        (a, b) -> a));
     }
 
     private boolean matchesKeyword(PenaltyPoint p, String keyword) {
@@ -152,21 +203,41 @@ public class PenaltyService {
                 || (studentNo != null && studentNo.contains(kw));
     }
 
-    private boolean matchesClass(PenaltyPoint p, Long classId) {
-        if (classId == null) {
-            return true;
+    /**
+     * 등록 건 ID → 반 이름.
+     *
+     * <p>화면 '반' 컬럼이 이걸 찍고, 반 필터도 같은 결과를 쓴다. <b>한 번에 조회한다</b> —
+     * 행마다 부르면 목록 크기만큼 쿼리가 나간다.
+     */
+    private java.util.Map<Long, String> classNamesOf(List<PenaltyPoint> rows) {
+        if (rows.isEmpty()) {
+            return java.util.Map.of();
         }
-        return classAssignmentRepository
-                .findActiveFixedByEnrollmentId(p.getEnrollment().getId())
-                .map(a -> a.getClassMaster().getId().equals(classId))
-                .orElse(false);
+        java.util.Set<Long> ids = rows.stream()
+                .map(p -> p.getEnrollment().getId())
+                .collect(java.util.stream.Collectors.toSet());
+        return classAssignmentRepository.findActiveFixedByEnrollmentIds(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        a -> a.getEnrollment().getId(),
+                        a -> a.getClassMaster().getName(),
+                        (x, y) -> x));
     }
+
+    // ★ 반 필터를 행마다 조회하던 matchesClass 는 뺐다 — 위 inClass 집합이 같은 일을
+    //   쿼리 한 번으로 한다. 둘 다 두면 목록 크기만큼 쿼리가 나가는 쪽이 남는다.
+
 
     /**
      * @param plusTotal  상점 합계(양수)
      * @param minusTotal 벌점 합계(<b>음수로 표시</b>). 화면이 "-12"처럼 그대로 찍는다
      * @param autoCount  자동 부여 건수. 규칙(I-5) 확정 전이라 보통 0이다
      */
-    public record PenaltyBoard(List<PenaltyPoint> rows, int plusTotal, int minusTotal, long autoCount) {
+    /**
+     * @param granterNames 부여자 계정 ID → 이름. 배치 부여분은 없다
+     * @param classNames   등록 건 ID → 반 이름. 미배정이면 없다
+     */
+    public record PenaltyBoard(List<PenaltyPoint> rows, int plusTotal, int minusTotal,
+                               long autoCount, java.util.Map<Long, String> granterNames,
+                               java.util.Map<Long, String> classNames) {
     }
 }

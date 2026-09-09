@@ -63,21 +63,34 @@ public class AdminAttendanceController {
      * @param classId 담당 반. 담임은 자기 반만 본다
      * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
      *                  전 지점 권한자(본사)는 지정해야 한다
+     * @param date <b>하루 조회.</b> {@code from}·{@code to}를 주면 그쪽이 우선한다
+     * @param from 기간 시작. {@code to}와 함께 준다
+     * @param to 기간 끝(포함). ★ 기간 조회는 <b>학생×날짜</b>로 행이 늘어난다 —
+     *           하루 조회처럼 "재원생 1인 1행"이 아니다
+     * @param excused <b>사유 승인 여부</b>. {@code statuses}로는 걸 수 없다 —
+     *                EXCUSED는 5종 상태 중 하나가 아니라 <b>행에 붙는 플래그</b>라서,
+     *                결석이면서 사유 승인인 행이 존재한다. 화면 상태 칩에 '사유 승인'이
+     *                있고 summary에도 카운트가 나가는데 필터만 없었다
      */
     @GetMapping
     public ApiResponse<AttendanceBoardResponse> board(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) List<ScreenStatus> statuses,
+            @RequestParam(required = false) Boolean excused,
             @RequestParam(required = false) String keyword) {
 
-        List<AttendanceRow> rows = boardService.board(
-                me, academyId, date == null ? LocalDate.now() : date, classId);
+        List<AttendanceRow> rows = (from != null && to != null)
+                ? boardService.board(me, academyId, from, to, classId)
+                : boardService.board(me, academyId, date == null ? LocalDate.now() : date, classId);
 
         List<AttendanceRow> filtered = rows.stream()
                 .filter(r -> statuses == null || statuses.isEmpty() || statuses.contains(r.status()))
+                .filter(r -> excused == null || r.excused() == excused)
                 .filter(r -> matchesKeyword(r, keyword))
                 .toList();
 
@@ -123,7 +136,9 @@ public class AdminAttendanceController {
      * @param studyTime {@code "N시간 MM분"} 문자열. 화면이 그대로 찍는다
      * @param excused   사유 승인 여부. 상태와 <b>직교하는 축</b>이라 따로 내린다
      */
+    /** @param date 그 행의 일자. 기간 조회는 학생×날짜로 행이 늘어난다 */
     public record AttendanceRowResponse(
+            LocalDate date,
             Long enrollmentId,
             String studentNo,
             String name,
@@ -140,7 +155,7 @@ public class AdminAttendanceController {
     ) {
         static AttendanceRowResponse of(AttendanceRow r, boolean raw) {
             return new AttendanceRowResponse(
-                    r.enrollmentId(), r.studentNo(),
+                    r.date(), r.enrollmentId(), r.studentNo(),
                     raw ? r.name() : Masking.name(r.name()),
                     r.className(), r.seatCd(),
                     r.checkInAt(), r.checkOutAt(),
@@ -244,7 +259,7 @@ public class AdminAttendanceController {
                                            @PathVariable Long enrollmentId,
                                            @Valid @RequestBody StatusCorrectionRequest request) {
         correctionService.correctStatus(me, enrollmentId, request.date(),
-                request.status(), request.excused(), request.reason());
+                request.status(), request.excusedOrFalse(), request.reason());
         return ApiResponse.success(null);
     }
 
@@ -253,8 +268,13 @@ public class AdminAttendanceController {
             @NotNull(message = "일자는 필수입니다.")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @NotNull(message = "상태는 필수입니다.") DailyStatus status,
-            boolean excused,
+            Boolean excused,
             @NotBlank(message = "정정 사유는 필수입니다.") @Size(max = 200) String reason) {
+
+        /** 생략 가능 — 없으면 false. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
+        public boolean excusedOrFalse() {
+            return excused == null ? false : excused;
+        }
     }
 
     /**

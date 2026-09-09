@@ -68,7 +68,7 @@ class NotificationTemplateFlowTest {
     private void createAdmin(Academy academy, String loginId, String role) {
         Employee employee = new Employee(academy, loginId);
         em.persist(employee);
-        Account account = Account.forEmployee(employee, loginId, passwordEncoder.encode(PASSWORD));
+        Account account = Account.forEmployee(employee, loginId, passwordEncoder.encode(PASSWORD), false);
         em.persist(account);
         em.flush();
         em.createNativeQuery("""
@@ -171,7 +171,7 @@ class NotificationTemplateFlowTest {
     @DisplayName("★ 승인된 알림톡 문구를 고치면 DRAFT로 돌아간다 — 카카오는 승인받은 문구만 허용한다")
     void editingApprovedContentResetsReview() throws Exception {
         String token = token("NTSUPER");
-        updateContent(alimtalkTemplateId, "{studentName} 미등원", "본문", true);
+        updateContent(alimtalkTemplateId, "{studentName} 미등원", "{studentName} 본문", true);
         mvc.perform(post("/api/v1/admin/notification-templates/{id}/review/submit", alimtalkTemplateId)
                 .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -186,7 +186,7 @@ class NotificationTemplateFlowTest {
         assertThat(reviewStatus(alimtalkTemplateId)).isEqualTo(ReviewStatus.APPROVED);
 
         // 문구 수정 → 재심사 대상
-        updateContent(alimtalkTemplateId, "{studentName} 미등원 안내", "본문 수정", true);
+        updateContent(alimtalkTemplateId, "{studentName} 미등원 안내", "{studentName} 본문 수정", true);
         em.clear();
 
         assertThat(reviewStatus(alimtalkTemplateId)).isEqualTo(ReviewStatus.DRAFT);
@@ -197,7 +197,7 @@ class NotificationTemplateFlowTest {
     @DisplayName("문구가 그대로면 승인 상태가 유지된다 — 확정 플래그만 다시 눌러도 재심사가 되면 안 된다")
     void sameContentKeepsApproval() throws Exception {
         String token = token("NTSUPER");
-        updateContent(alimtalkTemplateId, "제목", "본문", true);
+        updateContent(alimtalkTemplateId, "제목", "{studentName} 본문", true);
         mvc.perform(post("/api/v1/admin/notification-templates/{id}/review/submit", alimtalkTemplateId)
                 .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -210,7 +210,7 @@ class NotificationTemplateFlowTest {
                         {"approved":true}""")).andExpect(status().isOk());
         em.flush();
 
-        updateContent(alimtalkTemplateId, "제목", "본문", true);
+        updateContent(alimtalkTemplateId, "제목", "{studentName} 본문", true);
         em.clear();
 
         assertThat(reviewStatus(alimtalkTemplateId)).isEqualTo(ReviewStatus.APPROVED);
@@ -231,7 +231,7 @@ class NotificationTemplateFlowTest {
     @Test
     @DisplayName("★ FCM 템플릿은 심사 대상이 아니다 — 심사 목록에 섞이면 왜 안 넘어가는지 헤맨다")
     void fcmCannotBeSubmitted() throws Exception {
-        updateContent(fcmTemplateId, "제목", "본문", true);
+        updateContent(fcmTemplateId, "제목", "{studentName} 본문", true);
 
         mvc.perform(post("/api/v1/admin/notification-templates/{id}/review/submit", fcmTemplateId)
                         .header("Authorization", token("NTSUPER"))
@@ -246,7 +246,7 @@ class NotificationTemplateFlowTest {
     @DisplayName("FCM은 심사 없이 문구만 확정하면 발송 가능해진다")
     void fcmSendableAfterContentConfirmed() throws Exception {
         assertThat(sendable(fcmTemplateId)).isFalse();
-        updateContent(fcmTemplateId, "{studentName} 반려", "신청이 반려되었습니다", true);
+        updateContent(fcmTemplateId, "{studentName} 반려", "{studentName} 학생의 신청이 반려되었습니다", true);
         em.clear();
         assertThat(sendable(fcmTemplateId)).isTrue();
     }
@@ -255,7 +255,7 @@ class NotificationTemplateFlowTest {
     @DisplayName("심사 반려되면 사유가 남는다 — 없으면 뭘 고쳐야 할지 모른다")
     void rejectionKeepsNote() throws Exception {
         String token = token("NTSUPER");
-        updateContent(alimtalkTemplateId, "제목", "본문", true);
+        updateContent(alimtalkTemplateId, "제목", "{studentName} 본문", true);
         mvc.perform(post("/api/v1/admin/notification-templates/{id}/review/submit", alimtalkTemplateId)
                 .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -299,6 +299,42 @@ class NotificationTemplateFlowTest {
                                 {"event":"MISSING_ATTENDANCE","channel":"FCM_PUSH"}"""))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("NOTIFICATION_TEMPLATE_DUPLICATED"));
+    }
+
+    @Test
+    @DisplayName("★★ 알림톡은 심사를 통과해야 발송 가능하다 — NOT_REQUIRED 로 새어나가면 카카오가 거절한다")
+    void alimtalkNeedsApprovalEvenIfNotRequired() throws Exception {
+        updateContent(alimtalkTemplateId, "{studentName} 미등원", "{studentName} 본문", true);
+        em.clear();
+
+        // 마이그레이션 순서 때문에 알림톡이 NOT_REQUIRED 로 들어간 적이 있다.
+        // 그 상태를 강제로 만들어도 발송 가능이 되면 안 된다 —
+        // 화면은 "나감"인데 카카오에서 거절되고 원인이 우리 쪽에 안 남는다
+        em.createQuery("UPDATE NotificationTemplate t SET t.reviewStatus = :s WHERE t.id = :id")
+                .setParameter("s", ReviewStatus.NOT_REQUIRED)
+                .setParameter("id", alimtalkTemplateId)
+                .executeUpdate();
+        em.clear();
+
+        assertThat(sendable(alimtalkTemplateId)).isFalse();
+    }
+
+    @Test
+    @DisplayName("★ 본문에 학생명 자리가 없으면 확정되지 않는다 — 다자녀 학부모가 누구 얘긴지 모른다")
+    void confirmRequiresStudentNamePlaceholder() throws Exception {
+        mvc.perform(patch("/api/v1/admin/notification-templates/{id}/content", alimtalkTemplateId)
+                        .header("Authorization", token("NTSUPER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"titleTemplate":"미등원","bodyTemplate":"학생이 등원하지 않았습니다",\
+                                 "contentConfirmed":true}"""))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("확정 전 초안은 학생명 없이도 저장된다 — 쓰다 만 문구까지 막으면 작성이 불편하다")
+    void draftDoesNotRequirePlaceholder() throws Exception {
+        updateContent(alimtalkTemplateId, "미등원", "아직 쓰는 중", false);
     }
 
     private boolean sendable(Long id) {

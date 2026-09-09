@@ -157,7 +157,7 @@ public class AdminLearningPlanController {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
 
         return ApiResponse.success(PlanResponse.PlanOption.from(planService.createOption(
-                academy, year, request.optionType(), request.label(), request.sortOrder())));
+                academy, year, request.optionType(), request.label(), request.sortOrderOrZero())));
     }
 
     /** 선택지 이름 변경. 이미 그 선택지를 쓴 계획도 같이 바뀐다. */
@@ -169,7 +169,7 @@ public class AdminLearningPlanController {
             @Valid @RequestBody PlanRequests.SaveOption request) {
 
         return ApiResponse.success(PlanResponse.PlanOption.from(planService.updateOption(
-                resolveScope(me, academyId), optionId, request.label(), request.sortOrder())));
+                resolveScope(me, academyId), optionId, request.label(), request.sortOrderOrZero())));
     }
 
     /** soft delete — 이미 이 과목으로 쌓인 계획의 통계가 사라지면 안 된다. */

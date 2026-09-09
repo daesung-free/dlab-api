@@ -35,6 +35,7 @@ public class AppAttendanceController {
 
     private final AttendanceQueryService attendanceQueryService;
     private final AbsenceReasonService absenceReasonService;
+    private final com.dlab.domain.attendance.repository.AbsenceReasonCategoryRepository categoryRepository;
     private final AppScopeResolver scopeResolver;
 
     /**
@@ -95,7 +96,25 @@ public class AppAttendanceController {
         return ApiResponse.success(AttendanceResponse.AbsenceReasonRow.from(
                 absenceReasonService.submitByStudent(enrollmentId, request.date(),
                         request.type(), request.reasonText(),
-                        request.startTime(), request.endTime())));
+                        request.startTime(), request.endTime(), request.categoryId())));
+    }
+
+    /**
+     * 사유 카테고리 목록 — 신청 화면 드롭다운.
+     *
+     * <p><b>켜져 있는 것만</b> 내린다. 꺼둔 항목은 관리 화면에서만 보인다.
+     *
+     * <p>비어 있을 수 있다 — 아직 등록된 카테고리가 없으면 앱은 사유란만 보여주면 된다.
+     */
+    @GetMapping("/absence-reasons/categories")
+    public ApiResponse<List<AttendanceResponse.AbsenceCategory>> absenceCategories(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long studentId) {
+
+        var enrollment = scopeResolver.resolve(me.accountId(), studentId);
+        return ApiResponse.success(categoryRepository
+                .findUsable(enrollment.getAcademy().getId(), enrollment.getYear(), true)
+                .stream().map(AttendanceResponse.AbsenceCategory::from).toList());
     }
 
     /** 사유 취소 — 승인 전까지만. 승인·반려된 건은 이력이라 관리자가 정정한다. */

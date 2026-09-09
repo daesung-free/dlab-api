@@ -52,15 +52,34 @@ public class AdminQnaOfflineController {
                 .toList());
     }
 
-    /** 날짜별 슬롯 + 예약 현황. 예약자 명단이 함께 나온다. */
+    /**
+     * 슬롯 + 예약 현황. 예약자 명단이 함께 나온다.
+     *
+     * <p><b>기간으로도 조회한다.</b> 화면이 주간 그리드라 하루씩 부르면 5회가 매번 나간다 —
+     * {@code from}·{@code to}를 주면 한 번에 받는다. {@code date} 하나만 주면 그날만 본다.
+     */
     @GetMapping("/slots")
     public ApiResponse<List<QnaResponse.QnaSlot>> slots(
             @CurrentAccount AuthPrincipal me,
             @RequestParam Long academyId,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return ApiResponse.success(
-                qnaOfflineService.slotsWithReservations(academyId, date, me).stream()
-                        .map(QnaResponse.QnaSlot::from).toList());
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+
+        if (date == null && from == null) {
+            throw new com.dlab.common.exception.BusinessException(
+                    com.dlab.common.exception.ErrorCode.INVALID_REQUEST,
+                    "date 또는 from·to 중 하나는 필요합니다.");
+        }
+        var views = date != null
+                ? qnaOfflineService.slotsWithReservations(academyId, date, me)
+                : qnaOfflineService.slotsWithReservations(academyId, from,
+                        to == null ? from : to, me);
+
+        return ApiResponse.success(views.stream().map(QnaResponse.QnaSlot::from).toList());
     }
 
     /**

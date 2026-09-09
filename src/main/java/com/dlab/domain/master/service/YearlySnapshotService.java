@@ -9,10 +9,13 @@ import com.dlab.domain.master.entity.CourseType;
 import com.dlab.domain.master.entity.Curriculum;
 import com.dlab.domain.master.entity.Tuition;
 import com.dlab.domain.master.entity.DepartmentMaster;
+import com.dlab.domain.master.entity.ScholarshipMaster;
 import com.dlab.domain.master.repository.CourseTypeRepository;
 import com.dlab.domain.master.repository.CurriculumRepository;
 import com.dlab.domain.master.repository.TuitionRepository;
 import com.dlab.domain.master.repository.DepartmentMasterRepository;
+import com.dlab.domain.master.repository.ScholarshipMasterRepository;
+import com.dlab.domain.payment.entity.BillingStandard;
 import com.dlab.domain.penalty.entity.PenaltyItem;
 import com.dlab.domain.penalty.entity.PenaltyRule;
 import com.dlab.domain.penalty.repository.PenaltyItemRepository;
@@ -77,6 +80,9 @@ public class YearlySnapshotService {
     private final ApprovalItemRepository approvalItemRepository;
     private final PenaltyItemRepository penaltyItemRepository;
     private final PenaltyRuleRepository penaltyRuleRepository;
+    private final ScholarshipMasterRepository scholarshipMasterRepository;
+    /** 화면의 '전년도 기준 복사'가 이걸 탄다 — 없어서 눌러도 아무 일도 안 일어났다. */
+    private final com.dlab.domain.payment.repository.BillingStandardRepository billingStandardRepository;
 
     @PersistenceContext
     private EntityManager em;
@@ -120,6 +126,8 @@ public class YearlySnapshotService {
         copied.put("penaltyItem", itemMapping.size());
         copied.put("penaltyRule", copyPenaltyRules(academy, fromYear, toYear, itemMapping));
         copied.put("tuition", copyTuitions(academy, fromYear, toYear));
+        copied.put("scholarshipMaster", copyScholarshipMasters(academy, fromYear, toYear));
+        copied.put("billingStandard", copyBillingStandards(academy, fromYear, toYear));
         copied.put("staff", copyStaffEnrollments(academy, fromYear, toYear));
 
         SnapshotResult result = new SnapshotResult(fromYear, toYear, copied);
@@ -205,6 +213,8 @@ public class YearlySnapshotService {
             DepartmentMaster copy = departmentRepository.save(
                     new DepartmentMaster(academy, toYear, src.getName()));
             copy.markCopiedFrom(src.getId());
+            carryAttributes(src.getCode(), src.getMemo(), src.isActive(),
+                    copy::updateAttributes, copy::changeActive);
         });
         return sources.size();
     }
@@ -274,6 +284,8 @@ public class YearlySnapshotService {
                     academy, toYear, src.getName(), src.getClassType(),
                     activeTeacherOrNull(src.getHomeroomTeacher())));
             copy.markCopiedFrom(src.getId());
+            // 정원도 같이 가져간다 — 안 가져가면 새 연도 반이 전부 "정원 없음"이 된다
+            copy.changeCapacity(src.getCapacity());
             // ★ 과정 참조를 새 연도 것으로 갈아끼운다. 그냥 두면 새 연도 반이 옛 과정을 가리킨다.
             if (src.getCourseType() != null) {
                 copy.assignCourseType(courseMapping.get(src.getCourseType().getId()));
@@ -294,6 +306,8 @@ public class YearlySnapshotService {
             Curriculum copy = curriculumRepository.save(new Curriculum(
                     academy, toYear, src.getName(), newClass, src.getSortOrder()));
             copy.markCopiedFrom(src.getId());
+            carryAttributes(src.getCode(), src.getMemo(), src.isActive(),
+                    copy::updateAttributes, copy::changeActive);
         }
         return sources.size();
     }
@@ -307,6 +321,8 @@ public class YearlySnapshotService {
             CourseType copy = courseTypeRepository.save(
                     new CourseType(academy, toYear, src.getName(), src.getSortOrder()));
             copy.markCopiedFrom(src.getId());
+            carryAttributes(src.getCode(), src.getMemo(), src.isActive(),
+                    copy::updateAttributes, copy::changeActive);
             mapping.put(src.getId(), copy);
         }
         return mapping;
@@ -339,7 +355,60 @@ public class YearlySnapshotService {
             Tuition copy = tuitionRepository.save(
                     new Tuition(academy, toYear, src.getName(), src.getAmount(), src.getSortOrder()));
             copy.markCopiedFrom(src.getId());
+            carryAttributes(src.getCode(), src.getMemo(), src.isActive(),
+                    copy::updateAttributes, copy::changeActive);
         });
+        return sources.size();
+    }
+
+    /**
+     * 장학 종류.
+     *
+     * <p><b>안 옮기면 그 해 장학 부여가 통째로 막힌다</b>({@code SCHOLARSHIP_MASTER_NOT_FOUND}) —
+     * 교습일수·성적 양식과 같은 유형의 연도 게이트다.
+     *
+     * <p><b>지점 행만 옮긴다.</b> 전 지점 공통 행({@code academy_id IS NULL})은 어느 지점의
+     * 복사에도 속하지 않는다 — 지점마다 복사를 돌리면 같은 공통 행이 지점 수만큼 생긴다.
+     * 공통 행은 본사가 연 1회 등록한다(컷오버 체크리스트 항목).
+     */
+    /**
+     * 청구기준 이월 (F-4.10-5).
+     *
+     * <p>화면에 '전년도 기준 복사' 버튼이 있는데 <b>복사 대상에 안 들어 있어 눌러도
+     * 아무 일도 일어나지 않았다.</b>
+     *
+     * <p><b>금액도 같이 넘어온다.</b> 교습비 행({@code PRICE_MATRIX})은 애초에 금액을
+     * 안 들고 단가표를 보므로, 새 해 단가표를 넣으면 그쪽을 따라간다 — 여기서
+     * 옛 금액이 굳지 않는다. 고정금액 행은 값이 그대로 넘어오니 <b>인상분은 새 해에
+     * 다시 손봐야 한다</b>(교습비·독서실비 인상 계획이 있다).
+     *
+     * <p>전 지점 공통 행은 복사하지 않는다 — 지점별로 돌리면 같은 공통 행이 지점 수만큼
+     * 복제된다. 공통분은 본사가 한 번 만든다.
+     */
+    private int copyBillingStandards(Academy academy, short fromYear, short toYear) {
+        List<BillingStandard> sources =
+                billingStandardRepository.findAllByScope(fromYear, academy.getId(), null, null);
+        for (BillingStandard src : sources) {
+            if (src.isCommon()) {
+                continue;
+            }
+            billingStandardRepository.save(src.getAmountSource() == BillingStandard.AmountSource.PRICE_MATRIX
+                    ? BillingStandard.priceMatrix(academy, toYear, src.getCode(), src.getItemType(),
+                            src.getName(), src.getRoundName(), src.getDueDesc(),
+                            src.getPaymentMethod(), src.getSortOrder(), src.getMemo())
+                    : BillingStandard.fixed(academy, toYear, src.getCode(), src.getItemType(),
+                            src.getName(), src.getRoundName(), src.getAmount(), src.getDueDesc(),
+                            src.getPaymentMethod(), src.getSortOrder(), src.getMemo()));
+        }
+        return (int) sources.stream().filter(s -> !s.isCommon()).count();
+    }
+
+    private int copyScholarshipMasters(Academy academy, short fromYear, short toYear) {
+        List<ScholarshipMaster> sources =
+                scholarshipMasterRepository.findAllByScope(fromYear, academy.getId());
+        sources.forEach(src -> scholarshipMasterRepository.save(new ScholarshipMaster(
+                academy, toYear, src.getCode(), src.getName(), src.getDiscountRate(),
+                src.getSortOrder(), src.getMemo())));
         return sources.size();
     }
 
@@ -383,5 +452,21 @@ public class YearlySnapshotService {
             count++;
         }
         return count;
+    }
+
+    /**
+     * 코드 · 비고 · 사용여부를 새 연도 행에 옮긴다.
+     *
+     * <p><b>{@code active}까지 옮긴다.</b> 중지해 둔 마스터가 복사에서 되살아나면
+     * 새 기수 화면에 지난 기수 항목이 다시 뜬다.
+     *
+     * <p><b>{@code code}는 그대로 둔다.</b> 지점·연도 단위 유니크라 연도가 다르면
+     * 겹치지 않고, 바꾸면 연도 간 대조가 끊긴다.
+     */
+    private void carryAttributes(String code, String memo, boolean active,
+                                 java.util.function.BiConsumer<String, String> updateAttributes,
+                                 java.util.function.Consumer<Boolean> changeActive) {
+        updateAttributes.accept(code, memo);
+        changeActive.accept(active);
     }
 }

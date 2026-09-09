@@ -52,4 +52,36 @@ public class StudyArea extends BaseEntity {
         this.sortOrder = sortOrder;
         this.active = true;
     }
+
+    /**
+     * 구역 정보 수정.
+     *
+     * <p><b>{@code areaCd}는 바꾸지 않는다.</b> 키오스크가 이 코드로 좌석을 조회하므로
+     * (3.7·3.8) 바꾸면 단말이 그 구역을 못 찾는다. 이름·정렬만 고친다.
+     */
+    public void update(String areaNm, Short sortOrder) {
+        if (areaNm != null) {
+            this.areaNm = areaNm;
+        }
+        if (sortOrder != null) {
+            this.sortOrder = sortOrder;
+        }
+    }
+
+    /**
+     * 노출 여부.
+     *
+     * <p>비활성이면 관리자 화면 구역 목록에서 빠진다 — 삭제가 아니라 "쓰지 않는 구역"이다.
+     */
+    public void changeActive(boolean active) {
+        this.active = active;
+    }
+
+    /** 되살릴 때 코드가 아니라 이름·정렬만 새 값으로 덮는다. */
+    public void reviveAs(String areaNm, short sortOrder) {
+        restore();
+        this.areaNm = areaNm;
+        this.sortOrder = sortOrder;
+        this.active = true;
+    }
 }

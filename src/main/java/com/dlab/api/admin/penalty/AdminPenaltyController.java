@@ -4,6 +4,7 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.privacy.Masking;
 import com.dlab.common.privacy.PersonalDataPolicy;
+import com.dlab.common.search.PageSlicer;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
@@ -11,6 +12,7 @@ import com.dlab.domain.penalty.entity.PenaltyCategory;
 import com.dlab.domain.penalty.entity.PenaltyItem;
 import com.dlab.domain.penalty.entity.PenaltyPoint;
 import com.dlab.domain.penalty.entity.PenaltySource;
+import com.dlab.domain.user.entity.EnrollmentStatus;
 import com.dlab.domain.penalty.repository.PenaltyItemRepository;
 import com.dlab.domain.penalty.service.PenaltyService;
 import jakarta.validation.Valid;
@@ -46,6 +48,10 @@ public class AdminPenaltyController {
      *
      * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
      *                  전 지점 권한자(본사)는 지정해야 한다
+     * @param source <b>반복 파라미터다</b>({@code ?source=KIOSK&source=ROUTINE}).
+     *               화면이 '수기'와 '자동' 둘로 묶는데 '자동'은 두 값의 OR라
+     *               단일 파라미터로는 표현이 안 된다
+     * @param enrollmentStatus 재원 상태. 화면 조건이 전체/재원생/퇴원생 3종이다
      */
     @GetMapping
     public ApiResponse<PenaltyBoardResponse> board(
@@ -54,22 +60,39 @@ public class AdminPenaltyController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) PenaltyCategory category,
-            @RequestParam(required = false) PenaltySource source,
+            @RequestParam(required = false) List<PenaltySource> source,
+            @RequestParam(required = false) EnrollmentStatus enrollmentStatus,
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) Long classId) {
+            @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
 
         LocalDate start = from == null ? LocalDate.now().withDayOfMonth(1) : from;
         LocalDate end = to == null ? LocalDate.now() : to;
 
-        var board = penaltyService.board(me, academyId, start, end, category, source, keyword, classId);
+        var board = penaltyService.board(me, academyId, start, end, category,
+                source, enrollmentStatus, keyword, classId);
         boolean raw = PersonalDataPolicy.canViewRaw(me);
 
-        return ApiResponse.success(new PenaltyBoardResponse(
-                board.rows().stream().map(p -> PenaltyRowResponse.of(p, raw)).toList(),
-                Map.of("plusTotal", (long) board.plusTotal(),
-                        "minusTotal", (long) board.minusTotal(),
-                        "autoCount", board.autoCount()),
-                !raw));
+        // 반·부여자 이름은 한 번에 조회해 Map으로 붙인다(행마다 부르면 목록 크기만큼 쿼리)
+        List<PenaltyRowResponse> all = board.rows().stream()
+                .map(p -> PenaltyRowResponse.of(p, raw, board.granterNames(), board.classNames()))
+                .toList();
+
+        // summary 는 페이지 합계가 아니라 필터 전체 기준이다 — 상단 통계 타일이
+        // 페이지를 넘길 때마다 값이 바뀌면 "이번 달 벌점 합계"라는 의미가 사라진다
+        Map<String, Long> summary = Map.of(
+                "plusTotal", (long) board.plusTotal(),
+                "minusTotal", (long) board.minusTotal(),
+                "autoCount", board.autoCount());
+
+        if (size == null) {
+            return ApiResponse.success(new PenaltyBoardResponse(all, summary, !raw));
+        }
+        var sliced = PageSlicer.of(all, page, size);
+        return ApiResponse.success(
+                new PenaltyBoardResponse(sliced.getContent(), summary, !raw),
+                ApiResponse.PageMeta.of(sliced));
     }
 
     /**
@@ -105,7 +128,8 @@ public class AdminPenaltyController {
                         "상벌점 항목을 찾을 수 없습니다."));
 
         return ApiResponse.success(penaltyService
-                .grantManually(me, request.enrollmentIds(), item, request.reason()).size());
+                .grantManually(me, request.enrollmentIds(), item, request.reason(),
+                        request.occurredAt()).size());
     }
 
     /**
@@ -127,14 +151,21 @@ public class AdminPenaltyController {
         boolean raw = PersonalDataPolicy.canViewRaw(me);
         return ApiResponse.success(new StudentPenaltyResponse(
                 penaltyService.findByEnrollment(me, enrollmentId).stream()
-                        .map(p -> PenaltyRowResponse.of(p, raw)).toList(),
+                        // 학생 상세는 건수가 적어 부여자 이름을 붙이지 않는다 —
+                        // 목록에서만 쓰는 값이고, 여기서 조회하면 화면당 쿼리가 하나 는다
+                        .map(p -> PenaltyRowResponse.of(p, raw, Map.of(), Map.of())).toList(),
                 penaltyService.totalPoints(enrollmentId)));
     }
 
+    /**
+     * @param occurredAt 발생 일자. 비우면 오늘이다 — <b>어제 일을 오늘 넣는 경우가
+     *                   실제로 있다.</b> 미래는 거부된다
+     */
     public record GrantRequest(
             @NotEmpty List<Long> enrollmentIds,
             @NotNull Long itemId,
-            @Size(max = 500) String reason
+            @Size(max = 500) String reason,
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate occurredAt
     ) {
     }
 
@@ -148,8 +179,17 @@ public class AdminPenaltyController {
      * @param point 화면 표기용 부호. <b>벌점은 음수</b>로 내린다 —
      *              화면이 카테고리를 다시 보지 않고 그대로 찍는다
      */
+    /**
+     * @param enrollmentId ★ 화면의 '선택 일괄 점수부여'가 목록에서 고른 행으로
+     *                     {@code POST /penalties}(enrollmentIds)를 부른다. 이게 없으면
+     *                     학번으로 역조회해야 해서 붙일 수가 없다
+     * @param grantedByName 부여자 이름. 계정 ID만 주면 화면이 이름을 찾을 방법이 없다
+     * @param className 반 이름. 미배정이면 {@code null}
+     * @param enrollmentStatus 재원 상태. 화면이 퇴원생을 구분해 표시한다
+     */
     public record PenaltyRowResponse(
             Long id,
+            Long enrollmentId,
             Instant occurredAt,
             String studentNo,
             String name,
@@ -158,14 +198,19 @@ public class AdminPenaltyController {
             int point,
             String reason,
             PenaltySource source,
-            Long grantedBy
+            Long grantedBy,
+            String grantedByName,
+            String className,
+            EnrollmentStatus enrollmentStatus
     ) {
-        static PenaltyRowResponse of(PenaltyPoint p, boolean raw) {
+        static PenaltyRowResponse of(PenaltyPoint p, boolean raw,
+                                    Map<Long, String> granters, Map<Long, String> classes) {
             boolean demerit = p.getPenaltyItem().getCategory() == PenaltyCategory.DEMERIT;
             int value = Math.abs(p.getPoints());
 
             return new PenaltyRowResponse(
                     p.getId(),
+                    p.getEnrollment().getId(),
                     p.getOccurredAt(),
                     p.getEnrollment().getStudentNo(),
                     raw ? p.getEnrollment().getStudent().getName()
@@ -175,7 +220,10 @@ public class AdminPenaltyController {
                     demerit ? -value : value,
                     p.getReason(),
                     p.getSource(),
-                    p.getCreatedBy());
+                    p.getCreatedBy(),
+                    granters.get(p.getCreatedBy()),
+                    classes.get(p.getEnrollment().getId()),
+                    p.getEnrollment().getEnrollmentStatus());
         }
     }
 

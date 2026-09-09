@@ -11,10 +11,14 @@ import java.util.List;
  * <h2>산식이 항목마다 다르다</h2>
  * <table>
  *   <tr><th>항목</th><th>산식</th></tr>
- *   <tr><td>교습비</td><td><b>구간</b> — 이용기간 1/3까지 2/3 환불, 1/2까지 1/2, 1/2 이후 없음</td></tr>
+ *   <tr><td>교습비</td><td><b>구간</b> — 교습 시작 전 전액, 1/3까지 2/3 환불, 1/2까지 1/2,
+ *       1/2 이후 없음</td></tr>
  *   <tr><td>독서실비</td><td><b>일할</b> — 사용한 일수만큼 차감</td></tr>
  * </table>
  * 교습비 쪽은 학원법 반환기준 그대로다.
+ *
+ * <p>⚠️ <b>첫 행(교습 시작 전 전액)을 빼먹기 쉽다.</b> 빼면 {@code usedDays = 0}이
+ * "1/3 이내" 구간으로 떨어져 하루도 안 다닌 학생에게서 1/3을 떼게 된다.
  *
  * <h2>★ 차감은 "정상가 기준"이다 — 이게 규정의 핵심이다</h2>
  * 규정에 <i>"할인적용을 받았을 경우 정상가 기준으로 차감 후 환불"</i>이라고 명시돼 있다.
@@ -75,6 +79,7 @@ public final class RefundCalculator {
      * 실수로 계산하면 27일 × 1/3 = 8.999…처럼 경계에서 한 칸씩 어긋난다.
      */
     private static ItemResult bracket(BillingItem item, int teachingDays, int usedDays) {
+        // 사용일수 0        →  차감 없음 (전액 환불) ★ 아래 주석 참고
         // 사용일수 ≤ 교습일수/3  →  차감 1/3 (2/3 환불)
         // 사용일수 ≤ 교습일수/2  →  차감 1/2 (1/2 환불)
         // 그 이후               →  차감 전액 (환불 없음)
@@ -82,7 +87,15 @@ public final class RefundCalculator {
         final int deductionDenominator;
         final String bracketName;
 
-        if (usedDays * 3 <= teachingDays) {
+        // ★ 교습 시작 전은 전액 반환이다 — 학원법 반환기준의 첫 행.
+        //   이 분기가 없으면 usedDays=0 이 아래 첫 구간(0*3 <= teachingDays)으로 떨어져
+        //   **하루도 안 다닌 학생에게서 1/3을 떼게 된다.** 방향이 과소 환불이라
+        //   그냥 계산 오류가 아니라 법정 기준 미달이다.
+        if (usedDays == 0) {
+            deductionNumerator = 0;
+            deductionDenominator = 1;
+            bracketName = "교습 시작 전 — 전액 환불";
+        } else if (usedDays * 3 <= teachingDays) {
             deductionNumerator = 1;
             deductionDenominator = 3;
             bracketName = "이용기간 1/3 이내 — 2/3 환불";

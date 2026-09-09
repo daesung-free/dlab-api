@@ -2,7 +2,10 @@ package com.dlab.api.admin.staff;
 
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
+import com.dlab.domain.user.entity.AccountStatus;
 import com.dlab.common.security.CurrentAccount;
+import com.dlab.common.security.Role;
+import com.dlab.domain.audit.AuditLogRepository;
 import com.dlab.domain.user.service.StaffAccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,21 +30,55 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminStaffController {
 
     private final StaffAccountService staffAccountService;
+    private final AuditLogRepository auditLogRepository;
+
+    /**
+     * 계정 목록 (F-4.10-2 사용자 관리).
+     *
+     * <p><b>사람 목록({@code /teachers}·{@code /employees})과 용도가 다르다.</b>
+     * 저쪽은 담임 지정·승인자 선택용이라 이름·연락처만 주고, 이쪽은 <b>로그인 아이디·
+     * 계정 상태·권한·잠금 여부</b>를 보여준다.
+     *
+     * <p><b>학생·학부모 계정은 안 나온다</b> — 가입 승인(F-4.12-1)에서 따로 다루고,
+     * 섞으면 목록이 수백 건이 되어 관리자를 찾을 수 없다.
+     *
+     * @param academyId 전 지점 권한자만 의미가 있다. 비우면 전 지점
+     * @param status 계정 상태 필터. 비우면 전체
+     */
+    @GetMapping("/accounts")
+    public ApiResponse<List<StaffAccountService.AccountRow>> accounts(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam(required = false) AccountStatus status) {
+        return ApiResponse.success(staffAccountService.accounts(academyId, status, me));
+    }
 
     /** 담당선생님(사감) 목록. 반 담임·승인 에스컬레이션 대상이 여기서 나온다. */
     @GetMapping("/teachers")
     public ApiResponse<List<StaffResponse>> teachers(@CurrentAccount AuthPrincipal me,
                                                      @RequestParam Long academyId) {
-        return ApiResponse.success(staffAccountService.teachers(academyId, me).stream()
-                .map(StaffResponse::from).toList());
+        var teachers = staffAccountService.teachers(academyId, me);
+        var accounts = staffAccountService.accountsOfTeachers(
+                teachers.stream().map(com.dlab.domain.user.entity.Teacher::getId).toList());
+
+        return ApiResponse.success(teachers.stream()
+                .map(t -> StaffResponse.of(t, accounts.accountOf(t.getId()),
+                        accounts.rolesOf(t.getId())))
+                .toList());
     }
 
     /** 행정선생님 목록. 학생 가입 승인·전체공지 작성이 이쪽이다. */
     @GetMapping("/employees")
     public ApiResponse<List<StaffResponse>> employees(@CurrentAccount AuthPrincipal me,
                                                       @RequestParam Long academyId) {
-        return ApiResponse.success(staffAccountService.employees(academyId, me).stream()
-                .map(StaffResponse::from).toList());
+        var employees = staffAccountService.employees(academyId, me);
+        var accounts = staffAccountService.accountsOfEmployees(
+                employees.stream().map(com.dlab.domain.user.entity.Employee::getId).toList());
+
+        return ApiResponse.success(employees.stream()
+                .map(e -> StaffResponse.of(e, accounts.accountOf(e.getId()),
+                        accounts.rolesOf(e.getId())))
+                .toList());
     }
 
     /**
@@ -51,21 +88,95 @@ public class AdminStaffController {
      * 곧 "담당선생님 보장"이 된다. 합치면 배정할 때마다 역할을 검사해야 한다.
      */
     @PostMapping("/teachers")
-    public ApiResponse<StaffResponse> createTeacher(@CurrentAccount AuthPrincipal me,
-                                                    @Valid @RequestBody StaffRequests.CreateTeacher request) {
-        return ApiResponse.success(StaffResponse.from(staffAccountService.createTeacher(
+    public ApiResponse<StaffCreated> createTeacher(@CurrentAccount AuthPrincipal me,
+                                                   @Valid @RequestBody StaffRequests.CreateTeacher request) {
+        var created = staffAccountService.createTeacher(
                 request.academyId(), request.name(), request.phone(), request.email(),
-                request.loginId(), request.password(), request.roles(), me)));
+                request.loginId(), request.roles(), me);
+        return ApiResponse.success(toCreated(StaffResponse.of(
+                created.staff(), created.account(), roleNames(request.roles())), created,
+                roleNames(request.roles())));
     }
 
     /** 행정선생님 등록. */
     @PostMapping("/employees")
-    public ApiResponse<StaffResponse> createEmployee(@CurrentAccount AuthPrincipal me,
-                                                     @Valid @RequestBody StaffRequests.CreateEmployee request) {
-        return ApiResponse.success(StaffResponse.from(staffAccountService.createEmployee(
+    public ApiResponse<StaffCreated> createEmployee(@CurrentAccount AuthPrincipal me,
+                                                    @Valid @RequestBody StaffRequests.CreateEmployee request) {
+        var created = staffAccountService.createEmployee(
                 request.academyId(), request.name(), request.deptName(), request.positionName(),
-                request.phone(), request.email(), request.loginId(), request.password(),
-                request.roles(), me)));
+                request.phone(), request.email(), request.loginId(), request.roles(), me);
+        return ApiResponse.success(toCreated(StaffResponse.of(
+                created.staff(), created.account(), roleNames(request.roles())), created,
+                roleNames(request.roles())));
+    }
+
+    /**
+     * 인적사항 수정.
+     *
+     * <p>없으면 <b>오타 하나에 탈퇴 처리하고 새로 만드는 수밖에 없어</b>
+     * {@code WITHDRAWN} 계정이 목록에 쌓인다.
+     */
+    @PatchMapping("/teachers/{teacherId}")
+    public ApiResponse<StaffResponse> updateTeacher(@CurrentAccount AuthPrincipal me,
+                                                    @PathVariable Long teacherId,
+                                                    @Valid @RequestBody StaffRequests.UpdateTeacher request) {
+        return ApiResponse.success(StaffResponse.from(staffAccountService.updateTeacher(
+                teacherId, request.name(), request.phone(), request.email(), me)));
+    }
+
+    @PatchMapping("/employees/{employeeId}")
+    public ApiResponse<StaffResponse> updateEmployee(@CurrentAccount AuthPrincipal me,
+                                                     @PathVariable Long employeeId,
+                                                     @Valid @RequestBody StaffRequests.UpdateEmployee request) {
+        return ApiResponse.success(StaffResponse.from(staffAccountService.updateEmployee(
+                employeeId, request.name(), request.deptName(), request.positionName(),
+                request.phone(), request.email(), me)));
+    }
+
+    /**
+     * 로그인 아이디 사용 가능 여부.
+     *
+     * <p>없으면 <b>폼을 다 채우고 저장을 눌러야</b> 중복인지 알 수 있다.
+     */
+    @GetMapping("/login-id-available")
+    public ApiResponse<LoginIdAvailability> loginIdAvailable(@RequestParam String loginId) {
+        return ApiResponse.success(
+                new LoginIdAvailability(loginId, staffAccountService.loginIdAvailable(loginId)));
+    }
+
+    /**
+     * 역할 목록.
+     *
+     * <p>화면이 5개를 하드코딩하면 <b>한글 표기가 화면마다 갈린다.</b>
+     * {@code grantable}은 <b>지금 로그인한 사람이 부여할 수 있는가</b>다 —
+     * 자기보다 상위 역할은 서버가 거절하므로, 고를 수 없게 표시하면 헛수고가 준다.
+     */
+    @GetMapping("/roles")
+    public ApiResponse<List<RoleOption>> roles(@CurrentAccount AuthPrincipal me) {
+        int mine = me.roles().stream().mapToInt(Role::rank).min().orElse(Integer.MAX_VALUE);
+        return ApiResponse.success(java.util.Arrays.stream(Role.values())
+                .map(r -> new RoleOption(r.name(), r.displayName(), r.description(),
+                        r.rank() >= mine))
+                .toList());
+    }
+
+    private StaffCreated toCreated(StaffResponse staff,
+                                   StaffAccountService.Created<?> created,
+                                   Set<String> roles) {
+        return StaffCreated.of(staff, created.account(), roles, created.temporaryPassword());
+    }
+
+    private Set<String> roleNames(Set<Role> roles) {
+        return roles.stream().map(Role::name).collect(java.util.stream.Collectors.toSet());
+    }
+
+    /** @param available {@code false}면 이미 쓰이는 아이디다 */
+    public record LoginIdAvailability(String loginId, boolean available) {
+    }
+
+    /** @param grantable 지금 로그인한 사람이 이 역할을 부여할 수 있는가 */
+    public record RoleOption(String code, String displayName, String description,
+                             boolean grantable) {
     }
 
     /**
@@ -79,5 +190,60 @@ public class AdminStaffController {
                                                  @Valid @RequestBody StaffRequests.ReplaceRoles request) {
         staffAccountService.replaceRoles(accountId, request.roles(), me);
         return ApiResponse.success(staffAccountService.rolesOf(accountId));
+    }
+
+    /**
+     * 계정 권한·상태 변경 이력 (사용자 관리 화면의 '권한 수정시간').
+     *
+     * <p>감사 로그(F-C-1)와 <b>같은 표를 읽는다</b> — 계정 이력만 따로 쌓으면 표가 두 벌이
+     * 되고, 전 화면 이력 조회가 그걸 다시 합쳐야 한다.
+     *
+     * <p>다만 <b>적재 경로는 다르다</b>. 역할은 {@code account_role} 조인 테이블이라
+     * {@code @Audited} 엔티티 리스너에 안 걸려서 서비스가 직접 남긴다.
+     */
+    @GetMapping("/accounts/{accountId}/history")
+    public ApiResponse<List<AccountHistoryRow>> accountHistory(@PathVariable Long accountId) {
+        return ApiResponse.success(auditLogRepository.findByEntity("Account", accountId).stream()
+                .map(AccountHistoryRow::from).toList());
+    }
+
+    /**
+     * @param changes  {@code [{"field":"roles","before":"STAFF","after":"TEACHER"}]} 형태의 JSON
+     * @param actorId  행위자 계정 id. 배치·시스템 경로면 비어 있다
+     */
+    public record AccountHistoryRow(Long id, String action, String changes,
+                                    Long actorId, String actorName,
+                                    java.time.Instant occurredAt) {
+
+        static AccountHistoryRow from(com.dlab.domain.audit.AuditLog log) {
+            return new AccountHistoryRow(log.getId(), log.getAction().name(), log.getChanges(),
+                    log.getActorId(), log.getActorName(), log.getOccurredAt());
+        }
+    }
+
+    /**
+     * 계정 승인 (승인대기 → 사용).
+     *
+     * <p>지점이 만든 계정은 승인 전까지 <b>로그인 자체가 막힌다</b>. 본사만 승인할 수
+     * 있다 — 지점이 자기가 만든 계정을 스스로 승인하면 절차가 아무것도 막지 못한다.
+     */
+    @PostMapping("/accounts/{accountId}/approve")
+    public ApiResponse<Void> approveAccount(@CurrentAccount AuthPrincipal me,
+                                            @PathVariable Long accountId) {
+        staffAccountService.approve(accountId, me);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * 계정 탈퇴 처리.
+     *
+     * <p><b>계정을 지우지 않는다</b> — 지난 로그인 이력과 이 계정이 남긴 작업 기록이
+     * 감사 대상이다. 되살릴 일이 있으면 승인으로 다시 올린다.
+     */
+    @PostMapping("/accounts/{accountId}/withdraw")
+    public ApiResponse<Void> withdrawAccount(@CurrentAccount AuthPrincipal me,
+                                             @PathVariable Long accountId) {
+        staffAccountService.withdraw(accountId, me);
+        return ApiResponse.empty();
     }
 }

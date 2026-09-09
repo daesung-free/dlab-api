@@ -18,6 +18,30 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
     List<ApprovalRequest> findByAcademyIdAndStatusOrderByRequestedAtAsc(Long academyId, ApprovalStatus status);
 
     /**
+     * 관리자 현황 — 지점 단위. <b>담임 개인 대기열과 다른 질의다.</b>
+     *
+     * <p>담임용은 "내가 처리할 것"이고 이쪽은 "지금 몇 건이 밀려 있나"다.
+     * 그래서 상태를 지정하지 않으면 처리된 건까지 함께 본다 — 대기 건만 주면
+     * "오늘 몇 건이 들어왔나"를 셀 수 없다.
+     *
+     * @param academyId 전 지점 권한자가 지점을 안 고르면 {@code null}이고, 그때는 전 지점이다
+     */
+    @Query("""
+            SELECT r FROM ApprovalRequest r
+            JOIN FETCH r.enrollment e
+            JOIN FETCH e.student
+            JOIN FETCH r.approvalItem i
+            WHERE r.deleted = false
+              AND (:academyId IS NULL OR r.academy.id = :academyId)
+              AND (:status IS NULL OR r.status = :status)
+              AND (:requestType IS NULL OR i.requestType = :requestType)
+              AND r.requestedAt >= :from AND r.requestedAt < :to
+            ORDER BY r.requestedAt DESC
+            """)
+    List<ApprovalRequest> findBoard(Long academyId, ApprovalStatus status,
+                                    RequestType requestType, Instant from, Instant to);
+
+    /**
      * 이 학부모 계정이 승인해야 할 대기 건.
      * 연결된 자녀(사람) 기준이라 등록 건이 바뀌어도 계속 보인다.
      */
@@ -81,6 +105,33 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
                          Account resolver,
                          ResolutionCase resolutionCase,
                          String rejectReason);
+
+    /**
+     * <b>승인된 건을 되돌린다</b>(직원 철회).
+     *
+     * <p>승인 전 취소와 다르다 — 그쪽은 신청자가 스스로 거두는 것이고, 이쪽은
+     * <b>이미 승인이 난 뒤에 직원이 판단해서</b> 무르는 것이다.
+     *
+     * <p><b>학생에게 이 경로를 주지 않는다.</b> 사유 신청은 승인되면 그 시간 결석·조퇴가
+     * 무단이 아니게 되어 벌점을 면한다 — 학생이 직접 되돌릴 수 있으면
+     * <b>승인만 받고 취소해 벌점을 피하는 길</b>이 생긴다.
+     *
+     * <p>{@code APPROVED}일 때만 걸린다. 반려·이미 철회된 건을 또 되돌릴 수는 없다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            UPDATE ApprovalRequest r
+               SET r.status          = com.dlab.domain.approval.entity.ApprovalStatus.CANCELED,
+                   r.resolvedAt      = :revokedAt,
+                   r.resolverType    = :resolverType,
+                   r.resolverAccount = :resolver,
+                   r.rejectReason    = :reason,
+                   r.updatedAt       = :revokedAt
+             WHERE r.id = :id
+               AND r.status = com.dlab.domain.approval.entity.ApprovalStatus.APPROVED
+            """)
+    int revokeIfApproved(Long id, Instant revokedAt, ApproverType resolverType,
+                         Account resolver, String reason);
 
     /**
      * 자동 재승인 요청 대상 — 학부모 우선인데 타임아웃이 지나도록 무응답이고 아직 안 보낸 건.

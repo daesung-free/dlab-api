@@ -45,8 +45,22 @@ public enum ErrorCode {
     SEAT_NOT_FOUND(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."),
     SEAT_ALREADY_OCCUPIED(HttpStatus.CONFLICT, "이미 배정된 좌석입니다."),
     SEAT_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "배정된 좌석이 없습니다."),
+    CLASS_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "그 반에 배정된 학생이 아닙니다."),
+    STUDY_AREA_NOT_FOUND(HttpStatus.NOT_FOUND, "구역을 찾을 수 없습니다."),
+    STUDY_AREA_DUPLICATED(HttpStatus.CONFLICT, "같은 지점에 이미 있는 구역 코드입니다."),
+    STUDY_AREA_HAS_SEATS(HttpStatus.CONFLICT, "좌석이 남아 있는 구역은 삭제할 수 없습니다."),
+    SEAT_CD_DUPLICATED(HttpStatus.CONFLICT, "같은 지점에 이미 있는 좌석번호입니다."),
+    SEAT_ASSIGN_PARTIAL_FAILED(HttpStatus.CONFLICT, "배정할 수 없는 건이 있어 전체를 취소했습니다."),
     MASTER_NOT_FOUND(HttpStatus.NOT_FOUND, "기초 데이터를 찾을 수 없습니다."),
     LOCKER_ALREADY_OCCUPIED(HttpStatus.CONFLICT, "이미 배정된 사물함입니다."),
+    /** 배정을 남긴 채 지우면 없는 반을 가리키는 학생이 생긴다 — 해제가 먼저다. */
+    CLASS_HAS_MEMBERS(HttpStatus.CONFLICT, "배정된 학생이 있는 반은 삭제할 수 없습니다."),
+    /** 지점이 자기가 만든 계정을 스스로 승인하면 절차가 아무것도 막지 못한다. */
+    ACCOUNT_APPROVAL_FORBIDDEN(HttpStatus.FORBIDDEN, "계정 승인은 본사만 할 수 있습니다."),
+    ACCOUNT_NOT_PENDING(HttpStatus.CONFLICT, "승인 대기 상태의 계정이 아닙니다."),
+    /** 사물함도 같다. 쓰는 사람이 있는 칸을 지우면 그 배정이 붕 뜬다. */
+    LOCKER_IN_USE(HttpStatus.CONFLICT, "배정된 사물함은 삭제할 수 없습니다."),
+    LOCKER_NO_DUPLICATED(HttpStatus.CONFLICT, "같은 지점에 이미 있는 사물함 번호입니다."),
     OTHER_BRANCH_ACCESS_DENIED(HttpStatus.FORBIDDEN, "다른 지점의 데이터에 접근할 수 없습니다."),
     SNAPSHOT_TARGET_NOT_EMPTY(HttpStatus.CONFLICT, "복사 대상 연도에 이미 기초 데이터가 있습니다."),
 
@@ -157,6 +171,26 @@ public enum ErrorCode {
     /** 사유가 없으면 나중에 "왜 살려뒀나"에 답할 수 없다. */
     SCHOLARSHIP_EXCEPTION_NOTE_REQUIRED(HttpStatus.BAD_REQUEST, "예외 인정 사유를 적어주세요."),
 
+    // 장학 종류 마스터
+    /**
+     * ★ 없는 장학 코드를 통과시키면 안 된다. 취소 규칙이 문자열로 매칭하므로
+     * 한 글자만 달라도 <b>그 학생만 판정에서 조용히 빠진다</b> — 오류도 안 나고
+     * 검토 목록에 안 뜰 뿐이라 아무도 알아채지 못한다.
+     */
+    /**
+     * 기초 마스터 코드 중복. DB 부분 유니크 인덱스도 있지만 그것만 믿으면
+     * 제약 위반이 500으로 나가 화면이 무엇이 잘못됐는지 못 알려준다.
+     */
+    MASTER_CODE_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 코드입니다."),
+
+    SCHOLARSHIP_MASTER_NOT_FOUND(HttpStatus.NOT_FOUND, "등록되지 않은 장학 종류입니다."),
+    SCHOLARSHIP_MASTER_CODE_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 장학 코드입니다."),
+    SCHOLARSHIP_MASTER_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN,
+            "전 지점 공통 장학은 본사만 다룰 수 있습니다."),
+    /** 화면에 보이는 값과 저장되는 값이 다르면 데스크가 알 방법이 없다. */
+    SCHOLARSHIP_RATE_MISMATCH(HttpStatus.BAD_REQUEST,
+            "할인율이 장학 마스터와 다릅니다. 마스터 값을 확인해 주세요."),
+
     // 교습비 가격 (F-4.10-5 · 0820 규정)
     TUITION_PRICE_NOT_FOUND(HttpStatus.NOT_FOUND, "해당 조건의 교습비가 등록되지 않았습니다."),
     /** 지점 관리자가 공통 가격을 고치면 나머지 지점 청구가 같이 바뀐다. */
@@ -166,6 +200,14 @@ public enum ErrorCode {
      * 달력(28·30)으로 떨어뜨리면 조용히 틀린 금액이 청구된다.
      */
     TEACHING_DAYS_NOT_REGISTERED(HttpStatus.NOT_FOUND, "그 달의 교습일수가 등록되지 않았습니다."),
+
+    // 청구기준 (F-4.10-5)
+    BILLING_STANDARD_NOT_FOUND(HttpStatus.NOT_FOUND, "청구기준을 찾을 수 없습니다."),
+    /** 코드는 전표에 나가는 값이라 같은 지점·연도에서 겹치면 어느 기준으로 청구됐는지 갈린다. */
+    BILLING_STANDARD_CODE_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 청구기준 코드입니다."),
+    /** 지점 관리자가 공통 기준을 고치면 나머지 지점 청구가 같이 바뀐다. */
+    BILLING_STANDARD_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN,
+            "전 지점 공통 청구기준은 본사만 다룰 수 있습니다."),
 
     // 공지 (F-4.11-3)
     NOTICE_NOT_FOUND(HttpStatus.NOT_FOUND, "공지를 찾을 수 없습니다."),
@@ -212,7 +254,13 @@ public enum ErrorCode {
     EXAM_SUBJECT_NOT_IN_FORM(HttpStatus.BAD_REQUEST, "이 학생의 성적 입력 양식에 없는 과목입니다."),
     GRADE_SUBMISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "제출된 성적이 없습니다."),
     /** 0으로 채우게 두면 진짜 0점과 구분되지 않는다. 사유를 남기고 건너뛴다. */
-    GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요.");
+    GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요."),
+
+    /**
+     * 조건 자체가 성립하지 않는 검색 조합(예: 특정 반 + 반 미배정).
+     * 빈 목록으로 돌려주면 화면이 "해당 학생이 없다"로 읽고 조용히 넘어간다.
+     */
+    CONFLICTING_SEARCH_CONDITION(HttpStatus.BAD_REQUEST, "함께 지정할 수 없는 검색 조건입니다.");
 
     private final HttpStatus status;
     private final String message;

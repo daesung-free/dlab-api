@@ -52,6 +52,23 @@ public class Teacher extends BaseEntity {
     @Column(name = "resigned_date")
     private LocalDate resignedDate;
 
+    /** 이름 정정. {@code null}이면 바꾸지 않는다. */
+    public void rename(String name) {
+        if (name != null && !name.isBlank()) {
+            this.name = name;
+        }
+    }
+
+    /** 부분 수정 — {@code null}은 "변경하지 않음"이다. 등록과 규칙이 다르다. */
+    public void patchContact(String phone, String email) {
+        if (phone != null) {
+            this.phone = phone;
+        }
+        if (email != null) {
+            this.email = email;
+        }
+    }
+
     public void updateContact(String phone, String email) {
         this.phone = phone;
         this.email = email;

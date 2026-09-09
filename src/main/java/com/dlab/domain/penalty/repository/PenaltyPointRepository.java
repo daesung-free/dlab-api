@@ -51,8 +51,11 @@ public interface PenaltyPointRepository extends JpaRepository<PenaltyPoint, Long
     /**
      * 관리자 목록. 지점·기간 + 조건으로 훑는다.
      *
-     * <p>{@code category}·{@code source}는 {@code null}이면 전체다 —
+     * <p>{@code category}·{@code sources}·{@code enrollmentStatus}는 {@code null}이면 전체다 —
      * 화면 칩 필터가 미선택 상태일 때 조건이 빠져야 한다.
+     *
+     * <p><b>{@code sources}가 목록인 이유</b>: 화면이 '수기'와 '자동' 둘로 묶는데
+     * '자동'은 {@code KIOSK}·{@code ROUTINE} 두 값의 OR다. 단일 파라미터로는 못 보낸다.
      */
     @Query("""
             SELECT p FROM PenaltyPoint p
@@ -63,7 +66,8 @@ public interface PenaltyPointRepository extends JpaRepository<PenaltyPoint, Long
               AND p.occurredAt >= :from
               AND p.occurredAt < :to
               AND (:category IS NULL OR i.category = :category)
-              AND (:source IS NULL OR p.source = :source)
+              AND (:sources IS NULL OR p.source IN :sources)
+              AND (:enrollmentStatus IS NULL OR e.enrollmentStatus = :enrollmentStatus)
               AND p.deleted = false
             ORDER BY p.occurredAt DESC
             """)
@@ -71,5 +75,6 @@ public interface PenaltyPointRepository extends JpaRepository<PenaltyPoint, Long
                               @Param("from") java.time.Instant from,
                               @Param("to") java.time.Instant to,
                               @Param("category") com.dlab.domain.penalty.entity.PenaltyCategory category,
-                              @Param("source") com.dlab.domain.penalty.entity.PenaltySource source);
+                              @Param("sources") java.util.Collection<com.dlab.domain.penalty.entity.PenaltySource> sources,
+                              @Param("enrollmentStatus") com.dlab.domain.user.entity.EnrollmentStatus enrollmentStatus);
 }

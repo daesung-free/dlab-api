@@ -47,6 +47,10 @@ public class NotificationTemplateService {
                 List.of(ReviewStatus.DRAFT, ReviewStatus.SUBMITTED, ReviewStatus.REJECTED));
     }
 
+    /** 본문에 반드시 있어야 하는 자리. {@code render()}가 이 형태를 치환한다. */
+    private static final String STUDENT_NAME_PLACEHOLDER =
+            "{" + NotificationTemplate.REQUIRED_STUDENT_NAME + "}";
+
     /**
      * 템플릿 생성.
      *
@@ -74,8 +78,13 @@ public class NotificationTemplateService {
      * <p><b>확정하려면 문구가 비어 있으면 안 된다.</b> 빈 문구로 확정 처리되면
      * 발송 조건을 통과해 <b>내용 없는 알림이 실제로 나간다.</b>
      *
-     * <p>학생명 변수는 강제하지 않는다 — {@code requiredVariableSet()}이 항상 포함시키므로
-     * 발송 시점에 {@link NotificationService}가 검증한다.
+     * <p><b>확정하려면 본문에 {@code {studentName}} 자리가 있어야 한다.</b>
+     * {@code requiredVariableSet()}이 학생명을 항상 요구하므로 값이 비면 발송이 막히지만,
+     * <b>본문에 자리가 없으면 값이 채워져도 문구에 안 찍힌다</b> — 발송은 되는데 학부모는
+     * 여전히 "이거 누구 얘기지"가 된다. 다자녀 학부모 때문에 넣은 규칙이라 그게 곧 실패다.
+     *
+     * <p>확정 전 초안에는 걸지 않는다. 쓰다 만 문구를 저장하는 것까지 막으면
+     * 작성 자체가 불편해진다.
      */
     @Transactional
     public NotificationTemplate updateContent(Long id, String title, String body,
@@ -83,6 +92,11 @@ public class NotificationTemplateService {
         NotificationTemplate template = require(id);
         if (contentConfirmed && (isBlank(title) || isBlank(body))) {
             throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_CONTENT_EMPTY);
+        }
+        if (contentConfirmed && !body.contains(STUDENT_NAME_PLACEHOLDER)) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_CONTENT_EMPTY,
+                    "본문에 %s 을(를) 넣어야 합니다 — 다자녀 학부모가 누구 얘기인지 알 수 없습니다."
+                            .formatted(STUDENT_NAME_PLACEHOLDER));
         }
         ReviewStatus before = template.getReviewStatus();
         template.updateContent(title, body, requiredVariables, contentConfirmed);

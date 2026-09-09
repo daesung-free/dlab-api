@@ -45,6 +45,15 @@ public class Academy extends BaseEntity {
     @Column(name = "store_code", length = 20)
     private String storeCode;
 
+    /**
+     * 홈페이지 입학예약 학원코드(분당 F · 일산 I · 동탄 T …).
+     *
+     * <p>★ <b>키오스크 {@code acadCd}(31·32…)와 다른 체계다.</b> 같은 지점을 부르는 이름이
+     * 둘이라 섞으면 엉뚱한 지점에 저장된다.
+     */
+    @Column(name = "dlab_cd", length = 2)
+    private String dlabCd;
+
     /** 등원 기준시각(지점 공통, 학생별 아님). 이 시각에 미등원 감지 배치가 돈다. */
     @Column(name = "attendance_deadline", nullable = false)
     private LocalTime attendanceDeadline;

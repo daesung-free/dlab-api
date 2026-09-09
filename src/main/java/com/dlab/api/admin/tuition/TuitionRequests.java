@@ -38,8 +38,8 @@ public final class TuitionRequests {
             @NotNull(message = "연도는 필수입니다.") Short year,
             @NotNull(message = "학년은 필수입니다.") GradeType gradeType,
             @NotNull(message = "좌석 유형은 필수입니다.") SeatType seatType,
-            @PositiveOrZero(message = "교습비는 0 이상이어야 합니다.") int tuitionFee,
-            @PositiveOrZero(message = "독서실비는 0 이상이어야 합니다.") int studyRoomFee) {
+            @PositiveOrZero(message = "교습비는 0 이상이어야 합니다.") @NotNull(message = "교습비는 필수입니다.") Integer tuitionFee,
+            @PositiveOrZero(message = "독서실비는 0 이상이어야 합니다.") @NotNull(message = "독서실비는 필수입니다.") Integer studyRoomFee) {
     }
 
     /**
@@ -54,7 +54,7 @@ public final class TuitionRequests {
             Long academyId,
             @NotBlank(message = "월은 필수입니다.")
             @Pattern(regexp = MONTH_PATTERN, message = MONTH_MESSAGE) String month,
-            @Min(1) @Max(31) int teachingDays) {
+            @Min(1) @Max(31) @NotNull(message = "교습일수는 필수입니다.") Integer teachingDays) {
 
         public YearMonth yearMonth() {
             return YearMonth.parse(month);

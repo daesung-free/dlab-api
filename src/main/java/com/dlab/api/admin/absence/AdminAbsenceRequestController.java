@@ -45,18 +45,27 @@ public class AdminAbsenceRequestController {
             @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) ApprovalStatus status) {
+            @RequestParam(required = false) ApprovalStatus status,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
 
         LocalDate start = from == null ? LocalDate.now().withDayOfMonth(1) : from;
         LocalDate end = to == null ? LocalDate.now() : to;
 
         boolean raw = PersonalDataPolicy.canViewRaw(me);
-        return ApiResponse.success(new ListResponse(
-                absenceReasonService.list(me, academyId, start, end, status).stream()
-                        .map(r -> AbsenceRowResponse.of(r, raw))
-                        .toList(),
-                absenceReasonService.summary(me, academyId, start, end),
-                !raw));
+        List<AbsenceRowResponse> all = absenceReasonService.list(me, academyId, start, end, status)
+                .stream().map(r -> AbsenceRowResponse.of(r, raw)).toList();
+
+        // summary 는 페이지 합계가 아니라 필터 전체 기준이다 — 탭 건수가 페이지마다
+        // 바뀌면 "대기 3건"이 무슨 뜻인지 알 수 없다
+        var summary = absenceReasonService.summary(me, academyId, start, end);
+
+        if (size == null) {
+            return ApiResponse.success(new ListResponse(all, summary, !raw));
+        }
+        var sliced = com.dlab.common.search.PageSlicer.of(all, page, size);
+        return ApiResponse.success(new ListResponse(sliced.getContent(), summary, !raw),
+                ApiResponse.PageMeta.of(sliced));
     }
 
     /**
@@ -70,7 +79,8 @@ public class AdminAbsenceRequestController {
                                       @Valid @RequestBody AbsenceRegisterRequest request) {
         return ApiResponse.success(absenceReasonService.register(
                 me, request.enrollmentId(), request.date(), request.type(),
-                request.reason(), request.startTime(), request.endTime()).getId());
+                request.reason(), request.startTime(), request.endTime(),
+                request.categoryId()).getId());
     }
 
     /**
@@ -83,7 +93,9 @@ public class AdminAbsenceRequestController {
             @NotNull AbsenceReasonType type,
             @Size(max = 500) String reason,
             LocalTime startTime,
-            LocalTime endTime
+            LocalTime endTime,
+            /** 사유 카테고리(병결·가정사 등). 비워도 된다 — 등록된 게 없을 수 있다 */
+            Long categoryId
     ) {
     }
 
@@ -103,6 +115,7 @@ public class AdminAbsenceRequestController {
             AbsenceReasonType type,
             String period,
             String reason,
+            String categoryName,
             ApproverType approverType,
             ApprovalStatus status,
             boolean escalationCandidate
@@ -111,7 +124,7 @@ public class AdminAbsenceRequestController {
             return new AbsenceRowResponse(
                     r.id(), r.approvalRequestId(), r.submittedAt(), r.studentNo(),
                     raw ? r.name() : Masking.name(r.name()),
-                    r.className(), r.type(), r.period(), r.reason(),
+                    r.className(), r.type(), r.period(), r.reason(), r.categoryName(),
                     r.approverType(), r.status(), r.escalationCandidate());
         }
     }

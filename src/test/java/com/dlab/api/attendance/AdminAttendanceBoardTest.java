@@ -297,4 +297,30 @@ class AdminAttendanceBoardTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
     }
+
+    @Test
+    @DisplayName("★ 기간 조회는 학생×날짜로 행이 늘어난다 — 하루 조회의 '1인 1행'과 다르다")
+    void rangeQueryReturnsRowPerDay() {
+        enroll("RNG01", "범위학생", "2026-0009");
+
+        var rows = boardService.board(admin, null, day.minusDays(2), day, null);
+
+        // 재원생 1명 × 3일
+        assertThat(rows).hasSize(3);
+        assertThat(rows).extracting(r -> r.date()).contains(day, day.minusDays(1), day.minusDays(2));
+    }
+
+    @Test
+    @DisplayName("★ 기간이 너무 넓으면 거부한다 — 페이징이 없는 응답이라 조용히 느려진다")
+    void tooWideRangeIsRejected() {
+        assertThatThrownBy(() -> boardService.board(admin, null, day.minusDays(40), day, null))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("시작이 끝보다 뒤면 거부한다")
+    void invertedRangeIsRejected() {
+        assertThatThrownBy(() -> boardService.board(admin, null, day, day.minusDays(1), null))
+                .isInstanceOf(BusinessException.class);
+    }
 }

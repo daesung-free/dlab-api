@@ -55,14 +55,29 @@ public class SeatLayoutService {
     private final SeatMasterRepository seatMasterRepository;
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final AttendanceTaggingLogRepository taggingLogRepository;
+    private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
     private final Clock clock;
 
     /** 구역 목록. 화면이 구역을 골라야 배치도를 열 수 있다. */
     public List<AreaSummary> areas(AuthPrincipal me, Long academyId) {
+        return areas(me, academyId, false);
+    }
+
+    /**
+     * 구역 목록.
+     *
+     * <p><b>{@code includeInactive}는 관리 화면 전용이다.</b> 배치도·배정 화면은 비활성
+     * 구역을 보면 안 되지만(고를 수 있게 되면 안 쓰는 구역에 학생이 배정된다), 관리 화면에서
+     * 까지 숨기면 <b>한 번 끈 구역을 다시 켤 방법이 없어진다.</b>
+     */
+    public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive) {
         Long resolved = requireAcademyAccess(me, academyId);
-        return studyAreaRepository.findActiveByAcademyId(resolved).stream()
+        var areas = includeInactive
+                ? studyAreaRepository.findAllByAcademyId(resolved)
+                : studyAreaRepository.findActiveByAcademyId(resolved);
+        return areas.stream()
                 .map(a -> new AreaSummary(
-                        a.getId(), a.getAreaCd(), a.getAreaNm(),
+                        a.getId(), a.getAreaCd(), a.getAreaNm(), a.getSortOrder(), a.isActive(),
                         seatMasterRepository.findByStudyAreaId(a.getId()).size()))
                 .toList();
     }
@@ -71,9 +86,17 @@ public class SeatLayoutService {
      * 구역 배치도.
      *
      * <p><b>사용중지 좌석도 내린다</b> — 빼면 도면에 구멍이 생겨 좌표가 어긋나 보인다.
-     * 학생 이름은 <b>마스킹해서</b> 내린다(도면은 벽에 띄워두는 일이 있다).
+     *
+     * <p>학생 이름은 <b>기본이 마스킹</b>이다(도면은 벽에 띄워두는 일이 있다). 다만
+     * 현장에서 좌석 주인을 확인해야 하는 경우가 있어 다른 목록과 같은 규칙으로
+     * {@code unmask}를 연다 — <b>상위 관리자에게만</b> 먹고, 화면은 {@code masked}로
+     * 실제 적용 여부를 안다(모르면 "이름이 잘못 저장됐다"는 오인 문의가 생긴다).
+     *
+     * <p><b>고정반을 함께 내린다.</b> 좌석만 보고는 어느 반 학생인지 알 수 없어
+     * 현장에서 쓸모가 준다.
      */
-    public List<SeatCell> layout(AuthPrincipal me, Long studyAreaId) {
+    public List<SeatCell> layout(AuthPrincipal me, Long studyAreaId, boolean unmask) {
+        boolean raw = unmask && com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me);
         StudyArea area = studyAreaRepository.findById(studyAreaId)
                 .filter(a -> !a.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.SEAT_NOT_FOUND,
@@ -89,9 +112,21 @@ public class SeatLayoutService {
         seatAssignmentRepository.findActiveByStudyAreaId(studyAreaId)
                 .forEach(sa -> assignmentBySeat.put(sa.getSeat().getSeatCd(), sa));
 
+        // 좌석 수만큼 조회하지 않도록 배정된 학생의 반을 한 번에 받아 둔다
+        Map<Long, com.dlab.domain.user.entity.ClassMaster> classByEnrollment = new HashMap<>();
+        List<Long> enrollmentIds = assignmentBySeat.values().stream()
+                .map(sa -> sa.getEnrollment().getId()).toList();
+        if (!enrollmentIds.isEmpty()) {
+            classAssignmentRepository.findActiveFixedByEnrollmentIds(enrollmentIds)
+                    .forEach(ca -> classByEnrollment.put(
+                            ca.getEnrollment().getId(), ca.getClassMaster()));
+        }
+
         return seatMasterRepository.findByStudyAreaId(studyAreaId).stream()
                 .map(seat -> {
                     SeatAssignment assignment = assignmentBySeat.get(seat.getSeatCd());
+                    var clazz = assignment == null ? null
+                            : classByEnrollment.get(assignment.getEnrollment().getId());
                     return new SeatCell(
                             seat.getId(),
                             seat.getSeatCd(),
@@ -103,9 +138,12 @@ public class SeatLayoutService {
                             assignment == null ? null
                                     : assignment.getEnrollment().getStudentNo(),
                             assignment == null ? null
-                                    : com.dlab.common.privacy.Masking.name(
-                                            assignment.getEnrollment().getStudent().getName()),
-                            presenceOf(assignment, lastEvent));
+                                    : maskName(assignment.getEnrollment()
+                                            .getStudent().getName(), raw),
+                            clazz == null ? null : clazz.getId(),
+                            clazz == null ? null : clazz.getName(),
+                            presenceOf(assignment, lastEvent),
+                            !raw);
                 })
                 .toList();
     }
@@ -142,6 +180,10 @@ public class SeatLayoutService {
      * <p>배정이 없으면 {@link SeatPresence#EMPTY}다 — 태깅을 볼 필요조차 없다.
      * <b>사용중지 좌석도 EMPTY다</b>: 사용중지는 배정 축이라 재실 축과 별개로 표기된다.
      */
+    private static String maskName(String name, boolean raw) {
+        return raw ? name : com.dlab.common.privacy.Masking.name(name);
+    }
+
     private SeatPresence presenceOf(SeatAssignment assignment,
                                     Map<Long, AttendanceEventType> lastEvent) {
         if (assignment == null) {
@@ -170,12 +212,15 @@ public class SeatLayoutService {
     }
 
     /** @param seatCount 구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다 */
-    public record AreaSummary(Long id, String areaCd, String areaNm, int seatCount) {
+    public record AreaSummary(Long id, String areaCd, String areaNm, short sortOrder,
+                              boolean active, int seatCount) {
     }
 
     /**
-     * @param usable       사용중지 여부(배정 축). {@code presence}와 별개다
-     * @param studentName  <b>마스킹된 값</b>이다
+     * @param usable      사용중지 여부(배정 축). {@code presence}와 별개다
+     * @param studentName {@code masked}가 참이면 가려진 값이다
+     * @param className   고정반. 반 미배정이면 비어 있다
+     * @param masked      이름이 실제로 가려졌는지. 화면이 이 값을 보고 또 가리지 않는다
      */
     public record SeatCell(
             Long seatId,
@@ -187,7 +232,10 @@ public class SeatLayoutService {
             Long enrollmentId,
             String studentNo,
             String studentName,
-            SeatPresence presence) {
+            Long classId,
+            String className,
+            SeatPresence presence,
+            boolean masked) {
 
         /** 배정 축. 화면이 색을 고를 때 재실 축과 조합한다. */
         public String assignmentState() {

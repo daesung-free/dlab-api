@@ -1,5 +1,7 @@
 package com.dlab.domain.attendance.entity;
 
+import com.dlab.domain.audit.AuditEntityListener;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.approval.entity.ApprovalRequest;
 import com.dlab.domain.user.entity.Academy;
@@ -19,8 +21,10 @@ import java.time.LocalDate;
  * 미등원 알림 배치는 사유가 있는 학생을 대상에서 제외한다(무단결석만 알림).
  */
 @Getter
+@Audited("사유 신청")
 @Entity
 @Table(name = "absence_reason")
+@EntityListeners(AuditEntityListener.class)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class AbsenceReason extends BaseEntity {
 
@@ -31,6 +35,20 @@ public class AbsenceReason extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "academy_id", nullable = false)
     private Academy academy;
+
+    /**
+     * 사유 카테고리(병결·가정사 등).
+     *
+     * <p><b>{@code null}이 정상이다</b> — 카테고리가 하나도 등록되지 않은 상태에서도
+     * 사유 제출이 되어야 한다. 필수로 걸면 값이 확정될 때까지 앱에서 사유를 못 낸다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "category_id")
+    private AbsenceReasonCategory category;
+
+    public void changeCategory(AbsenceReasonCategory category) {
+        this.category = category;
+    }
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "enrollment_id", nullable = false)

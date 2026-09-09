@@ -92,3 +92,26 @@ logging:
     com.dlab: INFO
     # 쿼리 로그에 학생 식별자가 실린다
     org.hibernate.SQL: WARN
+
+# ─────────────────────────────────────────────────────────────
+# 프록시 뒤에서 뜬다 — Nginx(443) → app(127.0.0.1:8080)
+#
+# ★ 이게 없으면 HTTPS 를 붙여도 앱은 자기를 http 로 인식한다.
+#   Nginx 가 X-Forwarded-Proto: https 를 보내지만(deploy/README.md 3번)
+#   Spring 이 그 헤더를 읽지 않아 request.getScheme() 이 계속 "http" 다.
+#
+#   그래서 springdoc 이 뱉는 서버 URL 이 http://api.d-dlab.link 로 나가고,
+#   dlab-admin-web·dlab-app 이 **그 스펙으로 클라이언트를 생성한다**(CLAUDE.md §6-4).
+#   생성된 코드가 http 로 호출하면 브라우저는 mixed content 로 막고,
+#   iOS 는 ATS 로 막는다 — 원인이 서버 설정에 있다는 게 클라이언트 쪽에서는 안 보인다.
+#
+#   리다이렉트 Location 헤더와 클라이언트 IP 판별(로그인 실패 5회 잠금)도 같은 헤더를 탄다.
+#
+# ★ framework 는 Spring 내장 ForwardedHeaderFilter 를 켠다.
+#   native(=서블릿 컨테이너에 위임)와 달리 Tomcat RemoteIpValve 설정이 따로 필요 없다.
+#
+# ⚠️ 신뢰할 수 있는 프록시 뒤에서만 쓴다. 8080 은 127.0.0.1 에만 바인딩돼 있어
+#   Nginx 를 거치지 않고는 도달할 수 없다(deploy/docker-compose.yml) — 전제가 성립한다.
+# ─────────────────────────────────────────────────────────────
+server:
+  forward-headers-strategy: framework

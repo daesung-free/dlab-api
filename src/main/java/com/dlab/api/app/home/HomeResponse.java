@@ -17,15 +17,19 @@ public record HomeResponse(Profile profile,
     /**
      * 상단 프로필.
      *
+     * <p>{@code studentNo}(학번)와 {@code seatCd}(좌석번호)를 함께 내린다 — 앱 홈에서
+     * 바로 보여주고, 의견 보내기 같은 화면이 다시 조회하지 않아도 된다.
+     *
      * <p><b>학생 고유ID는 여기 없다</b> — 마이페이지에만 노출한다. 홈은 학부모도 보는
      * 화면이라, 자녀 화면에서 그대로 보이면 노출 지점이 늘어난다.
      */
     public record Profile(Long enrollmentId, String studentName, String studentNo,
-                          GradeType grade, String academyName, String className) {
+                          GradeType grade, String academyName, String className,
+                          String seatCd) {
 
-        static Profile of(StudentEnrollment e, String className) {
+        static Profile of(StudentEnrollment e, String className, String seatCd) {
             return new Profile(e.getId(), e.getStudent().getName(), e.getStudentNo(),
-                    e.getGrade(), e.getAcademy().getAcadNm(), className);
+                    e.getGrade(), e.getAcademy().getAcadNm(), className, seatCd);
         }
     }
 

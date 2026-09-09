@@ -1,5 +1,6 @@
 package com.dlab.api.admin.notice;
 
+import jakarta.validation.constraints.NotNull;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
@@ -15,6 +16,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -42,12 +44,22 @@ public class AdminNoticeController {
 
     private final NoticeService noticeService;
 
-    /** 공지 목록. <b>조회는 관리자 전체 공유</b>이고 작성만 역할별로 갈린다. */
+    /**
+     * 공지 목록. <b>조회는 관리자 전체 공유</b>이고 작성만 역할별로 갈린다.
+     *
+     * <p>열람 수({@code readCount})를 함께 내린다 — 공지마다 세면 쿼리가 행 수만큼
+     * 나가므로 ID를 모아 한 번에 읽는다.
+     */
     @GetMapping
     public ApiResponse<List<NoticeResponse>> list(@CurrentAccount AuthPrincipal me,
                                                   @RequestParam(required = false) Short year) {
-        return ApiResponse.success(noticeService.findForAdmin(me, year).stream()
-                .map(NoticeResponse::from).toList());
+        var notices = noticeService.findForAdmin(me, year);
+        var readCounts = noticeService.readCounts(
+                notices.stream().map(Notice::getId).toList());
+
+        return ApiResponse.success(notices.stream()
+                .map(n -> NoticeResponse.of(n, readCounts.getOrDefault(n.getId(), 0L)))
+                .toList());
     }
 
     /** 전 지점 공지 — <b>본사만.</b> */
@@ -98,6 +110,26 @@ public class AdminNoticeController {
                 request.publishedAt(), request.expiresAt())));
     }
 
+    /**
+     * 부분 수정 — <b>보내지 않은 필드는 그대로</b>.
+     *
+     * <p>상단 고정·배너 토글은 본문과 무관한 조작인데 {@code PUT}은 제목·내용을 요구해서,
+     * 화면이 기존 값을 채워 보내야 했다. <b>그 사이 남이 본문을 고쳤으면 되돌아간다</b> —
+     * 목록이 낡았을수록 확률이 올라간다.
+     *
+     * <p>⚠️ 예약·만료 시각을 <b>지우는 것</b>은 이 경로로 안 된다({@code null}이 "그대로"라서).
+     * 지울 때는 {@code PUT}을 쓴다.
+     */
+    @PatchMapping("/{id}")
+    public ApiResponse<NoticeResponse> patch(@CurrentAccount AuthPrincipal me,
+                                             @PathVariable Long id,
+                                             @Valid @RequestBody NoticePatchRequest request) {
+        return ApiResponse.success(NoticeResponse.from(noticeService.patch(
+                me, id, request.title(), request.content(),
+                request.pinned(), request.banner(),
+                request.publishedAt(), request.expiresAt())));
+    }
+
     /** 공지 삭제(soft). */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me, @PathVariable Long id) {
@@ -117,8 +149,18 @@ public class AdminNoticeController {
     public record NoticeUpdateRequest(
             @NotBlank(message = "제목은 필수입니다.") @Size(max = 200) String title,
             @NotBlank(message = "내용은 필수입니다.") String content,
-            boolean pinned,
-            boolean banner,
+            @NotNull(message = "상단 고정 여부는 필수입니다.") Boolean pinned,
+            @NotNull(message = "배너 노출 여부는 필수입니다.") Boolean banner,
+            Instant publishedAt,
+            Instant expiresAt) {
+    }
+
+    /** 전부 선택값이다 — 보내지 않은 것은 바뀌지 않는다. */
+    public record NoticePatchRequest(
+            @Size(max = 200) String title,
+            String content,
+            Boolean pinned,
+            Boolean banner,
             Instant publishedAt,
             Instant expiresAt) {
     }
@@ -139,9 +181,15 @@ public class AdminNoticeController {
             boolean banner,
             Instant publishedAt,
             Instant expiresAt,
-            Instant createdAt) {
+            Instant createdAt,
+            /** 열람한 학생 수. 학부모 열람은 세지 않는다 — 학생이 봤는지가 기준이다 */
+            long readCount) {
 
         public static NoticeResponse from(Notice n) {
+            return of(n, 0L);
+        }
+
+        public static NoticeResponse of(Notice n, long readCount) {
             return new NoticeResponse(
                     n.getId(), n.getScope(),
                     n.getAcademy() == null ? null : n.getAcademy().getId(),
@@ -151,7 +199,7 @@ public class AdminNoticeController {
                     n.getTitle(), n.getContent(),
                     n.getAuthorType(), n.getAuthorId(),
                     n.isPinned(), n.isBanner(),
-                    n.getPublishedAt(), n.getExpiresAt(), n.getCreatedAt());
+                    n.getPublishedAt(), n.getExpiresAt(), n.getCreatedAt(), readCount);
         }
     }
 }
