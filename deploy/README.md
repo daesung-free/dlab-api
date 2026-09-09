@@ -195,18 +195,56 @@ curl localhost:8080/actuator/health/kiosk
 
 ### 로그를 브라우저로 보기 (Dozzle)
 
-`docker compose logs`를 매번 ssh로 치는 대신, 로컬에서 터널을 열어 브라우저로 본다.
+**https://logs.d-dlab.link** — 로그인하면 컨테이너별 실시간 로그·검색·다운로드가 된다.
+
+#### 최초 1회 세팅 (서버에서)
+
+**1) 계정 파일 만들기.** 비밀번호 해시가 들어가므로 **커밋하지 않는다.**
 
 ```bash
-ssh -i <키> -L 8888:127.0.0.1:8888 ubuntu@<서버>
-# 브라우저에서 http://localhost:8888
+cd /home/ubuntu/dlab-api
+docker run --rm amir20/dozzle:v8 generate \
+  --name "지유림" --email you@dlab.local --password '<비밀번호>' <아이디> > users.yml
 ```
 
-컨테이너별 실시간 로그·검색·다운로드가 된다. 터널을 끊으면 접근도 끊긴다.
+여러 명이면 같은 명령을 반복해 나온 항목을 `users.yml`에 이어 붙인다.
 
-> ⚠️ **인터넷에 열지 말 것.** Dozzle에는 기본 인증이 없고 **로그에 학생 이름·연락처가 실릴 수 있다.**
-> compose에서 `127.0.0.1:8888`로 묶어 뒀다 — 여기서 `"8888:8080"`으로 바꾸면
-> 보안그룹과 무관하게 인터넷에 열린다(Docker가 iptables를 직접 만진다).
+> ⚠️ **이 파일이 없으면 컨테이너가 뜨자마자 죽는다** — `simple` 인증이 이 파일을 요구한다.
+
+**2) DNS.** `logs.d-dlab.link` A 레코드를 서버 IP로.
+
+**3) nginx + 인증서.**
+
+```bash
+sudo certbot --nginx -d logs.d-dlab.link
+```
+
+발급된 443 서버블록의 `location /`을 아래로 바꾼다.
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8888;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # ★ Dozzle 은 WebSocket 으로 로그를 흘린다. 이 세 줄이 없으면
+    #   화면은 뜨는데 로그가 한 줄도 안 흐른다 — 원인이 잘 안 보인다.
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 1d;      # 없으면 60초마다 연결이 끊겼다 붙는다
+}
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+> ⚠️ **compose 의 `127.0.0.1:8888` 을 바꾸지 말 것.** `"8888:8080"` 으로 열면
+> 그 경로는 nginx 를 안 지나므로 **인증이 통째로 우회된다.**
+> (Docker 가 iptables 를 직접 만져 보안그룹으로도 안 막힌다)
 
 > ⚠️ **이건 감시가 아니다.** 사람이 열어봐야 보이고, 로그 회전(20m × 5)이 돌면 옛 기록은 사라지며,
 > 서버가 죽으면 이것도 같이 죽는다. **컷오버 전에 CloudWatch로 보관·알람을 붙여야 한다** —
