@@ -38,7 +38,10 @@ public class PasswordChangeRequiredInterceptor implements HandlerInterceptor {
             "/api/v1/app/auth/password",
             "/api/v1/app/auth/logout",
             "/api/v1/admin/auth/password",
-            "/api/v1/admin/auth/logout"
+            "/api/v1/admin/auth/logout",
+            // ★ 비밀번호 변경 화면에도 헤더가 있다. 막으면 그 화면에서
+            //   "누가 로그인했는지"를 못 읽어 빈 이름으로 뜬다
+            "/api/v1/admin/auth/me"
     );
 
     @Override

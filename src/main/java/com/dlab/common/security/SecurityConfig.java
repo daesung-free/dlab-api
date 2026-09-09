@@ -81,6 +81,9 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
                 .authorizeHttpRequests(auth -> auth
+                        // ★ /me 는 permitAll 앞에 둔다. 뒤에 두면 auth/** 에 먼저 걸려
+                        //   토큰 없이 들어오고, 컨트롤러가 principal 을 null 로 받아 500 이 난다
+                        .requestMatchers("/api/v1/admin/auth/me").authenticated()
                         // 로그인·토큰재발급은 인증 전에 호출된다
                         .requestMatchers("/api/v1/app/auth/**").permitAll()
                         .requestMatchers("/api/v1/admin/auth/**").permitAll()
