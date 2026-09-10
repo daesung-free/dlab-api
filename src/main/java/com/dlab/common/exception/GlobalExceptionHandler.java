@@ -282,6 +282,43 @@ public class GlobalExceptionHandler {
      * <p>어느 값이 빠졌는지는 <b>{@code MissingRequestValueException}일 때만</b> 싣는다 —
      * 그 아래에만 이름이 있고, 상위 타입은 메시지에 내부 정보가 섞일 수 있다.
      */
+    /**
+     * DB 제약 위반 — 길이 초과 · 중복 · FK.
+     *
+     * <p><b>안 잡으면 catch-all 이 500 으로 내보낸다.</b> 실제로 휴일명에 203자를 넣으면
+     * "서버 오류가 발생했습니다"가 돌아왔다 — <b>입력이 길다는 클라이언트 잘못인데</b>
+     * 화면은 무엇을 고쳐야 하는지 알 수 없다.
+     *
+     * <p>DTO 마다 {@code @Size} 를 다는 게 먼저지만, <b>컬럼이 수백 개라 반드시 빠뜨린다.</b>
+     * 여기가 마지막 그물이다 — 빠뜨린 곳도 500 대신 400 이 나간다.
+     *
+     * <p><b>원본 메시지를 그대로 내보내지 않는다.</b> PostgreSQL 이
+     * {@code value too long for type character varying(50)} 처럼 <b>테이블·컬럼·제약 이름</b>을
+     * 실어 보내는데, 그건 내부 구조 노출이다. 종류만 판별해 우리 문구로 바꾼다.
+     */
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(
+            org.springframework.dao.DataIntegrityViolationException e) {
+        log.warn("DB 제약 위반: {}", e.getMostSpecificCause().getMessage());
+
+        String cause = e.getMostSpecificCause().getMessage();
+        String message = "입력값이 올바르지 않습니다.";
+        if (cause != null) {
+            String lower = cause.toLowerCase();
+            if (lower.contains("too long")) {
+                message = "입력이 허용된 길이를 넘었습니다.";
+            } else if (lower.contains("duplicate key") || lower.contains("unique")) {
+                message = "이미 등록된 값입니다.";
+            } else if (lower.contains("foreign key")) {
+                message = "참조하는 대상을 찾을 수 없습니다.";
+            } else if (lower.contains("not-null") || lower.contains("null value")) {
+                message = "필수 값이 비어 있습니다.";
+            }
+        }
+        return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
+                .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST, message));
+    }
+
     @ExceptionHandler(org.springframework.web.bind.ServletRequestBindingException.class)
     public ResponseEntity<ApiResponse<Void>> handleMissingValue(
             org.springframework.web.bind.ServletRequestBindingException e) {

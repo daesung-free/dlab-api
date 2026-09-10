@@ -2,6 +2,7 @@ package com.dlab.api.admin.holiday.dto;
 
 import com.dlab.domain.holiday.entity.HolidayType;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 
@@ -16,7 +17,9 @@ import java.time.LocalDate;
 public record HolidayRequest(
         Long academyId,
         @NotNull(message = "날짜는 필수입니다.") LocalDate date,
-        @NotBlank(message = "휴일명은 필수입니다.") String name,
+        /** 컬럼이 VARCHAR(50)이다. 안 걸면 넘칠 때 500이 난다. */
+        @NotBlank(message = "휴일명은 필수입니다.")
+        @Size(max = 50, message = "휴일명은 50자 이내여야 합니다.") String name,
         @NotNull(message = "휴일 종류는 필수입니다.") HolidayType type,
         /**
          * 학습계획 미작성 집계에서 뺄 날인가. 생략하면 <b>빼지 않는다</b>.

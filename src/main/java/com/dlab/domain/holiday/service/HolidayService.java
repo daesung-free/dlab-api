@@ -29,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class HolidayService {
 
     private final HolidayRepository holidayRepository;
+    /** 등록 가능 연도 범위를 판단한다. 테스트가 시각을 고정할 수 있어야 해서 주입받는다. */
+    private final java.time.Clock clock;
 
     /** 기간 조회. 전 지점 공통 + 해당 지점 것을 함께 돌려준다. */
     /**
@@ -57,6 +59,7 @@ public class HolidayService {
     public Holiday register(AuthPrincipal principal, Long academyId, LocalDate date,
                             String name, HolidayType type, boolean planExcluded) {
         validateWritable(principal, academyId, type);
+        validateDateInRange(date);
         validateNotDuplicated(academyId, date);
 
         Holiday holiday = academyId == null
@@ -65,6 +68,23 @@ public class HolidayService {
         holiday.changePlanExcluded(planExcluded);
         // created_by는 SecurityAuditorAware가 채운다 — 여기서 설정하지 않는다.
         return holidayRepository.save(holiday);
+    }
+
+    /**
+     * 등록할 수 있는 날짜 범위.
+     *
+     * <p>없으면 {@code 2099-01-01} 이 그대로 저장된다. 오타 한 번에 들어간 먼 미래 날짜는
+     * <b>화면의 연도 필터에 잡히지 않아 조회도 삭제도 못 한다</b> — API 로만 지울 수 있다.
+     *
+     * <p>범위를 넓게 잡은 이유는 <b>연말에 다음 해 공휴일을 미리 넣는 운영</b>이 실제로
+     * 있어서다. 지난 해를 허용하는 것도 소급 등록이 있기 때문이다.
+     */
+    private void validateDateInRange(LocalDate date) {
+        int year = LocalDate.now(clock).getYear();
+        if (date.getYear() < year - 1 || date.getYear() > year + 2) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "%d년 ~ %d년 사이의 날짜만 등록할 수 있습니다.".formatted(year - 1, year + 2));
+        }
     }
 
     @Transactional
