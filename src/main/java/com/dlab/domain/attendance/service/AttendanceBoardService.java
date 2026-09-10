@@ -165,7 +165,7 @@ public class AttendanceBoardService {
                             seats.get(e.getId()),
                             firstArrival(logs),
                             lastDeparture(logs),
-                            screenStatus(logs, confirmed.get(e.getId())),
+                            screenStatus(date, logs, confirmed.get(e.getId())),
                             excused(confirmed.get(e.getId())),
                             studyMinutes(confirmed.get(e.getId()), logs, periods, until),
                             guardianPhones.get(e.getId()),
@@ -201,7 +201,16 @@ public class AttendanceBoardService {
      * <p><b>확정된 일자 상태가 있으면 그걸 쓴다.</b> 없으면(오늘) 원장에서 즉석 판정한다.
      * 외출 중은 확정 상태가 아니라 <b>지금 나가 있는지</b>라, 원장의 마지막 이벤트로만 알 수 있다.
      */
-    private ScreenStatus screenStatus(List<AttendanceTaggingLog> logs, AttendanceDailyStatus confirmed) {
+    private ScreenStatus screenStatus(LocalDate date, List<AttendanceTaggingLog> logs,
+                                      AttendanceDailyStatus confirmed) {
+        // ★ 아직 오지 않은 날은 결석이 아니다.
+        //   이 분기가 없으면 아래 "등원 태깅이 없다 → ABSENT"에 걸려 미래 날짜를
+        //   조회한 순간 재원생 전원이 결석으로 나간다.
+        //   확정 행이 있으면 그건 실제 판정이므로 그대로 쓴다(소급 입력 등).
+        if (confirmed == null && logs.isEmpty() && date.isAfter(LocalDate.now(clock))) {
+            return ScreenStatus.NOT_YET;
+        }
+
         AttendanceEventType last = logs.isEmpty() ? null : logs.get(logs.size() - 1).getEventType();
         if (last == AttendanceEventType.OUTING || last == AttendanceEventType.EXCUSED_OUTING) {
             return ScreenStatus.OUT;
@@ -325,8 +334,20 @@ public class AttendanceBoardService {
     }
 
     /** 화면(`Attendance.tsx`)이 쓰는 상태값. 우리 {@link DailyStatus}와 축이 다르다. */
+    /**
+     * @see #NOT_YET 아직 오지 않은 날. <b>결석과 반드시 구분해야 한다</b>
+     */
     public enum ScreenStatus {
-        ON_TIME, LATE, ABSENT, OUT, EARLY_LEAVE
+        ON_TIME, LATE, ABSENT, OUT, EARLY_LEAVE,
+
+        /**
+         * 판정 불가 — <b>아직 오지 않은 날</b>이다.
+         *
+         * <p>이 값이 없을 때 미래 날짜를 조회하면 <b>재원생 전원이 결석으로 내려갔다</b>.
+         * "안 온 것"과 "아직 오지 않은 것"은 다르고, 화면이 그걸 구분할 근거가 응답에
+         * 없었다. 통계나 배치가 그 값을 집으면 조용히 번진다.
+         */
+        NOT_YET
     }
 
     /**

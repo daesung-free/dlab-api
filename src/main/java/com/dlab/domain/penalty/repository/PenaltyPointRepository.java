@@ -10,6 +10,9 @@ public interface PenaltyPointRepository extends JpaRepository<PenaltyPoint, Long
 
     boolean existsByIdempotencyKeyAndDeletedFalse(String idempotencyKey);
 
+    /** 이 등록 건에 상벌점 이력이 있는가 — 학생 삭제를 막는 근거다. */
+    boolean existsByEnrollmentIdAndDeletedFalse(Long enrollmentId);
+
     /** 학생별 내역. 앱 Daily Report와 관리자 상세가 함께 쓴다. */
     @Query("""
             SELECT p FROM PenaltyPoint p

@@ -90,8 +90,13 @@ public class NotificationTemplateService {
     public NotificationTemplate updateContent(Long id, String title, String body,
                                               String requiredVariables, boolean contentConfirmed) {
         NotificationTemplate template = require(id);
-        if (contentConfirmed && (isBlank(title) || isBlank(body))) {
-            throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_CONTENT_EMPTY);
+        // ★ 무엇이 비었는지 갈라서 말한다. 하나로 묶으면 본문을 채운 사용자가
+        //   "문구가 비어 있다"를 받고 원인을 못 찾는다 — 화면에 제목이 필수라는 표시도 없다
+        if (contentConfirmed && isBlank(title)) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_TITLE_EMPTY);
+        }
+        if (contentConfirmed && isBlank(body)) {
+            throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_BODY_EMPTY);
         }
         if (contentConfirmed && !body.contains(STUDENT_NAME_PLACEHOLDER)) {
             throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_CONTENT_EMPTY,

@@ -49,10 +49,17 @@ class AuditLogTest {
 
     /**
      * 트랜잭션 테스트가 아니라 <b>데이터가 커밋되어 남는다</b> — 지점 코드가 겹치면
-     * 유니크 제약에 걸린다. 실행 간에도 남으므로 시각 기반으로 만든다.
+     * 유니크 제약에 걸린다. 실행 간에도 남으므로 매번 다른 값이어야 한다.
+     *
+     * <p>⚠️ <b>{@code nanoTime() % 100_000}으로 만들던 자리다.</b> 5자리라 경우의 수가
+     * 10만인데 실행할 때마다 행이 쌓이므로, 돌릴수록 충돌 확률이 올라간다. 실제로
+     * 전체 테스트에서 무작위로 깨졌다(그때 남아 있던 행이 23개). 무작위 실패는
+     * 원인을 찾는 데 드는 시간이 실패 자체보다 비싸다.
+     *
+     * <p>{@code acad_cd}가 20자라 UUID 8자리면 충분히 넓다.
      */
     private static String uniqueCode() {
-        return "A" + (System.nanoTime() % 100_000);
+        return "A" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
 
     @BeforeEach

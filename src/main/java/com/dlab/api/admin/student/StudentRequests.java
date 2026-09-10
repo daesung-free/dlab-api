@@ -12,6 +12,17 @@ public final class StudentRequests {
     private StudentRequests() {
     }
 
+    /**
+     * 연락처 형식.
+     *
+     * <p><b>이 값이 알림톡 수신처가 된다.</b> 패턴이 없을 때 "전화번호아님abc"가 그대로
+     * 저장됐고, 발송이 조용히 실패해도 화면에는 그 번호가 정상처럼 보인다.
+     *
+     * <p>하이픈은 있어도 없어도 받는다 — 운영자가 붙여넣는 형태가 제각각이라 형식을
+     * 하나로 강요하면 정상 번호가 거부된다. 국번 판별은 {@code common/privacy/Masking}이 한다.
+     */
+    private static final String PHONE_PATTERN = "^0\\d{1,2}-?\\d{3,4}-?\\d{4}$";
+
     /** 신규 접수. 학번은 서버가 채번하므로 받지 않는다. */
     /**
      * 신규 접수 등록.
@@ -27,12 +38,15 @@ public final class StudentRequests {
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") @Min(2000) @Max(2100) Integer year,
             @NotBlank(message = "이름은 필수입니다.") @Size(max = 20) String name,
-            @Size(max = 20) String phone,
+            @Size(max = 20)
+            @Pattern(regexp = PHONE_PATTERN, message = "연락처 형식이 올바르지 않습니다.")
+            String phone,
             @NotNull(message = "학년 구분은 필수입니다.") GradeType grade,
             /** N수 차수 — 1=재수, 2=삼수. N수가 아니면 비운다 */
             @Min(1) @Max(10) Short retakeCount,
             TrackType track,
-            LocalDate birthDate,
+            /** 미래 날짜는 받지 않는다 — 2099-01-01 이 그대로 저장되던 자리다 */
+            @Past(message = "생년월일은 과거 날짜여야 합니다.") LocalDate birthDate,
             @Size(max = 1) String gender,
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,
@@ -47,8 +61,10 @@ public final class StudentRequests {
      */
     public record StudentUpdate(
             @Size(max = 20) String name,
-            @Size(max = 20) String phone,
-            LocalDate birthDate,
+            @Size(max = 20)
+            @Pattern(regexp = PHONE_PATTERN, message = "연락처 형식이 올바르지 않습니다.")
+            String phone,
+            @Past(message = "생년월일은 과거 날짜여야 합니다.") LocalDate birthDate,
             @Size(max = 1) String gender,
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,

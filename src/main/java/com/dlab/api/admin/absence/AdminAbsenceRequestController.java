@@ -118,6 +118,8 @@ public class AdminAbsenceRequestController {
             String categoryName,
             ApproverType approverType,
             ApprovalStatus status,
+            /** 반려 사유. 반려된 건에만 값이 있다 — 없으면 화면이 "왜 반려됐나"를 못 보여준다 */
+            String rejectReason,
             boolean escalationCandidate
     ) {
         static AbsenceRowResponse of(AbsenceRequestRow r, boolean raw) {
@@ -125,7 +127,7 @@ public class AdminAbsenceRequestController {
                     r.id(), r.approvalRequestId(), r.submittedAt(), r.studentNo(),
                     raw ? r.name() : Masking.name(r.name()),
                     r.className(), r.type(), r.period(), r.reason(), r.categoryName(),
-                    r.approverType(), r.status(), r.escalationCandidate());
+                    r.approverType(), r.status(), r.rejectReason(), r.escalationCandidate());
         }
     }
 }
