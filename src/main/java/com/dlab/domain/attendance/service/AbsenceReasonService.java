@@ -301,6 +301,9 @@ public class AbsenceReasonService {
                 r.getCategory() == null ? null : r.getCategory().getName(),
                 approverType,
                 statusOf(r),
+                // 반려 사유는 승인 요청에 남는다 — 이게 안 내려가면 화면이 "왜 반려됐는지"를
+                // 표시할 값 자체가 없다. 반려가 아니면 비어 있다
+                approval == null ? null : approval.getRejectReason(),
                 escalationCandidate);
     }
 
@@ -352,6 +355,8 @@ public class AbsenceReasonService {
             String categoryName,
             ApproverType approverType,
             ApprovalStatus status,
+            /** 반려 사유. 반려된 건에만 값이 있다 */
+            String rejectReason,
             boolean escalationCandidate
     ) {
     }

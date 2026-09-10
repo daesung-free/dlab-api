@@ -125,18 +125,37 @@ public class SecurityConfig {
      */
     @Bean
     @Order(3)
-    public SecurityFilterChain defaultFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain defaultFilterChain(HttpSecurity http,
+                                                  org.springframework.core.env.Environment env)
+            throws Exception {
+        // ★ API 명세를 아무나 볼 수 있으면 안 된다 — 435개 엔드포인트의 경로·파라미터·
+        //   응답 구조가 그대로 나간다. 공격자에게는 지도를 쥐여주는 것과 같다.
+        //   다만 로컬·CI 에서는 열어둔다. 막으면 프론트가 타입을 생성하지 못하고
+        //   springdoc 을 쓰는 이유가 없어진다.
+        boolean docsOpen = env.acceptsProfiles(
+                org.springframework.core.env.Profiles.of("local", "ci", "test"));
+
         return http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
-                .authorizeHttpRequests(auth -> auth
-                        // 외부 모니터가 찔러볼 창구. 상세 노출 범위는 프로필이 정한다
-                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                        // env·beans·heapdump 등. 열리면 DB 접속정보까지 나간다
-                        .requestMatchers("/actuator/**").denyAll()
-                        .anyRequest().permitAll())
+                .authorizeHttpRequests(auth -> {
+                    // 외부 모니터가 찔러볼 창구. 상세 노출 범위는 프로필이 정한다
+                    auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll();
+                    // env·beans·heapdump 등. 열리면 DB 접속정보까지 나간다
+                    auth.requestMatchers("/actuator/**").denyAll();
+
+                    // 액추에이터와 같은 방식이다 — springdoc.api-docs.enabled 설정으로도
+                    // 끌 수 있지만, 설정 한 줄이 바뀌면 그대로 뚫린다. 여기서도 막아
+                    // 설정과 코드가 같이 틀려야 열리게 한다.
+                    if (!docsOpen) {
+                        auth.requestMatchers("/v3/api-docs", "/v3/api-docs/**",
+                                "/v3/api-docs.yaml", "/swagger-ui.html", "/swagger-ui/**")
+                                .denyAll();
+                    }
+                    auth.anyRequest().permitAll();
+                })
                 .build();
     }
 

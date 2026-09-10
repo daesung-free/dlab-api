@@ -43,6 +43,9 @@ public class StudentService {
     private final AcademyRepository academyRepository;
     private final TransactionTemplate transactionTemplate;
     private final java.time.Clock clock;
+    /** 삭제 전 이력 확인용 — 다닌 흔적이 있으면 지우지 않고 퇴원·제적으로 보낸다 */
+    private final com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository taggingLogRepository;
+    private final com.dlab.domain.penalty.repository.PenaltyPointRepository penaltyPointRepository;
 
     @Transactional(readOnly = true)
     public Page<StudentEnrollment> search(SearchScope scope, StudentSearchCondition condition,
@@ -156,6 +159,50 @@ public class StudentService {
             enrollment.changeRetakeCount(retakeCount);
         }
         return enrollment;
+    }
+
+    /**
+     * 잘못 등록한 학생 삭제 (soft).
+     *
+     * <p><b>정상 퇴원·제적에는 쓰지 않는다.</b> 그건 {@code POST /students/{id}/status}이고,
+     * 반·좌석 해제와 앱 계정 차단까지 한 트랜잭션으로 돈다. 여기는 <b>오등록을 치우는</b>
+     * 용도다 — 삭제 수단이 없어 테스트 학생이 재원생 수에 섞여 있던 자리다.
+     *
+     * <h2>이력이 있으면 거부한다</h2>
+     * 출결 태깅이나 상벌점이 하나라도 붙었으면 실제로 다닌 학생이다. 지우면 그 기록이
+     * 주인을 잃고, 출결률 분모도 조용히 바뀐다. 그 경우는 <b>퇴원·제적으로 처리</b>해야 한다.
+     *
+     * <h2>물리 삭제하지 않는다</h2>
+     * 학번이 유니크라 행을 지우면 그 번호가 재사용되고, 나중에 같은 번호로 다른 학생을
+     * 조회하게 된다. {@code is_deleted}만 세운다.
+     *
+     * <p><b>사람({@code student})은 다른 등록 건이 없을 때만</b> 같이 내린다 —
+     * 삼수 재등록처럼 한 사람에 등록이 여럿이면 남은 쪽이 주인을 잃는다.
+     */
+    @Transactional
+    public void delete(Long enrollmentId, AuthPrincipal principal) {
+        StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .filter(e -> !e.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+        if (!principal.canAccessAcademy(enrollment.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+
+        if (taggingLogRepository.existsByEnrollmentIdAndDeletedFalse(enrollmentId)
+                || penaltyPointRepository.existsByEnrollmentIdAndDeletedFalse(enrollmentId)) {
+            throw new BusinessException(ErrorCode.STUDENT_HAS_HISTORY);
+        }
+
+        Student student = enrollment.getStudent();
+        enrollment.markDeleted();
+
+        boolean lastOne = enrollmentRepository.findByStudentId(student.getId()).stream()
+                .noneMatch(e -> !e.isDeleted() && !e.getId().equals(enrollmentId));
+        if (lastOne) {
+            student.markDeleted();
+        }
+        log.info("학생 삭제(오등록 정리): enrollmentId={}, studentNo={}, 사람도 삭제={}",
+                enrollmentId, enrollment.getStudentNo(), lastOne);
     }
 
     /**

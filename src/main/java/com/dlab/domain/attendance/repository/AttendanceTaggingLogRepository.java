@@ -8,6 +8,9 @@ import java.util.List;
 
 public interface AttendanceTaggingLogRepository extends JpaRepository<AttendanceTaggingLog, Long> {
 
+    /** 이 등록 건에 태깅 이력이 하나라도 있는가 — 학생 삭제를 막는 근거다. */
+    boolean existsByEnrollmentIdAndDeletedFalse(Long enrollmentId);
+
     List<AttendanceTaggingLog> findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(
             Long enrollmentId, LocalDate attendanceDate);
 

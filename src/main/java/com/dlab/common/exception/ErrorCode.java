@@ -55,6 +55,12 @@ public enum ErrorCode {
     LOCKER_ALREADY_OCCUPIED(HttpStatus.CONFLICT, "이미 배정된 사물함입니다."),
     /** 배정을 남긴 채 지우면 없는 반을 가리키는 학생이 생긴다 — 해제가 먼저다. */
     CLASS_HAS_MEMBERS(HttpStatus.CONFLICT, "배정된 학생이 있는 반은 삭제할 수 없습니다."),
+    /**
+     * 다닌 흔적이 있는 학생은 지우지 않는다 — 출결·상벌점이 주인을 잃고 출결률 분모가
+     * 조용히 바뀐다. 삭제는 오등록 정리용이고, 실제 학생은 퇴원·제적으로 처리한다.
+     */
+    STUDENT_HAS_HISTORY(HttpStatus.CONFLICT,
+            "출결·상벌점 이력이 있는 학생은 삭제할 수 없습니다. 퇴원 또는 제적으로 처리해 주세요."),
     /** 지점이 자기가 만든 계정을 스스로 승인하면 절차가 아무것도 막지 못한다. */
     ACCOUNT_APPROVAL_FORBIDDEN(HttpStatus.FORBIDDEN, "계정 승인은 본사만 할 수 있습니다."),
     ACCOUNT_NOT_PENDING(HttpStatus.CONFLICT, "승인 대기 상태의 계정이 아닙니다."),
@@ -132,6 +138,15 @@ public enum ErrorCode {
     NOTIFICATION_TEMPLATE_NOT_FOUND(HttpStatus.NOT_FOUND, "알림 템플릿을 찾을 수 없습니다."),
     NOTIFICATION_VARIABLE_MISSING(HttpStatus.INTERNAL_SERVER_ERROR, "알림 템플릿 변수가 누락되었습니다."),
     NOTIFICATION_TEMPLATE_DUPLICATED(HttpStatus.CONFLICT, "이 이벤트의 템플릿이 이미 있습니다."),
+    /**
+     * ⚠️ <b>한 코드를 세 상황에 쓰지 말 것.</b> 제목 없음·본문 없음·변수 누락에 같은 문구가
+     * 나가던 시절, 본문을 채운 사용자가 "문구가 비어 있다"를 받고 원인을 못 찾았다.
+     * 아래처럼 무엇이 비었는지까지 말해야 한다.
+     */
+    NOTIFICATION_TEMPLATE_TITLE_EMPTY(HttpStatus.BAD_REQUEST,
+            "제목을 입력해야 확정할 수 있습니다."),
+    NOTIFICATION_TEMPLATE_BODY_EMPTY(HttpStatus.BAD_REQUEST,
+            "본문을 입력해야 확정할 수 있습니다."),
     NOTIFICATION_TEMPLATE_CONTENT_EMPTY(HttpStatus.BAD_REQUEST,
             "문구가 비어 있어 확정할 수 없습니다."),
     NOTIFICATION_REVIEW_NOT_APPLICABLE(HttpStatus.BAD_REQUEST,
