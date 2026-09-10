@@ -41,7 +41,10 @@ class HolidayServiceTest {
         given(repository.findNationwideInRange(any(), any())).willReturn(List.of());
         given(repository.findInRange(any(), any(), any())).willReturn(List.of());
         given(repository.save(any(Holiday.class))).willAnswer(inv -> inv.getArgument(0));
-        service = new HolidayService(repository);
+        // 등록 가능 연도 범위 판정이 "오늘"에 달려 있어 시각을 고정한다
+        service = new HolidayService(repository,
+                java.time.Clock.fixed(java.time.Instant.parse("2026-08-01T00:00:00Z"),
+                        java.time.ZoneId.of("Asia/Seoul")));
     }
 
     @Test
@@ -115,5 +118,37 @@ class HolidayServiceTest {
         Holiday saved = service.register(branchAdmin, 7L, DATE, "개원기념일", HolidayType.ACADEMY, false);
 
         assertThat(saved.getAcademyId()).isEqualTo(7L);
+    }
+
+    @Test
+    @DisplayName("★ 먼 미래 날짜는 거절한다 — 한 번 들어가면 화면에서 지울 수 없다")
+    void rejectsFarFutureDate() {
+        // 2099-01-01 이 그대로 저장되던 문제. 화면의 연도 필터에 안 잡혀
+        // 조회도 삭제도 못 하고 API 로만 지울 수 있었다
+        assertThatThrownBy(() -> service.register(
+                headquarters, null, LocalDate.of(2099, 1, 1), "잘못된날짜",
+                HolidayType.PUBLIC, false))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_REQUEST);
+    }
+
+    @Test
+    @DisplayName("다음 해까지는 등록된다 — 연말에 다음 해 공휴일을 미리 넣는 운영이 있다")
+    void allowsNextYear() {
+        Holiday saved = service.register(
+                headquarters, null, LocalDate.of(2027, 1, 1), "신정",
+                HolidayType.PUBLIC, false);
+
+        assertThat(saved.getHolidayDate()).isEqualTo(LocalDate.of(2027, 1, 1));
+    }
+
+    @Test
+    @DisplayName("지난 해도 등록된다 — 소급 등록이 있다")
+    void allowsLastYear() {
+        Holiday saved = service.register(
+                headquarters, null, LocalDate.of(2025, 12, 25), "성탄절",
+                HolidayType.PUBLIC, false);
+
+        assertThat(saved.getHolidayDate()).isEqualTo(LocalDate.of(2025, 12, 25));
     }
 }
