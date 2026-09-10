@@ -50,6 +50,11 @@ public class SecurityConfig {
      * <p>{@code /auth2}·{@code /dlab}은 홈페이지 입학예약이다 — 키오스크와 <b>토큰이
      * 서로 통하지 않는다.</b> 검증은 각 구획의 서비스가 본문 token으로 직접 한다.
      */
+    /** 관리자 웹에서 쓰기가 허용되는 역할. 5단계 중 READONLY 만 빠진다. */
+    private static final String[] WRITABLE_ADMIN_ROLES = {
+            "SUPER_ADMIN", "BRANCH_ADMIN", "TEACHER", "STAFF"
+    };
+
     @Bean
     @Order(1)
     public SecurityFilterChain dsaCompatFilterChain(HttpSecurity http) throws Exception {
@@ -87,6 +92,26 @@ public class SecurityConfig {
                         // 로그인·토큰재발급은 인증 전에 호출된다
                         .requestMatchers("/api/v1/app/auth/**").permitAll()
                         .requestMatchers("/api/v1/admin/auth/**").permitAll()
+                        // ★★ 조회 전용(READONLY)은 관리자 웹에서 아무것도 쓸 수 없다.
+                        //
+                        //   컨트롤러마다 @PreAuthorize 를 다는 게 먼저지만 쓰기가 209개라
+                        //   반드시 빠뜨린다 — 실제로 20개가 비어 있었고, 그중 휴일은
+                        //   조회 전용 계정으로 등록·수정·삭제가 그대로 됐다.
+                        //   역할 이름 자체가 "조회 전용"이라 여기엔 정책 판단의 여지가 없다.
+                        //
+                        //   ⚠️ 이건 "누가 무엇을 쓸 수 있나"(권한 매트릭스, §4)를 정하는 게 아니다.
+                        //      READONLY 하나만 막는 바닥선이고, 나머지 역할 구분은 매트릭스 수령 후
+                        //      permission 테이블로 간다. 여기에 역할별 규칙을 더 얹지 말 것.
+                        //
+                        //   auth/** 는 위에서 이미 permitAll 이라 로그인·비밀번호 변경은 걸리지 않는다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/**")
+                            .hasAnyRole(WRITABLE_ADMIN_ROLES)
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/**")
+                            .hasAnyRole(WRITABLE_ADMIN_ROLES)
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/admin/**")
+                            .hasAnyRole(WRITABLE_ADMIN_ROLES)
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/admin/**")
+                            .hasAnyRole(WRITABLE_ADMIN_ROLES)
                         // 가입은 토큰이 생기기 전에 호출된다(휴대폰 인증 → 가입)
                         .requestMatchers("/api/v1/app/signup/**").permitAll()
                         // ★ 앱 부팅 첫 호출. 점검 중이거나 강제 업데이트가 필요한지는

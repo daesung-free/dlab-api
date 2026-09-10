@@ -92,6 +92,46 @@ class StaffAccountFlowTest {
     }
 
     @Test
+    @DisplayName("★★ 조회 전용은 관리자 웹에서 아무것도 쓸 수 없다 — 휴일이 그대로 뚫려 있었다")
+    void readonlyCannotWrite() throws Exception {
+        Employee viewer = new Employee(em.find(Academy.class, academyId), "조회전용");
+        em.persist(viewer);
+        Account viewerAccount = Account.forEmployee(
+                viewer, "SFRO", passwordEncoder.encode(PASSWORD), false);
+        em.persist(viewerAccount);
+        em.flush();
+        grantRole(viewerAccount.getId(), "READONLY");
+        String viewerToken = token("SFRO");
+
+        // 휴일 — 역할 검사가 없어 조회 전용 계정이 등록·수정·삭제를 다 할 수 있었다
+        mvc.perform(post("/api/v1/admin/holidays")
+                        .header("Authorization", viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"date":"2026-11-11","name":"조회전용이등록",
+                                 "type":"ACADEMY"}""".formatted(academyId)))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(delete("/api/v1/admin/holidays/{id}", 1))
+                .andExpect(status().isUnauthorized());
+
+        // 휴일만의 문제가 아니라 관리자 웹 전역이다
+        mvc.perform(post("/api/v1/admin/staff/employees")
+                        .header("Authorization", viewerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"name":"몰래등록","loginId":"SNEAK",
+                                 "roles":["STAFF"]}""".formatted(academyId)))
+                .andExpect(status().isForbidden());
+
+        // 조회는 그대로 된다 — 막는 것은 쓰기뿐이다
+        mvc.perform(get("/api/v1/admin/holidays")
+                        .header("Authorization", viewerToken)
+                        .param("from", "2026-09-01").param("to", "2026-09-30"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @DisplayName("★ /auth/me — 권한이 낮아도 자기가 누구인지는 읽을 수 있어야 한다")
     void authMe() throws Exception {
         // 헤더에 이름을 띄우는 용도라 모든 역할이 부를 수 있어야 한다.

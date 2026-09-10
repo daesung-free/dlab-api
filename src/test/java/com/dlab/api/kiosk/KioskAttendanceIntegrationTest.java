@@ -521,12 +521,15 @@ class KioskAttendanceIntegrationTest {
     void earlyLeaveIsReusableAfterReAttend() throws Exception {
         // ★ 시각을 현재 기준으로 잡는다. setReAttendProc의 복귀는 서버 현재시각이라
         //    고정 시각으로 태깅하면 원장 순서가 뒤집힌다(운영에서는 생기지 않는 어긋남)
-        java.time.LocalTime now = java.time.LocalTime.now(clock);
-        String checkIn = fmt(now.minusHours(2));
-        String leaveAt = fmt(now.minusHours(1));
-        String retryAt = fmt(now.plusMinutes(2));
+        // ★ 벽시계를 쓰지 않는다. 교시가 08:00~12:00 · 13:00~22:00 이라
+        //   밤에 돌리면 now-1h·now+2m 이 교시 밖으로 나가 응답 모양이 달라진다
+        //   (실제로 CI 가 23:14 에 돌아 깨졌다). 야자 안쪽으로 고정한다.
+        java.time.LocalTime base = java.time.LocalTime.of(21, 0);
+        String checkIn = fmt(base.minusHours(2));
+        String leaveAt = fmt(base.minusHours(1));
+        String retryAt = fmt(base.plusMinutes(2));
 
-        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, now.minusHours(1));
+        submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, base.minusHours(1));
         tag(checkIn);
         tag(leaveAt, "C").andExpect(jsonPath("$.att_gn").value("C"));
 

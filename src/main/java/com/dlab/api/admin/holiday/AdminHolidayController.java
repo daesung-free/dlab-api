@@ -1,5 +1,6 @@
 package com.dlab.api.admin.holiday;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import com.dlab.api.admin.holiday.dto.HolidayRequest;
 import com.dlab.api.admin.holiday.dto.HolidayResponse;
 import com.dlab.common.response.ApiResponse;
@@ -63,8 +64,13 @@ public class AdminHolidayController {
      * 다른 지점 급식까지 막힌다. 지점은 자기 지점 유형만 등록한다.
      *
      * <p>⚠️ 이 데이터는 <b>급식 가능일</b>용이다. 교습비 일수는 별개다 —
-     * 학원은 삼일절·어린이날에도 운영한다.
+     * 학원은 삼일절·어린이날에도 운영한다.     *
+     * <p><b>쓰기는 관리자만.</b> 지금까지 역할 검사가 없어 조회 전용(READONLY)과 행정선생님(STAFF)이
+     * 휴일을 등록·수정·삭제할 수 있었다 — 지점 범위만 보고 역할은 보지 않았다.
+     * 휴일 하나가 그 지점 급식 신청일을 통째로 바꾸므로 급식 중단일(AdminMealController)과
+     * 같은 기준으로 맞춘다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @PostMapping
     public ApiResponse<HolidayResponse> register(
             @CurrentAccount AuthPrincipal me,
@@ -79,6 +85,7 @@ public class AdminHolidayController {
      * 이름과 <b>학습계획 차단 여부</b>를 고친다. 날짜·유형을 바꿀 일이면 지우고 새로 넣는 게
      * 이력상 명확하다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @PatchMapping("/{holidayId}")
     public ApiResponse<HolidayResponse> rename(
             @CurrentAccount AuthPrincipal me,
@@ -90,6 +97,7 @@ public class AdminHolidayController {
     }
 
     /** 공휴일 삭제(soft). 물리 삭제하면 과거 급식 신청이 어느 규칙으로 계산됐는지 추적이 끊긴다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @DeleteMapping("/{holidayId}")
     public ApiResponse<Void> remove(
             @CurrentAccount AuthPrincipal me,
