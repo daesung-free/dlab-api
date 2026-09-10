@@ -323,4 +323,32 @@ class AdminAttendanceBoardTest {
         assertThatThrownBy(() -> boardService.board(admin, null, day, day.minusDays(1), null))
                 .isInstanceOf(BusinessException.class);
     }
+
+    @Test
+    @DisplayName("★ 아직 오지 않은 날은 결석이 아니다 — 미래 날짜에 전원 결석이 나오던 건")
+    void futureDateIsNotAbsent() {
+        enroll("FUT-001", "미래학생", "2026-0101");
+
+        // 4주 뒤 — 같은 요일이라 교시 마스터 구성이 같다
+        var rows = boardService.board(admin, null, day.plusDays(28), null);
+
+        // 태깅도 확정도 없는 미래 날짜다. NOT_YET 이 없으면
+        // "등원 태깅이 없다 → ABSENT" 에 걸려 재원생 전원이 결석으로 나간다
+        assertThat(rows).isNotEmpty();
+        assertThat(rows).extracting(r -> r.status())
+                .containsOnly(AttendanceBoardService.ScreenStatus.NOT_YET);
+        assertThat(rows).extracting(r -> r.status())
+                .doesNotContain(AttendanceBoardService.ScreenStatus.ABSENT);
+    }
+
+    @Test
+    @DisplayName("지난 날짜는 그대로 결석으로 판정된다 — 미래 분기가 과거까지 먹으면 안 된다")
+    void pastDateStillAbsent() {
+        enroll("PAST-001", "과거학생", "2026-0102");
+
+        var rows = boardService.board(admin, null, day.minusDays(28), null);
+
+        assertThat(rows).extracting(r -> r.status())
+                .contains(AttendanceBoardService.ScreenStatus.ABSENT);
+    }
 }

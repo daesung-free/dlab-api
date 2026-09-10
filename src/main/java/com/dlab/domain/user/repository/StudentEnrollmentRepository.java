@@ -16,6 +16,9 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
      * <p>{@code is_current}로 거르지 않는다 — 같은 연도·지점에는 등록 건이 하나뿐이고,
      * 지난 기수 행까지 걸러버리면 이번 기수 행을 못 찾아 같은 사람을 또 만들게 된다.
      */
+    /** 그 사람의 모든 등록 건(삭제분 포함). 삭제 시 "마지막 하나인가"를 판단한다. */
+    List<StudentEnrollment> findByStudentId(Long studentId);
+
     Optional<StudentEnrollment> findByStudentIdAndAcademyIdAndYearAndDeletedFalse(
             Long studentId, Long academyId, short year);
 

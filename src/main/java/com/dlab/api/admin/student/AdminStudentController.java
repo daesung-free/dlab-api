@@ -198,6 +198,22 @@ public class AdminStudentController {
                 request.retakeCount(), request.track(), request.status(), me), me));
     }
 
+    /**
+     * 오등록 학생 삭제 (soft).
+     *
+     * <p><b>퇴원·제적에는 쓰지 않는다</b> — 그건 아래 {@code /status}이고 반·좌석 해제와
+     * 앱 계정 차단까지 함께 돈다. 여기는 <b>잘못 만든 행을 치우는</b> 용도다.
+     *
+     * <p><b>출결·상벌점 이력이 있으면 409</b>다. 실제로 다닌 학생을 지우면 그 기록이
+     * 주인을 잃고 출결률 분모가 조용히 바뀐다.
+     */
+    @DeleteMapping("/{enrollmentId}")
+    public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me,
+                                    @PathVariable Long enrollmentId) {
+        studentService.delete(enrollmentId, me);
+        return ApiResponse.empty();
+    }
+
     // ── 상태 관리 (F-4.1-8) ──
 
     /**

@@ -214,4 +214,37 @@ class StudentStatusFlowTest {
                 .andExpect(jsonPath("$.data[0].fromStatus").value("LEAVE"))
                 .andExpect(jsonPath("$.data[0].reason").value("타 학원 이동"));
     }
+
+    @Test
+    @DisplayName("★ 오등록 학생은 지울 수 있다 — 삭제 수단이 없어 테스트 학생이 재원생 수에 섞였다")
+    void wronglyAdmittedStudentCanBeDeleted() throws Exception {
+        mvc.perform(delete("/api/v1/admin/students/{id}", enrollmentId)
+                        .header("Authorization", token()))
+                .andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        // 목록에서 빠진다 — 물리 삭제가 아니라 is_deleted 다
+        mvc.perform(get("/api/v1/admin/students").header("Authorization", token()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.enrollmentId==%d)]".formatted(enrollmentId))
+                        .isEmpty());
+    }
+
+    @Test
+    @DisplayName("★★ 다닌 흔적이 있으면 삭제를 막는다 — 지우면 출결 기록이 주인을 잃는다")
+    void studentWithHistoryCannotBeDeleted() throws Exception {
+        StudentEnrollment enrollment = em.find(StudentEnrollment.class, enrollmentId);
+        em.persist(new com.dlab.domain.attendance.entity.AttendanceTaggingLog(
+                academy, enrollment,
+                com.dlab.domain.attendance.entity.AttendanceEventType.CHECK_IN,
+                com.dlab.domain.attendance.entity.AttendanceSource.KIOSK_NFC,
+                java.time.Instant.now(), java.time.LocalDate.now()));
+        em.flush();
+
+        mvc.perform(delete("/api/v1/admin/students/{id}", enrollmentId)
+                        .header("Authorization", token()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("STUDENT_HAS_HISTORY"));
+    }
 }

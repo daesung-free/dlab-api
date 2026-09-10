@@ -72,3 +72,7 @@ docs/*
 
 # 에이전트 작업용 임시 워크트리 — 커밋 대상이 아니다
 .claude/worktrees/
+.playwright-mcp/
+
+# 테스트 점검표·회신서 원본은 git 밖에서 관리한다 (md/·doc/ 와 같은 이유)
+*.pdf

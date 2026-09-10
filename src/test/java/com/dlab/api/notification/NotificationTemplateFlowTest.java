@@ -225,7 +225,29 @@ class NotificationTemplateFlowTest {
                         .content("""
                                 {"titleTemplate":"","bodyTemplate":"","contentConfirmed":true}"""))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.error.code").value("NOTIFICATION_TEMPLATE_CONTENT_EMPTY"));
+                // 제목이 먼저 비어 있으므로 제목 오류다. 셋을 한 코드로 묶으면
+                // 본문을 채운 사용자가 "문구가 비어 있다"를 받고 원인을 못 찾는다
+                .andExpect(jsonPath("$.error.code").value("NOTIFICATION_TEMPLATE_TITLE_EMPTY"));
+    }
+
+    @Test
+    @DisplayName("★ 제목만 비면 제목 오류, 본문만 비면 본문 오류 — 무엇이 비었는지 알려준다")
+    void emptyTitleAndBodyAreDistinguished() throws Exception {
+        mvc.perform(patch("/api/v1/admin/notification-templates/{id}/content", fcmTemplateId)
+                        .header("Authorization", token("NTSUPER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"titleTemplate":"","bodyTemplate":"{studentName} 안내","contentConfirmed":true}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("NOTIFICATION_TEMPLATE_TITLE_EMPTY"));
+
+        mvc.perform(patch("/api/v1/admin/notification-templates/{id}/content", fcmTemplateId)
+                        .header("Authorization", token("NTSUPER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"titleTemplate":"제목","bodyTemplate":"","contentConfirmed":true}"""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("NOTIFICATION_TEMPLATE_BODY_EMPTY"));
     }
 
     @Test
