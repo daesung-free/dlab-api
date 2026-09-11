@@ -64,6 +64,7 @@ public class AttendanceBoardService {
     private final PeriodMasterRepository periodMasterRepository;
     private final StudyTimeCalculator studyTimeCalculator;
     private final com.dlab.common.excel.ExcelExporter excelExporter;
+    private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
     private final Clock clock;
 
     /** 화면 표기 그대로. 코드값을 그대로 내리면 받는 사람이 못 읽는다. */
@@ -149,8 +150,14 @@ public class AttendanceBoardService {
                 ? LocalTime.now(clock)
                 : LocalTime.MAX;
 
+        // ★ 담임은 맡은 반만 본다. classId는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다.
+        var classFilter = homeroomScopeService.resolveClassFilter(me, targets.get(0).getYear(), classId);
+        if (classFilter.blocksEverything()) {
+            return List.of();
+        }
+
         return targets.stream()
-                .filter(e -> matchesClass(classes.get(e.getId()), classId))
+                .filter(e -> matchesClass(classes.get(e.getId()), classFilter))
                 .map(e -> {
                     List<AttendanceTaggingLog> logs =
                             logsByEnrollment.getOrDefault(e.getId(), List.of());
@@ -281,11 +288,10 @@ public class AttendanceBoardService {
         return log.getRecordedAt().atZone(TimeConfig.KST).toLocalTime();
     }
 
-    private boolean matchesClass(ClassAssignment assignment, Long classId) {
-        if (classId == null) {
-            return true;
-        }
-        return assignment != null && assignment.getClassMaster().getId().equals(classId);
+    /** 반 미배정 학생은 {@code assignment}가 없다 — 제한이 걸린 담임에게는 안 보인다. */
+    private boolean matchesClass(ClassAssignment assignment,
+                                 com.dlab.domain.user.service.HomeroomScopeService.ClassFilter filter) {
+        return filter.matches(assignment == null ? null : assignment.getClassMaster().getId());
     }
 
     private Map<Long, List<AttendanceTaggingLog>> logsOf(Long academyId, LocalDate date) {
