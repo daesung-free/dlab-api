@@ -31,6 +31,9 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 public class StudentService {
 
+    /** 저장 버튼 중복 제출로 보는 시간 창. 사람이 다시 누르는 간격은 이 안에 들어온다. */
+    private static final int DOUBLE_SUBMIT_WINDOW_SECONDS = 10;
+
     /** 학번 채번 충돌 재시도 횟수. 동시 접수는 드물어서 이 정도면 충분하다. */
     private static final int STUDENT_NO_RETRY = 5;
 
@@ -88,6 +91,7 @@ public class StudentService {
         if (admissionDate != null && admissionDate.isAfter(LocalDate.now(clock))) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "등원일을 미래로 지정할 수 없습니다.");
         }
+        rejectDoubleSubmit(academyId, year, name, phone, birthDate);
         return withStudentNoRetry(() -> {
             Academy academy = academyRepository.findById(academyId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
@@ -106,6 +110,36 @@ public class StudentService {
     }
 
     /**
+     * 저장 버튼을 두 번 누른 것을 막는다.
+     *
+     * <h2>왜 화면만으로는 안 되는가</h2>
+     * 버튼을 요청 중 비활성으로 바꿔도 <b>서버는 그걸 모른다.</b> 탭을 두 개 열거나
+     * 네트워크가 느려 사용자가 다시 누르면 그대로 두 건이 만들어진다 — 실제로 동시에
+     * 두 번 보내면 학번이 연속으로 두 개 발급됐다. 화면에서 감추는 것과 서버가 막는 것은
+     * 다르다(CLAUDE.md §7).
+     *
+     * <h2>이름만으로 막지 않는 이유</h2>
+     * <b>동명이인 등록은 정상</b>이다(점검표 경계 23번). 그래서 이름·연락처·생년월일이
+     * <b>모두 같고</b> {@value #DOUBLE_SUBMIT_WINDOW_SECONDS}초 안에 들어온 것만 막는다.
+     *
+     * <p>⚠️ <b>완전한 방어는 아니다.</b> 연락처·생년월일을 비운 채 같은 이름을 두 사람이
+     * 동시에 넣으면 여전히 통과한다. 제대로 막으려면 화면이 요청마다 멱등키를 보내야 하는데
+     * 그건 프론트 변경이 필요해 여기서는 <b>가장 흔한 경로(한 사람이 두 번 누름)</b>만 닫는다.
+     */
+    private void rejectDoubleSubmit(Long academyId, short year, String name,
+                                    String phone, LocalDate birthDate) {
+        java.time.Instant since = java.time.Instant.now(clock)
+                .minusSeconds(DOUBLE_SUBMIT_WINDOW_SECONDS);
+        boolean duplicated = enrollmentRepository
+                .findRecentByName(academyId, year, name, since).stream()
+                .anyMatch(e -> java.util.Objects.equals(e.getStudent().getPhone(), phone)
+                        && java.util.Objects.equals(e.getStudent().getBirthDate(), birthDate));
+        if (duplicated) {
+            throw new BusinessException(ErrorCode.DUPLICATE_ADMISSION);
+        }
+    }
+
+    /**
      * 채번 충돌 시 <b>새 트랜잭션으로</b> 다시 시도한다.
      *
      * <p>애플리케이션 락으로 막지 않는 이유는 <b>다중 인스턴스에서 무의미</b>하기 때문이다.
@@ -116,11 +150,32 @@ public class StudentService {
             try {
                 return transactionTemplate.execute(status -> attempt.get());
             } catch (DataIntegrityViolationException e) {
-                // 다른 접수가 같은 번호를 먼저 가져갔다. 새 트랜잭션에서 다시 계산한다.
+                // ★ 채번 충돌만 다시 시도한다. 예전에는 모든 무결성 위반을 여기서 삼켰다 —
+                //   성별에 'X' 를 넣으면 gender CHECK 에 걸리는데 세 번 재시도한 뒤
+                //   "학번 채번에 실패했습니다" 가 나갔다. 사용자는 원인을 찾을 수 없다.
+                if (!isStudentNoConflict(e)) {
+                    throw e;
+                }
                 log.info("학번 채번 충돌, 재시도 {}/{}", i + 1, STUDENT_NO_RETRY);
             }
         }
         throw new BusinessException(ErrorCode.INVALID_REQUEST, "학번 채번에 실패했습니다. 다시 시도해주세요.");
+    }
+
+    /**
+     * 이 무결성 위반이 <b>학번 채번 충돌</b>인가.
+     *
+     * <p>제약 이름({@code uq_enrollment_student_no})으로 가른다. 예외 종류로는 못 가린다 —
+     * 유니크 위반도 CHECK 위반도 같은 {@link DataIntegrityViolationException} 이다.
+     */
+    private boolean isStudentNoConflict(DataIntegrityViolationException e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            String message = t.getMessage();
+            if (message != null && message.contains("uq_enrollment_student_no")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
