@@ -53,6 +53,7 @@ public class AbsenceReasonService {
     private final ClassAssignmentRepository classAssignmentRepository;
     private final com.dlab.domain.attendance.repository.AbsenceReasonCategoryRepository categoryRepository;
     private final ApprovalService approvalService;
+    private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
     private final Clock clock;
 
     /**
@@ -234,8 +235,15 @@ public class AbsenceReasonService {
         Map<Long, ClassAssignment> classes = classesOf(reasons);
         Instant now = Instant.now(clock);
 
+        // ★ 담임은 맡은 반 학생의 신청만 본다 — 여기가 열려 있으면 학생 이름·사유가 그대로 새어나간다
+        var classFilter = homeroomScopeService.resolveClassFilter(me, yearOf(from), null);
+        if (classFilter.blocksEverything()) {
+            return List.of();
+        }
+
         return reasons.stream()
                 .filter(r -> status == null || statusOf(r) == status)
+                .filter(r -> classFilter.matches(classIdOf(classes.get(r.getEnrollment().getId()))))
                 .map(r -> toRow(r, classes.get(r.getEnrollment().getId()), now))
                 .toList();
     }
@@ -316,6 +324,16 @@ public class AbsenceReasonService {
         return r.getApprovalRequest() == null
                 ? ApprovalStatus.PENDING
                 : r.getApprovalRequest().getStatus();
+    }
+
+    /** 반 미배정이면 {@code null}이다 — 제한이 걸린 담임에게는 안 보인다. */
+    private Long classIdOf(ClassAssignment assignment) {
+        return assignment == null ? null : assignment.getClassMaster().getId();
+    }
+
+    /** 반은 연도마다 새로 만들어진다 — 조회 기간의 연도를 쓴다. */
+    private short yearOf(LocalDate date) {
+        return (short) date.getYear();
     }
 
     private Map<Long, ClassAssignment> classesOf(List<AbsenceReason> reasons) {
