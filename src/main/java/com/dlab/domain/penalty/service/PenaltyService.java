@@ -33,6 +33,7 @@ public class PenaltyService {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
+    private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
     private final java.time.Clock clock;
 
     /**
@@ -143,11 +144,20 @@ public class PenaltyService {
         //   반 필터도 여기서 같이 쓴다
         java.util.Map<Long, String> classes = classNamesOf(points);
 
+        // ★ 담임은 맡은 반만 본다. classId는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다.
+        var classFilter = homeroomScopeService.resolveClassFilter(
+                principal, (short) from.getYear(), classId);
+        if (classFilter.blocksEverything()) {
+            return new PenaltyBoard(List.of(), 0, 0, 0L, java.util.Map.of(), classes);
+        }
+
         // 반 필터를 행마다 조회하면 쿼리가 건수만큼 나간다. 대상 학생을 한 번에 받아 둔다
-        java.util.Set<Long> inClass = classId == null ? null
-                : classAssignmentRepository.findActiveByClassId(classId).stream()
+        java.util.Set<Long> inClass = classFilter.restricted()
+                ? classFilter.classIds().stream()
+                        .flatMap(id -> classAssignmentRepository.findActiveByClassId(id).stream())
                         .map(a -> a.getEnrollment().getId())
-                        .collect(java.util.stream.Collectors.toSet());
+                        .collect(java.util.stream.Collectors.toSet())
+                : null;
 
         List<PenaltyPoint> filtered = points.stream()
                 .filter(p -> matchesKeyword(p, keyword))

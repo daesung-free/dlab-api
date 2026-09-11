@@ -1,5 +1,6 @@
 package com.dlab.api.admin.student;
 
+import com.dlab.common.validation.BirthDateRange;
 import com.dlab.domain.user.entity.EnrollmentStatus;
 import com.dlab.domain.user.entity.GradeType;
 import com.dlab.domain.user.entity.TrackType;
@@ -45,8 +46,13 @@ public final class StudentRequests {
             /** N수 차수 — 1=재수, 2=삼수. N수가 아니면 비운다 */
             @Min(1) @Max(10) Short retakeCount,
             TrackType track,
-            /** 미래 날짜는 받지 않는다 — 2099-01-01 이 그대로 저장되던 자리다 */
-            @Past(message = "생년월일은 과거 날짜여야 합니다.") LocalDate birthDate,
+            /**
+             * 미래 날짜는 받지 않는다 — 2099-01-01 이 그대로 저장되던 자리다.
+             * <b>하한도 둔다</b>: 1800-01-01 이 통과해 명단에 남던 자리이기도 하다.
+             * 오타를 그대로 저장하면 나이·학년 통계가 조용히 어긋난다.
+             */
+            @Past(message = "생년월일은 과거 날짜여야 합니다.")
+            @BirthDateRange LocalDate birthDate,
             @Size(max = 1) String gender,
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,
@@ -64,7 +70,8 @@ public final class StudentRequests {
             @Size(max = 20)
             @Pattern(regexp = PHONE_PATTERN, message = "연락처 형식이 올바르지 않습니다.")
             String phone,
-            @Past(message = "생년월일은 과거 날짜여야 합니다.") LocalDate birthDate,
+            @Past(message = "생년월일은 과거 날짜여야 합니다.")
+            @BirthDateRange LocalDate birthDate,
             @Size(max = 1) String gender,
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,
