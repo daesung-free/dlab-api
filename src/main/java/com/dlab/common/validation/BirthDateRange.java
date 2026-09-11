@@ -9,7 +9,6 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.time.Clock;
 import java.time.LocalDate;
 
 /**
@@ -43,13 +42,15 @@ public @interface BirthDateRange {
 
     class Validator implements ConstraintValidator<BirthDateRange, LocalDate> {
 
-        private final Clock clock;
-
-        /** 시계를 주입받는다 — {@code LocalDate.now()} 를 직접 부르면 테스트가 벽시계에 묶인다. */
-        Validator(Clock clock) {
-            this.clock = clock;
-        }
-
+        /**
+         * ★ 시계를 주입받지 않는다. 처음에는 {@code Clock} 을 받게 했는데, 그러면
+         * <b>스프링 밖에서 이 검증기를 만들 수 없다</b> — 순수 {@code Validator} 로 DTO 를
+         * 검증하면 {@code HV000064: Unable to instantiate ConstraintValidator} 로 터진다.
+         *
+         * <p>여기서는 벽시계를 써도 된다. 판정 폭이 {@value #MIN_AGE}~{@value #MAX_AGE}년이라
+         * 실행 시각이 몇 시인지가 결과를 바꾸지 않는다 — 분 단위가 걸리는
+         * 출결 판정과는 성격이 다르다.
+         */
         @Override
         public boolean isValid(LocalDate value, ConstraintValidatorContext context) {
             // null 은 여기서 판단하지 않는다 — 필수 여부는 @NotNull 의 몫이고,
@@ -57,7 +58,7 @@ public @interface BirthDateRange {
             if (value == null) {
                 return true;
             }
-            LocalDate today = LocalDate.now(clock);
+            LocalDate today = LocalDate.now();
             return !value.isBefore(today.minusYears(MAX_AGE))
                     && !value.isAfter(today.minusYears(MIN_AGE));
         }

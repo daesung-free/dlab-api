@@ -144,7 +144,7 @@ public class StudentImportService {
 
         return new ParsedStudent(
                 row.rowNumber(), uniqueCode, maskedAwareName, phone,
-                row.date("birthDate", "생년월일"), row.text("gender"), schoolName,
+                row.date("birthDate", "생년월일"), gender(row), schoolName,
                 grade, track, existing);
     }
 
@@ -233,5 +233,27 @@ public class StudentImportService {
         if (!principal.canAccessAcademy(academyId)) {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
+    }
+
+    /**
+     * 성별 칸. 엑셀은 {@code 남}/{@code 여}로 적혀 오는 일이 흔하다.
+     *
+     * <p>검증 없이 통과시키면 DB CHECK 에서 터지는데, 일괄 업로드라 <b>어느 행이 왜 틀렸는지</b>
+     * 알 수 없는 오류가 난다. 여기서 걸러 행 번호와 함께 돌려준다 — 나머지 행은 그대로 반영된다.
+     */
+    private String gender(com.dlab.common.excel.ExcelRow row) {
+        String value = row.text("gender");
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = switch (value.trim()) {
+            case "남", "남자", "M", "m" -> "M";
+            case "여", "여자", "F", "f" -> "F";
+            default -> null;
+        };
+        if (normalized == null) {
+            row.addError("gender", "성별은 남/여 또는 M/F 입니다. (입력값: " + value + ")");
+        }
+        return normalized;
     }
 }
