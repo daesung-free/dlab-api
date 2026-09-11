@@ -24,6 +24,9 @@ public final class StudentRequests {
      */
     private static final String PHONE_PATTERN = "^0\\d{1,2}-?\\d{3,4}-?\\d{4}$";
 
+    /** 성별 코드. DB CHECK(gender IN ('M','F'))와 같은 값이다 — 한쪽만 고치면 어긋난다. */
+    private static final String GENDER_PATTERN = "^[MF]$";
+
     /** 신규 접수. 학번은 서버가 채번하므로 받지 않는다. */
     /**
      * 신규 접수 등록.
@@ -53,7 +56,14 @@ public final class StudentRequests {
              */
             @Past(message = "생년월일은 과거 날짜여야 합니다.")
             @BirthDateRange LocalDate birthDate,
-            @Size(max = 1) String gender,
+            /**
+             * {@code M} / {@code F} 만 받는다.
+             *
+             * <p>전에는 길이만 봤다. 그래서 {@code "X"} 가 검증을 통과해 DB CHECK 에서 터졌고,
+             * 사용자에게는 <b>어느 항목이 문제인지 없는 메시지</b>가 나갔다
+             * (한때는 "학번 채번에 실패했습니다" 까지 나왔다). 앱 가입 쪽과 규칙을 맞춘다.
+             */
+            @Pattern(regexp = GENDER_PATTERN, message = "성별은 M 또는 F입니다.") String gender,
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,
             LocalDate admissionDate) {
@@ -72,7 +82,14 @@ public final class StudentRequests {
             String phone,
             @Past(message = "생년월일은 과거 날짜여야 합니다.")
             @BirthDateRange LocalDate birthDate,
-            @Size(max = 1) String gender,
+            /**
+             * {@code M} / {@code F} 만 받는다.
+             *
+             * <p>전에는 길이만 봤다. 그래서 {@code "X"} 가 검증을 통과해 DB CHECK 에서 터졌고,
+             * 사용자에게는 <b>어느 항목이 문제인지 없는 메시지</b>가 나갔다
+             * (한때는 "학번 채번에 실패했습니다" 까지 나왔다). 앱 가입 쪽과 규칙을 맞춘다.
+             */
+            @Pattern(regexp = GENDER_PATTERN, message = "성별은 M 또는 F입니다.") String gender,
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,
             GradeType grade,
