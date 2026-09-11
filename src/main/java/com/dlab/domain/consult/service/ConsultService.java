@@ -51,6 +51,7 @@ public class ConsultService {
     private final TeacherRepository teacherRepository;
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
     private final com.dlab.domain.user.repository.AcademyRepository academyRepository;
+    private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
     private final Clock clock;
 
     // ── 일지 ──────────────────────────────────────────────────
@@ -115,9 +116,14 @@ public class ConsultService {
         Long academyId = me.requireAcademyScope(requestedAcademyId);
         short year = (short) from.getYear();
 
+        // ★ 담임은 맡은 반 학생의 상담만 본다. 상담 내용에 학생 신상이 그대로 들어 있다.
+        var scope = homeroomScopeService.enrollmentIdsOf(me, year);
+
         return logRepository.findByPeriod(academyId, year, from, to).stream()
                 .filter(l -> teacherId == null
                         || (l.getTeacher() != null && l.getTeacher().getId().equals(teacherId)))
+                .filter(l -> com.dlab.domain.user.service.HomeroomScopeService.allows(
+                        scope, l.getEnrollment() == null ? null : l.getEnrollment().getId()))
                 .toList();
     }
 
@@ -150,7 +156,17 @@ public class ConsultService {
         Map<Long, ClassAssignment> classes = classesOf(targets);
         LocalDate today = LocalDate.now(clock);
 
+        // ★ 담임 범위. teacherId 는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다
+        var classFilter = homeroomScopeService.resolveClassFilter(me, year, null);
+        if (classFilter.blocksEverything()) {
+            return List.of();
+        }
+
         return targets.stream()
+                .filter(e -> {
+                    ClassAssignment a = classes.get(e.getId());
+                    return classFilter.matches(a == null ? null : a.getClassMaster().getId());
+                })
                 .filter(e -> matchesTeacher(classes.get(e.getId()), teacherId))
                 .map(e -> {
                     ConsultLog last = latest.get(e.getId());

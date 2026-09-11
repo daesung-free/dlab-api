@@ -19,6 +19,26 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
     /** 그 사람의 모든 등록 건(삭제분 포함). 삭제 시 "마지막 하나인가"를 판단한다. */
     List<StudentEnrollment> findByStudentId(Long studentId);
 
+    /**
+     * 같은 이름으로 <b>방금</b> 들어온 등록. 저장 버튼 중복 제출을 가리는 <b>후보</b>다.
+     *
+     * <p>연락처·생년월일 일치는 <b>호출부에서</b> 본다. 여기서 {@code (:phone IS NULL OR ...)}
+     * 로 처리하면 Postgres 가 파라미터 타입을 정하지 못해 쿼리가 통째로 실패한다
+     * ({@code could not determine data type of parameter}). 후보가 "같은 이름 + 최근 몇 초"라
+     * 많아야 한두 건이므로 Java 에서 걸러도 비용이 없다.
+     */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student s
+            WHERE e.academy.id = :academyId
+              AND e.year = :year
+              AND s.name = :name
+              AND e.createdAt >= :since
+              AND e.deleted = false
+            """)
+    List<StudentEnrollment> findRecentByName(Long academyId, short year, String name,
+                                             java.time.Instant since);
+
     Optional<StudentEnrollment> findByStudentIdAndAcademyIdAndYearAndDeletedFalse(
             Long studentId, Long academyId, short year);
 
