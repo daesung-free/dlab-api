@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -67,7 +68,24 @@ class KioskAttendanceIntegrationTest {
     @Autowired EntityManager em;
     @Autowired com.dlab.domain.kiosk.service.DsaTokenService tokenService;
     @Autowired AttendanceTaggingLogRepository taggingLogRepository;
-    @Autowired Clock clock;
+    /**
+     * ★ <b>시계를 고정한다.</b> {@code setReAttendProc} 의 복귀 기록이 서버 현재시각으로 찍히는데,
+     * 교시가 22:00 에 끝나서 <b>22시 이후 CI 가 돌면 복귀가 교시 밖으로 나가</b> 깨졌다.
+     * 실제로 23:14 과 22:19 에 깨졌고, 그때마다 "상한을 건다" 는 식으로 덧대다 보니
+     * 시각대마다 다른 이유로 실패하는 테스트가 됐다.
+     *
+     * <p>날짜는 오늘 그대로 두고 <b>시각만</b> 낮으로 고정한다 — 날짜까지 박으면
+     * {@code DayType}(평일/토/일)이 실제 요일과 어긋난다.
+     */
+    @TestBean(name = "clock")
+    Clock clock;
+
+    static Clock clock() {
+        return Clock.fixed(
+                LocalDate.now(com.dlab.common.config.TimeConfig.KST)
+                        .atTime(15, 0).atZone(com.dlab.common.config.TimeConfig.KST).toInstant(),
+                com.dlab.common.config.TimeConfig.KST);
+    }
 
     @MockitoBean
     com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
@@ -519,18 +537,9 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 재등원하면 조퇴를 다시 쓸 수 있다 — 키오스크가 '조퇴 카운트를 0으로' 되돌린다")
     void earlyLeaveIsReusableAfterReAttend() throws Exception {
-        // ★ 시각을 현재 기준으로 잡는다. setReAttendProc의 복귀는 서버 현재시각이라
-        //    고정 시각으로 태깅하면 원장 순서가 뒤집힌다(운영에서는 생기지 않는 어긋남)
-        // ★ 기준 시각이 벽시계를 따라간다. 판정이 원장 순서뿐 아니라 현재 시각에도
-        //   달려 있어, 고정값으로 바꿨더니 밤에는 통과하고 낮에는 깨졌다
-        //   (11:33 에 선택지 대신 att_gn "R" 이 돌아온다).
-        //
-        //   ⚠️ 다만 그대로 두면 22시 이후에 now-1h 가 마지막 교시(~22:00) 밖으로 나가
-        //      CI 가 밤에 돌 때 깨진다 — 실제로 23:14 에 깨졌다. 그래서 상한만 건다.
-        java.time.LocalTime wall = java.time.LocalTime.now(clock);
-        java.time.LocalTime base = wall.isAfter(java.time.LocalTime.of(21, 58))
-                ? java.time.LocalTime.of(21, 58)
-                : wall;
+        // 복귀는 서버 현재시각으로 찍힌다 — 그래서 태깅 시각도 그 기준으로 잡아야
+        // 원장 순서가 뒤집히지 않는다. 시계가 고정돼 있어 시각대에 상관없이 같은 값이다.
+        java.time.LocalTime base = java.time.LocalTime.now(clock);
         String checkIn = fmt(base.minusHours(2));
         String leaveAt = fmt(base.minusHours(1));
         String retryAt = fmt(base.plusMinutes(2));
