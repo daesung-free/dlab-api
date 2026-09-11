@@ -1,5 +1,6 @@
 package com.dlab.api.admin.audit;
 
+import com.dlab.common.config.SecurityAuditorAware;
 import com.dlab.domain.audit.AuditAction;
 import com.dlab.domain.audit.AuditLog;
 import com.dlab.domain.audit.AuditLogRepository;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminAuditLogController {
 
     private final AuditLogRepository auditLogRepository;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
     private final Clock clock;
 
     /**
@@ -72,15 +74,45 @@ public class AdminAuditLogController {
                 end.plusDays(1).atStartOfDay(clock.getZone()).toInstant(),
                 pageable);
 
-        return ApiResponse.from(page.map(AuditLogResponse::from));
+        var names = actorNames(page.getContent());
+        return ApiResponse.from(page.map(a -> AuditLogResponse.of(a, names)));
     }
 
     /** 한 건이 어떻게 바뀌어 왔나 — 학생 상세에서 "이 기록의 이력". */
     @GetMapping("/entities/{entityType}/{entityId}")
     public ApiResponse<List<AuditLogResponse>> history(@PathVariable String entityType,
                                                        @PathVariable Long entityId) {
-        return ApiResponse.success(auditLogRepository.findByEntity(entityType, entityId)
-                .stream().map(AuditLogResponse::from).toList());
+        var logs = auditLogRepository.findByEntity(entityType, entityId);
+        var names = actorNames(logs);
+        return ApiResponse.success(logs.stream()
+                .map(a -> AuditLogResponse.of(a, names)).toList());
+    }
+
+    /**
+     * 계정 id → 사람 이름.
+     *
+     * <p><b>기록 시점이 아니라 조회 시점에 붙인다.</b> 저장할 때 조회하면 JPA 리스너가
+     * 플러시 중이라 {@code ConcurrentModificationException} 이 난다 — 실제로 그렇게 만들었다가
+     * 커밋이 통째로 깨졌다.
+     *
+     * <p>계정마다 따로 조회하면 50줄짜리 화면에 쿼리가 50번 나가므로 <b>한 번에 받아 붙인다.</b>
+     */
+    private java.util.Map<Long, String> actorNames(java.util.List<AuditLog> logs) {
+        java.util.Set<Long> ids = logs.stream()
+                .map(AuditLog::getActorId)
+                .filter(java.util.Objects::nonNull)
+                .filter(id -> !id.equals(SecurityAuditorAware.SYSTEM_ACCOUNT_ID))
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return java.util.Map.of();
+        }
+        java.util.Map<Long, String> names = new java.util.HashMap<>();
+        for (Object[] row : accountRepository.findActorNames(ids)) {
+            if (row[1] != null) {
+                names.put((Long) row[0], (String) row[1]);
+            }
+        }
+        return names;
     }
 
     /**
@@ -93,9 +125,16 @@ public class AdminAuditLogController {
                                    Long academyId, Long actorId, String actorName, String actorIp,
                                    String changes, Instant occurredAt) {
 
-        static AuditLogResponse from(AuditLog a) {
+        /**
+         * @param names 조회 시점에 붙인 사람 이름. 없으면 저장된 값을 그대로 쓴다 —
+         *              계정이 완전히 사라진 옛 기록이 빈칸이 되면 안 된다
+         */
+        static AuditLogResponse of(AuditLog a, java.util.Map<Long, String> names) {
+            String actorName = SecurityAuditorAware.SYSTEM_ACCOUNT_ID.equals(a.getActorId())
+                    ? "시스템"
+                    : names.getOrDefault(a.getActorId(), a.getActorName());
             return new AuditLogResponse(a.getId(), a.getEntityType(), a.getEntityId(),
-                    a.getAction(), a.getAcademyId(), a.getActorId(), a.getActorName(),
+                    a.getAction(), a.getAcademyId(), a.getActorId(), actorName,
                     a.getActorIp(), a.getChanges(), a.getOccurredAt());
         }
     }
