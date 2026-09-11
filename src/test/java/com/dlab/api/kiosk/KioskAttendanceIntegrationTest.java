@@ -521,10 +521,16 @@ class KioskAttendanceIntegrationTest {
     void earlyLeaveIsReusableAfterReAttend() throws Exception {
         // ★ 시각을 현재 기준으로 잡는다. setReAttendProc의 복귀는 서버 현재시각이라
         //    고정 시각으로 태깅하면 원장 순서가 뒤집힌다(운영에서는 생기지 않는 어긋남)
-        // ★ 벽시계를 쓰지 않는다. 교시가 08:00~12:00 · 13:00~22:00 이라
-        //   밤에 돌리면 now-1h·now+2m 이 교시 밖으로 나가 응답 모양이 달라진다
-        //   (실제로 CI 가 23:14 에 돌아 깨졌다). 야자 안쪽으로 고정한다.
-        java.time.LocalTime base = java.time.LocalTime.of(21, 0);
+        // ★ 기준 시각이 벽시계를 따라간다. 판정이 원장 순서뿐 아니라 현재 시각에도
+        //   달려 있어, 고정값으로 바꿨더니 밤에는 통과하고 낮에는 깨졌다
+        //   (11:33 에 선택지 대신 att_gn "R" 이 돌아온다).
+        //
+        //   ⚠️ 다만 그대로 두면 22시 이후에 now-1h 가 마지막 교시(~22:00) 밖으로 나가
+        //      CI 가 밤에 돌 때 깨진다 — 실제로 23:14 에 깨졌다. 그래서 상한만 건다.
+        java.time.LocalTime wall = java.time.LocalTime.now(clock);
+        java.time.LocalTime base = wall.isAfter(java.time.LocalTime.of(21, 58))
+                ? java.time.LocalTime.of(21, 58)
+                : wall;
         String checkIn = fmt(base.minusHours(2));
         String leaveAt = fmt(base.minusHours(1));
         String retryAt = fmt(base.plusMinutes(2));
