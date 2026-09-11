@@ -91,6 +91,26 @@ class AuditLogTest {
     }
 
     @Test
+    @DisplayName("★★ 누가 했는지를 사람 이름으로 되짚을 수 있다 — 저장값은 계정 유형이었다")
+    void actorNameIsResolvedFromAccount() {
+        // 저장 시점에는 계정 유형(EMPLOYEE)이 들어간다. 사람 이름을 저장하려면
+        // 리스너가 플러시 중일 때 조회해야 하는데, 그러면 ConcurrentModificationException 으로
+        // 커밋이 통째로 깨진다 — 실제로 그렇게 만들었다가 되돌렸다.
+        // 그래서 이름은 조회 시점에 붙인다. 그 근거가 되는 쿼리를 고정한다.
+        Notice notice = createNotice();
+
+        List<AuditLog> logs = auditLogRepository.findByEntity("공지", notice.getId());
+        assertThat(logs).isNotEmpty();
+
+        Long actorId = logs.get(0).getActorId();
+        assertThat(accountRepository.findActorNames(List.of(actorId)))
+                .anySatisfy(row -> {
+                    assertThat(row[0]).isEqualTo(actorId);
+                    assertThat(row[1]).isEqualTo("감사행정");
+                });
+    }
+
+    @Test
     @DisplayName("★ soft delete 는 UPDATE 가 아니라 DELETE 로 남는다 — 화면이 삭제를 구분해야 한다")
     void softDeleteIsRecordedAsDelete() {
         Notice notice = createNotice();

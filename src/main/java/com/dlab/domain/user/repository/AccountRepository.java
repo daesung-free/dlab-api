@@ -13,6 +13,25 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     Optional<Account> findByLoginId(String loginId);
 
     /**
+     * 감사 로그에 남길 사람 이름.
+     *
+     * <p>이름이 {@code account} 가 아니라 <b>사람 테이블 세 곳에 흩어져</b> 있다 —
+     * 직원·선생님·학생이 각각 다른 테이블이라 한 번에 꺼내려면 여기서 합쳐야 한다.
+     *
+     * <p>계정이 탈퇴해도 행은 남으므로(soft delete) 나중에도 이름이 나온다.
+     */
+    @Query("""
+            SELECT a.id, COALESCE(e.name, t.name, s.name)
+            FROM Account a
+            LEFT JOIN a.employee e
+            LEFT JOIN a.teacher t
+            LEFT JOIN a.student s
+            WHERE a.id IN :accountIds
+            """)
+    java.util.List<Object[]> findActorNames(
+            @Param("accountIds") java.util.Collection<Long> accountIds);
+
+    /**
      * 학생 재가입 중복 검사.
      * loginId UNIQUE만으로는 부족하다 — 승인 대기(PENDING) 중인 기존 요청도 "이미 신청한 사람"이다.
      */
