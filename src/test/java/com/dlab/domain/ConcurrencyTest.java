@@ -135,10 +135,18 @@ class ConcurrencyTest {
     @Test
     @DisplayName("★ 동시 접수해도 학번이 중복되지 않는다 — 매년 초 대량 접수에서 실제로 부딪히는 경로")
     void studentNoNeverDuplicates() throws Exception {
-        int succeeded = runConcurrently(THREADS, () ->
-                studentService.admit(academyId, (short) 2026, "동시접수", "010-0000-0000",
-                        GradeType.N_SU, null, TrackType.SCIENCE,
-                        null, null, null, null, null, principal));
+        // ★ 스레드마다 <b>다른 사람</b>으로 넣는다. 이름·연락처가 같으면 이제 중복 제출
+        //   방어(DUPLICATE_ADMISSION)에 걸려 한 명만 통과한다 — 그건 학번 채번이 아니라
+        //   다른 장치를 재는 것이다. 여기서 보려는 것은 "동시에 8명이 접수해도
+        //   학번이 겹치지 않는가" 다.
+        java.util.concurrent.atomic.AtomicInteger seq = new java.util.concurrent.atomic.AtomicInteger();
+        int succeeded = runConcurrently(THREADS, () -> {
+            int n = seq.incrementAndGet();
+            studentService.admit(academyId, (short) 2026, "동시접수" + n,
+                    String.format("010-0000-%04d", n),
+                    GradeType.N_SU, null, TrackType.SCIENCE,
+                    null, null, null, null, null, principal);
+        });
 
         List<String> numbers = tx.execute(status -> em.createQuery("""
                 SELECT e.studentNo FROM StudentEnrollment e
