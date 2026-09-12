@@ -105,6 +105,64 @@ class LectureFlowTest {
     }
 
     @Test
+    @DisplayName("★ 아무도 신청하지 않은 특강만 지운다 — 신청 이력을 지우지 않는다")
+    void deleteOnlyWhenNobodyApplied() throws Exception {
+        String token = adminToken();
+
+        // 만들어만 두고 아무도 신청하지 않은 것 — 지워진다
+        long empty = openLecture(null);
+        mvc.perform(delete("/api/v1/admin/lectures/{id}", empty)
+                        .header("Authorization", token))
+                .andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/v1/admin/lectures")
+                        .header("Authorization", token)
+                        .param("academyId", String.valueOf(academyId))
+                        .param("year", String.valueOf(YEAR)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)]".formatted(empty)).isEmpty());
+
+        // 신청자가 있으면 막힌다 — 지우면 그 학생의 신청 이력이 사라진다
+        long applied = openLecture(5);
+        apply(studentA, applied);
+        em.flush();
+
+        mvc.perform(delete("/api/v1/admin/lectures/{id}", applied)
+                        .header("Authorization", token))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("★ 출결이 찍힌 회차는 못 지운다 — 그날 누가 왔는지가 사라진다")
+    void cannotDeleteSessionWithAttendance() throws Exception {
+        String token = adminToken();
+        long lectureId = openLecture(5);
+
+        String body = mvc.perform(post("/api/v1/admin/lectures/{id}/sessions", lectureId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"sessionDate":"2026-10-01","startTime":"19:00","endTime":"21:00"}"""))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long sessionId = objectMapper.readTree(body).path("data").path("id").asLong();
+        em.flush();
+
+        // 출결 전에는 지워진다 — 날짜를 잘못 넣었을 때 되돌릴 수단이다
+        mvc.perform(delete("/api/v1/admin/lectures/sessions/{id}", sessionId)
+                        .header("Authorization", token))
+                .andExpect(status().isOk());
+        em.flush();
+
+        mvc.perform(get("/api/v1/admin/lectures/{id}/sessions", lectureId)
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[?(@.id == %d)]".formatted(sessionId)).isEmpty());
+    }
+
+    @Test
     @DisplayName("특강 유형은 관리자가 추가하고, 등록할 때 붙였다 나중에 바꿀 수 있다")
     void lectureCategory() throws Exception {
         String token = adminToken();

@@ -14,6 +14,20 @@ public interface LectureApplicationRepository extends JpaRepository<LectureAppli
     /** 확정 인원. 정원 비교의 기준이라 <b>대기·취소는 세지 않는다.</b> */
     long countByLectureIdAndStatus(Long lectureId, ApplicationStatus status);
 
+    /**
+     * 살아 있는 신청 수 — 삭제 가능 여부 판정용.
+     *
+     * <p>취소({@code CANCELED})는 세지 않는다. 취소한 사람만 남은 특강은
+     * <b>아무도 기다리지 않는 상태</b>라 지워도 잃을 이력이 없다.
+     */
+    @Query("""
+            SELECT count(a) FROM LectureApplication a
+            WHERE a.lecture.id = :lectureId
+              AND a.status <> com.dlab.domain.lecture.entity.ApplicationStatus.CANCELED
+              AND a.deleted = false
+            """)
+    long countActiveByLectureId(@Param("lectureId") Long lectureId);
+
     /** 중복 신청 검사. 취소분은 재신청이 가능해야 하므로 제외한다. */
     @Query("""
             SELECT a FROM LectureApplication a

@@ -161,8 +161,25 @@ public class StudentService {
                 .filter(StudentEnrollment::isCurrent)
                 .ifPresent(e -> {
                     throw new BusinessException(ErrorCode.DUPLICATE_ADMISSION,
-                            "이미 등록된 학생입니다. (학번 " + e.getStudentNo() + ")");
+                            "이미 등록된 학생입니다. (학번 " + e.getStudentNo() + ")",
+                            new DuplicateAdmission(e.getId(), e.getStudentNo(),
+                                    e.getAcademy().getId(), e.getAcademy().getAcadNm()));
                 });
+    }
+
+    /**
+     * 중복 등록 오류에 함께 나가는 값.
+     *
+     * <p><b>화면이 메시지 문자열을 파싱하지 않게 하려는 것이다.</b> 지금까지는
+     * {@code "이미 등록된 학생입니다. (학번 2026-0031)"} 에서 괄호를 뜯어야 했고,
+     * 문구를 다듬는 순간 화면이 깨졌다. 이걸로 <b>그 학생으로 바로 이동</b>할 수 있다.
+     *
+     * <p>⚠️ <b>이름·연락처는 싣지 않는다.</b> 오류 응답은 로그·모니터링에 그대로 남는다 —
+     * 식별자까지가 한계다. 지점명은 <i>"어느 지점에 있는지"</i> 를 알려주는 데 필요하고
+     * 개인정보가 아니다.
+     */
+    public record DuplicateAdmission(Long enrollmentId, String studentNo,
+                                     Long academyId, String academyName) {
     }
 
     /**
