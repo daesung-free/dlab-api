@@ -11,4 +11,7 @@ public interface LectureAttendanceRepository extends JpaRepository<LectureAttend
     Optional<LectureAttendance> findBySessionIdAndApplicationId(Long sessionId, Long applicationId);
 
     List<LectureAttendance> findBySessionIdAndDeletedFalse(Long sessionId);
+
+    /** 회차 삭제 가능 여부 — 출결이 찍혔으면 그날 기록이 사라지므로 막는다. */
+    boolean existsBySessionIdAndDeletedFalse(Long sessionId);
 }
