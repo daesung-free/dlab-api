@@ -49,6 +49,8 @@ public class StudentService {
     /** 삭제 전 이력 확인용 — 다닌 흔적이 있으면 지우지 않고 퇴원·제적으로 보낸다 */
     private final com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository taggingLogRepository;
     private final com.dlab.domain.penalty.repository.PenaltyPointRepository penaltyPointRepository;
+    /** 접수 직렬화용 자문 잠금(pg_advisory_xact_lock) 호출에 쓴다 */
+    private final jakarta.persistence.EntityManager em;
 
     @Transactional(readOnly = true)
     public Page<StudentEnrollment> search(SearchScope scope, StudentSearchCondition condition,
@@ -91,8 +93,11 @@ public class StudentService {
         if (admissionDate != null && admissionDate.isAfter(LocalDate.now(clock))) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "등원일을 미래로 지정할 수 없습니다.");
         }
-        rejectDoubleSubmit(academyId, year, name, phone, birthDate);
         return withStudentNoRetry(() -> {
+            // ★ 잠금 → 확인 → 생성 순서를 지킨다. 트랜잭션 밖에서 확인하면
+            //   동시에 들어온 두 요청이 <b>둘 다</b> "없음" 을 읽고 둘 다 넣는다.
+            lockAdmission(academyId, year, name, phone, birthDate);
+            rejectDoubleSubmit(academyId, year, name, phone, birthDate);
             Academy academy = academyRepository.findById(academyId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
             Student student = studentRepository.save(new Student(generateUniqueCode(), name, phone));
@@ -107,6 +112,31 @@ public class StudentService {
             }
             return enrollment;
         });
+    }
+
+    /**
+     * 같은 접수를 <b>한 번에 하나만</b> 처리하도록 직렬화한다.
+     *
+     * <p>{@link #rejectDoubleSubmit} 은 "최근에 같은 게 있나" 를 <b>읽고</b> 판단한다.
+     * 읽기와 쓰기 사이에 틈이 있어, 동시에 들어온 두 요청이 둘 다 "없음" 을 읽고
+     * 둘 다 넣는다 — 실제로 동시 호출에서 학번이 연속으로 두 개 발급됐다.
+     * 버튼을 빠르게 두 번 누르면 브라우저가 두 요청을 <b>거의 동시에</b> 보내므로
+     * 이 경로가 현실에서 더 흔하다.
+     *
+     * <p>DB 자문 잠금을 쓴다. 트랜잭션이 끝나면 자동으로 풀리고, <b>인스턴스가 여럿이어도</b>
+     * 같은 DB 를 보므로 함께 직렬화된다 — 애플리케이션 락으로는 안 되는 이유다.
+     *
+     * <p>유니크 제약으로 막지 않는 이유: 동명이인 등록은 정상이라
+     * (점검표 경계 23번) 영구 제약을 걸 수 없다. 막아야 하는 것은 "같은 사람" 이 아니라
+     * <b>"같은 클릭"</b> 이다.
+     */
+    private void lockAdmission(Long academyId, short year, String name,
+                               String phone, LocalDate birthDate) {
+        // String.hashCode 는 명세로 고정돼 있어 인스턴스가 달라도 같은 값이 나온다
+        long key = (academyId + "|" + year + "|" + name + "|" + phone + "|" + birthDate).hashCode();
+        em.createNativeQuery("SELECT pg_advisory_xact_lock(?1)")
+                .setParameter(1, key)
+                .getSingleResult();
     }
 
     /**
