@@ -112,6 +112,38 @@ public class AdminLectureController {
                 request.room(), me)));
     }
 
+    /**
+     * 회차 삭제.
+     *
+     * <p>개설 폼이 기간·요일로 회차를 한 번에 만드는 구조라 날짜를 잘못 넣으면
+     * 그만큼 쌓이는데, <b>되돌릴 방법이 없었다.</b>
+     *
+     * <p>출결이 찍힌 회차는 400 이다 — 지우면 그날 누가 왔는지가 사라진다.
+     * 번호는 다시 매기지 않는다(이미 안내된 "3회차" 가 다른 날을 가리키게 된다).
+     */
+    @DeleteMapping("/sessions/{sessionId}")
+    public ApiResponse<Void> deleteSession(@CurrentAccount AuthPrincipal me,
+                                           @PathVariable Long sessionId) {
+        lectureService.deleteSession(sessionId, me);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * 특강 삭제.
+     *
+     * <p><b>신청자가 있으면 400 이다</b> — 지우면 그 학생의 신청 이력이 사라진다.
+     * 그때는 상태를 {@code CANCELED} 로 두면 목록에 남되 신청이 막힌다.
+     *
+     * <p>지울 수 있는 것은 <b>만들어만 두고 아무도 신청하지 않은 것</b>뿐이다.
+     * 딸린 회차도 함께 지운다 — 특강만 지우면 회차가 유령으로 남는다.
+     */
+    @DeleteMapping("/{lectureId}")
+    public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me,
+                                    @PathVariable Long lectureId) {
+        lectureService.delete(lectureId, me);
+        return ApiResponse.empty();
+    }
+
     // ── 명단 (F-4.7) ─────────────────────────────────────────────
 
     /**

@@ -173,6 +173,61 @@ public class LectureService {
                 new LectureSession(lecture, next, date, start, end, room));
     }
 
+    /**
+     * 회차 삭제.
+     *
+     * <p><b>날짜를 잘못 넣으면 되돌릴 방법이 없었다.</b> 개설 폼이 기간·요일로 회차를
+     * 한 번에 만드는 구조라, 한 번 잘못 만들면 그만큼 그대로 쌓인다.
+     *
+     * <p><b>출결이 찍힌 회차는 지우지 않는다.</b> 출석부가 회차 단위라 지우면
+     * 그날 누가 왔는지가 사라진다 — 학생 삭제를 이력으로 막은 것과 같은 자리다.
+     *
+     * <p><b>번호를 다시 매기지 않는다.</b> 3회차를 지웠다고 4회차가 3회차가 되면
+     * 이미 안내된 "3회차 결석" 이 다른 날을 가리키게 된다. 번호는 만든 순서일 뿐이다.
+     */
+    @Transactional
+    public void deleteSession(Long sessionId, AuthPrincipal principal) {
+        LectureSession session = sessionRepository.findById(sessionId)
+                .filter(x -> !x.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.LECTURE_SESSION_NOT_FOUND));
+        require(session.getLecture().getId(), principal);
+
+        if (attendanceRepository.existsBySessionIdAndDeletedFalse(sessionId)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "출결이 기록된 회차는 삭제할 수 없습니다.");
+        }
+        session.markDeleted();
+        log.info("특강 회차 삭제: sessionId={}, lectureId={}",
+                sessionId, session.getLecture().getId());
+    }
+
+    /**
+     * 특강 삭제.
+     *
+     * <p><b>신청자가 한 명이라도 있으면 지우지 않는다.</b> 지우면 그 학생의 신청 이력이
+     * 통째로 사라진다. 대신 상태를 {@code CANCELED} 로 두면 목록에는 남되 신청은 막힌다.
+     *
+     * <p>즉 지울 수 있는 것은 <b>만들어만 두고 아무도 신청하지 않은 것</b>뿐이다 —
+     * 잘못 만든 특강이 목록에 영영 남는 문제가 이걸로 풀린다.
+     *
+     * <p>딸린 회차도 같이 지운다. 특강만 지우면 회차가 남아 화면에서 유령이 된다.
+     */
+    @Transactional
+    public void delete(Long lectureId, AuthPrincipal principal) {
+        Lecture lecture = require(lectureId, principal);
+
+        long applications = applicationRepository.countActiveByLectureId(lectureId);
+        if (applications > 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "신청자가 있는 특강은 삭제할 수 없습니다(%d명). 접수를 마감하거나 취소해 주세요."
+                            .formatted(applications));
+        }
+        sessionRepository.findByLectureIdAndDeletedFalseOrderBySessionNo(lectureId)
+                .forEach(LectureSession::markDeleted);
+        lecture.markDeleted();
+        log.info("특강 삭제: lectureId={}, name={}", lectureId, lecture.getName());
+    }
+
     @Transactional(readOnly = true)
     public List<LectureSession> sessions(Long lectureId, AuthPrincipal principal) {
         require(lectureId, principal);
