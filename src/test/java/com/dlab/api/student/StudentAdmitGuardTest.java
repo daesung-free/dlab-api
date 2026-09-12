@@ -90,6 +90,39 @@ class StudentAdmitGuardTest {
     }
 
     @Test
+    @DisplayName("★★ 동시에 여러 번 보내도 한 명만 생긴다 — 버튼 연타는 거의 동시에 도착한다")
+    void concurrentSubmitsCreateOnlyOne() throws Exception {
+        int threads = 5;
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        var start = new java.util.concurrent.CountDownLatch(1);
+        var created = new java.util.concurrent.atomic.AtomicInteger();
+        var rejected = new java.util.concurrent.atomic.AtomicInteger();
+
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    admit("동시등록", "010-9999-1111", LocalDate.of(2007, 3, 1));
+                    created.incrementAndGet();
+                } catch (BusinessException e) {
+                    if (e.getErrorCode() == ErrorCode.DUPLICATE_ADMISSION) {
+                        rejected.incrementAndGet();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(30, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+        // ★ 읽고-쓰는 사이를 막지 않으면 여기서 5가 나온다. 자문 잠금으로 직렬화한다
+        assertThat(created.get()).isEqualTo(1);
+        assertThat(rejected.get()).isEqualTo(threads - 1);
+    }
+
+    @Test
     @DisplayName("동명이인은 그대로 등록된다 — 연락처가 다르면 다른 사람이다")
     void sameNameDifferentPersonIsAllowed() {
         admit("동명이인", "010-1111-3333", LocalDate.of(2007, 3, 1));
