@@ -133,6 +133,36 @@ class StudentAdmitGuardTest {
     }
 
     @Test
+    @DisplayName("★ 같은 사람이면 사람 행을 새로 만들지 않는다 — 기존 사람에 붙는다")
+    void samePersonIsReused() {
+        var first = admit("사람재사용", "010-5555-1111", LocalDate.of(2007, 4, 1));
+        Long personId = first.getStudent().getId();
+
+        // 시간 창을 벗어난 뒤에도 같은 사람이면 기등록으로 막힌다 — 시간과 무관한 규칙이다
+        tx.executeWithoutResult(status -> em.createNativeQuery(
+                        "UPDATE student_enrollment SET created_at = created_at - interval '1 hour' WHERE id = ?1")
+                .setParameter(1, first.getId()).executeUpdate());
+
+        assertThatThrownBy(() -> admit("사람재사용", "010-5555-1111", LocalDate.of(2007, 4, 1)))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(e -> assertThat(e.getMessage()).contains(first.getStudentNo()));
+
+        Long count = tx.execute(status -> em.createQuery(
+                        "SELECT count(s) FROM Student s WHERE s.id = :id", Long.class)
+                .setParameter("id", personId).getSingleResult());
+        assertThat(count).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("연락처가 다르면 다른 사람이다 — 이름·생년월일이 같아도 합치지 않는다")
+    void differentPhoneIsDifferentPerson() {
+        var a = admit("동일생일", "010-6666-1111", LocalDate.of(2007, 4, 1));
+        var b = admit("동일생일", "010-6666-2222", LocalDate.of(2007, 4, 1));
+
+        assertThat(b.getStudent().getId()).isNotEqualTo(a.getStudent().getId());
+    }
+
+    @Test
     @DisplayName("성별이 잘못되면 「학번 채번 실패」가 아니라 그 사유가 나온다")
     void invalidGenderReportsItsOwnCause() {
         assertThatThrownBy(() -> studentService.admit(academy.getId(), (short) 2026,
