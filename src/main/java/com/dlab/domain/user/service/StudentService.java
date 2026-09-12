@@ -97,10 +97,15 @@ public class StudentService {
             // ★ 잠금 → 확인 → 생성 순서를 지킨다. 트랜잭션 밖에서 확인하면
             //   동시에 들어온 두 요청이 <b>둘 다</b> "없음" 을 읽고 둘 다 넣는다.
             lockAdmission(academyId, year, name, phone, birthDate);
-            rejectDoubleSubmit(academyId, year, name, phone, birthDate);
             Academy academy = academyRepository.findById(academyId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
-            Student student = studentRepository.save(new Student(generateUniqueCode(), name, phone));
+
+            // ★ 사람을 먼저 찾는다. 신원이 특정되면 <b>시간과 무관하게</b> 기등록으로 막고
+            //   학번까지 알려줄 수 있다. 시간 창을 먼저 보면 그 정보를 못 준다.
+            Student student = findOrCreatePerson(name, phone, birthDate);
+            rejectAlreadyEnrolled(student, academyId, year);
+            // 신원을 특정하지 못한 경우(연락처·생년월일이 빈 접수)만 여기까지 온다
+            rejectDoubleSubmit(academyId, year, name, phone, birthDate);
             // 상세는 같은 트랜잭션에서 채운다 — 등록 후 따로 보내면 중간에 실패했을 때
             // 학생만 남고 상세가 비는 상태가 되고, 담당자는 그걸 알 방법이 없다
             student.updateProfile(null, null, birthDate, gender, schoolName, address);
@@ -112,6 +117,52 @@ public class StudentService {
             }
             return enrollment;
         });
+    }
+
+    /**
+     * 같은 사람이면 기존 {@link Student} 를 쓰고, 아니면 새로 만든다.
+     *
+     * <p>학생은 <b>사람 + 등록 건 2단</b>이다. 재접수는 사람을 새로 만드는 게 아니라
+     * 기존 사람에 등록 건을 붙이는 것이 이 구조의 뜻이고, {@code reEnroll} 은 이미 그렇게 한다.
+     * 그런데 신규 접수만 늘 {@code new Student} 를 만들고 있었다 — 저장 버튼을 두 번 누르면
+     * 등록 건뿐 아니라 <b>사람까지 두 명</b> 생긴 이유다.
+     *
+     * <p>★ <b>이름·생년월일·연락처가 모두 있을 때만</b> 찾는다. 하나라도 비면 신원을
+     * 특정할 수 없어, 같은 사람인지 동명이인인지 판단할 근거가 없다. 그때는 새 사람으로
+     * 만들고 중복 제출 방어(자문 잠금 + 시간 창)가 맡는다.
+     */
+    private Student findOrCreatePerson(String name, String phone, LocalDate birthDate) {
+        if (phone != null && !phone.isBlank() && birthDate != null) {
+            var existing = studentRepository
+                    .findByNameAndBirthDateAndPhoneAndDeletedFalse(name, birthDate, phone);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
+        return studentRepository.save(new Student(generateUniqueCode(), name, phone));
+    }
+
+    /**
+     * 이미 그 지점·그 연도에 <b>재원 중</b>이면 막는다.
+     *
+     * <p>DB 에도 같은 규칙이 부분 유니크({@code uq_enrollment_active_person})로 걸려 있다.
+     * 여기서 먼저 보는 이유는 <b>메시지 때문</b>이다 — 제약에 걸리면 학번을 알려줄 수 없어
+     * "이미 등록됐다" 까지만 말하게 된다. 담당자는 그 학생을 찾아가야 한다.
+     *
+     * <p>퇴원·제적 건은 {@code is_current} 가 false 라 걸리지 않는다 — 같은 해 재등록은
+     * 정상 업무다(F27-6).
+     */
+    private void rejectAlreadyEnrolled(Student student, Long academyId, short year) {
+        if (student.getId() == null) {
+            return;   // 방금 만든 사람이라 등록 건이 있을 수 없다
+        }
+        enrollmentRepository
+                .findByStudentIdAndAcademyIdAndYearAndDeletedFalse(student.getId(), academyId, year)
+                .filter(StudentEnrollment::isCurrent)
+                .ifPresent(e -> {
+                    throw new BusinessException(ErrorCode.DUPLICATE_ADMISSION,
+                            "이미 등록된 학생입니다. (학번 " + e.getStudentNo() + ")");
+                });
     }
 
     /**
