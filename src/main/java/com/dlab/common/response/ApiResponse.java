@@ -41,7 +41,21 @@ public record ApiResponse<T>(boolean success, T data, PageMeta meta, ErrorBody e
     }
 
     public static ApiResponse<Void> fail(ErrorCode errorCode, String message) {
-        return new ApiResponse<>(false, null, null, new ErrorBody(errorCode.name(), message));
+        return fail(errorCode, message, null);
+    }
+
+    /**
+     * 실패 응답에 값을 함께 싣는다.
+     *
+     * <p><b>화면이 메시지 문자열을 파싱하지 않게 하려는 것이다.</b> 중복 등록 오류에서
+     * 학번을 꺼내려면 {@code "이미 등록된 학생입니다. (2026-0031)"} 에서 괄호를 뜯어야 했다 —
+     * 문구를 다듬는 순간 화면이 깨진다.
+     *
+     * <p>{@code data} 가 없는 오류는 필드 자체가 응답에서 빠진다(기존 응답 불변).
+     */
+    public static ApiResponse<Void> fail(ErrorCode errorCode, String message, Object data) {
+        return new ApiResponse<>(false, null, null,
+                new ErrorBody(errorCode.name(), message, data));
     }
 
     /**
@@ -67,7 +81,12 @@ public record ApiResponse<T>(boolean success, T data, PageMeta meta, ErrorBody e
         }
     }
 
+    /**
+     * @param data 오류를 고치는 데 필요한 값. <b>대부분 비어 있다</b> —
+     *             화면이 뒤 동작(해당 학생으로 이동 등)을 할 수 있을 때만 싣는다.
+     *             {@code null}이면 필드 자체가 응답에서 빠진다(기존 응답 불변)
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public record ErrorBody(String code, String message) {
+    public record ErrorBody(String code, String message, Object data) {
     }
 }

@@ -26,7 +26,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException e) {
         log.warn("도메인 오류: {} - {}", e.getErrorCode(), e.getMessage());
         return ResponseEntity.status(e.getErrorCode().getStatus())
-                .body(ApiResponse.fail(e.getErrorCode(), e.getMessage()));
+                .body(ApiResponse.fail(e.getErrorCode(), e.getMessage(), e.getData()));
     }
 
     /** @Valid 검증 실패 */

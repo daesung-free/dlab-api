@@ -90,6 +90,24 @@ class StudentAdmitGuardTest {
     }
 
     @Test
+    @DisplayName("★ 중복 오류에 학번이 값으로 실려 온다 — 화면이 메시지를 파싱하지 않게")
+    void duplicateErrorCarriesStudentNo() {
+        // 전에는 "이미 등록된 학생입니다. (학번 2026-0031)" 에서 괄호를 뜯어야 했다.
+        // 문구를 다듬는 순간 화면이 깨진다.
+        StudentEnrollment first = admit("값실림", "010-3333-4444", LocalDate.of(2007, 5, 1));
+
+        assertThatThrownBy(() -> admit("값실림", "010-3333-4444", LocalDate.of(2007, 5, 1)))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getData())
+                .isInstanceOfSatisfying(StudentService.DuplicateAdmission.class, d -> {
+                    assertThat(d.studentNo()).isEqualTo(first.getStudentNo());
+                    assertThat(d.enrollmentId()).isEqualTo(first.getId());
+                    assertThat(d.academyId()).isEqualTo(academy.getId());
+                    assertThat(d.academyName()).isEqualTo(academy.getAcadNm());
+                });
+    }
+
+    @Test
     @DisplayName("★★ 동시에 여러 번 보내도 한 명만 생긴다 — 버튼 연타는 거의 동시에 도착한다")
     void concurrentSubmitsCreateOnlyOne() throws Exception {
         int threads = 5;
