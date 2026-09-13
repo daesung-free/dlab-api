@@ -344,4 +344,32 @@ class LoginSecurityTest {
                         .header("Authorization", token))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("★★ 토큰 없이 로그아웃·비밀번호 변경을 부르면 401 — 전에는 500 이 났다")
+    void authEndpointsRequireToken() throws Exception {
+        // auth/** 가 permitAll 이라 토큰 없이 들어왔고, 컨트롤러가 principal 을
+        // null 로 받아 NPE 가 났다. /me 만 막아뒀다가 logout·password 에서 같은 일이 났다.
+        for (String path : java.util.List.of(
+                "/api/v1/admin/auth/logout", "/api/v1/app/auth/logout")) {
+            mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(status().isUnauthorized());
+        }
+        for (String path : java.util.List.of(
+                "/api/v1/admin/auth/password", "/api/v1/app/auth/password")) {
+            mvc.perform(post(path)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"currentPassword":"x","newPassword":"yyyyyyyy"}"""))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        // 로그인·재발급은 토큰을 만드는 쪽이라 열려 있어야 한다
+        mvc.perform(post("/api/v1/admin/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"없는계정","password":"whatever12"}"""))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("INVALID_CREDENTIALS"));
+    }
 }
