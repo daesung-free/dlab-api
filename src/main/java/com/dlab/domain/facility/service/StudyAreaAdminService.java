@@ -3,11 +3,14 @@ package com.dlab.domain.facility.service;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
+import com.dlab.domain.facility.entity.AreaType;
 import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.facility.repository.SeatMasterRepository;
 import com.dlab.domain.facility.repository.StudyAreaRepository;
 import com.dlab.domain.user.entity.Academy;
+import com.dlab.domain.user.entity.ClassMaster;
 import com.dlab.domain.user.repository.AcademyRepository;
+import com.dlab.domain.user.repository.ClassMasterRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,10 +35,24 @@ public class StudyAreaAdminService {
     private final StudyAreaRepository studyAreaRepository;
     private final SeatMasterRepository seatMasterRepository;
     private final AcademyRepository academyRepository;
+    private final ClassMasterRepository classMasterRepository;
 
     /** 관리 화면 목록 — 비활성 구역까지 내린다(다시 켤 수 있어야 한다). */
     public List<StudyArea> list(AuthPrincipal me, Long academyId) {
-        return studyAreaRepository.findAllByAcademyId(me.requireAcademyScope(academyId));
+        return list(me, academyId, null);
+    }
+
+    /**
+     * 관리 화면 목록 — 종류로 거른다.
+     *
+     * <p>{@code areaType}이 비면 둘 다 내린다. <b>독서실 화면과 반 좌석표 화면은 각자
+     * 자기 종류만 걸어서 부른다</b> — 안 걸면 독서실 목록에 반이 섞인다.
+     */
+    public List<StudyArea> list(AuthPrincipal me, Long academyId, AreaType areaType) {
+        Long resolved = me.requireAcademyScope(academyId);
+        return areaType == null
+                ? studyAreaRepository.findAllByAcademyId(resolved)
+                : studyAreaRepository.findAllByAcademyIdAndType(resolved, areaType);
     }
 
     /**
@@ -48,9 +65,26 @@ public class StudyAreaAdminService {
     @Transactional
     public StudyArea create(AuthPrincipal me, Long academyId, String areaCd, String areaNm,
                             short sortOrder) {
+        return create(me, academyId, areaCd, areaNm, sortOrder, AreaType.STUDY, null);
+    }
+
+    /**
+     * 구역 등록 — 종류까지.
+     *
+     * <p><b>교실이면 반이 필요하다.</b> 반 없는 교실 구역은 배치도가 어느 반 것인지 알 수
+     * 없고, 반 하나에 좌석표는 하나다 — 둘이면 어느 쪽을 그릴지 정해지지 않는다.
+     *
+     * @param areaType      비면 {@code STUDY}
+     * @param classMasterId {@code CLASSROOM}일 때 필수, {@code STUDY}면 무시된다
+     */
+    @Transactional
+    public StudyArea create(AuthPrincipal me, Long academyId, String areaCd, String areaNm,
+                            short sortOrder, AreaType areaType, Long classMasterId) {
         Long resolved = me.requireAcademyScope(academyId);
         Academy academy = academyRepository.findById(resolved)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
+        AreaType type = areaType == null ? AreaType.STUDY : areaType;
+        ClassMaster classMaster = resolveClassMaster(type, classMasterId, resolved);
 
         var existing = studyAreaRepository.findAnyByAcademyIdAndAreaCd(resolved, areaCd);
         if (existing.isPresent()) {
@@ -59,10 +93,44 @@ public class StudyAreaAdminService {
                 throw new BusinessException(ErrorCode.STUDY_AREA_DUPLICATED,
                         "이미 있는 구역 코드입니다: " + areaCd);
             }
-            area.reviveAs(areaNm, sortOrder);
+            area.reviveAs(areaNm, sortOrder, type, classMaster);
             return area;
         }
-        return studyAreaRepository.save(new StudyArea(academy, areaCd, areaNm, sortOrder));
+        return studyAreaRepository.save(
+                new StudyArea(academy, areaCd, areaNm, sortOrder, type, classMaster));
+    }
+
+    /**
+     * 교실이면 반을 찾아 검증한다.
+     *
+     * <p>독서실인데 반을 보내오면 <b>조용히 버리지 않고 막는다</b> — 화면이 종류를 잘못
+     * 보냈다는 뜻이라, 통과시키면 어느 쪽 의도였는지 나중에 알 수 없다.
+     */
+    private ClassMaster resolveClassMaster(AreaType type, Long classMasterId, Long academyId) {
+        if (type != AreaType.CLASSROOM) {
+            if (classMasterId != null) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "독서실 구역에는 반을 지정할 수 없습니다.");
+            }
+            return null;
+        }
+        if (classMasterId == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "반 교실 구역에는 반이 필요합니다.");
+        }
+        ClassMaster classMaster = classMasterRepository.findById(classMasterId)
+                .filter(c -> !c.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.CLASS_NOT_FOUND));
+        // 다른 지점 반을 붙이면 그 지점 배치도에 남의 반이 뜬다.
+        if (!classMaster.getAcademy().getId().equals(academyId)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "다른 지점의 반은 지정할 수 없습니다.");
+        }
+        studyAreaRepository.findByClassMasterId(classMasterId).ifPresent(a -> {
+            throw new BusinessException(ErrorCode.STUDY_AREA_DUPLICATED,
+                    "이미 좌석표가 있는 반입니다: " + classMaster.getName());
+        });
+        return classMaster;
     }
 
     /** 이름·정렬·노출 수정. {@code areaCd}는 대상이 아니다(키오스크 계약). */

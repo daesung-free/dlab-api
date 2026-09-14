@@ -235,6 +235,44 @@ public class AdminStaffController {
     }
 
     /**
+     * 잠금 해제 (로그인 5회 실패).
+     *
+     * <p><b>자동 해제가 없어 이 호출이 유일한 수단이다.</b> 없는 동안에는 직원이 잠기면
+     * DB를 직접 고치는 것 말고 방법이 없었다 — 앱 계정에만 경로가 있었다.
+     *
+     * <p>잠겨 있지 않아도 성공을 돌려준다(멱등). 화면이 잠금 표시를 보고 누르는데 그 사이
+     * 다른 관리자가 먼저 풀었다고 오류를 낼 이유가 없다.
+     */
+    @PostMapping("/accounts/{accountId}/unlock")
+    public ApiResponse<Void> unlockAccount(@CurrentAccount AuthPrincipal me,
+                                           @PathVariable Long accountId) {
+        staffAccountService.unlock(accountId, me);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * 임시 비밀번호 재발급 (분실·잠금 시).
+     *
+     * <p><b>평문이 이 응답에 한 번만 실린다.</b> 저장하지 않으므로 놓치면 다시 발급해야
+     * 한다 — 되짚어 볼 수 있게 만들면 그 자체가 유출 경로가 된다. 받은 사람은 다음 로그인에서
+     * 비밀번호를 바꿔야 다른 API를 쓸 수 있다.
+     *
+     * <p>재발급하면 <b>잠금도 함께 풀리고 기존 로그인 세션이 끊긴다.</b>
+     */
+    @PostMapping("/accounts/{accountId}/temporary-password")
+    public ApiResponse<TemporaryPassword> reissueTemporaryPassword(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long accountId) {
+        return ApiResponse.success(new TemporaryPassword(
+                staffAccountService.reissueTemporaryPassword(accountId, me)));
+    }
+
+    /**
+     * @param temporaryPassword 평문 임시 비밀번호. 이 응답 이후로는 어디에도 남지 않는다
+     */
+    public record TemporaryPassword(String temporaryPassword) {
+    }
+
+    /**
      * 계정 탈퇴 처리.
      *
      * <p><b>계정을 지우지 않는다</b> — 지난 로그인 이력과 이 계정이 남긴 작업 기록이
