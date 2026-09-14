@@ -1,6 +1,13 @@
 spring:
   application:
     name: dlab-api
+  servlet:
+    multipart:
+      # ★ Spring 기본값이 1MB 라 그대로 두면 10MB 파일이 서비스에 닿기도 전에 컨테이너
+      #   단계에서 거부된다 — storage.max-file-size 검증이 아예 돌지 않는다.
+      #   요청 상한은 첨부 4개(입학상담 기준)를 감안해 넉넉히 둔다.
+      max-file-size: 10MB
+      max-request-size: 50MB
 
 logging:
   pattern:

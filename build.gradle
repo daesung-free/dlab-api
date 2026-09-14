@@ -51,6 +51,16 @@ dependencies {
     implementation 'com.github.therapi:therapi-runtime-javadoc:0.15.0'
     annotationProcessor 'com.github.therapi:therapi-runtime-javadoc-scribe:0.15.0'
 
+    // S3 파일 저장. 첨부(성적표·재학증명서·사유 증빙)와 공개 이미지가 여기 의존한다.
+    //
+    // ★ v2 를 쓴다 — v1(com.amazonaws)은 2025 년에 지원이 끝났다.
+    // ★ BOM 으로 버전을 한 곳에서 잡는다. s3 와 presigner 버전이 어긋나면
+    //   서명 방식이 달라져 presigned URL 이 403 을 낸다.
+    implementation platform('software.amazon.awssdk:bom:2.29.0')
+    implementation 'software.amazon.awssdk:s3'
+    // presigned URL 발급용. 비공개 파일은 CloudFront 를 두지 않고 이걸로 내려준다.
+    implementation 'software.amazon.awssdk:s3-transfer-manager'
+
     // 엑셀 Import/Export. 학생 일괄 등록(P1-02)·명단 출력(F-4.9)이 여기 의존한다.
     implementation 'org.apache.poi:poi-ooxml:5.4.1'
 
