@@ -36,6 +36,36 @@ springdoc:
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:}
 
+# ─────────────────────────────────────────────────────────────
+# 파일 저장소 (S3)
+#
+# ★ 버킷을 웹/앱이 아니라 **공개/비공개로 나눈다.** 어느 클라이언트가 올렸는지는
+#   접근 범위와 무관하다 — 공지 이미지는 앱에서 올려도 공개이고, 성적표는 웹에서
+#   올려도 비공개다. 클라이언트는 버킷 이름을 알 필요가 없고 API 만 나뉜다.
+#
+# ★ 공개 버킷도 S3 를 직접 열지 않는다. CloudFront(OAC)만 읽을 수 있고 화면에는
+#   public-base-url 을 붙인 주소가 나간다. 버킷을 열어두면 주소를 아는 사람이
+#   S3 를 직접 긁어도 전송료는 우리가 문다.
+#
+# ★ 비공개는 CloudFront 를 두지 않고 서버가 presigned URL 을 발급한다.
+#   TTL 을 길게 잡지 말 것 — 그 주소는 로그인 없이 열리므로 전달되면 그대로 새어 나간다.
+#
+# ⚠️ 값이 비어 있어도 기동은 된다(파일 기능만 동작하지 않는다). 자격증명이 없는 환경에서
+#   앱 전체가 안 뜨는 쪽이 더 나쁘다 — LoggingSmsSender 와 같은 판단이다.
+# ─────────────────────────────────────────────────────────────
+storage:
+  region: ${S3_REGION:ap-northeast-2}
+  public-bucket: ${S3_BUCKET_PUBLIC:}
+  private-bucket: ${S3_BUCKET_PRIVATE:}
+  # CloudFront 배포 도메인. 공개 파일 URL 의 앞부분이 된다
+  public-base-url: ${S3_PUBLIC_BASE_URL:}
+  access-key: ${AWS_ACCESS_KEY_ID:}
+  secret-key: ${AWS_SECRET_ACCESS_KEY:}
+  # presigned URL 유효시간. 화면이 받아서 바로 여는 용도라 짧아도 된다
+  presign-ttl: PT5M
+  # 입학상담 첨부 기준(10MB 이하, 최대 4개)에 맞춘다
+  max-file-size: 10MB
+
 jwt:
   # 운영 값은 환경변수로 주입한다. 커밋 금지(CLAUDE.md §8).
   # HS256이 최소 256비트를 요구하므로 32바이트 이상이어야 하고, 짧으면 기동 시점에 막힌다.

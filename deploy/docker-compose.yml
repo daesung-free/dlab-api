@@ -104,6 +104,14 @@ services:
       # 관리자 웹이 다른 origin 에서 /api 를 호출한다. 비면 브라우저 요청이 전부 차단된다
       # (차단이 기본, 필요한 origin 만 연다 — application-prod.yml 참고).
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      # 파일 저장소(S3). 비어 있으면 파일 업로드만 동작하지 않고 앱은 정상 기동한다.
+      # ★ 버킷은 공개/비공개 둘이다. 공개 쪽은 CloudFront 도메인으로 서빙한다.
+      S3_REGION: ${S3_REGION:-ap-northeast-2}
+      S3_BUCKET_PUBLIC: ${S3_BUCKET_PUBLIC:-}
+      S3_BUCKET_PRIVATE: ${S3_BUCKET_PRIVATE:-}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=70 -Dfile.encoding=UTF-8 -Duser.timezone=Asia/Seoul}
     ports:
       # ★ 여기도 127.0.0.1 이다. Nginx가 같은 호스트에서 프록시하므로 외부 공개가 필요 없고,
