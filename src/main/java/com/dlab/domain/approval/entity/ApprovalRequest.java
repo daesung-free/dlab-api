@@ -152,7 +152,12 @@ public class ApprovalRequest extends BaseEntity {
      */
     public ResolutionCase decideResolutionCase(ApproverType approverType, Instant approvedAt) {
         if (approverType == ApproverType.PARENT) {
-            return ResolutionCase.PARENT_IN_TIME;
+            // ★ 학부모도 시각을 본다. 전에는 승인자가 학부모면 무조건 IN_TIME 이라
+            //   열 시간 뒤 승인도 "시간 내" 로 남았다 — 담임 쪽은 전후를 가르는데
+            //   학부모만 한 칸이었다. 문구는 같고 기록만 갈린다.
+            return approvedAt.isBefore(escalationAt)
+                    ? ResolutionCase.PARENT_IN_TIME
+                    : ResolutionCase.PARENT_AFTER_TIMEOUT;
         }
         // 관리자 대리는 타임아웃과 무관하다 — 담임 케이스로 흘리면 담임이 승인했다는
         // 안내가 나가는데, 담임은 이 건을 본 적도 없다
