@@ -26,6 +26,8 @@ import java.util.List;
  *
  * @param birthDate        <b>문자열</b>이다 — 마스킹되면 {@code 2007-**-**}이라 날짜 타입에
  *                         담기지 않는다. 원본일 때도 같은 타입이어야 화면이 분기하지 않는다
+ * @param academyId        지점 id. 이름만 내리면 화면이 지점으로 거르거나 다른 API 를 호출할 때
+ *                         이름을 다시 id 로 되짚어야 한다 — 동명 지점이 생기면 그 되짚기가 깨진다
  * @param academyName      지점명. 본사 계정이 전 지점을 한 화면에서 보므로 코드가 아니라 이름이다
  * @param className        고정반 이름. 미배정이면 {@code null}
  * @param homeroomTeacher  담임(담당선생님) 이름. 반을 통해 나온다 — 반 미배정이거나
@@ -51,6 +53,7 @@ public record StudentResponse(
         TrackType track,
         EnrollmentStatus enrollmentStatus,
         LocalDate admissionDate,
+        Long academyId,
         String academyName,
         String className,
         String homeroomTeacher,
@@ -81,6 +84,7 @@ public record StudentResponse(
                 e.getTrack(),
                 e.getEnrollmentStatus(),
                 e.getAdmissionDate(),
+                e.getAcademy().getId(),
                 e.getAcademy().getName(),
                 extras.className(id),
                 extras.homeroomTeacher(id),
