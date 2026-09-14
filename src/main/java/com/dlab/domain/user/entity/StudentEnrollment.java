@@ -145,6 +145,24 @@ public class StudentEnrollment extends BaseEntity {
         this.current = false;
     }
 
+    /**
+     * 현재 등록으로 되돌린다.
+     *
+     * <p><b>잘못 만든 재등록을 지웠을 때 쓴다.</b> 재등록은 직전 건을 내리는데, 새로 만든
+     * 것을 다시 지우면 <b>아무 등록도 current 가 아닌 상태</b>가 남는다 — 앱은 통째로
+     * {@code ENROLLMENT_NOT_FOUND} 를 받고 관리자 화면에도 학생이 안 보인다. 되돌릴 방법이
+     * 화면에 없어서 DB 를 직접 고쳐야 했다.
+     *
+     * <p>⚠️ <b>종료 상태는 되살리지 않는다.</b> 퇴원한 등록 건이 current 로 돌아오면
+     * 퇴원생 카드로 키오스크 태깅이 통과한다(§3).
+     */
+    public void makeCurrent() {
+        if (enrollmentStatus.requiresCleanup()) {
+            return;
+        }
+        this.current = true;
+    }
+
 
     /**
      * 등록 건 수정. {@code null}은 "변경하지 않음"이다({@link Student#updateProfile} 참고).
