@@ -25,17 +25,17 @@
 INSERT INTO academy (acad_cd, acad_nm, full_nm, store_code, attendance_deadline, active)
 SELECT v.cd, v.nm, v.full_nm, v.store_cd, '09:00'::time, TRUE
 FROM (VALUES
-    ('31', '분당', 'Dlab 분당', 'DS-001'),
-    ('32', '일산', 'Dlab 일산', 'DS-002'),
-    ('33', '동탄', 'Dlab 동탄', 'DS-003'),
-    ('34', '김포', 'Dlab 김포', 'DS-004'),
-    ('42', '부천', 'Dlab 부천', 'DS-005'),
-    ('43', '이매', 'Dlab 이매', 'DS-006'),
-    ('44', '광명', 'Dlab 광명', 'DS-007'),
-    ('45', '목동', 'Dlab 목동', 'DS-008'),
-    ('46', '송파', 'Dlab 송파', 'DS-009'),
-    ('47', '대전', 'Dlab 대전', 'DS-010'),
-    ('48', '대구', 'Dlab 대구', 'DS-011')
+    ('31', '분당', 'DLab 분당', 'DS-001'),
+    ('32', '일산', 'DLab 일산', 'DS-002'),
+    ('33', '동탄', 'DLab 동탄', 'DS-003'),
+    ('34', '김포', 'DLab 김포', 'DS-004'),
+    ('42', '부천', 'DLab 부천', 'DS-005'),
+    ('43', '이매', 'DLab 이매', 'DS-006'),
+    ('44', '광명', 'DLab 광명', 'DS-007'),
+    ('45', '목동', 'DLab 목동', 'DS-008'),
+    ('46', '송파', 'DLab 송파', 'DS-009'),
+    ('47', '대전', 'DLab 대전', 'DS-010'),
+    ('48', '대구', 'DLab 대구', 'DS-011')
 ) AS v(cd, nm, full_nm, store_cd)
 -- 이미 있으면 건너뛴다. 개발 중 손으로 넣어둔 지점을 덮어쓰지 않는다
 WHERE NOT EXISTS (SELECT 1 FROM academy a WHERE a.acad_cd = v.cd);
