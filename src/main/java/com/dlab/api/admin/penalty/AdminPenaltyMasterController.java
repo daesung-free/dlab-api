@@ -164,11 +164,18 @@ public class AdminPenaltyMasterController {
                               @NotNull Long penaltyItemId) {
     }
 
-    /** @param point 저장된 부호 그대로다 — 벌점은 음수 */
+    /**
+     * @param point 벌점은 음수, 상점은 양수다.
+     *              <p>★ <b>{@code GET /penalties/items} 와 같은 부호로 내린다.</b> 전에는
+     *              이쪽만 저장값을 그대로 줘서, 부호가 잘못 저장된 옛 행에서 두 경로가
+     *              다른 값을 보였다 — 화면이 어느 쪽을 믿어야 할지 알 수 없다.
+     */
     public record ItemRow(Long id, String itemName, PenaltyCategory category, int point) {
 
         static ItemRow from(PenaltyItem i) {
-            return new ItemRow(i.getId(), i.getItemName(), i.getCategory(), i.getPointValue());
+            int magnitude = Math.abs(i.getPointValue());
+            return new ItemRow(i.getId(), i.getItemName(), i.getCategory(),
+                    i.getCategory() == PenaltyCategory.DEMERIT ? -magnitude : magnitude);
         }
     }
 
