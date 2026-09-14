@@ -53,7 +53,18 @@ public class NotificationService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_NOT_FOUND,
                         "알림 템플릿이 없습니다: " + command.event()));
 
-        validateVariables(template, command.variables());
+        // ★ 변수 누락을 예외로 던지지 않는다.
+        //
+        //   전에는 여기서 곧장 500 을 던졌다. 그래서 템플릿 설정 한 줄이 잘못되면
+        //   방화벽 해제 신청 자체가 실패했다 — 학생 화면에는 "서버 오류"만 뜨고
+        //   원인(알림 템플릿)은 어디에도 안 보인다. 실제로 그렇게 막혔다.
+        //
+        //   알림은 본 행위에 딸린 것이지 본 행위가 아니다. 상벌점 부여를 REQUIRES_NEW 로
+        //   떼어 둔 것과 같은 판단이다(§7) — 알림이 못 나가도 신청은 접수돼야 한다.
+        //
+        //   대신 기록을 SKIPPED 로 남겨 <b>안 나갔다는 사실이 보이게</b> 한다. 조용히
+        //   성공으로 두면 학부모가 못 받은 것을 아무도 모른다.
+        List<String> missing = missingVariables(template, command.variables());
 
         NotificationLog notificationLog = new NotificationLog(
                 command.academy(),
@@ -73,6 +84,13 @@ public class NotificationService {
             // dedup_key 유니크 위반 — 다른 실행이 같은 알림을 먼저 기록했다는 뜻이므로 정상 종료로 취급
             log.debug("중복 알림 동시 기록 감지: {}", command.dedupKey());
             return null;
+        }
+
+        if (!missing.isEmpty()) {
+            notificationLog.markSkipped("변수 누락: " + String.join(", ", missing));
+            log.error("알림 변수 누락으로 발송 보류 — 템플릿 설정을 확인할 것: event={}, 누락={}",
+                    command.event(), missing);
+            return notificationLog;
         }
 
         dispatch(template, notificationLog);
@@ -115,23 +133,21 @@ public class NotificationService {
     }
 
     /**
-     * 템플릿이 요구하는 변수가 모두 채워졌는지 확인한다.
-     * 학생명은 항상 필수라서 누락되면 발송 자체를 막는다 — 다자녀 학부모가
-     * "이거 누구 얘기지" 헷갈리는 알림이 나가면 안 되기 때문.
+     * 템플릿이 요구하는 변수 중 비어 있는 것.
+     *
+     * <p><b>발송은 막되 본 행위는 막지 않는다.</b> 학생명이 빠진 알림이 나가면 다자녀
+     * 학부모가 "이거 누구 얘기지" 를 겪으므로 보내지 않는 것이 맞지만, 그렇다고 신청·승인
+     * 자체를 실패시킬 이유는 없다.
      */
-    private void validateVariables(NotificationTemplate template, Map<String, String> variables) {
+    private List<String> missingVariables(NotificationTemplate template,
+                                          Map<String, String> variables) {
         Set<String> required = template.requiredVariableSet();
-        List<String> missing = required.stream()
+        return required.stream()
                 .filter(name -> {
                     String value = variables.get(name);
                     return value == null || value.isBlank();
                 })
                 .toList();
-
-        if (!missing.isEmpty()) {
-            throw new BusinessException(ErrorCode.NOTIFICATION_VARIABLE_MISSING,
-                    "알림 변수 누락(%s): %s".formatted(template.getEventCode(), String.join(", ", missing)));
-        }
     }
 
     /** {변수명} 치환. */
