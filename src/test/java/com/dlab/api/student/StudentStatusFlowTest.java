@@ -114,6 +114,34 @@ class StudentStatusFlowTest {
     }
 
     @Test
+    @DisplayName("★ 재등록 건을 지우면 직전 등록이 다시 현재가 된다 — 아무것도 current 가 아닌 상태가 남았다")
+    void deleteRestoresPreviousEnrollment() throws Exception {
+        Long studentId = em.createQuery("""
+                SELECT e.student.id FROM StudentEnrollment e WHERE e.id = :id
+                """, Long.class).setParameter("id", enrollmentId).getSingleResult();
+
+        change("WITHDRAWN", "자퇴").andExpect(status().isOk());
+        String body = reEnroll(studentId).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long reEnrolled = objectMapper.readTree(body).path("data").path("enrollmentId").asLong();
+        em.flush();
+        em.clear();
+
+        mvc.perform(delete("/api/v1/admin/students/{id}", reEnrolled)
+                        .header("Authorization", token()))
+                .andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        // 되돌아온 쪽은 퇴원 상태라 current 가 되면 안 된다 — 퇴원생 카드가 태깅을 통과한다
+        StudentEnrollment previous = em.find(StudentEnrollment.class, enrollmentId);
+        assertThat(previous.isCurrent()).isFalse();
+
+        // 사람은 남아야 한다 — 지운 것은 등록 건 하나뿐이다
+        assertThat(em.find(Student.class, studentId).isDeleted()).isFalse();
+    }
+
+    @Test
     @DisplayName("★ 재원 중인 학생은 재등록되지 않는다 — 같은 사람이 학번 둘로 갈린다")
     void reEnrollRequiresTerminalStatus() throws Exception {
         Long studentId = em.createQuery("""

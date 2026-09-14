@@ -351,15 +351,33 @@ public class StudentService {
         }
 
         Student student = enrollment.getStudent();
+        boolean wasCurrent = enrollment.isCurrent();
         enrollment.markDeleted();
+        // ★ 현재 플래그도 같이 내린다. 지운 행에 is_current 가 남으면 그 사람에게
+        //   "현재 등록"이 있는 것으로 보이는데 조회는 삭제분을 걸러서 아무것도 못 찾는다 —
+        //   앱이 통째로 ENROLLMENT_NOT_FOUND 를 받고, 화면에서는 원인이 안 보인다.
+        //   실제로 재등록 → 삭제 순서로 그 상태가 만들어졌다.
+        enrollment.expire();
 
-        boolean lastOne = enrollmentRepository.findByStudentId(student.getId()).stream()
-                .noneMatch(e -> !e.isDeleted() && !e.getId().equals(enrollmentId));
-        if (lastOne) {
+        var remaining = enrollmentRepository.findByStudentId(student.getId()).stream()
+                .filter(e -> !e.isDeleted() && !e.getId().equals(enrollmentId))
+                .toList();
+
+        if (remaining.isEmpty()) {
             student.markDeleted();
+        } else if (wasCurrent) {
+            // ★ 직전 등록을 다시 현재로 올린다.
+            //
+            //   재등록은 직전 건을 내리고 새 건을 만든다. 그 새 건을 지우면 아무 등록도
+            //   current 가 아닌 상태가 남아, 앱이 통째로 ENROLLMENT_NOT_FOUND 를 받고
+            //   관리자 목록에서도 학생이 사라진다. 화면에 되돌릴 방법이 없어 DB 를 직접
+            //   고쳐야 했다 — 실제로 두 번 고쳤다.
+            remaining.stream()
+                    .max(java.util.Comparator.comparing(StudentEnrollment::getId))
+                    .ifPresent(StudentEnrollment::makeCurrent);
         }
-        log.info("학생 삭제(오등록 정리): enrollmentId={}, studentNo={}, 사람도 삭제={}",
-                enrollmentId, enrollment.getStudentNo(), lastOne);
+        log.info("학생 삭제(오등록 정리): enrollmentId={}, studentNo={}, 남은 등록={}건",
+                enrollmentId, enrollment.getStudentNo(), remaining.size());
     }
 
     /**
