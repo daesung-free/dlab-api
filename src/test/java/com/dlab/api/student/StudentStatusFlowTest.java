@@ -114,6 +114,25 @@ class StudentStatusFlowTest {
     }
 
     @Test
+    @DisplayName("★ 퇴원 → 휴원 → 재원으로 우회할 수 없다 — 두 번에 나눠 부르면 통과했다")
+    void terminalStatusIsOneWay() throws Exception {
+        change("WITHDRAWN", "자퇴").andExpect(status().isOk());
+
+        // 재원 직행은 원래도 막혔지만, 휴원을 거치면 통과했다.
+        change("LEAVE", "복귀 예정")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message").value(
+                        org.hamcrest.Matchers.containsString("재등록으로 처리")));
+
+        change("ENROLLED", "착오")
+                .andExpect(status().isBadRequest());
+
+        // 종료끼리 정정도 막는다 — 이력에 한 줄만 남으면 왜 바뀌었는지 알 수 없다.
+        change("EXPELLED", "정정")
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     @DisplayName("★ 제적이 상태값에 있다 — 화면명이 '재원·휴원·퇴원·제적'인데 빠져 있었다")
     void expelledIsSupported() throws Exception {
         change("EXPELLED", "규정 위반")

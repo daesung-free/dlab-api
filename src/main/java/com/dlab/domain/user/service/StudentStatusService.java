@@ -72,10 +72,18 @@ public class StudentStatusService {
         if (from == to) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "이미 같은 상태입니다.");
         }
-        // 수료·퇴원·제적에서 되돌리는 건 실수 정정이라 화면이 아니라 별도 절차로 다뤄야 한다
-        if (from.requiresCleanup() && to == EnrollmentStatus.ENROLLED) {
+        // ★ 종료(퇴원·제적·수료)에서는 어디로도 나가지 못한다.
+        //
+        //   원래는 "재원으로 되돌리기"만 막았는데, 그러면 퇴원 → 휴원 → 재원으로 우회됐다.
+        //   막아둔 규칙이 두 번에 나눠 부르면 통과하는 상태였다 — 화면에 없을 뿐 API 로는
+        //   뚫린다.
+        //
+        //   종료는 후속처리(반 배정 해제·앱 계정 비활성·좌석 회수)가 이미 돈 상태다.
+        //   되돌리려면 그것들을 되살려야 하는데, 무엇이 어떤 값이었는지는 남겨두지 않는다.
+        //   그래서 착오 정정이든 재입학이든 **재등록(새 등록 행)**으로 처리한다.
+        if (from.requiresCleanup()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "%s 상태에서 재원으로 되돌릴 수 없습니다. 재등록으로 처리하세요.".formatted(from));
+                    "%s 상태에서는 상태를 바꿀 수 없습니다. 재등록으로 처리하세요.".formatted(from));
         }
 
         Instant now = Instant.now(clock);
