@@ -5,6 +5,7 @@ import com.dlab.domain.facility.entity.SeatMaster;
 import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.master.entity.Scholarship;
 import com.dlab.domain.user.entity.*;
+import com.dlab.support.FacilityFixtures;
 import jakarta.persistence.EntityManager;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -84,7 +85,7 @@ class StudentListFieldsTest {
         classMaster = new ClassMaster(academy, (short) 2026, "가온반", ClassType.FIXED, homeroom);
         em.persist(classMaster);
 
-        studyArea = new StudyArea(academy, "A", "A구역", (short) 1);
+        studyArea = new StudyArea(FacilityFixtures.mainBuilding(em, academy), "A", "A", "A구역", (short) 1);
         em.persist(studyArea);
         em.flush();
     }
@@ -125,7 +126,7 @@ class StudentListFieldsTest {
     }
 
     private void assignSeat(StudentEnrollment e, String seatCd) {
-        SeatMaster seat = new SeatMaster(academy, studyArea, seatCd, seatCd + "번", 1, 1);
+        SeatMaster seat = new SeatMaster(studyArea, seatCd, seatCd, seatCd + "번", 1, 1);
         em.persist(seat);
         em.persist(new SeatAssignment(academy, seat, e));
     }

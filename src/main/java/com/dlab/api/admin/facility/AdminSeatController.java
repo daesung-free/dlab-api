@@ -4,6 +4,7 @@ import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.facility.entity.SeatPresence;
+import com.dlab.domain.facility.service.BuildingAdminService;
 import com.dlab.domain.facility.service.SeatAssignmentService;
 import com.dlab.domain.facility.service.SeatLayoutService;
 import com.dlab.domain.facility.service.SeatMasterAdminService;
@@ -33,6 +34,54 @@ public class AdminSeatController {
     private final SeatLayoutService seatLayoutService;
     private final StudyAreaAdminService studyAreaAdminService;
     private final SeatMasterAdminService seatMasterAdminService;
+    private final BuildingAdminService buildingAdminService;
+
+    // ── 관(본관/별관) ────────────────────────────────────────────────────────
+    //
+    // ★ 구역 위에 층이 하나 더 있는 이유는 동탄2관 때문이다. 본관과 구역명·좌석번호가
+    //   같아서 구역만으로는 구분되지 않는다. 상세는 Building 참고.
+
+    /** 관 목록. 구역을 만들려면 먼저 관을 골라야 한다. */
+    @GetMapping("/buildings")
+    public ApiResponse<List<BuildingResponse>> buildings(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId) {
+        return ApiResponse.success(buildingAdminService.list(me, academyId).stream()
+                .map(BuildingResponse::from).toList());
+    }
+
+    /**
+     * 관 등록.
+     *
+     * <p>{@code seatCdOffset}이 0이면 본관, 1000 이상이면 별관이다. <b>등록 후에는 바꿀 수
+     * 없다</b> — 좌석의 키오스크 번호에 이미 반영돼 저장된다.
+     */
+    @PostMapping("/buildings")
+    public ApiResponse<BuildingResponse> createBuilding(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody BuildingRequests.BuildingCreate request) {
+        return ApiResponse.success(BuildingResponse.from(buildingAdminService.create(
+                me, request.academyId(), request.code(), request.name(),
+                request.sortOrderOrDefault(), request.seatCdOffsetOrDefault())));
+    }
+
+    /** 관 수정 — 이름·정렬·노출만. 코드·오프셋은 대상이 아니다. */
+    @PatchMapping("/buildings/{buildingId}")
+    public ApiResponse<BuildingResponse> updateBuilding(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long buildingId,
+            @Valid @RequestBody BuildingRequests.BuildingUpdate request) {
+        return ApiResponse.success(BuildingResponse.from(buildingAdminService.update(
+                me, buildingId, request.name(), request.sortOrder(), request.active())));
+    }
+
+    /** 관 삭제(soft). 구역이 남아 있으면 거부한다. */
+    @DeleteMapping("/buildings/{buildingId}")
+    public ApiResponse<Void> deleteBuilding(@CurrentAccount AuthPrincipal me,
+                                            @PathVariable Long buildingId) {
+        buildingAdminService.delete(me, buildingId);
+        return ApiResponse.empty();
+    }
 
     /** 구역별 현재 배정 현황. 좌석배치도에 뿌린다. */
     @GetMapping
@@ -50,8 +99,10 @@ public class AdminSeatController {
     public ApiResponse<List<SeatLayoutService.AreaSummary>> areas(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
-            @RequestParam(defaultValue = "false") boolean includeInactive) {
-        return ApiResponse.success(seatLayoutService.areas(me, academyId, includeInactive));
+            @RequestParam(defaultValue = "false") boolean includeInactive,
+            @RequestParam(required = false) Long buildingId) {
+        return ApiResponse.success(
+                seatLayoutService.areas(me, academyId, includeInactive, buildingId));
     }
 
     /**
@@ -64,8 +115,8 @@ public class AdminSeatController {
     public ApiResponse<StudyAreaResponse> createArea(
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody SeatRequests.StudyAreaCreate request) {
-        var area = studyAreaAdminService.create(me, request.academyId(), request.areaCd(),
-                request.areaNm(), request.sortOrderOrDefault());
+        var area = studyAreaAdminService.create(me, request.academyId(), request.buildingId(),
+                request.areaCd(), request.areaNm(), request.sortOrderOrDefault());
         return ApiResponse.success(StudyAreaResponse.from(area, 0));
     }
 

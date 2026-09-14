@@ -69,11 +69,20 @@ class SeatMasterAdminTest {
         enrollmentB = createStudent(academy, "학생나", "SMSTU02", "0002");
 
         // 다른 지점 구역 — 지점 격리 검증용
+        // 이 지점의 본관. 운영에서는 마이그레이션이 만들어 두지만 테스트는 지점을
+        // 직접 만들기 때문에 여기서도 만들어야 한다 — 없으면 구역 등록이 막힌다
+        com.dlab.support.FacilityFixtures.mainBuilding(em, academy);
+
+        com.dlab.domain.facility.entity.Building otherMain =
+                com.dlab.support.FacilityFixtures.mainBuilding(em, otherAcademy);
+        em.flush();
         em.createNativeQuery("""
-                        INSERT INTO study_area (academy_id, area_cd, area_nm, sort_order)
-                        VALUES (:aid, 'X', '남의구역', 1)
+                        INSERT INTO study_area
+                            (academy_id, building_id, area_cd, kiosk_area_cd, area_nm, sort_order)
+                        VALUES (:aid, :bid, 'X', 'X', '남의구역', 1)
                         """)
-                .setParameter("aid", otherAcademy.getId()).executeUpdate();
+                .setParameter("aid", otherAcademy.getId())
+                .setParameter("bid", otherMain.getId()).executeUpdate();
         otherAreaId = ((Number) em.createNativeQuery(
                         "SELECT id FROM study_area WHERE academy_id = :aid")
                 .setParameter("aid", otherAcademy.getId()).getSingleResult()).longValue();

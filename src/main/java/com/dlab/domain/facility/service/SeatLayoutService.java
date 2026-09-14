@@ -60,7 +60,7 @@ public class SeatLayoutService {
 
     /** 구역 목록. 화면이 구역을 골라야 배치도를 열 수 있다. */
     public List<AreaSummary> areas(AuthPrincipal me, Long academyId) {
-        return areas(me, academyId, false);
+        return areas(me, academyId, false, null);
     }
 
     /**
@@ -70,14 +70,19 @@ public class SeatLayoutService {
      * 구역을 보면 안 되지만(고를 수 있게 되면 안 쓰는 구역에 학생이 배정된다), 관리 화면에서
      * 까지 숨기면 <b>한 번 끈 구역을 다시 켤 방법이 없어진다.</b>
      */
-    public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive) {
+    public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive,
+                                   Long buildingId) {
         Long resolved = requireAcademyAccess(me, academyId);
         var areas = includeInactive
-                ? studyAreaRepository.findAllByAcademyId(resolved)
-                : studyAreaRepository.findActiveByAcademyId(resolved);
+                ? studyAreaRepository.findAllByAcademyId(resolved, buildingId)
+                : studyAreaRepository.findActiveByAcademyId(resolved).stream()
+                        .filter(a -> buildingId == null
+                                || buildingId.equals(a.getBuilding().getId()))
+                        .toList();
         return areas.stream()
                 .map(a -> new AreaSummary(
-                        a.getId(), a.getAreaCd(), a.getAreaNm(), a.getSortOrder(), a.isActive(),
+                        a.getId(), a.getBuilding().getId(), a.getBuilding().getName(),
+                        a.getAreaCd(), a.getAreaNm(), a.getSortOrder(), a.isActive(),
                         seatMasterRepository.findByStudyAreaId(a.getId()).size()))
                 .toList();
     }
@@ -211,8 +216,13 @@ public class SeatLayoutService {
         return me.requireAcademyScope(academyId);
     }
 
-    /** @param seatCount 구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다 */
-    public record AreaSummary(Long id, String areaCd, String areaNm, short sortOrder,
+    /**
+     * @param buildingName 어느 관인가. <b>화면이 이걸 안 띄우면 같은 이름의 구역이 둘씩
+     *                     보인다</b> — 본관 A 와 별관 A 를 구분할 수가 없다
+     * @param seatCount    구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다
+     */
+    public record AreaSummary(Long id, Long buildingId, String buildingName,
+                              String areaCd, String areaNm, short sortOrder,
                               boolean active, int seatCount) {
     }
 

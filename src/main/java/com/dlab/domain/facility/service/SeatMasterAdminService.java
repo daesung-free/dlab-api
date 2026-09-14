@@ -27,12 +27,16 @@ import org.springframework.transaction.annotation.Transactional;
  * 받아 좌표·코드를 서버가 만든다. 통로처럼 비는 칸은 {@code skips}로 빼고, <b>번호는 빈
  * 칸을 건너뛰고 이어진다</b>(실제 좌석표가 그렇게 붙어 있다).
  *
- * <h2>★ 같은 지점에 같은 {@code seatCd}를 두 번 넣을 수 없다</h2>
- * {@code seat_master}에 {@code UNIQUE (academy_id, seat_cd)}가 걸려 있다. <b>별관(동탄2관)
- * 처럼 본관과 좌석번호가 겹치는 운영이 실제로 있는데</b>, 「관」축이 아직 스키마에 없어서
- * 지금은 코드로 구분할 수밖에 없다(DSA가 별관을 1000번대로 돌려 쓰던 이유가 이것이다).
- * 그래서 <b>충돌을 DB 제약에 맡기지 않고 미리 모아서 알려준다</b> — 격자로 40석을 넣다가
- * 중간에 터지면 어디까지 들어갔는지 알 수 없고, 제약 위반은 화면에 이유가 안 보인다.
+ * <h2>★ 좌석번호는 구역 안에서만 유일하다 — 본관과 별관은 겹쳐도 된다</h2>
+ * 동탄2관처럼 본관과 좌석번호가 같은 별관이 실제로 있고, 클라이언트 요구가 <b>같은 번호를
+ * 쓰되 구분되는 것</b>이다. 그래서 우리 쪽 유일성은 구역 단위로 두고, 키오스크에 내릴
+ * {@code kioskSeatCd}를 따로 저장해 <b>지점 단위 유일성은 그쪽이 진다</b>.
+ *
+ * <h2>★ 충돌을 DB 제약에 맡기지 않고 미리 모아서 알려준다</h2>
+ * 격자로 40석을 넣다가 중간에 터지면 어디까지 들어갔는지 알 수 없고, 제약 위반은 화면에
+ * 이유가 안 보인다. <b>검사는 두 겹</b>이다 — 구역 안 좌석번호와, 지점 안 키오스크 번호.
+ * 뒤쪽이 필요한 이유는 별관 1번의 변환 결과(1001)가 <b>본관에 실재하는 1001번</b>과
+ * 겹칠 수 있어서다.
  */
 @Service
 @RequiredArgsConstructor
@@ -45,6 +49,7 @@ public class SeatMasterAdminService {
     private final SeatMasterRepository seatMasterRepository;
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final StudyAreaAdminService studyAreaAdminService;
+    private final KioskCodeTranslator kioskCodeTranslator;
 
     public List<SeatMaster> list(AuthPrincipal me, Long studyAreaId) {
         studyAreaAdminService.load(me, studyAreaId);
@@ -56,9 +61,16 @@ public class SeatMasterAdminService {
     public SeatMaster create(AuthPrincipal me, Long studyAreaId, String seatCd, String seatNm,
                              int xPos, int yPos) {
         StudyArea area = studyAreaAdminService.load(me, studyAreaId);
-        Map<String, SeatMaster> existing = existingByCd(area, List.of(seatCd));
-        rejectIfOccupied(existing, List.of(seatCd));
-        return persist(area, existing, seatCd, seatNm == null ? seatCd : seatNm, xPos, yPos);
+        List<String> codes = List.of(seatCd);
+
+        Map<String, SeatMaster> existing = existingByCd(area, codes);
+        rejectIfOccupied(area, existing, codes);
+
+        Map<String, String> kioskCds = kioskCodes(area, codes);
+        rejectIfKioskCodeTaken(area, existing, kioskCds);
+
+        return persist(area, existing, seatCd, kioskCds.get(seatCd),
+                seatNm == null ? seatCd : seatNm, xPos, yPos);
     }
 
     /**
@@ -76,11 +88,15 @@ public class SeatMasterAdminService {
         List<String> codes = planned.stream().map(PlannedSeat::seatCd).toList();
 
         Map<String, SeatMaster> existing = existingByCd(area, codes);
-        rejectIfOccupied(existing, codes);
+        rejectIfOccupied(area, existing, codes);
+
+        Map<String, String> kioskCds = kioskCodes(area, codes);
+        rejectIfKioskCodeTaken(area, existing, kioskCds);
 
         List<SeatMaster> created = new ArrayList<>(planned.size());
         for (PlannedSeat p : planned) {
-            created.add(persist(area, existing, p.seatCd(), p.seatCd(), p.xPos(), p.yPos()));
+            created.add(persist(area, existing, p.seatCd(), kioskCds.get(p.seatCd()),
+                    p.seatCd(), p.xPos(), p.yPos()));
         }
         return created;
     }
@@ -122,11 +138,12 @@ public class SeatMasterAdminService {
 
     // ── 코드 충돌 ────────────────────────────────────────────────────────────
 
+    /** 같은 구역의 같은 번호. 살아 있는 행이 먼저 오도록 정렬돼 있어 {@code putIfAbsent}다. */
     private Map<String, SeatMaster> existingByCd(StudyArea area, List<String> codes) {
         Map<String, SeatMaster> map = new LinkedHashMap<>();
         seatMasterRepository
-                .findAnyByAcademyIdAndSeatCdIn(area.getAcademy().getId(), codes)
-                .forEach(s -> map.put(s.getSeatCd(), s));
+                .findAnyByStudyAreaIdAndSeatCdIn(area.getId(), codes)
+                .forEach(s -> map.putIfAbsent(s.getSeatCd(), s));
         return map;
     }
 
@@ -137,7 +154,8 @@ public class SeatMasterAdminService {
      * 고쳐 올릴 때마다 충돌을 한 건씩만 발견하게 된다. 삭제분과 겹치는 것은 충돌이 아니라
      * <b>되살리기</b>다({@link #persist}).
      */
-    private void rejectIfOccupied(Map<String, SeatMaster> existing, List<String> codes) {
+    private void rejectIfOccupied(StudyArea area, Map<String, SeatMaster> existing,
+                                  List<String> codes) {
         List<String> conflicts = codes.stream()
                 .map(existing::get)
                 .filter(s -> s != null && !s.isDeleted())
@@ -147,21 +165,62 @@ public class SeatMasterAdminService {
             return;
         }
         throw new BusinessException(ErrorCode.SEAT_CD_DUPLICATED,
-                "같은 지점에 이미 있는 좌석번호입니다: " + String.join(", ", conflicts)
-                        + " (좌석번호는 지점 안에서 유일해야 합니다. 별관 좌석은 본관과 겹치지 않는 "
-                        + "번호대를 쓰세요.)");
+                "%s에 이미 있는 좌석번호입니다: %s".formatted(
+                        area.getAreaNm(), String.join(", ", conflicts)));
+    }
+
+    /**
+     * 키오스크에 내려갈 번호가 지점 안에서 겹치면 거부한다.
+     *
+     * <p><b>여기가 별관 때문에 새로 생긴 검사다.</b> 별관 1번은 1001번으로 내려가는데
+     * 본관에 1001번이 실재할 수 있다. 그대로 두면 <b>단말에서만</b> 두 자리가 한 자리로
+     * 보이고, 우리 DB·화면은 멀쩡해서 원인을 찾기가 매우 어렵다.
+     *
+     * <p>되살리기 대상(같은 구역의 삭제된 같은 번호)은 제외한다 — 그 행의 키오스크 번호가
+     * 곧 지금 만들려는 값이라, 자기 자신과 겹친다고 거부하게 된다.
+     */
+    private void rejectIfKioskCodeTaken(StudyArea area, Map<String, SeatMaster> revivable,
+                                        Map<String, String> kioskCdBySeatCd) {
+        Set<Long> reviving = revivable.values().stream()
+                .map(SeatMaster::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        List<String> conflicts = seatMasterRepository
+                .findByAcademyIdAndKioskSeatCdIn(area.getAcademy().getId(),
+                        List.copyOf(kioskCdBySeatCd.values()))
+                .stream()
+                .filter(s -> !reviving.contains(s.getId()))
+                .map(s -> "%s(%s %s번)".formatted(
+                        s.getKioskSeatCd(), s.getStudyArea().getAreaNm(), s.getSeatCd()))
+                .toList();
+        if (conflicts.isEmpty()) {
+            return;
+        }
+        throw new BusinessException(ErrorCode.SEAT_CD_DUPLICATED,
+                "키오스크에 내려갈 좌석번호가 이미 쓰이고 있습니다: "
+                        + String.join(", ", conflicts)
+                        + " (관의 좌석번호 오프셋을 겹치지 않는 번호대로 잡으세요.)");
     }
 
     private SeatMaster persist(StudyArea area, Map<String, SeatMaster> existing, String seatCd,
-                               String seatNm, int xPos, int yPos) {
+                               String kioskSeatCd, String seatNm, int xPos, int yPos) {
         SeatMaster deleted = existing.get(seatCd);
         if (deleted != null) {
-            // 지워진 좌석의 코드도 유니크 제약을 붙들고 있어 새 행을 넣을 수 없다
+            // 새로 만들면 seat_assignment 가 옛 행을 가리킨 채 남아 이력이 갈린다
             deleted.reviveAs(area, seatNm, xPos, yPos);
             return deleted;
         }
         return seatMasterRepository.save(
-                new SeatMaster(area.getAcademy(), area, seatCd, seatNm, xPos, yPos));
+                new SeatMaster(area, seatCd, kioskSeatCd, seatNm, xPos, yPos));
+    }
+
+    /** 좌석번호 → 키오스크 번호. 순서를 지켜야 오류 메시지가 격자 순서대로 나온다. */
+    private Map<String, String> kioskCodes(StudyArea area, List<String> seatCds) {
+        Map<String, String> map = new LinkedHashMap<>();
+        for (String seatCd : seatCds) {
+            map.put(seatCd, kioskCodeTranslator.seatCd(area.getBuilding(), seatCd));
+        }
+        return map;
     }
 
     // ── 격자 계산 ────────────────────────────────────────────────────────────

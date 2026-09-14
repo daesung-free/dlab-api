@@ -29,6 +29,19 @@ public class SeatMaster extends BaseEntity {
     @Column(name = "seat_cd", nullable = false, length = 50)
     private String seatCd;
 
+    /**
+     * 키오스크에 내리는 좌석번호.
+     *
+     * <p>본관은 {@link #seatCd}와 같고 <b>별관은 관 offset 이 더해진 값</b>이다(1번 →
+     * 1001번 — DSA 가 쓰던 방식 그대로라 기존 운영과 값이 같다).
+     *
+     * <p><b>계산해서 내리지 않고 저장하는 이유</b>: 본관에 이미 1001번이 있으면 별관 1번의
+     * 변환 결과와 겹치는데, 즉석 계산이면 그 충돌이 <b>단말에서만</b> 드러난다. 컬럼으로
+     * 두면 {@code UNIQUE (academy_id, kiosk_seat_cd)}가 등록 시점에 막는다.
+     */
+    @Column(name = "kiosk_seat_cd", nullable = false, length = 50)
+    private String kioskSeatCd;
+
     @Column(name = "seat_nm", length = 50)
     private String seatNm;
 
@@ -48,11 +61,12 @@ public class SeatMaster extends BaseEntity {
      * <p>좌표는 <b>키오스크가 좌석배치도를 그리는 데 쓴다</b> — 없으면 화면이 빈다.
      * {@code usable}은 DSA {@code seat_gn}에 대응한다(사용 {@code Y} / 미사용 {@code N}).
      */
-    public SeatMaster(Academy academy, StudyArea studyArea, String seatCd, String seatNm,
+    public SeatMaster(StudyArea studyArea, String seatCd, String kioskSeatCd, String seatNm,
                       int xPos, int yPos) {
-        this.academy = academy;
+        this.academy = studyArea.getAcademy();
         this.studyArea = studyArea;
         this.seatCd = seatCd;
+        this.kioskSeatCd = kioskSeatCd;
         this.seatNm = seatNm;
         this.xPos = xPos;
         this.yPos = yPos;
@@ -95,8 +109,12 @@ public class SeatMaster extends BaseEntity {
     /**
      * 지웠던 좌석을 같은 코드로 되살린다.
      *
-     * <p>{@code UNIQUE (academy_id, seat_cd)}가 soft delete를 모르기 때문에, 지운 좌석의
-     * 코드로 다시 등록하면 새 행을 넣을 수 없다. 구역·이름·좌표를 새 값으로 덮어 되살린다.
+     * <p>유니크가 부분 인덱스가 된 지금은 새 행을 넣어도 제약에 걸리지 않는다. 그래도
+     * 되살리는 이유는 <b>{@code seat_assignment}가 이 행을 참조</b>하기 때문이다 — 새 행을
+     * 만들면 같은 자리인데 과거 배정이 다른 좌석에 붙어 이력이 갈린다.
+     *
+     * <p>{@code seatCd}·{@code kioskSeatCd}는 덮지 않는다. 같은 코드를 찾아 온 것이라
+     * 이미 같은 값이고, 관이 다르면 애초에 이 좌석을 찾지 않는다.
      */
     public void reviveAs(StudyArea studyArea, String seatNm, int xPos, int yPos) {
         restore();

@@ -45,6 +45,11 @@ public final class SeatRequests {
      */
     public record StudyAreaCreate(
             Long academyId,
+            /**
+             * 어느 관에 만들 것인가. <b>생략하면 본관</b>이다 — 관 개념이 새로 생긴 것이라
+             * 화면이 아직 안 보낼 수 있는데, 그때 등록이 막히면 좌석 화면이 통째로 멈춘다.
+             */
+            Long buildingId,
             @NotBlank(message = "구역 코드는 필수입니다.")
             @Size(max = 50, message = "구역 코드는 50자까지입니다.") String areaCd,
             @NotBlank(message = "구역 이름은 필수입니다.")

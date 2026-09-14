@@ -19,6 +19,7 @@ import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.GradeType;
 import com.dlab.domain.user.entity.Student;
 import com.dlab.domain.user.entity.StudentEnrollment;
+import com.dlab.support.FacilityFixtures;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -59,7 +60,7 @@ class SeatLayoutTest {
 
         bundang = new Academy("31", "분당", LocalTime.of(9, 0));
         em.persist(bundang);
-        areaA = new StudyArea(bundang, "A", "A실", (short) 1);
+        areaA = new StudyArea(FacilityFixtures.mainBuilding(em, bundang), "A", "A", "A실", (short) 1);
         em.persist(areaA);
         em.flush();
 
@@ -68,7 +69,7 @@ class SeatLayoutTest {
     }
 
     private SeatMaster seat(String cd, int x, int y) {
-        SeatMaster s = new SeatMaster(bundang, areaA, cd, cd, x, y);
+        SeatMaster s = new SeatMaster(areaA, cd, cd, cd, x, y);
         em.persist(s);
         em.flush();
         return s;

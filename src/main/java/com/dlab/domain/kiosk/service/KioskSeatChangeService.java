@@ -48,7 +48,9 @@ public class KioskSeatChangeService {
         }
 
         StudentEnrollment enrollment = requireEnrollment(academyId, rfidNo);
-        SeatMaster seat = seatMasterRepository.findByAcademyIdAndSeatCd(academyId, seatCd)
+        // ★ 단말은 구역 없이 좌석번호만 보낸다. 그 값이 지점 안에서 유일하려면
+        //   우리 seat_cd 가 아니라 관까지 반영된 kiosk_seat_cd 여야 한다
+        SeatMaster seat = seatMasterRepository.findByAcademyIdAndKioskSeatCd(academyId, seatCd)
                 .orElseThrow(() -> new DsaApiException(DsaCode.INVALID_KEY, "없는 좌석입니다."));
 
         // 통로·미사용 좌석에는 배정하지 않는다. 좌석표에는 보이지만 앉을 수 없는 자리다

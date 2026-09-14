@@ -17,20 +17,28 @@ public interface StudyAreaRepository extends JpaRepository<StudyArea, Long> {
 
     @Query("""
             SELECT a FROM StudyArea a
+            JOIN FETCH a.building b
             WHERE a.academy.id = :academyId
               AND a.active = true
               AND a.deleted = false
-            ORDER BY a.sortOrder ASC, a.areaCd ASC
+            ORDER BY b.sortOrder ASC, a.sortOrder ASC, a.areaCd ASC
             """)
     List<StudyArea> findActiveByAcademyId(Long academyId);
 
+    /**
+     * ★ 키오스크 조회 전용 — {@code kiosk_area_cd}로 찾는다.
+     *
+     * <p>단말이 아는 코드는 우리 {@code area_cd}가 아니라 <b>관까지 반영된 변환값</b>이다.
+     * 본관은 둘이 같아서 이 구분이 티가 안 나지만, 별관을 {@code area_cd}로 찾으면
+     * 본관 구역이 잡힌다 — 좌석이 통째로 다른 관 것으로 내려간다.
+     */
     @Query("""
             SELECT a FROM StudyArea a
             WHERE a.academy.id = :academyId
-              AND a.areaCd = :areaCd
+              AND a.kioskAreaCd = :kioskAreaCd
               AND a.deleted = false
             """)
-    Optional<StudyArea> findByAcademyIdAndAreaCd(Long academyId, String areaCd);
+    Optional<StudyArea> findByAcademyIdAndKioskAreaCd(Long academyId, String kioskAreaCd);
 
     /**
      * 관리자 구역 목록 — <b>비활성 구역도 포함</b>한다.
@@ -40,21 +48,27 @@ public interface StudyAreaRepository extends JpaRepository<StudyArea, Long> {
      */
     @Query("""
             SELECT a FROM StudyArea a
+            JOIN FETCH a.building b
             WHERE a.academy.id = :academyId
+              AND (:buildingId IS NULL OR b.id = :buildingId)
               AND a.deleted = false
-            ORDER BY a.sortOrder ASC, a.areaCd ASC
+            ORDER BY b.sortOrder ASC, a.sortOrder ASC, a.areaCd ASC
             """)
-    List<StudyArea> findAllByAcademyId(Long academyId);
+    List<StudyArea> findAllByAcademyId(Long academyId, Long buildingId);
 
     /**
-     * 지운 구역까지 본다.
+     * 지운 구역까지 본다 — <b>관 안에서</b> 찾는다.
      *
-     * <p>{@code uq_study_area}가 부분 인덱스가 아니라서 <b>지운 구역의 코드도 계속 자리를
-     * 차지한다.</b> 같은 코드로 다시 등록하려면 그 행을 되살려야 하므로 삭제분도 찾는다.
+     * <p>유니크가 부분 인덱스가 된 뒤로 삭제분이 코드를 붙들지는 않지만, 같은 코드로 다시
+     * 등록하면 <b>그 행을 되살리는 편이 낫다</b> — 새로 만들면 좌석이 딸린 옛 구역이
+     * 떠다니게 된다.
+     *
+     * <p>살아 있는 행이 먼저다. 삭제분이 여러 개 쌓여 있을 수 있어 정렬로 고정한다.
      */
     @Query("""
             SELECT a FROM StudyArea a
-            WHERE a.academy.id = :academyId AND a.areaCd = :areaCd
+            WHERE a.building.id = :buildingId AND a.areaCd = :areaCd
+            ORDER BY a.deleted ASC, a.id DESC
             """)
-    Optional<StudyArea> findAnyByAcademyIdAndAreaCd(Long academyId, String areaCd);
+    List<StudyArea> findAnyByBuildingIdAndAreaCd(Long buildingId, String areaCd);
 }
