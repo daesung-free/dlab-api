@@ -1,6 +1,7 @@
 package com.dlab.domain.lecture.entity;
 
 import com.dlab.common.entity.BaseEntity;
+import com.dlab.common.web.Patch;
 import com.dlab.domain.user.entity.Academy;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -113,9 +114,21 @@ public class Lecture extends BaseEntity {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
-    public void update(String name, String code, String description,
-                       Integer capacity, Instant applyFrom, Instant applyTo,
-                       LocalDate startDate, LocalDate endDate, Integer fee) {
+    /**
+     * 수정.
+     *
+     * <p><b>이름·코드는 지울 수 없다</b>({@code null}이면 그대로 둔다) — 없으면 목록에 빈
+     * 줄이 생기고 신청 화면이 무엇을 신청하는지 알 수 없다.
+     *
+     * <p>나머지는 {@link Patch} 라 <b>비우는 요청과 안 보낸 요청이 구분된다.</b> 비우면
+     * 정원은 제한 없음, 신청기간은 제한 없음이 된다.
+     *
+     * <p>{@code fee} 는 {@code int} 라 비우면 0(무료)이다 — 금액은 "없음"과 "0원"을 나눌
+     * 이유가 없다.
+     */
+    public void update(String name, String code, Patch<String> description,
+                       Patch<Integer> capacity, Patch<Instant> applyFrom, Patch<Instant> applyTo,
+                       Patch<LocalDate> startDate, Patch<LocalDate> endDate, Patch<Integer> fee) {
         if (name != null) {
             this.name = name;
         }
@@ -123,25 +136,25 @@ public class Lecture extends BaseEntity {
             this.code = code;
         }
         if (description != null) {
-            this.description = description;
+            this.description = description.value();
         }
         if (capacity != null) {
-            this.capacity = capacity;
+            this.capacity = capacity.value();
         }
         if (applyFrom != null) {
-            this.applyFrom = applyFrom;
+            this.applyFrom = applyFrom.value();
         }
         if (applyTo != null) {
-            this.applyTo = applyTo;
+            this.applyTo = applyTo.value();
         }
         if (startDate != null) {
-            this.startDate = startDate;
+            this.startDate = startDate.value();
         }
         if (endDate != null) {
-            this.endDate = endDate;
+            this.endDate = endDate.value();
         }
         if (fee != null) {
-            this.fee = fee;
+            this.fee = fee.isCleared() ? 0 : fee.value();
         }
     }
 

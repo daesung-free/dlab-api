@@ -58,4 +58,16 @@ public class PatchDeserializer extends ValueDeserializer<Patch<?>> {
     public Object getNullValue(DeserializationContext ctxt) {
         return Patch.cleared();
     }
+
+    /**
+     * 필드가 <b>아예 없을 때</b> — "건드리지 마라".
+     *
+     * <p>★ 이걸 안 쓰면 {@link #getNullValue} 가 대신 불려서 <b>빈 요청 {@code {}} 이
+     * 모든 값을 지운다.</b> record 의 생성자 인자는 없으면 "absent" 로 채워지는데,
+     * 기본 구현이 그 자리를 {@code getNullValue()} 로 메우기 때문이다.
+     */
+    @Override
+    public Object getAbsentValue(DeserializationContext ctxt) {
+        return null;
+    }
 }

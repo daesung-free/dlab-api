@@ -31,6 +31,13 @@ public enum EnrollmentStatus {
      * <p><b>휴원은 포함하지 않는다</b> — 돌아올 학생의 좌석·사물함을 비우면
      * 복귀 때 다시 배정해야 하고, 그 사이 다른 학생이 들어가 자리를 잃는다.
      */
+    /**
+     * 종료 상태인가 — 퇴원·제적·수료.
+     *
+     * <p>이 상태가 되면 후속처리(반 배정 해제·앱 계정 비활성 등)가 돌고, <b>여기서 다른
+     * 상태로 나갈 수 없다.</b> 되돌리려면 후속처리를 되살려야 하는데 무엇이 어떤 값이었는지
+     * 남겨두지 않는다 — 착오 정정도 재등록(새 등록 행)으로 처리한다.
+     */
     public boolean requiresCleanup() {
         return this == WITHDRAWN || this == EXPELLED || this == GRADUATED;
     }
