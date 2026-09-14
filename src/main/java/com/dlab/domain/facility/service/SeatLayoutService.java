@@ -6,6 +6,7 @@ import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository;
+import com.dlab.domain.facility.entity.AreaType;
 import com.dlab.domain.facility.entity.SeatAssignment;
 import com.dlab.domain.facility.entity.SeatPresence;
 import com.dlab.domain.facility.entity.StudyArea;
@@ -71,13 +72,34 @@ public class SeatLayoutService {
      * 까지 숨기면 <b>한 번 끈 구역을 다시 켤 방법이 없어진다.</b>
      */
     public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive) {
+        return areas(me, academyId, includeInactive, null);
+    }
+
+    /**
+     * 구역 목록 — 종류로 거른다.
+     *
+     * <p>{@code areaType}이 비면 둘 다 내린다. <b>독서실 화면과 반 좌석표 화면은 각자 자기
+     * 종류를 걸어서 부른다</b> — 안 걸면 독서실 목록에 반이 섞인다.
+     */
+    public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive,
+                                   AreaType areaType) {
         Long resolved = requireAcademyAccess(me, academyId);
-        var areas = includeInactive
-                ? studyAreaRepository.findAllByAcademyId(resolved)
-                : studyAreaRepository.findActiveByAcademyId(resolved);
+        List<StudyArea> areas;
+        if (areaType == null) {
+            areas = includeInactive
+                    ? studyAreaRepository.findAllByAcademyId(resolved)
+                    : studyAreaRepository.findActiveByAcademyId(resolved);
+        } else {
+            areas = includeInactive
+                    ? studyAreaRepository.findAllByAcademyIdAndType(resolved, areaType)
+                    : studyAreaRepository.findActiveByAcademyIdAndType(resolved, areaType);
+        }
         return areas.stream()
                 .map(a -> new AreaSummary(
                         a.getId(), a.getAreaCd(), a.getAreaNm(), a.getSortOrder(), a.isActive(),
+                        a.getAreaType(),
+                        a.getClassMaster() == null ? null : a.getClassMaster().getId(),
+                        a.getClassMaster() == null ? null : a.getClassMaster().getName(),
                         seatMasterRepository.findByStudyAreaId(a.getId()).size()))
                 .toList();
     }
@@ -212,8 +234,14 @@ public class SeatLayoutService {
     }
 
     /** @param seatCount 구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다 */
+    /**
+     * @param areaType      독서실({@code STUDY}) / 반 교실({@code CLASSROOM})
+     * @param classMasterId 반 교실이면 그 반. 독서실이면 {@code null}
+     * @param className     반 이름. 화면이 id 로 반을 다시 조회하지 않게 함께 내린다
+     */
     public record AreaSummary(Long id, String areaCd, String areaNm, short sortOrder,
-                              boolean active, int seatCount) {
+                              boolean active, AreaType areaType, Long classMasterId,
+                              String className, int seatCount) {
     }
 
     /**
