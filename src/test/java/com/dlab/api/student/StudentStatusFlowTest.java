@@ -114,6 +114,35 @@ class StudentStatusFlowTest {
     }
 
     @Test
+    @DisplayName("★ 재원 중인 학생은 재등록되지 않는다 — 같은 사람이 학번 둘로 갈린다")
+    void reEnrollRequiresTerminalStatus() throws Exception {
+        Long studentId = em.createQuery("""
+                SELECT e.student.id FROM StudentEnrollment e WHERE e.id = :id
+                """, Long.class).setParameter("id", enrollmentId).getSingleResult();
+
+        reEnroll(studentId).andExpect(status().isBadRequest());
+
+        // 퇴원한 뒤에는 된다 — 재등록은 끝난 학생을 다시 받는 절차다
+        change("WITHDRAWN", "자퇴").andExpect(status().isOk());
+        em.flush();
+        em.clear();
+        reEnroll(studentId).andExpect(status().isOk());
+    }
+
+    private org.springframework.test.web.servlet.ResultActions reEnroll(Long studentId)
+            throws Exception {
+        Long academyId = em.createQuery("""
+                SELECT e.academy.id FROM StudentEnrollment e WHERE e.id = :id
+                """, Long.class).setParameter("id", enrollmentId).getSingleResult();
+        return mvc.perform(post("/api/v1/admin/students/{id}/re-enroll", studentId)
+                .header("Authorization", token())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"academyId":%d,"year":%d,"grade":"N_SU","track":"SCIENCE"}"""
+                        .formatted(academyId, YEAR)));
+    }
+
+    @Test
     @DisplayName("★ 퇴원 → 휴원 → 재원으로 우회할 수 없다 — 두 번에 나눠 부르면 통과했다")
     void terminalStatusIsOneWay() throws Exception {
         change("WITHDRAWN", "자퇴").andExpect(status().isOk());
