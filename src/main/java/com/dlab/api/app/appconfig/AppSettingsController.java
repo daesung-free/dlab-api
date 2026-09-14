@@ -88,11 +88,17 @@ public class AppSettingsController {
         return ApiResponse.empty();
     }
 
-    /** 로그아웃·앱 삭제 시 해제. */
+    /**
+     * 로그아웃·앱 삭제 시 해제.
+     *
+     * <p><b>내 토큰만 지워진다.</b> 남의 토큰을 보내면 아무 일도 일어나지 않는다 —
+     * 없는 토큰과 같은 응답이라 존재 여부를 떠볼 수도 없다.
+     */
     @DeleteMapping("/push-token")
     public ApiResponse<Void> removePushToken(
+            @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody SettingsRequests.RemovePushToken request) {
-        notificationSettingService.removeToken(request.token());
+        notificationSettingService.removeToken(me.accountId(), request.token());
         return ApiResponse.empty();
     }
 }
