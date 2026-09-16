@@ -128,3 +128,6 @@ kcp:
   base-url: ${KCP_BASE_URL:https://stg-spl.kcp.co.kr}
   cert-path: ${KCP_CERT_PATH:}
   private-key-path: ${KCP_PRIVATE_KEY_PATH:}
+  # ★ 개인키는 암호화되어 있다. 발급 시 정한 비밀번호가 없으면 서명을 만들 수 없다
+  #   (문서의 테스트 키는 changeit). 비우면 평문 키로 본다.
+  private-key-password: ${KCP_PRIVATE_KEY_PASSWORD:}

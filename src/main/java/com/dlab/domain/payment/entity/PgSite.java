@@ -54,11 +54,26 @@ public class PgSite extends BaseEntity {
     @JoinColumn(name = "vendor_id")
     private MealVendor vendor;
 
+    /**
+     * KCP 상점관리자 계정({@code reg_id}).
+     *
+     * <p>★ <b>결제 URL 생성의 필수 항목이다.</b> 주문번호를 넣으면 {@code S005} 로 거절된다 —
+     * 실제로 그렇게 보냈다가 KCP 테스트 서버가 잡아냈다.
+     */
+    @Column(name = "mgmt_id", length = 20)
+    private String mgmtId;
+
     @Column(nullable = false)
     private boolean active = true;
 
     public PgSite(Academy academy, PgPurpose purpose, PgChannel channel,
                   String siteCd, String displayName, MealVendor vendor) {
+        this(academy, purpose, channel, siteCd, displayName, vendor, null);
+    }
+
+    public PgSite(Academy academy, PgPurpose purpose, PgChannel channel,
+                  String siteCd, String displayName, MealVendor vendor, String mgmtId) {
+        this.mgmtId = mgmtId;
         this.academy = academy;
         this.purpose = purpose;
         this.channel = channel;
@@ -66,6 +81,10 @@ public class PgSite extends BaseEntity {
         this.displayName = displayName;
         this.vendor = vendor;
         this.active = true;
+    }
+
+    public void changeMgmtId(String mgmtId) {
+        this.mgmtId = mgmtId;
     }
 
     public void change(String siteCd, String displayName, MealVendor vendor) {

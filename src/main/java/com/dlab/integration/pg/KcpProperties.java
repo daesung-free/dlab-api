@@ -15,10 +15,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * <p>비어 있어도 앱은 뜬다 — 자격증명이 없는 로컬·CI 에서 결제와 무관한 작업까지
  * 멈추면 안 된다. 실제로 호출할 때 실패한다.
  *
- * @param baseUrl 테스트 {@code https://stg-spl.kcp.co.kr}, 운영 {@code https://spl.kcp.co.kr}
+ * @param baseUrl            테스트 {@code https://stg-spl.kcp.co.kr}, 운영 {@code https://spl.kcp.co.kr}
+ * @param privateKeyPassword ★ <b>KCP 개인키는 암호화되어 있다.</b> 발급 시 정한 비밀번호가
+ *                           없으면 서명을 만들 수 없다(문서의 테스트 키는 {@code changeit}).
+ *                           비워두면 암호화되지 않은 키로 간주하고 그대로 읽는다
  */
 @ConfigurationProperties(prefix = "kcp")
-public record KcpProperties(String baseUrl, String certPath, String privateKeyPath) {
+public record KcpProperties(String baseUrl, String certPath, String privateKeyPath,
+                            String privateKeyPassword) {
 
     public boolean configured() {
         return notBlank(baseUrl) && notBlank(certPath) && notBlank(privateKeyPath);

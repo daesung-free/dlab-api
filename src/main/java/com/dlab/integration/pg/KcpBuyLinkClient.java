@@ -86,7 +86,8 @@ public class KcpBuyLinkClient {
         if (command.buyerMail() != null) {
             body.put("buyr_mail", command.buyerMail());
         }
-        body.put("reg_id", command.orderNo());
+        // ★ 상점관리자 계정이다. 주문번호를 넣으면 S005 로 거절된다
+        body.put("reg_id", command.regId());
         if (command.expireDate() != null) {
             body.put("url_expire_dt", command.expireDate());
         }
@@ -131,8 +132,9 @@ public class KcpBuyLinkClient {
         body.put("va_name", command.buyerName());
         // 입금 기한. 지나면 그 계좌로 낼 수 없다
         body.put("va_date", command.expireAt());
-        // 0 = 현금영수증 미발급. 발급은 별도 API 라 여기서 처리하지 않는다
-        body.put("va_receipt_gubn", "0");
+        // ★ va_receipt_gubn·va_taxno 를 보내지 않는다. 그 둘은 "가상계좌 발급과 동시에
+        //   현금영수증도 내달라" 는 뜻이고, 하나만 보내면 8308 포맷에러가 난다.
+        //   우리는 현금영수증을 별도 API 로 발급하므로 여기서 요청하지 않는다.
 
         JsonNode response = post(VBANK_PATH, body);
         String code = text(response, "res_cd");
@@ -225,12 +227,31 @@ public class KcpBuyLinkClient {
         return read(properties.certPath());
     }
 
+    /**
+     * 개인키를 읽는다.
+     *
+     * <p>★ <b>KCP 가 발급하는 개인키는 암호화된 PKCS8 이다.</b> 발급 시 정한 비밀번호로
+     * 풀어야 하고, JDK 기본 {@code KeyFactory} 로는 읽히지 않는다 — 문서의 테스트 키도
+     * {@code changeit} 으로 잠겨 있다. 비밀번호가 없으면 평문 키로 보고 그대로 읽는다.
+     */
     private PrivateKey privateKey() throws Exception {
-        String pem = read(properties.privateKeyPath())
+        String pem = read(properties.privateKeyPath());
+        byte[] der = Base64.getDecoder().decode(pem
                 .replaceAll("-----(BEGIN|END)[^-]+-----", "")
-                .replaceAll("\\s", "");
-        return KeyFactory.getInstance("RSA")
-                .generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(pem)));
+                .replaceAll("\\s", ""));
+
+        String password = properties.privateKeyPassword();
+        if (password == null || password.isBlank()) {
+            return KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(der));
+        }
+
+        var encrypted = new org.bouncycastle.pkcs.PKCS8EncryptedPrivateKeyInfo(
+                org.bouncycastle.asn1.pkcs.EncryptedPrivateKeyInfo.getInstance(
+                        org.bouncycastle.asn1.ASN1Sequence.getInstance(der)));
+        var decryptor = new org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8DecryptorProviderBuilder()
+                .build(password.toCharArray());
+        return new org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter()
+                .getPrivateKey(encrypted.decryptPrivateKeyInfo(decryptor));
     }
 
     private String read(String path) {
@@ -258,9 +279,10 @@ public class KcpBuyLinkClient {
      *                 문자가 다른 사람에게 전달될 수 있다
      * @param sendSms  KCP 가 결제 링크 문자를 대신 보낼지
      */
-    public record CreateCommand(String siteCd, String orderNo, int amount, String payMethod,
-                                String goodName, String buyerName, String buyerTel,
-                                String buyerMail, String expireDate, boolean sendSms) {
+    public record CreateCommand(String siteCd, String regId, String orderNo, int amount,
+                                String payMethod, String goodName, String buyerName,
+                                String buyerTel, String buyerMail, String expireDate,
+                                boolean sendSms) {
     }
 
     public record Created(String payUrl, String urlRegId) {

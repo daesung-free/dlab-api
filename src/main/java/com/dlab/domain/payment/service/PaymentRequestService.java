@@ -70,7 +70,7 @@ public class PaymentRequestService {
 
         LocalDate expire = LocalDate.now(clock).plusDays(EXPIRE_DAYS);
         var created = client.createPayUrl(new KcpBuyLinkClient.CreateCommand(
-                site.getSiteCd(), orderNo, amount, payMethod.name(),
+                site.getSiteCd(), site.getMgmtId(), orderNo, amount, payMethod.name(),
                 // ★ 상품명에 학생 이름을 넣지 않는다 — 문자가 다른 사람에게 전달될 수 있다
                 billing.getName(),
                 student.getName(), digits(student.getPhone()), null,

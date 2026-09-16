@@ -31,6 +31,11 @@ CREATE TABLE pg_site (
     -- 급식업체 명의면 그 업체. 학원 명의면 비어 있다
     vendor_id    BIGINT       REFERENCES meal_vendor (id),
 
+    -- ★ KCP 상점관리자 계정(reg_id). 결제 URL 생성 전문의 필수 항목이다.
+    --   우리 주문번호를 넣으면 S005(요청 parameter 오류)로 거절된다 — 실제로 그렇게 짰다가
+    --   KCP 테스트 서버가 잡아냈다. 사이트코드마다 계정이 따로 있어 여기 둔다.
+    mgmt_id      VARCHAR(20),
+
     active       BOOLEAN      NOT NULL DEFAULT TRUE,
 
     created_at   TIMESTAMPTZ  NOT NULL DEFAULT now(),
