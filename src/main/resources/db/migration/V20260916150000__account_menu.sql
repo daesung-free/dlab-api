@@ -48,8 +48,15 @@ COMMENT ON TABLE account_menu IS '계정별 허용 메뉴. 행이 없으면 제�
 
 INSERT INTO menu (code, name, parent_code, path_prefix, sort_order) VALUES
     ('student',              '학생 관리',        NULL,      '/api/v1/admin/students', 10),
+    -- ★ 경로가 비어 있는 메뉴 — 화면은 있는데 서버 API 가 아직 없다.
+    --   코드가 없으면 프론트가 그 화면을 거를 수단이 없어서 미리 넣어 둔다.
+    --   API 가 생기면 그때 path_prefix 만 채우면 서버 차단까지 함께 걸린다
+    ('waiting',              '대기자 관리',      'student', NULL, 14),
+    ('timetable',            '시간표·이동수업',  'student', NULL, 15),
+    ('personal-record',      '신상기록부',       'student', NULL, 16),
     ('student-signup',       '가입 승인',        'student', '/api/v1/admin/student-signups', 11),
     ('app-account',          '앱 계정',          'student', '/api/v1/admin/app-accounts', 12),
+    ('app-config',           '앱 운영 관리',     NULL,      '/api/v1/admin/app-config', 97),
     ('class',                '반 관리',          'student', '/api/v1/admin/classes', 13),
 
     ('attendance',           '출결 현황',        NULL,      '/api/v1/admin/attendance', 20),
