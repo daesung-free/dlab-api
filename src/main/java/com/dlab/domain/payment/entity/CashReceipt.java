@@ -89,6 +89,15 @@ public class CashReceipt extends BaseEntity {
     @Column(name = "canceled_at")
     private Instant canceledAt;
 
+    /**
+     * 취소 승인번호.
+     *
+     * <p>★ <b>발급 승인번호와 다른 값이다.</b> 취소도 국세청에 "-" 매출로 등록되는 별개의
+     * 건이라 승인번호가 새로 나온다 — 덮어쓰면 무엇을 신고했는지 대조할 수 없다.
+     */
+    @Column(name = "cancel_receipt_no", length = 20)
+    private String cancelReceiptNo;
+
     @Column(name = "fail_reason", length = 200)
     private String failReason;
 
@@ -126,8 +135,9 @@ public class CashReceipt extends BaseEntity {
      * <p><b>행을 지우지 않는다.</b> 발급했다가 취소한 사실이 남아야 국세청 신고 내역과
      * 대조할 수 있다 — 지우면 "발급한 적 없음" 과 구분되지 않는다.
      */
-    public void markCanceled(Instant canceledAt) {
+    public void markCanceled(String cancelReceiptNo, Instant canceledAt) {
         this.status = CashReceiptStatus.CANCELED;
+        this.cancelReceiptNo = cancelReceiptNo;
         this.canceledAt = canceledAt;
     }
 

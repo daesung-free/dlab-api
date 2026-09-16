@@ -40,6 +40,13 @@ public class KcpBuyLinkClient {
     private static final String CREATE_PATH = "/std/url/v1/create";
     /** 가상계좌 발급. 바이링크와 경로가 다르다 */
     private static final String VBANK_PATH = "/gw/hub/v1/payment";
+    /** 취소 전용 경로다. 발급 경로로 보내면 받지 않는다 */
+    private static final String CANCEL_PATH = "/gw/mod/v1/cancel";
+    /**
+     * 전체 취소. 부분 취소({@code STPC})는 쓰지 않는다 — 수납을 부분 취소하는 흐름이
+     * 없어서, 만들어 두면 금액이 어긋난 채 신고될 여지만 생긴다.
+     */
+    private static final String CANCEL_ALL = "STSC";
     /** 가상계좌 거래 구분. KCP 고정값이라 바꾸면 거절된다 */
     private static final String VBANK_TXTYPE = "41100000";
     /** 원화. KCP 규격값이다 */
@@ -187,17 +194,50 @@ public class KcpBuyLinkClient {
     }
 
     /**
+     * 현금영수증 취소.
+     *
+     * <p>★ <b>취소하면 발급과 다른 승인번호가 온다.</b> 취소도 국세청에 "-" 매출로 등록되는
+     * 별개의 건이라서다 — 발급 승인번호를 덮어쓰면 무엇을 신고했는지 대조할 수 없게 된다.
+     *
+     * <p>취소 대상은 주문번호가 아니라 <b>현금영수증 거래번호</b>({@code cash_no})다.
+     */
+    public CashReceiptCanceled cancelCashReceipt(CashReceiptCancelCommand command) {
+        require();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("site_cd", command.siteCd());
+        body.put("kcp_cert_info", certificate());
+        body.put("kcp_sign_data",
+                signData(command.siteCd() + "^" + command.cashNo() + "^" + CANCEL_ALL));
+        body.put("mod_type", CANCEL_ALL);
+        body.put("mod_gubn", "MG01");
+        body.put("mod_value", command.cashNo());
+
+        JsonNode response = post(CANCEL_PATH, body);
+        String code = text(response, "res_cd");
+        if (!"0000".equals(code)) {
+            throw new BusinessException(ErrorCode.PG_REQUEST_FAILED,
+                    "현금영수증 취소 실패: %s (%s)".formatted(text(response, "res_msg"), code));
+        }
+        return new CashReceiptCanceled(text(response, "cash_no"), text(response, "receipt_no"));
+    }
+
+    /**
      * 서명 데이터.
      *
      * <p>거래조회·사용중지에 쓴다. <b>서명 대상 문자열이 요청과 정확히 같아야 한다</b> —
      * 조합 순서를 바꾸면 KCP 가 거절한다.
      */
     public String sign(String siteCd, String urlRegId) {
+        return signData(siteCd + "^" + urlRegId);
+    }
+
+    private String signData(String target) {
         require();
         try {
             Signature signature = Signature.getInstance("SHA256withRSA");
             signature.initSign(privateKey());
-            signature.update((siteCd + "^" + urlRegId).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            signature.update(target.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(signature.sign());
         } catch (Exception e) {
             throw new BusinessException(ErrorCode.PG_REQUEST_FAILED, "서명 생성에 실패했습니다.");
@@ -314,5 +354,13 @@ public class KcpBuyLinkClient {
     }
 
     public record CashReceiptIssued(String cashNo, String receiptNo) {
+    }
+
+    /** @param cashNo 취소할 현금영수증 거래번호. 주문번호가 아니다 */
+    public record CashReceiptCancelCommand(String siteCd, String cashNo) {
+    }
+
+    /** @param receiptNo ★ 취소 승인번호. 발급 승인번호와 다른 값이라 따로 남긴다 */
+    public record CashReceiptCanceled(String cashNo, String receiptNo) {
     }
 }
