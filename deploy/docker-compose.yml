@@ -112,7 +112,17 @@ services:
       S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      # 결제(KCP). 사이트코드는 DB(pg_site)에 있고 여기에는 인증서 경로만 온다.
+      # ⚠️ 인증서·개인키 파일은 서버에 두고(chmod 600) 컨테이너에 마운트해야 한다 —
+      #    아래 app.volumes 참고. 경로만 넣고 파일이 없으면 결제만 실패한다.
+      KCP_BASE_URL: ${KCP_BASE_URL:-https://stg-spl.kcp.co.kr}
+      KCP_CERT_PATH: ${KCP_CERT_PATH:-}
+      KCP_PRIVATE_KEY_PATH: ${KCP_PRIVATE_KEY_PATH:-}
       JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=70 -Dfile.encoding=UTF-8 -Duser.timezone=Asia/Seoul}
+    volumes:
+      # 결제 인증서·개인키. 호스트의 secrets 를 읽기 전용으로 붙인다 —
+      # 이미지에 넣으면 GHCR 에 올라가고, 레포에 넣으면 커밋 히스토리에 남는다.
+      - ./secrets:/app/secrets:ro
     ports:
       # ★ 여기도 127.0.0.1 이다. Nginx가 같은 호스트에서 프록시하므로 외부 공개가 필요 없고,
       #   8080 이 인터넷에 열리면 Nginx를 우회해 actuator 까지 그대로 노출된다.

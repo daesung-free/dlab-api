@@ -107,3 +107,24 @@ management:
         kiosk:
           include: kioskCompat
           show-details: always
+
+# ─────────────────────────────────────────────────────────────
+# 결제 (NHN KCP)
+#
+# ★ 사이트코드는 여기 없다. 사업자 × 채널(× 지점)로 여러 개라 한 칸에 담기지 않는다 —
+#   pg_site 테이블에 두고 관리자 화면에서 넣는다. 지점이 늘어도 배포가 필요 없다.
+#
+# ★ 인증서·개인키는 경로로 받는다. PEM 은 여러 줄이라 환경변수 한 줄에 맞지 않고,
+#   값을 통째로 넣으면 로그·오류 메시지에 딸려 나갈 위험이 크다.
+#   서버에 파일로 두고(chmod 600) 경로만 적는다. ⚠️ 레포에 넣지 말 것(§8).
+#
+# ⚠️ 비어 있어도 앱은 뜬다. 자격증명이 없는 로컬·CI 에서 결제와 무관한 작업까지 멈추면
+#   안 된다 — 실제로 호출할 때 PG_NOT_CONFIGURED 로 실패한다.
+#
+# 테스트: https://stg-spl.kcp.co.kr (문서의 테스트 사이트코드 T0000 으로 동작한다)
+# 운영:   https://spl.kcp.co.kr
+# ─────────────────────────────────────────────────────────────
+kcp:
+  base-url: ${KCP_BASE_URL:https://stg-spl.kcp.co.kr}
+  cert-path: ${KCP_CERT_PATH:}
+  private-key-path: ${KCP_PRIVATE_KEY_PATH:}
