@@ -1,6 +1,7 @@
 package com.dlab.domain.payment;
 
 import com.dlab.common.exception.BusinessException;
+import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
 import com.dlab.domain.payment.entity.*;
@@ -70,6 +71,9 @@ class CashReceiptTest {
 
         when(client.issueCashReceipt(any()))
                 .thenReturn(new KcpBuyLinkClient.CashReceiptIssued("CASH-1", "RCPT-1"));
+        // ★ 취소 승인번호는 발급 승인번호와 다른 값으로 온다
+        when(client.cancelCashReceipt(any()))
+                .thenReturn(new KcpBuyLinkClient.CashReceiptCanceled("CASH-1", "RCPT-CANCEL-1"));
     }
 
     private PaymentTransaction pay(PaymentMethod method) {
@@ -117,6 +121,39 @@ class CashReceiptTest {
                 service.issue(admin, transfer.getId(), ReceiptPurpose.PERSONAL, "01011112222"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("이미 발급된");
+    }
+
+    @Test
+    @DisplayName("★ 취소 승인번호는 발급 승인번호와 따로 남는다 — 국세청에는 별개 건으로 등록된다")
+    void keepsCancelReceiptNo() {
+        PaymentTransaction transfer = pay(PaymentMethod.TRANSFER);
+        CashReceipt receipt = service.issue(admin, transfer.getId(),
+                ReceiptPurpose.PERSONAL, "01011112222");
+        em.flush();
+
+        service.cancel(admin, receipt.getId());
+        em.flush();
+
+        assertThat(receipt.getReceiptNo()).isEqualTo("RCPT-1");
+        assertThat(receipt.getCancelReceiptNo()).isEqualTo("RCPT-CANCEL-1");
+    }
+
+    @Test
+    @DisplayName("★★ KCP 가 취소를 거절하면 발급 상태 그대로다 — 우리만 취소로 바꾸면 국세청과 어긋난다")
+    void keepsIssuedWhenKcpRejects() {
+        PaymentTransaction transfer = pay(PaymentMethod.TRANSFER);
+        CashReceipt receipt = service.issue(admin, transfer.getId(),
+                ReceiptPurpose.PERSONAL, "01011112222");
+        em.flush();
+
+        when(client.cancelCashReceipt(any()))
+                .thenThrow(new BusinessException(ErrorCode.PG_REQUEST_FAILED, "취소 실패"));
+
+        assertThatThrownBy(() -> service.cancel(admin, receipt.getId()))
+                .isInstanceOf(BusinessException.class);
+
+        assertThat(receipt.getStatus()).isEqualTo(CashReceiptStatus.ISSUED);
+        assertThat(receipt.getCanceledAt()).isNull();
     }
 
     @Test

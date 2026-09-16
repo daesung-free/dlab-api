@@ -121,9 +121,14 @@ public class CashReceiptService {
         if (!receipt.isIssued()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "발급 상태가 아닙니다.");
         }
-        // ⚠️ KCP 취소 호출은 규격 확인 후 붙인다. 지금은 상태만 되돌려 이중 발급을 막는다
-        receipt.markCanceled(Instant.now(clock));
-        log.info("현금영수증 취소: receiptId={}, cashNo={}", receiptId, receipt.getCashNo());
+        // ★ KCP 가 받아주기 전에 상태를 바꾸지 않는다. 우리만 취소로 바꾸면 국세청에는
+        //   발급된 채로 남고, 화면에는 취소로 보여 아무도 어긋난 줄 모른다
+        var canceled = client.cancelCashReceipt(new KcpBuyLinkClient.CashReceiptCancelCommand(
+                receipt.getPgSite().getSiteCd(), receipt.getCashNo()));
+
+        receipt.markCanceled(canceled.receiptNo(), Instant.now(clock));
+        log.info("현금영수증 취소: receiptId={}, cashNo={}, 취소승인번호={}",
+                receiptId, receipt.getCashNo(), canceled.receiptNo());
         return receipt;
     }
 
