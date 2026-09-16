@@ -49,6 +49,31 @@ public class AdminMenuController {
                 .stream().map(MenuView::from).toList());
     }
 
+    /**
+     * 내 자주 쓰는 메뉴 (대시보드 좌측).
+     *
+     * <p>노출 설정과 다른 개념이다 — 저건 최고관리자가 정하는 <b>권한</b>이고 이건 본인이
+     * 고르는 <b>편의</b>다. 비어 있으면 아직 고르지 않은 것이다.
+     */
+    @GetMapping("/menus/favorites")
+    public ApiResponse<List<MenuView>> favorites(@CurrentAccount AuthPrincipal me) {
+        return ApiResponse.success(menuAccessService.favorites(me.accountId())
+                .stream().map(MenuView::from).toList());
+    }
+
+    /**
+     * 자주 쓰는 메뉴 저장. <b>보낸 순서가 화면 순서</b>이고, 교체다(최대 8개).
+     *
+     * <p>볼 수 없는 메뉴는 담기지 않는다 — 눌렀을 때 403 이 나는 칸이 대시보드에 남는다.
+     */
+    @PutMapping("/menus/favorites")
+    public ApiResponse<List<MenuView>> replaceFavorites(@CurrentAccount AuthPrincipal me,
+                                                        @RequestBody MenuCodes request) {
+        return ApiResponse.success(
+                menuAccessService.replaceFavorites(me.accountId(), request.menuCodes())
+                        .stream().map(MenuView::from).toList());
+    }
+
     /** 이 계정에 지정된 메뉴. {@code restricted=false} 면 제한이 걸려 있지 않은 것이다. */
     @GetMapping("/staff/accounts/{accountId}/menus")
     @PreAuthorize("hasRole('SUPER_ADMIN')")

@@ -35,8 +35,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class MenuAccessService {
 
+    /** 자주 쓰는 메뉴 상한. 대시보드 한 칸에 들어가야 한다 */
+    private static final int FAVORITE_LIMIT = 8;
+
     private final MenuRepository menuRepository;
     private final AccountMenuRepository accountMenuRepository;
+    private final com.dlab.domain.menu.repository.FavoriteMenuRepository favoriteMenuRepository;
     private final AccountRepository accountRepository;
 
     @Transactional(readOnly = true)
@@ -98,6 +102,51 @@ public class MenuAccessService {
         }
         menus.forEach(menu -> accountMenuRepository.save(new AccountMenu(account, menu)));
         return menus;
+    }
+
+    /** 내 자주 쓰는 메뉴. 정한 순서 그대로다. */
+    @Transactional(readOnly = true)
+    public List<Menu> favorites(Long accountId) {
+        return favoriteMenuRepository.findByAccountId(accountId).stream()
+                .map(com.dlab.domain.menu.entity.FavoriteMenu::getMenu)
+                .toList();
+    }
+
+    /**
+     * 자주 쓰는 메뉴를 바꾼다. 보낸 순서가 그대로 화면 순서다.
+     *
+     * <p>★ <b>볼 수 없는 메뉴는 담기지 않는다.</b> 담아 두면 눌렀을 때 403 이 나는 칸이
+     * 대시보드에 남는다 — 편의 설정이 권한을 넓히지도, 깨진 링크를 만들지도 않아야 한다.
+     */
+    @Transactional
+    public List<Menu> replaceFavorites(Long accountId, List<String> menuCodes) {
+        favoriteMenuRepository.deleteByAccountId(accountId);
+        favoriteMenuRepository.flush();
+
+        if (menuCodes == null || menuCodes.isEmpty()) {
+            return List.of();
+        }
+        if (menuCodes.size() > FAVORITE_LIMIT) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "자주 쓰는 메뉴는 %d개까지입니다.".formatted(FAVORITE_LIMIT));
+        }
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+
+        List<Menu> visible = visibleMenus(accountId);
+        List<Menu> picked = new java.util.ArrayList<>();
+        short order = 0;
+        for (String code : menuCodes.stream().distinct().toList()) {
+            Menu menu = visible.stream()
+                    .filter(m -> m.getCode().equals(code))
+                    .findFirst()
+                    .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                            "담을 수 없는 메뉴입니다: %s".formatted(code)));
+            favoriteMenuRepository.save(
+                    new com.dlab.domain.menu.entity.FavoriteMenu(account, menu, order++));
+            picked.add(menu);
+        }
+        return picked;
     }
 
     /**

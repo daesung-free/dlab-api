@@ -143,6 +143,39 @@ class MenuAccessTest {
         assertThat(menuAccessService.allows(viewer.getId(), "/api/v1/admin/students")).isFalse();
     }
 
+    @Test
+    @DisplayName("자주 쓰는 메뉴는 보낸 순서 그대로다 — 사용자가 정한 배치다")
+    void favoritesKeepOrder() {
+        menuAccessService.replaceFavorites(viewer.getId(),
+                List.of("penalty", "attendance", "student"));
+        em.flush();
+
+        assertThat(menuAccessService.favorites(viewer.getId()))
+                .extracting(com.dlab.domain.menu.entity.Menu::getCode)
+                .containsExactly("penalty", "attendance", "student");
+    }
+
+    @Test
+    @DisplayName("★ 볼 수 없는 메뉴는 담기지 않는다 — 눌러도 403 인 칸이 대시보드에 남는다")
+    void cannotFavoriteHiddenMenu() {
+        menuAccessService.replace(superAdmin, viewer.getId(), List.of("attendance"));
+        em.flush();
+
+        assertThatThrownBy(() -> menuAccessService.replaceFavorites(
+                viewer.getId(), List.of("student")))
+                .hasMessageContaining("담을 수 없는");
+    }
+
+    @Test
+    @DisplayName("자주 쓰는 메뉴를 담아도 권한은 그대로다 — 편의 설정이 권한을 넓히지 않는다")
+    void favoriteDoesNotGrantAccess() {
+        menuAccessService.replace(superAdmin, viewer.getId(), List.of("attendance", "penalty"));
+        menuAccessService.replaceFavorites(viewer.getId(), List.of("penalty"));
+        em.flush();
+
+        assertThat(menuAccessService.allows(viewer.getId(), "/api/v1/admin/students")).isFalse();
+    }
+
     private String login() throws Exception {
         String body = mvc.perform(post("/api/v1/admin/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
