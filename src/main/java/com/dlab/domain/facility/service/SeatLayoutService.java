@@ -136,6 +136,7 @@ public class SeatLayoutService {
                     return new SeatCell(
                             seat.getId(),
                             seat.getSeatCd(),
+                            seat.getKioskSeatCd(),
                             seat.getSeatNm(),
                             seat.getXPos(),
                             seat.getYPos(),
@@ -239,6 +240,13 @@ public class SeatLayoutService {
     public record SeatCell(
             Long seatId,
             String seatCd,
+            /**
+             * 단말이 아는 번호. 본관은 {@code seatCd}와 같고 별관은 관 offset 이 더해진다.
+             *
+             * <p><b>배치도에 필요하다</b> — "단말에서 이 자리가 안 보인다"는 문의를 받는
+             * 화면이 배치도인데, 이 값이 없으면 대조를 다른 화면에서 해야 한다.
+             */
+            String kioskSeatCd,
             String seatNm,
             int xPos,
             int yPos,

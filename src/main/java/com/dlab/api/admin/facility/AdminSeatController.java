@@ -53,8 +53,12 @@ public class AdminSeatController {
     /**
      * 관 등록.
      *
-     * <p>{@code seatCdOffset}이 0이면 본관, 1000 이상이면 별관이다. <b>등록 후에는 바꿀 수
-     * 없다</b> — 좌석의 키오스크 번호에 이미 반영돼 저장된다.
+     * <p><b>{@code seatCdOffset} 은 생략하는 것을 권한다.</b> {@code annex=true} 면 서버가
+     * 겹치지 않는 번호대를 채번한다 — 화면이 계산해서 보내면 두 사람이 동시에 등록할 때
+     * 같은 값이 나온다.
+     *
+     * <p>등록 후에는 바꿀 수 없다 — 좌석의 키오스크 번호에 이미 반영돼 저장된다.
+     * 본관은 지점당 하나, 번호대가 겹치는 별관도 만들 수 없다.
      */
     @PostMapping("/buildings")
     public ApiResponse<BuildingResponse> createBuilding(
@@ -62,7 +66,7 @@ public class AdminSeatController {
             @Valid @RequestBody BuildingRequests.BuildingCreate request) {
         return ApiResponse.success(BuildingResponse.from(buildingAdminService.create(
                 me, request.academyId(), request.code(), request.name(),
-                request.sortOrderOrDefault(), request.seatCdOffsetOrDefault())));
+                request.sortOrderOrDefault(), request.seatCdOffset(), request.isAnnex())));
     }
 
     /** 관 수정 — 이름·정렬·노출만. 코드·오프셋은 대상이 아니다. */
@@ -248,6 +252,8 @@ public class AdminSeatController {
     public record SeatCellResponse(
             Long seatId,
             String seatCd,
+            /** 단말이 아는 번호. 별관이면 {@code seatCd}와 다르다 — 대조용이다 */
+            String kioskSeatCd,
             String seatNm,
             int xPos,
             int yPos,
@@ -261,7 +267,7 @@ public class AdminSeatController {
             boolean masked) {
 
         public static SeatCellResponse from(SeatLayoutService.SeatCell c) {
-            return new SeatCellResponse(c.seatId(), c.seatCd(), c.seatNm(),
+            return new SeatCellResponse(c.seatId(), c.seatCd(), c.kioskSeatCd(), c.seatNm(),
                     c.xPos(), c.yPos(), c.assignmentState(), c.presence(),
                     c.enrollmentId(), c.studentNo(), c.studentName(),
                     c.classId(), c.className(), c.masked());

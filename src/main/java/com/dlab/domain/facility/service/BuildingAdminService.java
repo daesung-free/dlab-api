@@ -42,28 +42,77 @@ public class BuildingAdminService {
     /**
      * 관 등록.
      *
-     * <p>{@code seatCdOffset} 이 0이면 본관, 그 이상이면 별관이다. 별관은 <b>1000 이상</b>만
-     * 받는다 — DSA 가 1000번대를 쓰던 관례와 맞추고, 100 같은 작은 값이면 본관 101번과
-     * 별관 1번의 변환 결과가 곧바로 겹친다.
+     * <h2>{@code seatCdOffset} 을 생략하면 서버가 정한다</h2>
+     * {@code annex} 가 참이고 값이 없으면 <b>기존 최대 offset + 1000</b> 으로 채번한다.
+     * 화면이 계산해서 보내면 <b>두 사람이 동시에 등록할 때 같은 값이 나온다</b> — 학번
+     * 채번을 서버가 하는 것과 같은 이유다.
+     *
+     * <h2>★ 겹치면 여기서 막는다</h2>
+     * 같은 offset 을 가진 별관이 둘이면 <b>나중 관은 좌석을 한 자리도 못 만든다</b>
+     * (변환 결과가 통째로 겹친다). 좌석 등록 단계에서도 걸리지만, 그때는 이미 관·구역을
+     * 만들어 둔 뒤라 어디서부터 잘못됐는지 되짚어야 한다.
+     *
+     * <p><b>다만 이 검사가 충돌을 다 막지는 못한다.</b> offset 이 달라도 본관에 1001번이
+     * 실재하면 2관 1번과 겹친다 — 그건 좌석 등록의
+     * {@code rejectIfKioskCodeTaken} 이 잡는다. 여기는 <b>미리 알려주는</b> 자리다.
+     *
+     * <h2>본관은 지점당 하나다</h2>
+     * 둘이면 "본관"이라는 말이 의미를 잃고, {@code buildingId} 없이 들어온 구역 등록이
+     * 어디에 붙일지 정할 수 없어 통째로 막힌다({@link #resolveDefault}).
      */
     @Transactional
     public Building create(AuthPrincipal me, Long academyId, String code, String name,
-                           short sortOrder, int seatCdOffset) {
+                           short sortOrder, Integer seatCdOffset, boolean annex) {
         Long resolved = me.requireAcademyScope(academyId);
         Academy academy = academyRepository.findById(resolved)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
 
-        if (seatCdOffset != 0 && seatCdOffset < MIN_ANNEX_OFFSET) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "별관 좌석번호 오프셋은 " + MIN_ANNEX_OFFSET + " 이상이어야 합니다. "
-                            + "작은 값은 본관 좌석번호와 겹칩니다.");
+        List<Building> existing = buildingRepository.findAllByAcademyId(resolved);
+        int offset = resolveOffset(existing, seatCdOffset, annex);
+
+        if (offset == 0 && existing.stream().anyMatch(Building::isMain)) {
+            throw new BusinessException(ErrorCode.BUILDING_DUPLICATED,
+                    "본관은 지점마다 하나입니다. 별관으로 등록하세요.");
         }
-        if (buildingRepository.findByAcademyIdAndCode(resolved, code).isPresent()) {
+        if (offset != 0) {
+            existing.stream()
+                    .filter(b -> b.getSeatCdOffset() == offset)
+                    .findFirst()
+                    .ifPresent(clash -> {
+                        throw new BusinessException(ErrorCode.BUILDING_DUPLICATED,
+                                "%s이(가) 이미 %d 번호대를 쓰고 있습니다. 겹치면 나중에 만든 관은 좌석을 "
+                                        .formatted(clash.getName(), offset)
+                                        + "한 자리도 만들 수 없습니다.");
+                    });
+        }
+        if (existing.stream().anyMatch(b -> b.getCode().equals(code))) {
             throw new BusinessException(ErrorCode.BUILDING_DUPLICATED,
                     "이미 있는 관 코드입니다: " + code);
         }
         return buildingRepository.save(
-                new Building(academy, code, name, sortOrder, seatCdOffset));
+                new Building(academy, code, name, sortOrder, offset));
+    }
+
+    /**
+     * 쓸 offset 을 정한다.
+     *
+     * <p>값이 오면 그대로 쓰되 범위만 본다. 없으면 별관일 때만 채번한다 —
+     * 본관은 0 이 유일한 값이라 정할 것이 없다.
+     */
+    private int resolveOffset(List<Building> existing, Integer requested, boolean annex) {
+        if (requested != null) {
+            if (requested != 0 && requested < MIN_ANNEX_OFFSET) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "별관 좌석번호 오프셋은 " + MIN_ANNEX_OFFSET + " 이상이어야 합니다. "
+                                + "작은 값은 본관 좌석번호와 겹칩니다.");
+            }
+            return requested;
+        }
+        if (!annex) {
+            return 0;
+        }
+        int max = existing.stream().mapToInt(Building::getSeatCdOffset).max().orElse(0);
+        return Math.max(max + MIN_ANNEX_OFFSET, MIN_ANNEX_OFFSET);
     }
 
     /** 이름·정렬만. 코드·offset 은 대상이 아니다(저장된 키오스크 코드와 어긋난다). */
