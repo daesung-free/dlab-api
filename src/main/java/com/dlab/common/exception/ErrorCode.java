@@ -42,6 +42,8 @@ public enum ErrorCode {
     // 지점 / 조직
     ACADEMY_NOT_FOUND(HttpStatus.NOT_FOUND, "지점을 찾을 수 없습니다."),
     CLASS_NOT_FOUND(HttpStatus.NOT_FOUND, "반을 찾을 수 없습니다."),
+    /** 수납이 남은 청구는 취소할 수 없다 — 받은 돈이 매출에서 사라진다. */
+    BILLING_HAS_PAYMENT(HttpStatus.BAD_REQUEST, "수납 내역이 있어 청구를 취소할 수 없습니다."),
     /** S3 설정이 비어 있다. 기동은 되지만 파일 기능만 동작하지 않는다 — 기동 로그에 경고가 있다. */
     FILE_STORAGE_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "파일 저장소가 설정되지 않았습니다."),
     FILE_NOT_FOUND(HttpStatus.NOT_FOUND, "파일을 찾을 수 없습니다."),
