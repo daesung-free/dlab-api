@@ -135,6 +135,67 @@ class MockExamUploadTest {
         assertThat(subjects).containsExactlyInAnyOrder("국어", "수학");
     }
 
+    @Test
+    @DisplayName("★★ 한 번 연결해두면 다음 회차부터 자동이다 — 아니면 같은 학생이 매번 빠진다")
+    void linkedRowMatchesNextTime() {
+        // 동명이인 둘 중 누구인지 사람이 정한다
+        uploadService.link(admin, bundang.getId(), YEAR, "99700", "2", "2001",
+                enrollmentId("2098-0004"));
+        em.flush();
+
+        var result = uploadService.apply(admin, bundang.getId(), june.getId(),
+                new ByteArrayInputStream(sample()));
+
+        assertThat(result.unmatched()).isEmpty();
+        assertThat(result.matched()).extracting(MockExamUploadService.Matched::studentNo)
+                .contains("2098-0004");
+    }
+
+    @Test
+    @DisplayName("연결을 해제하면 다시 이름으로 찾는다 — 잘못 이었을 때 되돌릴 방법이 있어야 한다")
+    void unlinkRestoresNameMatching() {
+        var key = uploadService.link(admin, bundang.getId(), YEAR, "99700", "2", "2001",
+                enrollmentId("2098-0004"));
+        em.flush();
+
+        uploadService.unlink(admin, key.getId());
+        em.flush();
+
+        var preview = uploadService.preview(admin, bundang.getId(), june.getId(),
+                new ByteArrayInputStream(sample()));
+        assertThat(preview.unmatched()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("★ 같은 칸을 다시 연결하면 대상만 바뀐다 — 둘이면 어느 학생 성적인지 정해지지 않는다")
+    void relinkDoesNotDuplicate() {
+        Long fourth = enrollmentId("2098-0004");
+        uploadService.link(admin, bundang.getId(), YEAR, "99700", "2", "2001",
+                enrollmentId("2098-0003"));
+        uploadService.link(admin, bundang.getId(), YEAR, "99700", "2", "2001", fourth);
+        em.flush();
+
+        var links = uploadService.links(admin, bundang.getId(), YEAR);
+        assertThat(links).hasSize(1);
+        assertThat(links.get(0).getEnrollment().getId()).isEqualTo(fourth);
+    }
+
+    @Test
+    @DisplayName("미매칭 행에 학교코드가 실려 온다 — 없으면 화면이 연결을 걸 수 없다")
+    void unmatchedCarriesSchoolCode() {
+        var preview = uploadService.preview(admin, bundang.getId(), june.getId(),
+                new ByteArrayInputStream(sample()));
+
+        assertThat(preview.unmatched().get(0).schoolCode()).isEqualTo("99700");
+    }
+
+    private Long enrollmentId(String studentNo) {
+        return em.createQuery(
+                        "SELECT e.id FROM StudentEnrollment e WHERE e.studentNo = :no", Long.class)
+                .setParameter("no", studentNo)
+                .getSingleResult();
+    }
+
     /** 실물과 같은 2단 헤더 구조의 축소본. */
     private byte[] sample() {
         try (XSSFWorkbook workbook = new XSSFWorkbook();

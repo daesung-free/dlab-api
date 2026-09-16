@@ -63,6 +63,7 @@ public class MockExamUploadService {
     private final ExamMasterRepository examMasterRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final StudentGradeService gradeService;
+    private final com.dlab.domain.grade.repository.MockExamStudentKeyRepository keyRepository;
 
     /** 저장하지 않고 결과만 본다. */
     @Transactional(readOnly = true)
@@ -95,6 +96,15 @@ public class MockExamUploadService {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
 
+        // ★ 사람이 한 번 정해준 연결이 먼저다. 이름은 동명이인에서 멈추는데, 그러면
+        //   그 학생은 회차마다 계속 빠진다
+        Map<String, StudentEnrollment> byKey = keyRepository
+                .findAllByScope(academyId, exam.getYear()).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        k -> fileKey(k.getSchoolCode(), k.getClassNo(), k.getStudentNo()),
+                        com.dlab.domain.grade.entity.MockExamStudentKey::getEnrollment,
+                        (a, b) -> a));
+
         Map<String, List<StudentEnrollment>> byName = enrollmentRepository
                 .findCurrentByAcademyId(academyId).stream()
                 .collect(java.util.stream.Collectors.groupingBy(
@@ -107,31 +117,29 @@ public class MockExamUploadService {
         List<Unmatched> unmatched = new ArrayList<>();
 
         for (MockExamExcelParser.StudentRow row : parsed.students()) {
+            StudentEnrollment linked =
+                    byKey.get(fileKey(row.schoolCode(), row.classNo(), row.studentNo()));
+            if (linked != null) {
+                record(exam, row, linked, save, matched, unmatched);
+                continue;
+            }
+
             List<StudentEnrollment> candidates = byName.getOrDefault(normalize(row.name()), List.of());
             if (candidates.isEmpty()) {
-                unmatched.add(new Unmatched(row.rowNumber(), row.name(), row.classNo(),
+                unmatched.add(new Unmatched(row.rowNumber(), row.schoolCode(), row.name(), row.classNo(),
                         row.studentNo(), "이 지점 재원생 중에 같은 이름이 없습니다."));
                 continue;
             }
             if (candidates.size() > 1) {
                 // 동명이인을 임의로 고르면 남의 성적이 들어간다 — 사람이 정해야 한다
-                unmatched.add(new Unmatched(row.rowNumber(), row.name(), row.classNo(),
-                        row.studentNo(), "같은 이름이 %d명입니다.".formatted(candidates.size())));
+                unmatched.add(new Unmatched(row.rowNumber(), row.schoolCode(), row.name(), row.classNo(),
+                        row.studentNo(),
+                        "같은 이름이 %d명입니다. 학생을 지정하면 다음 회차부터 자동으로 연결됩니다."
+                                .formatted(candidates.size())));
                 continue;
             }
 
-            StudentEnrollment enrollment = candidates.get(0);
-            List<StudentGradeService.ScoreInput> inputs = scoreInputs(exam, row);
-            if (inputs.isEmpty()) {
-                unmatched.add(new Unmatched(row.rowNumber(), row.name(), row.classNo(),
-                        row.studentNo(), "이 회차 양식과 맞는 과목 점수가 없습니다."));
-                continue;
-            }
-            if (save) {
-                gradeService.saveExamScores(enrollment, inputs);
-            }
-            matched.add(new Matched(row.rowNumber(), enrollment.getId(),
-                    enrollment.getStudentNo(), row.name(), inputs.size()));
+            record(exam, row, candidates.get(0), save, matched, unmatched);
         }
 
         if (save) {
@@ -139,6 +147,95 @@ public class MockExamUploadService {
                     examMasterId, matched.size(), unmatched.size());
         }
         return new Preview(exam.getExamName(), parsed.students().size(), matched, unmatched);
+    }
+
+    /** 찾은 학생에 점수를 넣는다. 회차 양식과 겹치는 과목이 하나도 없으면 미매칭이다. */
+    private void record(ExamMaster exam, MockExamExcelParser.StudentRow row,
+                        StudentEnrollment enrollment, boolean save,
+                        List<Matched> matched, List<Unmatched> unmatched) {
+        List<StudentGradeService.ScoreInput> inputs = scoreInputs(exam, row);
+        if (inputs.isEmpty()) {
+            unmatched.add(new Unmatched(row.rowNumber(), row.schoolCode(), row.name(), row.classNo(),
+                    row.studentNo(), "이 회차 양식과 맞는 과목 점수가 없습니다."));
+            return;
+        }
+        if (save) {
+            gradeService.saveExamScores(enrollment, inputs);
+        }
+        matched.add(new Matched(row.rowNumber(), enrollment.getId(),
+                enrollment.getStudentNo(), row.name(), inputs.size()));
+    }
+
+    /**
+     * 파일 식별자 한 덩어리.
+     *
+     * <p>세 값을 다 쓴다 — 번호만으로는 반이 다른 학생과 겹치고, 학교코드를 빼면 지점이
+     * 섞인다. 값이 비면 키를 만들지 않는다(빈 문자열끼리 맞아 엉뚱한 학생에게 붙는다).
+     */
+    private static String fileKey(String schoolCode, String classNo, String studentNo) {
+        if (isBlank(schoolCode) || isBlank(classNo) || isBlank(studentNo)) {
+            return null;
+        }
+        return schoolCode.trim() + "|" + classNo.trim() + "|" + studentNo.trim();
+    }
+
+    private static boolean isBlank(String v) {
+        return v == null || v.isBlank();
+    }
+
+    /**
+     * 사람이 정한 연결을 남긴다.
+     *
+     * <p>동명이인이라 매칭이 멈춘 행을 화면에서 지정하면 여기로 온다. <b>다음 회차부터는
+     * 이름을 보지 않고 이 연결을 쓴다</b> — 그러지 않으면 같은 학생이 회차마다 빠진다.
+     *
+     * <p>같은 칸에 행을 하나 더 만들지 않고 대상을 바꾼다. 둘이면 어느 학생 성적인지가
+     * 정해지지 않는다.
+     */
+    @Transactional
+    public com.dlab.domain.grade.entity.MockExamStudentKey link(
+            AuthPrincipal me, Long requestedAcademyId, short year,
+            String schoolCode, String classNo, String studentNo, Long enrollmentId) {
+        Long academyId = me.requireAcademyScope(requestedAcademyId);
+        if (fileKey(schoolCode, classNo, studentNo) == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "학교코드·반·번호가 모두 있어야 연결할 수 있습니다.");
+        }
+
+        StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .filter(e -> !e.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.STUDENT_NOT_FOUND));
+        // 지점을 확인하지 않으면 enrollmentId 만 바꿔 남의 지점 학생에게 성적을 붙일 수 있다
+        if (!enrollment.getAcademy().getId().equals(academyId)) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+
+        var academy = enrollment.getAcademy();
+        return keyRepository.findByKey(academyId, year, schoolCode, classNo, studentNo)
+                .map(existing -> {
+                    existing.relink(enrollment);
+                    return existing;
+                })
+                .orElseGet(() -> keyRepository.save(
+                        new com.dlab.domain.grade.entity.MockExamStudentKey(
+                                academy, year, schoolCode, classNo, studentNo, enrollment)));
+    }
+
+    /** 연결 해제. 잘못 이었으면 지우고 다시 이름 매칭으로 돌아간다. */
+    @Transactional
+    public void unlink(AuthPrincipal me, Long keyId) {
+        var key = keyRepository.findById(keyId)
+                .filter(k -> !k.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        me.requireAcademyScope(key.getAcademy().getId());
+        key.markDeleted();
+    }
+
+    /** 이 지점·연도에 사람이 정해둔 연결. 화면에서 확인·해제한다. */
+    @Transactional(readOnly = true)
+    public List<com.dlab.domain.grade.entity.MockExamStudentKey> links(
+            AuthPrincipal me, Long requestedAcademyId, short year) {
+        return keyRepository.findAllByScope(me.requireAcademyScope(requestedAcademyId), year);
     }
 
     /**
@@ -208,7 +305,11 @@ public class MockExamUploadService {
                           String name, int subjectCount) {
     }
 
-    public record Unmatched(int rowNumber, String name, String classNo,
+    /**
+     * @param schoolCode 연결 등록에 필요하다. 이게 없으면 화면이 미매칭 행을 학생에
+     *                   이을 수 없다 — 키가 학교코드·반·번호 세 값이다
+     */
+    public record Unmatched(int rowNumber, String schoolCode, String name, String classNo,
                             String studentNo, String reason) {
     }
 }
