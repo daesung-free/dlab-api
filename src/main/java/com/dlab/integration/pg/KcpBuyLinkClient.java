@@ -147,6 +147,44 @@ public class KcpBuyLinkClient {
     }
 
     /**
+     * 현금영수증 발급.
+     *
+     * <p>가상계좌와 같은 경로({@code /gw/hub/v1/payment})를 쓴다 — 전문 내용으로 갈린다.
+     *
+     * <p>⚠️ <b>공급가액·부가세를 호출부가 계산해 넘긴다.</b> 여기서 나누면 절사 규칙이
+     * 여기에만 있게 되고, 저장된 값과 실제 발급값이 어긋날 수 있다.
+     */
+    public CashReceiptIssued issueCashReceipt(CashReceiptCommand command) {
+        require();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("site_cd", command.siteCd());
+        body.put("kcp_cert_info", certificate());
+        body.put("pay_method", "CASH");
+        // PGNW = PG 사를 통한 발급. 가맹점 직접 발급과 구분된다
+        body.put("user_type", "PGNW");
+        body.put("trad_time", command.tradeTime());
+        body.put("tr_code", command.purposeCode());
+        body.put("id_info", command.idInfo());
+        body.put("amt_tot", String.valueOf(command.amount()));
+        body.put("amt_sup", String.valueOf(command.supplyAmount()));
+        body.put("amt_tax", String.valueOf(command.taxAmount()));
+        body.put("ordr_idxx", command.orderNo());
+        body.put("good_name", command.goodName());
+        body.put("buyr_name", command.buyerName());
+        // 0 = 우리 사업자 매출. 입점몰(하위 업체) 구분이 아니다
+        body.put("corp_type", "0");
+
+        JsonNode response = post(VBANK_PATH, body);
+        String code = text(response, "res_cd");
+        if (!"0000".equals(code)) {
+            throw new BusinessException(ErrorCode.PG_REQUEST_FAILED,
+                    "현금영수증 발급 실패: %s (%s)".formatted(text(response, "res_msg"), code));
+        }
+        return new CashReceiptIssued(text(response, "cash_no"), text(response, "receipt_no"));
+    }
+
+    /**
      * 서명 데이터.
      *
      * <p>거래조회·사용중지에 쓴다. <b>서명 대상 문자열이 요청과 정확히 같아야 한다</b> —
@@ -239,5 +277,20 @@ public class KcpBuyLinkClient {
 
     public record VbankIssued(String tno, String account, String bankName,
                               String bankCode, String depositor) {
+    }
+
+    /**
+     * @param tradeTime   원 거래 일시 {@code yyyyMMddHHmmss}. <b>발급 시각이 아니라
+     *                    돈을 받은 시각</b>이다 — 며칠 뒤에 발급해도 원 거래일로 신고된다
+     * @param purposeCode {@code 0}=소득공제(개인) / {@code 1}=지출증빙(기업)
+     * @param idInfo      소득공제면 휴대폰번호, 지출증빙이면 사업자번호
+     */
+    public record CashReceiptCommand(String siteCd, String orderNo, String tradeTime,
+                                     String purposeCode, String idInfo, int amount,
+                                     int supplyAmount, int taxAmount,
+                                     String goodName, String buyerName) {
+    }
+
+    public record CashReceiptIssued(String cashNo, String receiptNo) {
     }
 }
