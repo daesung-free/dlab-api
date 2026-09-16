@@ -37,4 +37,19 @@ public interface PgSiteRepository extends JpaRepository<PgSite, Long> {
             ORDER BY s.purpose, s.channel, s.id
             """)
     List<PgSite> findAllActive();
+
+    /**
+     * 같은 칸(지점·용도·채널)에 이미 등록된 행.
+     *
+     * <p>DB 에 유니크 제약이 있어 막히기는 하지만, 그대로 두면 화면에 제약 위반이 그대로
+     * 올라간다 — 어느 행과 겹쳤는지 알려주려면 먼저 찾아봐야 한다.
+     */
+    @Query("""
+            SELECT s FROM PgSite s
+            WHERE s.purpose = :purpose
+              AND s.channel = :channel
+              AND s.deleted = false
+              AND ((:academyId IS NULL AND s.academy IS NULL) OR s.academy.id = :academyId)
+            """)
+    Optional<PgSite> findByScope(Long academyId, PgPurpose purpose, PgChannel channel);
 }
