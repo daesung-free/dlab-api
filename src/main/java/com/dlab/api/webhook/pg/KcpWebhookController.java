@@ -77,6 +77,45 @@ public class KcpWebhookController {
         }
     }
 
+    /**
+     * 가상계좌 입금 통보.
+     *
+     * <p>바이링크와 파라미터 이름이 다르다 — 주문번호가 {@code order_no}, 금액이
+     * {@code ipgm_mnyx}, 입금자가 {@code ipgm_name} 이다. 같은 핸들러로 받으면 값이
+     * 전부 비어 수납이 안 잡힌다.
+     *
+     * <p>⚠️ <b>{@code op_cd=13} 은 입금 취소</b>다(기관 망 취소). 이 경우 수납을 잡으면
+     * 들어오지 않은 돈이 기록된다 — 기록만 남기고 사람이 확인한다.
+     */
+    @PostMapping(value = "/vbank",
+            consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE, MediaType.APPLICATION_JSON_VALUE},
+            produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, String> vbankDeposit(@RequestParam(required = false) Map<String, String> form,
+                                            @RequestBody(required = false) Map<String, Object> json) {
+        Map<String, String> data = merge(form, json);
+        String orderNo = data.get("order_no");
+        String tno = data.get("tno");
+        String opCd = data.get("op_cd");
+
+        if ("13".equals(opCd)) {
+            // 입금 취소. 자동으로 수납을 되돌리지 않는다 — 이미 환불했는지 사람이 확인해야 한다
+            log.error("가상계좌 입금 취소 통보 — 확인 필요: orderNo={}, tno={}", orderNo, tno);
+            return Map.of("res_cd", OK, "res_msg", "정상처리");
+        }
+
+        try {
+            boolean first = paymentRequestService.confirmVbankDeposit(orderNo, tno,
+                    amount(data.get("ipgm_mnyx")), data.get("ipgm_name"));
+            if (!first) {
+                log.info("가상계좌 재전송 수신 — 이미 처리됨: orderNo={}, tno={}", orderNo, tno);
+            }
+            return Map.of("res_cd", OK, "res_msg", "정상처리");
+        } catch (Exception e) {
+            log.error("가상계좌 입금 처리 실패 — 재전송 대기: orderNo={}, tno={}", orderNo, tno, e);
+            return Map.of("res_cd", "9999", "res_msg", "처리 실패");
+        }
+    }
+
     private Map<String, String> merge(Map<String, String> form, Map<String, Object> json) {
         Map<String, String> data = new java.util.LinkedHashMap<>();
         if (form != null) {

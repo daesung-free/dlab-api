@@ -38,6 +38,10 @@ import tools.jackson.databind.ObjectMapper;
 public class KcpBuyLinkClient {
 
     private static final String CREATE_PATH = "/std/url/v1/create";
+    /** 가상계좌 발급. 바이링크와 경로가 다르다 */
+    private static final String VBANK_PATH = "/gw/hub/v1/payment";
+    /** 가상계좌 거래 구분. KCP 고정값이라 바꾸면 거절된다 */
+    private static final String VBANK_TXTYPE = "41100000";
     /** 원화. KCP 규격값이다 */
     private static final String CURRENCY_KRW = "410";
 
@@ -96,6 +100,50 @@ public class KcpBuyLinkClient {
                     "결제 링크 생성 실패: %s (%s)".formatted(text(response, "res_msg"), code));
         }
         return new Created(text(response, "pay_url"), text(response, "url_reg_id"));
+    }
+
+    /**
+     * 가상계좌 발급.
+     *
+     * <p>⚠️ <b>발급 응답은 결제 완료가 아니다.</b> 계좌번호가 나왔을 뿐이고 입금은 며칠 뒤에
+     * 들어오거나 영영 안 들어온다 — 완료는 입금 통보 Webhook 이 확정한다.
+     *
+     * <p>성공 코드가 바이링크와 다르다({@code V000}). 같은 값으로 판정하면 정상 발급을
+     * 실패로 본다.
+     */
+    public VbankIssued issueVbank(VbankCommand command) {
+        require();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("site_cd", command.siteCd());
+        body.put("kcp_cert_info", certificate());
+        body.put("pay_method", "VCNT");
+        body.put("amount", String.valueOf(command.amount()));
+        body.put("currency", CURRENCY_KRW);
+        body.put("ordr_idxx", command.orderNo());
+        body.put("good_name", command.goodName());
+        body.put("buyr_name", command.buyerName());
+        body.put("buyr_tel2", command.buyerTel());
+        body.put("va_txtype", VBANK_TXTYPE);
+        // ★ amount 와 같아야 한다. 다르면 KCP 가 거절한다
+        body.put("va_mny", String.valueOf(command.amount()));
+        body.put("va_bankcode", command.bankCode());
+        body.put("va_name", command.buyerName());
+        // 입금 기한. 지나면 그 계좌로 낼 수 없다
+        body.put("va_date", command.expireAt());
+        // 0 = 현금영수증 미발급. 발급은 별도 API 라 여기서 처리하지 않는다
+        body.put("va_receipt_gubn", "0");
+
+        JsonNode response = post(VBANK_PATH, body);
+        String code = text(response, "res_cd");
+        if (!"V000".equals(code)) {
+            throw new BusinessException(ErrorCode.PG_REQUEST_FAILED,
+                    "가상계좌 발급 실패: %s (%s)".formatted(text(response, "res_msg"), code));
+        }
+        return new VbankIssued(
+                text(response, "tno"), text(response, "account"),
+                text(response, "bankname"), text(response, "bankcode"),
+                text(response, "depositor"));
     }
 
     /**
@@ -178,5 +226,18 @@ public class KcpBuyLinkClient {
     }
 
     public record Created(String payUrl, String urlRegId) {
+    }
+
+    /**
+     * @param bankCode 입금받을 은행. 은행마다 코드가 다르다(문서 4장 은행코드표)
+     * @param expireAt 입금 기한 {@code yyyyMMddHHmmss}
+     */
+    public record VbankCommand(String siteCd, String orderNo, int amount, String goodName,
+                               String buyerName, String buyerTel, String bankCode,
+                               String expireAt) {
+    }
+
+    public record VbankIssued(String tno, String account, String bankName,
+                              String bankCode, String depositor) {
     }
 }

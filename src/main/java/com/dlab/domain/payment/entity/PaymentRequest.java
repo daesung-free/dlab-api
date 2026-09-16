@@ -88,6 +88,29 @@ public class PaymentRequest extends BaseEntity {
     @Column(name = "fail_reason", length = 200)
     private String failReason;
 
+    // ── 가상계좌 ─────────────────────────────────────────────
+    @Column(name = "vbank_account", length = 30)
+    private String vbankAccount;
+
+    @Column(name = "vbank_bank_name", length = 30)
+    private String vbankBankName;
+
+    @Column(name = "vbank_bank_code", length = 10)
+    private String vbankBankCode;
+
+    /** 예금주. KCP 가 가맹점명으로 내려준다 */
+    @Column(name = "vbank_depositor", length = 30)
+    private String vbankDepositor;
+
+    /**
+     * 실제 입금자명.
+     *
+     * <p>⚠️ <b>예금주·학생명과 다를 수 있다</b> — 조부모가 대신 내는 경우가 흔하다.
+     * 본인 확인 수단으로 쓰면 정상 입금을 반려하게 된다. 영수증·대사 참고용이다.
+     */
+    @Column(name = "vbank_remitter", length = 30)
+    private String vbankRemitter;
+
     public PaymentRequest(Billing billing, PgSite pgSite, String orderNo, int amount,
                           PayMethod payMethod) {
         this.academy = billing.getAcademy();
@@ -98,6 +121,27 @@ public class PaymentRequest extends BaseEntity {
         this.amount = amount;
         this.payMethod = payMethod;
         this.status = PaymentRequestStatus.CREATED;
+    }
+
+    /**
+     * 가상계좌 발급 반영.
+     *
+     * <p>⚠️ <b>발급은 결제가 아니다.</b> 계좌번호가 나왔을 뿐이고, 입금은 며칠 뒤에
+     * 들어오거나 영영 안 들어온다.
+     */
+    public void markVbankIssued(String tno, String account, String bankName, String bankCode,
+                                String depositor, Instant expireAt) {
+        this.tno = tno;
+        this.vbankAccount = account;
+        this.vbankBankName = bankName;
+        this.vbankBankCode = bankCode;
+        this.vbankDepositor = depositor;
+        this.expireAt = expireAt;
+    }
+
+    /** 입금자명 기록. 확정과 별개로 남긴다 — 누가 냈는지가 대사에 필요하다. */
+    public void recordRemitter(String remitter) {
+        this.vbankRemitter = remitter;
     }
 
     /** 생성 응답 반영. 아직 결제된 것이 아니다. */
@@ -120,7 +164,11 @@ public class PaymentRequest extends BaseEntity {
             return false;
         }
         this.status = PaymentRequestStatus.PAID;
-        this.tno = tno;
+        // 가상계좌는 발급 시점에 이미 tno 를 받았다. 입금 통보의 값과 같지만,
+        // 비어 있을 때만 채워 발급 tno 를 덮어쓰지 않는다
+        if (this.tno == null && tno != null) {
+            this.tno = tno;
+        }
         this.approvedAt = approvedAt;
         this.payDetail = payDetail;
         return true;

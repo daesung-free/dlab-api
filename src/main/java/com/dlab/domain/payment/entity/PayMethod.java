@@ -14,5 +14,7 @@ public enum PayMethod {
     /** 계좌이체 */
     BANK,
     /** 휴대폰 결제 */
-    MOBX
+    MOBX,
+    /** 가상계좌. 발급만 하고 입금은 나중에 들어온다 */
+    VCNT
 }

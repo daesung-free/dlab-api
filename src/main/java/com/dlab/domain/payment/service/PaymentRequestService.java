@@ -39,6 +39,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class PaymentRequestService {
 
     private static final DateTimeFormatter EXPIRE_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
+    /** 가상계좌 입금 기한은 초까지 준다 */
+    private static final DateTimeFormatter VBANK_DATE_FORMAT =
+            DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     /** 링크 유효기간. 너무 길면 지난 달 청구가 살아 있고, 짧으면 학부모가 못 낸다 */
     private static final int EXPIRE_DAYS = 7;
 
@@ -56,29 +59,9 @@ public class PaymentRequestService {
     @Transactional
     public PaymentRequest createBuyLink(AuthPrincipal me, Long billingId, PayMethod payMethod,
                                         boolean sendSms) {
-        Billing billing = billingRepository.findById(billingId)
-                .filter(b -> !b.isDeleted())
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
-                        "청구를 찾을 수 없습니다."));
-        if (!me.canAccessAcademy(billing.getAcademy().getId())) {
-            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
-        }
-        if (billing.getStatus() == BillingStatus.CANCELLED) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "취소된 청구입니다.");
-        }
+        Billing billing = requireBillable(me, billingId);
         int amount = billing.unpaidAmount();
-        if (amount <= 0) {
-            // 완납 건에 링크를 또 보내면 학부모가 두 번 낸다
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "이미 완납된 청구입니다.");
-        }
-
-        // ★ 급식비는 업체 명의 사이트코드로 나간다. 학원 코드로 받으면 그 돈이 업체에게 안 간다
-        PgPurpose purpose = billing.getBillingType() == BillingType.MEAL
-                ? PgPurpose.MEAL : PgPurpose.TUITION;
-        PgSite site = pgSiteRepository
-                .findForUse(billing.getAcademy().getId(), purpose, PgChannel.BUYLINK)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PG_SITE_NOT_FOUND,
-                        "%s 바이링크 사이트코드가 등록되지 않았습니다.".formatted(purpose)));
+        PgSite site = requireSite(billing, PgChannel.BUYLINK);
 
         var student = billing.getEnrollment().getStudent();
         String orderNo = orderNo(billing);
@@ -97,6 +80,59 @@ public class PaymentRequestService {
                 expire.atStartOfDay(clock.getZone()).toInstant());
         log.info("결제 링크 생성: billingId={}, orderNo={}, 금액={}", billingId, orderNo, amount);
         return request;
+    }
+
+    /**
+     * 가상계좌 발급.
+     *
+     * <p>⚠️ <b>발급은 결제가 아니다.</b> 계좌번호가 나왔을 뿐이고, 입금은 며칠 뒤에 들어오거나
+     * 영영 안 들어온다 — 완료는 입금 통보 Webhook 이 확정한다. 화면도 "발급됨" 으로 보여야
+     * 데스크가 받은 줄 알지 않는다.
+     *
+     * @param bankCode 입금받을 은행 코드(KCP 은행코드표)
+     * @param days     입금 기한. 지나면 그 계좌로 낼 수 없다
+     */
+    @Transactional
+    public PaymentRequest issueVbank(AuthPrincipal me, Long billingId, String bankCode, int days) {
+        Billing billing = requireBillable(me, billingId);
+        int amount = billing.unpaidAmount();
+
+        PgSite site = requireSite(billing, PgChannel.VBANK);
+        var student = billing.getEnrollment().getStudent();
+        String orderNo = orderNo(billing);
+
+        PaymentRequest request = requestRepository.save(
+                new PaymentRequest(billing, site, orderNo, amount, PayMethod.VCNT));
+
+        // 기한 끝은 그날 23:59:59 다 — 자정으로 두면 그 하루가 통째로 빠진다
+        var expire = LocalDate.now(clock).plusDays(days).atTime(23, 59, 59);
+        var issued = client.issueVbank(new KcpBuyLinkClient.VbankCommand(
+                site.getSiteCd(), orderNo, amount, billing.getName(),
+                student.getName(), digits(student.getPhone()), bankCode,
+                expire.format(VBANK_DATE_FORMAT)));
+
+        request.markVbankIssued(issued.tno(), issued.account(), issued.bankName(),
+                issued.bankCode(), issued.depositor(),
+                expire.atZone(clock.getZone()).toInstant());
+        log.info("가상계좌 발급: billingId={}, orderNo={}, 금액={}", billingId, orderNo, amount);
+        return request;
+    }
+
+    /**
+     * 가상계좌 입금 통보.
+     *
+     * <p>바이링크와 같은 경로로 확정한다 — 다른 것은 <b>입금자명</b>이 따로 온다는 것뿐이다.
+     *
+     * <p>⚠️ <b>입금자가 학생·학부모와 다를 수 있다.</b> 조부모가 대신 내는 경우가 흔해서
+     * 이름을 대조해 반려하면 정상 입금이 막힌다 — 기록만 남긴다.
+     */
+    @Transactional
+    public boolean confirmVbankDeposit(String orderNo, String tno, int amount, String remitter) {
+        PaymentRequest request = requestRepository.findByOrderNo(orderNo)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "결제 요청을 찾을 수 없습니다: " + orderNo));
+        request.recordRemitter(remitter);
+        return confirm(orderNo, tno, amount, "가상계좌 입금" + (remitter == null ? "" : " · " + remitter));
     }
 
     /**
@@ -132,6 +168,39 @@ public class PaymentRequestService {
         return true;
     }
 
+    /** 결제할 수 있는 청구인지. 취소·완납 건에 요청하면 학부모가 두 번 낸다. */
+    private Billing requireBillable(AuthPrincipal me, Long billingId) {
+        Billing billing = billingRepository.findById(billingId)
+                .filter(b -> !b.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "청구를 찾을 수 없습니다."));
+        if (!me.canAccessAcademy(billing.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        if (billing.getStatus() == BillingStatus.CANCELLED) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "취소된 청구입니다.");
+        }
+        if (billing.unpaidAmount() <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "이미 완납된 청구입니다.");
+        }
+        return billing;
+    }
+
+    /**
+     * 쓸 사이트코드.
+     *
+     * <p>★ <b>급식비는 업체 명의 코드로 나간다.</b> 학원 코드로 받으면 그 돈이 업체에게
+     * 가지 않고 정산·환불 주체가 어긋난다.
+     */
+    private PgSite requireSite(Billing billing, PgChannel channel) {
+        PgPurpose purpose = billing.getBillingType() == BillingType.MEAL
+                ? PgPurpose.MEAL : PgPurpose.TUITION;
+        return pgSiteRepository
+                .findForUse(billing.getAcademy().getId(), purpose, channel)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PG_SITE_NOT_FOUND,
+                        "%s %s 사이트코드가 등록되지 않았습니다.".formatted(purpose, channel)));
+    }
+
     /**
      * 우리 주문번호. KCP 가 이 값으로 돌아온다.
      *
@@ -144,7 +213,12 @@ public class PaymentRequestService {
 
     /** KCP 결제수단 → 우리 수납 수단. 계좌이체·휴대폰은 현금성으로 잡는다 */
     private PaymentMethod methodOf(PayMethod payMethod) {
-        return payMethod == PayMethod.CARD ? PaymentMethod.CARD : PaymentMethod.TRANSFER;
+        return switch (payMethod) {
+            case CARD -> PaymentMethod.CARD;
+            case VCNT -> PaymentMethod.VBANK;
+            // 계좌이체·휴대폰은 현금성으로 잡는다
+            default -> PaymentMethod.TRANSFER;
+        };
     }
 
     /** 휴대폰번호는 숫자만 넘긴다 — 하이픈이 들어가면 KCP 가 거절한다 */

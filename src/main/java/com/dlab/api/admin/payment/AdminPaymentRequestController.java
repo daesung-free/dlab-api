@@ -48,6 +48,24 @@ public class AdminPaymentRequestController {
                         request.payMethodOrDefault(), request.sendSmsOrDefault())));
     }
 
+    /**
+     * 가상계좌 발급.
+     *
+     * <p>⚠️ <b>발급은 결제가 아닙니다.</b> 계좌번호가 나왔을 뿐이고 입금은 며칠 뒤에
+     * 들어오거나 영영 안 들어온다 — 화면도 "발급됨" 으로 보여야 한다.
+     *
+     * @param bankCode 입금받을 은행 코드(KCP 은행코드표). 비우면 기본 은행
+     * @param days     입금 기한(일). 비우면 7일
+     */
+    @PostMapping("/vbank")
+    public ApiResponse<PaymentRequestResponse> issueVbank(
+            @CurrentAccount AuthPrincipal me,
+            @RequestBody VbankRequest request) {
+        return ApiResponse.success(PaymentRequestResponse.from(
+                paymentRequestService.issueVbank(me, request.billingId(),
+                        request.bankCodeOrDefault(), request.daysOrDefault())));
+    }
+
     /** 청구의 결제 요청 이력. 링크를 몇 번 보냈는지, 어느 것이 결제됐는지 본다. */
     @GetMapping
     public ApiResponse<List<PaymentRequestResponse>> byBilling(@RequestParam Long billingId) {
@@ -71,6 +89,21 @@ public class AdminPaymentRequestController {
     }
 
     /**
+     * @param bankCode 비우면 {@code BK26}(신한). 지점이 쓰는 은행으로 바꿀 수 있다
+     * @param days     입금 기한. 비우면 7일 — 너무 길면 지난 달 청구가 살아 있다
+     */
+    public record VbankRequest(@NotNull Long billingId, String bankCode, Integer days) {
+
+        String bankCodeOrDefault() {
+            return bankCode == null || bankCode.isBlank() ? "BK26" : bankCode;
+        }
+
+        int daysOrDefault() {
+            return days == null || days <= 0 ? 7 : days;
+        }
+    }
+
+    /**
      * @param status  {@code CREATED}=링크만 만들어짐, {@code PAID}=결제 완료(Webhook 확정)
      * @param payUrl  학부모가 열 주소. 문자를 껐다면 화면이 이 값을 전달한다
      * @param tno     KCP 거래번호. 승인 후에만 있다
@@ -78,13 +111,16 @@ public class AdminPaymentRequestController {
     public record PaymentRequestResponse(Long id, Long billingId, String orderNo, int amount,
                                          String payMethod, String status, String payUrl,
                                          Instant expireAt, String tno, Instant approvedAt,
-                                         String payDetail, String failReason) {
+                                         String payDetail, String failReason,
+                                         String vbankAccount, String vbankBankName,
+                                         String vbankDepositor, String vbankRemitter) {
 
         static PaymentRequestResponse from(PaymentRequest r) {
             return new PaymentRequestResponse(r.getId(), r.getBilling().getId(), r.getOrderNo(),
                     r.getAmount(), r.getPayMethod().name(), r.getStatus().name(), r.getPayUrl(),
                     r.getExpireAt(), r.getTno(), r.getApprovedAt(), r.getPayDetail(),
-                    r.getFailReason());
+                    r.getFailReason(), r.getVbankAccount(), r.getVbankBankName(),
+                    r.getVbankDepositor(), r.getVbankRemitter());
         }
     }
 }

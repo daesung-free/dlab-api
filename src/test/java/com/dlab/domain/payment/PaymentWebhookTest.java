@@ -132,6 +132,32 @@ class PaymentWebhookTest {
     }
 
     @Test
+    @DisplayName("★ 가상계좌 발급은 결제가 아니다 — 계좌번호만 나왔고 입금은 나중이다")
+    void vbankIssueIsNotPayment() {
+        em.persist(new PgSite(null, PgPurpose.TUITION, PgChannel.VBANK,
+                "AO8M2", "대성학력개발 가상계좌", null));
+        em.flush();
+        org.mockito.Mockito.when(client.issueVbank(any())).thenReturn(
+                new KcpBuyLinkClient.VbankIssued("TNO-V1", "T2609260001713",
+                        "신한은행", "BK26", "대성학력개발"));
+
+        PaymentRequest request = service.issueVbank(admin, billing.getId(), "BK26", 7);
+        em.flush();
+
+        assertThat(request.getVbankAccount()).isEqualTo("T2609260001713");
+        assertThat(request.getStatus()).isEqualTo(PaymentRequestStatus.CREATED);
+        assertThat(billing.receivedAmount()).isZero();
+
+        // 입금 통보가 와야 수납이 잡힌다
+        service.confirmVbankDeposit(request.getOrderNo(), "TNO-V1", 750_000, "김할머니");
+        em.flush();
+
+        assertThat(billing.receivedAmount()).isEqualTo(750_000);
+        // ⚠️ 입금자가 학생·학부모와 다를 수 있다 — 기록만 하고 대조하지 않는다
+        assertThat(request.getVbankRemitter()).isEqualTo("김할머니");
+    }
+
+    @Test
     @DisplayName("★ 급식비는 업체 명의 사이트코드가 없으면 거절한다 — 학원 코드로 받으면 업체에게 안 간다")
     void mealRequiresVendorSite() {
         Billing meal = new Billing(billing.getEnrollment(), "9월 급식비",
