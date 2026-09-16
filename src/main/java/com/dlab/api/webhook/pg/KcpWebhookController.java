@@ -2,6 +2,7 @@ package com.dlab.api.webhook.pg;
 
 import com.dlab.domain.payment.service.PaymentRequestService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -46,12 +47,9 @@ public class KcpWebhookController {
      * 같은 건이 10번 쌓이고 로그가 묻힌다. 다만 <b>아직 처리하지 못한 것</b>(주문번호를
      * 못 찾는 등)은 실패로 돌려줘야 KCP 가 다시 보낸다.
      */
-    @PostMapping(value = "/buylink",
-            consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE, MediaType.APPLICATION_JSON_VALUE},
-            produces = MediaType.APPLICATION_JSON_VALUE)
-    public Map<String, String> buyLink(@RequestParam(required = false) Map<String, String> form,
-                                       @RequestBody(required = false) Map<String, Object> json) {
-        Map<String, String> data = merge(form, json);
+    @PostMapping(value = "/buylink", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, String> buyLink(HttpServletRequest request) {
+        Map<String, String> data = read(request);
         String resCd = data.get("res_cd");
         String orderNo = data.get("ordr_idxx");
         String tno = data.get("tno");
@@ -87,12 +85,9 @@ public class KcpWebhookController {
      * <p>⚠️ <b>{@code op_cd=13} 은 입금 취소</b>다(기관 망 취소). 이 경우 수납을 잡으면
      * 들어오지 않은 돈이 기록된다 — 기록만 남기고 사람이 확인한다.
      */
-    @PostMapping(value = "/vbank",
-            consumes = {MediaType.APPLICATION_FORM_URLENCODED_VALUE, MediaType.APPLICATION_JSON_VALUE},
-            produces = MediaType.APPLICATION_JSON_VALUE)
-    public Map<String, String> vbankDeposit(@RequestParam(required = false) Map<String, String> form,
-                                            @RequestBody(required = false) Map<String, Object> json) {
-        Map<String, String> data = merge(form, json);
+    @PostMapping(value = "/vbank", produces = MediaType.APPLICATION_JSON_VALUE)
+    public Map<String, String> vbankDeposit(HttpServletRequest request) {
+        Map<String, String> data = read(request);
         String orderNo = data.get("order_no");
         String tno = data.get("tno");
         String opCd = data.get("op_cd");
@@ -116,16 +111,49 @@ public class KcpWebhookController {
         }
     }
 
-    private Map<String, String> merge(Map<String, String> form, Map<String, Object> json) {
+    /**
+     * 전문을 읽는다.
+     *
+     * <p>★ <b>form 과 JSON 이 둘 다 온다.</b> 가이드의 예시가 한쪽은 {@code &} 로 이어붙인
+     * 폼이고 다른 쪽은 JSON 이라, 어느 형식으로 올지 우리가 고를 수 없다.
+     *
+     * <p>⚠️ {@code @RequestParam Map} 과 {@code @RequestBody Map} 을 한 메서드에 함께 두면
+     * <b>폼 요청에서 500 이 난다</b> — 본문이 이미 파라미터로 소비돼 JSON 변환기가 읽을
+     * 것이 없다. 실제로 그렇게 짰다가 테스트에서 잡혔다. 그래서 요청을 직접 읽는다.
+     */
+    private Map<String, String> read(HttpServletRequest request) {
         Map<String, String> data = new java.util.LinkedHashMap<>();
-        if (form != null) {
-            data.putAll(form);
+        // 폼이면 서블릿이 이미 파싱해 둔다
+        request.getParameterMap().forEach((k, v) -> {
+            if (v != null && v.length > 0) {
+                data.put(k, v[0]);
+            }
+        });
+        if (!data.isEmpty()) {
+            return data;
         }
-        if (json != null) {
-            json.forEach((k, v) -> data.put(k, v == null ? null : String.valueOf(v)));
+        String contentType = request.getContentType();
+        if (contentType == null || !contentType.toLowerCase().contains("json")) {
+            return data;
+        }
+        try {
+            String body = request.getReader().lines()
+                    .collect(java.util.stream.Collectors.joining());
+            if (body.isBlank()) {
+                return data;
+            }
+            tools.jackson.databind.JsonNode node = MAPPER.readTree(body);
+            node.propertyStream().forEach(e ->
+                    data.put(e.getKey(), e.getValue().isNull() ? null : e.getValue().asString()));
+        } catch (Exception e) {
+            // 본문을 못 읽으면 값이 비어 아래 대조에서 걸린다 — 여기서 터뜨리지 않는다
+            log.error("KCP 전문을 읽지 못했다", e);
         }
         return data;
     }
+
+    private static final tools.jackson.databind.ObjectMapper MAPPER =
+            new tools.jackson.databind.ObjectMapper();
 
     private int amount(String value) {
         try {
