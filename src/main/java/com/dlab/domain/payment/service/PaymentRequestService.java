@@ -136,6 +136,60 @@ public class PaymentRequestService {
     }
 
     /**
+     * 단말기(POS) 승인 결과 기록.
+     *
+     * <h2>★ 여기서는 KCP 를 부르지 않는다</h2>
+     * 단말 승인은 <b>데스크 PC 에서 이미 끝난 일</b>이다. SecureVCAT 이 설치된 PC 에서
+     * 브라우저가 단말을 직접 호출해 승인받고, 우리는 <b>그 결과를 받아 적기만</b> 한다.
+     * 우리가 다시 KCP 에 요청하면 같은 금액이 두 번 승인된다.
+     *
+     * <p>그래서 바이링크·가상계좌와 달리 <b>Webhook 을 기다리지 않는다</b> — 호출 시점에
+     * 이미 승인된 거래라 바로 수납으로 잡는다.
+     *
+     * <p><b>승인번호로 멱등을 건다.</b> 화면이 저장에 실패해 다시 누르면 같은 승인이 두 번
+     * 기록되고, 그 학생은 두 번 낸 것으로 남는다.
+     *
+     * @param approvalNo 단말이 준 승인번호. 이 값이 중복 방지의 근거다
+     */
+    @Transactional
+    public PaymentRequest recordTerminalApproval(AuthPrincipal me, Long billingId, int amount,
+                                                 String approvalNo, String cardName,
+                                                 Instant approvedAt) {
+        // ★ 중복부터 본다. 뒤에 두면 첫 저장으로 완납이 된 청구가 "이미 완납" 으로 거절되어,
+        //   화면은 같은 승인을 저장하지 못한 것으로 읽고 다시 누른다.
+        var existing = requestRepository.findByTno(approvalNo);
+        if (existing.isPresent()) {
+            log.info("단말 승인 중복 저장 차단: approvalNo={}", approvalNo);
+            return existing.get();
+        }
+
+        Billing billing = requireBillable(me, billingId);
+        if (amount > billing.unpaidAmount()) {
+            // 미납액보다 많이 받으면 과납이 되는데, 환불 경로가 따로 필요해진다
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "미납액(%,d원)보다 많은 금액은 기록할 수 없습니다.".formatted(billing.unpaidAmount()));
+        }
+
+        // 단말 채널 사이트코드는 있으면 함께 남긴다 — 정산 대사에 쓰인다.
+        // 없다고 막지 않는다. 승인은 이미 끝났고, 기록을 거절하면 받은 돈이 사라진다
+        PgSite site = siteOrNull(billing, PgChannel.TERMINAL);
+        if (site == null) {
+            throw new BusinessException(ErrorCode.PG_SITE_NOT_FOUND,
+                    "단말기 사이트코드가 등록되지 않았습니다. 등록 후 다시 저장해 주세요.");
+        }
+
+        PaymentRequest request = requestRepository.save(
+                new PaymentRequest(billing, site, orderNo(billing), amount, PayMethod.CARD));
+        request.markPaid(approvalNo, approvedAt == null ? Instant.now(clock) : approvedAt,
+                cardName);
+        billing.addPayment(amount, PaymentMethod.CARD,
+                approvedAt == null ? Instant.now(clock) : approvedAt);
+
+        log.info("단말 승인 기록: billingId={}, 승인번호={}, 금액={}", billingId, approvalNo, amount);
+        return request;
+    }
+
+    /**
      * Webhook 수신 — 여기서만 수납이 확정된다.
      *
      * <p><b>멱등해야 한다.</b> KCP 는 우리가 {@code result=0000} 을 돌려줄 때까지 최대 10번
@@ -166,6 +220,13 @@ public class PaymentRequestService {
         billing.addPayment(amount, methodOf(request.getPayMethod()), Instant.now(clock));
         log.info("결제 완료: orderNo={}, tno={}, billingId={}", orderNo, tno, billing.getId());
         return true;
+    }
+
+    private PgSite siteOrNull(Billing billing, PgChannel channel) {
+        PgPurpose purpose = billing.getBillingType() == BillingType.MEAL
+                ? PgPurpose.MEAL : PgPurpose.TUITION;
+        return pgSiteRepository.findForUse(billing.getAcademy().getId(), purpose, channel)
+                .orElse(null);
     }
 
     /** 결제할 수 있는 청구인지. 취소·완납 건에 요청하면 학부모가 두 번 낸다. */

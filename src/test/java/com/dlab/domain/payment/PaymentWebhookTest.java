@@ -158,6 +158,34 @@ class PaymentWebhookTest {
     }
 
     @Test
+    @DisplayName("★ 단말 승인은 같은 승인번호로 두 번 기록되지 않는다 — 두 번 낸 것으로 남는다")
+    void terminalApprovalIsIdempotent() {
+        em.persist(new PgSite(null, PgPurpose.TUITION, PgChannel.TERMINAL,
+                "AO8M3", "대성학력개발 단말기", null));
+        em.flush();
+
+        service.recordTerminalApproval(admin, billing.getId(), 750_000, "APP-1", "현대카드", null);
+        service.recordTerminalApproval(admin, billing.getId(), 750_000, "APP-1", "현대카드", null);
+        em.flush();
+
+        assertThat(billing.receivedAmount()).isEqualTo(750_000);
+        assertThat(billing.getStatus()).isEqualTo(BillingStatus.PAID);
+    }
+
+    @Test
+    @DisplayName("단말 승인은 미납액을 넘을 수 없다 — 과납은 환불 경로가 따로 필요하다")
+    void terminalCannotExceedUnpaid() {
+        em.persist(new PgSite(null, PgPurpose.TUITION, PgChannel.TERMINAL,
+                "AO8M3", "대성학력개발 단말기", null));
+        em.flush();
+
+        assertThatThrownBy(() ->
+                service.recordTerminalApproval(admin, billing.getId(), 800_000, "APP-2", "현대카드", null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("미납액");
+    }
+
+    @Test
     @DisplayName("★ 급식비는 업체 명의 사이트코드가 없으면 거절한다 — 학원 코드로 받으면 업체에게 안 간다")
     void mealRequiresVendorSite() {
         Billing meal = new Billing(billing.getEnrollment(), "9월 급식비",

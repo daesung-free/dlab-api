@@ -66,6 +66,28 @@ public class AdminPaymentRequestController {
                         request.bankCodeOrDefault(), request.daysOrDefault())));
     }
 
+    /**
+     * 단말기(POS) 승인 기록.
+     *
+     * <p>★ <b>이 API 는 결제를 하지 않는다.</b> 승인은 데스크 PC 의 SecureVCAT 이
+     * 단말과 직접 해서 이미 끝났고, 여기서는 <b>그 결과를 적을 뿐</b>이다 —
+     * 서버가 다시 요청하면 같은 금액이 두 번 승인된다.
+     *
+     * <p>그래서 Webhook 을 기다리지 않고 <b>호출 즉시 수납으로 잡힌다.</b>
+     *
+     * <p><b>승인번호로 중복을 막는다.</b> 저장에 실패해 다시 눌러도 한 번만 기록된다 —
+     * 같은 승인이 두 번 잡히면 그 학생은 두 번 낸 것으로 남는다.
+     */
+    @PostMapping("/terminal")
+    public ApiResponse<PaymentRequestResponse> recordTerminal(
+            @CurrentAccount AuthPrincipal me,
+            @RequestBody TerminalRequest request) {
+        return ApiResponse.success(PaymentRequestResponse.from(
+                paymentRequestService.recordTerminalApproval(me, request.billingId(),
+                        request.amount(), request.approvalNo(), request.cardName(),
+                        request.approvedAt())));
+    }
+
     /** 청구의 결제 요청 이력. 링크를 몇 번 보냈는지, 어느 것이 결제됐는지 본다. */
     @GetMapping
     public ApiResponse<List<PaymentRequestResponse>> byBilling(@RequestParam Long billingId) {
@@ -86,6 +108,17 @@ public class AdminPaymentRequestController {
         boolean sendSmsOrDefault() {
             return sendSms == null || sendSms;
         }
+    }
+
+    /**
+     * @param approvalNo 단말이 준 승인번호. <b>중복 저장을 막는 키</b>다
+     * @param cardName   카드사명. 영수증·대사에 쓴다
+     * @param approvedAt 단말 승인 시각. 비우면 서버 시각 — 오프라인 승인 뒤 늦게 저장하는
+     *                   경우가 있어 단말 시각을 그대로 받는 편이 정확하다
+     */
+    public record TerminalRequest(@NotNull Long billingId, int amount,
+                                  @NotNull String approvalNo, String cardName,
+                                  Instant approvedAt) {
     }
 
     /**
