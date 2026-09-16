@@ -134,6 +134,77 @@ public class AdminGradeController {
                 mockExamUploadService.apply(me, academyId, examMasterId, file.getInputStream()));
     }
 
+    /**
+     * 동명이인 등으로 멈춘 행을 학생에 연결한다.
+     *
+     * <p>★ <b>한 번 정하면 다음 회차부터 자동이다.</b> 그러지 않으면 같은 학생이 회차마다
+     * 미매칭으로 빠지고, 매번 사람이 같은 판단을 다시 해야 한다.
+     *
+     * <p>⚠️ 반이 바뀌면 파일의 번호 앞자리가 바뀌어 이 연결이 맞지 않게 된다. 그때는
+     * 다시 이름 매칭으로 떨어진다 — <b>틀린 학생에게 들어가는 게 아니라 다시 물어본다.</b>
+     *
+     * @param year 회차 연도. 학번·반이 해마다 초기화되므로 연도까지 묶는다
+     */
+    @PostMapping("/grades/exam-scores/upload/links")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<MockExamLinkView> linkUploadRow(
+            @CurrentAccount AuthPrincipal me,
+            @jakarta.validation.Valid @RequestBody MockExamLink request) {
+        return ApiResponse.success(MockExamLinkView.from(mockExamUploadService.link(
+                me, request.academyId(), request.year(), request.schoolCode(),
+                request.classNo(), request.studentNo(), request.enrollmentId())));
+    }
+
+    /** 사람이 정해둔 연결 목록. */
+    @GetMapping("/grades/exam-scores/upload/links")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<java.util.List<MockExamLinkView>> uploadLinks(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam short year) {
+        return ApiResponse.success(mockExamUploadService.links(me, academyId, year)
+                .stream().map(MockExamLinkView::from).toList());
+    }
+
+    /** 잘못 이었으면 해제한다. 지우면 다시 이름으로 찾는다. */
+    @DeleteMapping("/grades/exam-scores/upload/links/{linkId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<Void> unlinkUploadRow(@CurrentAccount AuthPrincipal me,
+                                             @PathVariable Long linkId) {
+        mockExamUploadService.unlink(me, linkId);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * @param schoolCode 파일의 학교코드(분당 {@code 99700}). 미리보기 응답에 함께 온다
+     */
+    public record MockExamLink(
+            Long academyId,
+            @jakarta.validation.constraints.NotNull(message = "연도는 필수입니다.") Short year,
+            @jakarta.validation.constraints.NotBlank(message = "학교코드는 필수입니다.")
+            @jakarta.validation.constraints.Size(max = 20) String schoolCode,
+            @jakarta.validation.constraints.NotBlank(message = "반은 필수입니다.")
+            @jakarta.validation.constraints.Size(max = 20) String classNo,
+            @jakarta.validation.constraints.NotBlank(message = "번호는 필수입니다.")
+            @jakarta.validation.constraints.Size(max = 20) String studentNo,
+            @jakarta.validation.constraints.NotNull(message = "학생은 필수입니다.") Long enrollmentId) {
+    }
+
+    /**
+     * @param fileStudentNo 파일의 번호("반 번호 + 3자리 순번")
+     * @param studentNo     우리 학번. 둘은 서로 다른 체계라 같은 칸에 두면 헷갈린다
+     */
+    public record MockExamLinkView(Long id, short year, String schoolCode, String classNo,
+                                   String fileStudentNo, Long enrollmentId, String studentNo,
+                                   String studentName) {
+
+        static MockExamLinkView from(com.dlab.domain.grade.entity.MockExamStudentKey k) {
+            return new MockExamLinkView(k.getId(), k.getYear(), k.getSchoolCode(),
+                    k.getClassNo(), k.getStudentNo(), k.getEnrollment().getId(),
+                    k.getEnrollment().getStudentNo(), k.getEnrollment().getStudent().getName());
+        }
+    }
+
     @GetMapping("/students/{enrollmentId}/grades")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
     public ApiResponse<GradeResponse.Submission> studentGrades(
