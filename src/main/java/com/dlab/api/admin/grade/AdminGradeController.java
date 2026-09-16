@@ -39,6 +39,7 @@ public class AdminGradeController {
     private final ExamFormService examFormService;
     private final StudentGradeService gradeService;
     private final StudentService studentService;
+    private final com.dlab.domain.grade.service.MockExamUploadService mockExamUploadService;
 
     /**
      * 등록된 시험 회차 목록.
@@ -88,6 +89,51 @@ public class AdminGradeController {
      * <p>{@code examSkipped}가 {@code true}면 <b>"모른다"고 체크한 것</b>이지 미입력이
      * 아니다 — 사유가 함께 온다. 승인 심사에서 이 둘을 같게 취급하지 말 것.
      */
+    /**
+     * 모의고사 성적 엑셀 미리보기.
+     *
+     * <p><b>저장하지 않는다.</b> 605명짜리 파일을 바로 반영하면 매칭이 어긋났을 때 무엇이
+     * 잘못 들어갔는지 모른 채 전교생 성적이 바뀐다. 누가 매칭됐고 누가 안 됐는지 먼저 본다.
+     *
+     * <p>양식은 <b>대성전산이 쓰던 담임용 파일 그대로</b>다 — 우리가 새로 만들지 않는다.
+     * 더프리미엄과 평가원이 같은 양식이라 파일 종류를 구분해 올리지 않아도 된다.
+     *
+     * @param academyId    업로드할 지점. ★ 파일의 학교코드를 지점과 잇는 매핑이 아직 없어
+     *                     <b>관리자가 고른다</b>(§4)
+     * @param examMasterId 어느 회차 성적인지. 파일에는 회차 정보가 없다
+     */
+    @PostMapping("/grades/exam-scores/upload/preview")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<com.dlab.domain.grade.service.MockExamUploadService.Preview> previewUpload(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam Long examMasterId,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file)
+            throws java.io.IOException {
+        return ApiResponse.success(
+                mockExamUploadService.preview(me, academyId, examMasterId, file.getInputStream()));
+    }
+
+    /**
+     * 모의고사 성적 엑셀 반영.
+     *
+     * <p><b>매칭된 학생만 저장한다.</b> 못 찾은 행 때문에 전체를 되돌리면 한 명 때문에
+     * 604명을 다시 올려야 한다 — 못 찾은 행은 응답에 사유와 함께 남는다.
+     *
+     * <p>같은 회차를 다시 올리면 그 회차 점수가 <b>교체</b>된다. 다른 회차는 건드리지 않는다.
+     */
+    @PostMapping("/grades/exam-scores/upload")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<com.dlab.domain.grade.service.MockExamUploadService.Preview> upload(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam Long examMasterId,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file)
+            throws java.io.IOException {
+        return ApiResponse.success(
+                mockExamUploadService.apply(me, academyId, examMasterId, file.getInputStream()));
+    }
+
     @GetMapping("/students/{enrollmentId}/grades")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
     public ApiResponse<GradeResponse.Submission> studentGrades(
