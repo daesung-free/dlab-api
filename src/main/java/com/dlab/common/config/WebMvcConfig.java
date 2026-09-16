@@ -19,10 +19,14 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebMvcConfig implements WebMvcConfigurer {
 
     private final PasswordChangeRequiredInterceptor passwordChangeRequiredInterceptor;
+    private final com.dlab.common.security.MenuAccessInterceptor menuAccessInterceptor;
 
     @Override
     public void addInterceptors(@NonNull InterceptorRegistry registry) {
         registry.addInterceptor(passwordChangeRequiredInterceptor)
                 .addPathPatterns("/api/**");
+        // 계정별 메뉴 노출. 관리자 웹만 대상이다 — 앱에는 메뉴 설정 개념이 없다
+        registry.addInterceptor(menuAccessInterceptor)
+                .addPathPatterns("/api/v1/admin/**");
     }
 }
