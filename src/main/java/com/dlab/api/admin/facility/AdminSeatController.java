@@ -175,7 +175,7 @@ public class AdminSeatController {
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody SeatRequests.SeatGridCreate request) {
         var spec = new SeatMasterAdminService.SeatGridSpec(
-                request.studyAreaId(), request.rows(), request.columns(), request.seatCdPrefix(),
+                request.studyAreaId(), request.rows(), request.columns(), request.seatCdPrefixOrEmpty(),
                 request.startNumberOrDefault(), request.numberPaddingOrDefault(),
                 request.startXOrDefault(), request.startYOrDefault(),
                 request.columnMajorOrDefault(),

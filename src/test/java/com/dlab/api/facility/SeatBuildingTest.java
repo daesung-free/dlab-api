@@ -11,6 +11,7 @@ import com.dlab.domain.facility.entity.Building;
 import com.dlab.domain.facility.entity.SeatMaster;
 import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.facility.service.BuildingAdminService;
+import com.dlab.domain.facility.service.SeatLayoutService;
 import com.dlab.domain.facility.service.SeatMasterAdminService;
 import com.dlab.domain.facility.service.StudyAreaAdminService;
 import com.dlab.domain.kiosk.service.KioskSeatQueryService;
@@ -45,6 +46,7 @@ class SeatBuildingTest {
     @Autowired StudyAreaAdminService studyAreaAdminService;
     @Autowired SeatMasterAdminService seatMasterAdminService;
     @Autowired KioskSeatQueryService kioskSeatQueryService;
+    @Autowired SeatLayoutService seatLayoutService;
 
     Academy dongtan;
     Building main;
@@ -150,6 +152,40 @@ class SeatBuildingTest {
 
         assertThat(area.getBuilding().getId()).isEqualTo(main.getId());
         assertThat(area.getKioskAreaCd()).isEqualTo("A");
+    }
+
+    @Test
+    @DisplayName("★ 구역 목록에 관·키오스크 코드가 실린다 — 화면이 본관 A 와 별관 A 를 구분할 근거")
+    void areaListCarriesBuildingAndKioskCode() {
+        // 목록 응답은 StudyAreaResponse 가 아니라 AreaSummary 라 필드가 따로 논다.
+        // 실제로 kioskAreaCd 가 빠진 채로 화면이 그 칼럼을 그리고 있었다
+        Building annex = buildingAdminService.create(admin, dongtan.getId(), "2", "2관",
+                (short) 1, 1000);
+        area(main.getId(), "A");
+        area(annex.getId(), "A");
+        em.flush();
+
+        assertThat(seatLayoutService.areas(admin, dongtan.getId(), true, null))
+                .extracting(a -> a.buildingName() + "/" + a.areaCd() + "/" + a.kioskAreaCd())
+                .containsExactlyInAnyOrder("본관/A/A", "2관/A/2-A");
+    }
+
+    @Test
+    @DisplayName("★ 접두어 없이 격자를 만들 수 있다 — 별관 오프셋은 숫자일 때만 걸린다")
+    void gridWithoutPrefix() {
+        // 접두어가 필수였을 때, 정작 이 기능이 필요한 동탄(순수 숫자 번호)이
+        // 격자를 못 만들었다. "A-01" 이면 offset 변환 자체가 안 걸린다
+        Building annex = buildingAdminService.create(admin, dongtan.getId(), "2", "2관",
+                (short) 1, 1000);
+        StudyArea annexA = area(annex.getId(), "A");
+
+        var created = seatMasterAdminService.createGrid(admin,
+                new SeatMasterAdminService.SeatGridSpec(
+                        annexA.getId(), 1, 3, "", 1, 1, 1, 1, false, List.of()));
+
+        assertThat(created)
+                .extracting(s -> s.getSeatCd() + "->" + s.getKioskSeatCd())
+                .containsExactly("1->1001", "2->1002", "3->1003");
     }
 
     // ── 준비물 ───────────────────────────────────────────────────────────────

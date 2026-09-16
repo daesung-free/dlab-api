@@ -82,7 +82,8 @@ public class SeatLayoutService {
         return areas.stream()
                 .map(a -> new AreaSummary(
                         a.getId(), a.getBuilding().getId(), a.getBuilding().getName(),
-                        a.getAreaCd(), a.getAreaNm(), a.getSortOrder(), a.isActive(),
+                        a.getAreaCd(), a.getKioskAreaCd(), a.getAreaNm(), a.getSortOrder(),
+                        a.isActive(),
                         seatMasterRepository.findByStudyAreaId(a.getId()).size()))
                 .toList();
     }
@@ -219,10 +220,13 @@ public class SeatLayoutService {
     /**
      * @param buildingName 어느 관인가. <b>화면이 이걸 안 띄우면 같은 이름의 구역이 둘씩
      *                     보인다</b> — 본관 A 와 별관 A 를 구분할 수가 없다
+     * @param kioskAreaCd  단말이 쓰는 코드. 본관은 {@code areaCd}와 같고 별관은 관 코드가
+     *                     앞에 붙는다. <b>대조용</b>이다 — 단말에서 구역이 안 보인다는
+     *                     문의가 오면 이 값부터 확인한다
      * @param seatCount    구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다
      */
     public record AreaSummary(Long id, Long buildingId, String buildingName,
-                              String areaCd, String areaNm, short sortOrder,
+                              String areaCd, String kioskAreaCd, String areaNm, short sortOrder,
                               boolean active, int seatCount) {
     }
 

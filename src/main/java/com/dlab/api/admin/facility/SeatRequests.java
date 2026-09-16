@@ -84,7 +84,8 @@ public final class SeatRequests {
      * <p>수십 석을 한 칸씩 등록하게 하면 실무에서 안 쓴다. 행·열과 시작 번호만 받아
      * 좌표·좌석번호를 서버가 만든다.
      *
-     * @param seatCdPrefix  좌석번호 접두어. {@code "A-"} + 번호 → {@code A-01}
+     * @param seatCdPrefix  좌석번호 접두어. {@code "A-"} + 번호 → {@code A-01}.
+     *                      <b>비워도 된다</b> — 그러면 번호만 남는다({@code 1}, {@code 2}…)
      * @param startNumber   시작 번호(기본 1). 기존 격자에 이어붙일 때 지정한다
      * @param numberPadding 번호 자릿수(기본 2). {@code 2}면 {@code 01}
      * @param startX        x 좌표 시작값(기본 1)
@@ -96,7 +97,11 @@ public final class SeatRequests {
             @NotNull(message = "구역은 필수입니다.") Long studyAreaId,
             @Min(value = 1, message = "행은 1 이상이어야 합니다.") @Max(100) @NotNull(message = "행 수는 필수입니다.") Integer rows,
             @Min(value = 1, message = "열은 1 이상이어야 합니다.") @Max(100) @NotNull(message = "열 수는 필수입니다.") Integer columns,
-            @NotBlank(message = "좌석번호 접두어는 필수입니다.")
+            /*
+             * ★ 필수가 아니다. 접두어 없는 **순수 숫자** 좌석번호가 정상 케이스다 —
+             *   동탄이 그렇고, 별관 오프셋 변환(1번 → 1001번)도 숫자일 때만 걸린다.
+             *   @NotBlank 였을 때 정작 이 기능이 필요한 지점이 격자를 못 만들었다.
+             */
             @Size(max = 30, message = "접두어는 30자까지입니다.") String seatCdPrefix,
             @Min(0) Integer startNumber,
             @Min(0) @Max(6) Integer numberPadding,
@@ -104,6 +109,10 @@ public final class SeatRequests {
             @Min(0) Integer startY,
             Boolean columnMajor,
             @Valid List<SeatGridSkipCell> skips) {
+
+        public String seatCdPrefixOrEmpty() {
+            return seatCdPrefix == null ? "" : seatCdPrefix;
+        }
 
         public int startNumberOrDefault() {
             return startNumber == null ? 1 : startNumber;
