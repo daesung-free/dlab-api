@@ -43,10 +43,21 @@ class ApprovalRequestTest {
     }
 
     @Test
-    @DisplayName("케이스1 - 학부모는 타임아웃이 지나서 승인해도 정상 승인으로 본다")
-    void parentApprovalAfterTimeoutIsStillParentCase() {
+    @DisplayName("★ 케이스1-b - 학부모가 타임아웃을 넘겨 승인하면 따로 기록한다")
+    void parentApprovalAfterTimeout() {
+        // 전에는 이것도 PARENT_IN_TIME 이었다 — 열 시간 뒤 승인이 "시간 내" 로 남았다.
+        // 문구는 같지만 기록이 갈려야 "학부모 무응답 비율" 을 볼 수 있다.
         assertThat(request().decideResolutionCase(ApproverType.PARENT, REQUESTED_AT.plusSeconds(1200)))
-                .isEqualTo(ResolutionCase.PARENT_IN_TIME);
+                .isEqualTo(ResolutionCase.PARENT_AFTER_TIMEOUT);
+    }
+
+    @Test
+    @DisplayName("경계 — 타임아웃 정각에 승인하면 늦은 것으로 본다")
+    void parentApprovalExactlyAtTimeout() {
+        // escalationAt 부터는 담임에게 넘어간 시점이다. 정각을 "시간 내" 로 두면
+        // 담임 쪽 판정(STAFF_AFTER_TIMEOUT)과 기준이 어긋난다.
+        assertThat(request().decideResolutionCase(ApproverType.PARENT, REQUESTED_AT.plusSeconds(600)))
+                .isEqualTo(ResolutionCase.PARENT_AFTER_TIMEOUT);
     }
 
     @Test

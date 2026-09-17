@@ -105,6 +105,41 @@ class LectureFlowTest {
     }
 
     @Test
+    @DisplayName("★ PATCH 로 값을 비울 수 있다 — null 이 '안 보냄'과 구분된다")
+    void patchCanClearValues() throws Exception {
+        String token = adminToken();
+        long lectureId = openLecture(30);
+
+        // 설명을 넣어 둔다
+        mvc.perform(patch("/api/v1/admin/lectures/{id}", lectureId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"description":"국어 실전"}"""))
+                .andExpect(status().isOk());
+        em.flush();
+
+        // 안 보내면 그대로 둔다
+        mvc.perform(patch("/api/v1/admin/lectures/{id}", lectureId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.description").value("국어 실전"))
+                .andExpect(jsonPath("$.data.capacity").value(30));
+
+        // 명시적 null 은 '비워 달라'다 — 정원은 제한 없음이 된다
+        mvc.perform(patch("/api/v1/admin/lectures/{id}", lectureId)
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"description":null,"capacity":null}"""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.description").doesNotExist())
+                .andExpect(jsonPath("$.data.capacity").doesNotExist());
+    }
+
+    @Test
     @DisplayName("★ 아무도 신청하지 않은 특강만 지운다 — 신청 이력을 지우지 않는다")
     void deleteOnlyWhenNobodyApplied() throws Exception {
         String token = adminToken();

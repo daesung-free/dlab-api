@@ -66,15 +66,15 @@ class AdminAcademyTest {
                 "src/main/resources/db/seed/V20260807_1600__academy_seed.sql"));
 
         // acad_cd는 연속이 아니다 — 31~34 다음이 42다
-        assertThat(sql).contains("('31', '분당', 'D.Lab 분당', 'DS-001')")
-                .contains("('34', '김포', 'D.Lab 김포', 'DS-004')")
-                .contains("('42', '부천', 'D.Lab 부천', 'DS-005')")
-                .contains("('46', '송파', 'D.Lab 송파', 'DS-009')");
+        assertThat(sql).contains("('31', '분당', 'DLab 분당', 'DS-001')")
+                .contains("('34', '김포', 'DLab 김포', 'DS-004')")
+                .contains("('42', '부천', 'DLab 부천', 'DS-005')")
+                .contains("('46', '송파', 'DLab 송파', 'DS-009')");
         // ★ 대전·대구는 2026-08-26에 추가됐다. store_code 는 키오스크 어드민에서
         //   확인한 값이고, 추측이 아니다 — 어긋난 값이 들어가면 "설정은 됐는데
         //   연동이 안 되는" 상태가 되어 원인을 찾기가 더 어려워진다
-        assertThat(sql).contains("('47', '대전', 'D.Lab 대전', 'DS-010')")
-                .contains("('48', '대구', 'D.Lab 대구', 'DS-011')");
+        assertThat(sql).contains("('47', '대전', 'DLab 대전', 'DS-010')")
+                .contains("('48', '대구', 'DLab 대구', 'DS-011')");
         // 11개 전부 store_code 를 갖는다 — 하나라도 비면 그 지점만 조용히 연동이 끊긴다
         assertThat(sql.lines().filter(l -> l.contains("'DS-")).count()).isEqualTo(11);
     }
@@ -102,7 +102,7 @@ class AdminAcademyTest {
     @Test
     @DisplayName("★ 등원 기준 시각을 고칠 수 있다 — 지각 판정 기준이다")
     void canUpdateAttendanceDeadline() {
-        academyService.update(bundangAdmin, bundang.getId(), "분당", "D.Lab 분당",
+        academyService.update(bundangAdmin, bundang.getId(), "분당", "DLab 분당",
                 LocalTime.of(8, 30));
         em.flush();
         em.clear();

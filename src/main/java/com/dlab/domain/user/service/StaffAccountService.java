@@ -3,7 +3,9 @@ package com.dlab.domain.user.service;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
+import com.dlab.common.security.LoginAttemptStore;
 import com.dlab.common.security.PasswordPolicy;
+import com.dlab.common.security.RefreshTokenStore;
 import com.dlab.common.security.Role;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.AuditRecorder;
@@ -41,6 +43,13 @@ public class StaffAccountService {
     private final AccountRoleRepository accountRoleRepository;
     private final AcademyRepository academyRepository;
     private final PasswordEncoder passwordEncoder;
+    /**
+     * 로그인 실패 카운터. 잠금을 풀 때 <b>함께 지워야</b> 한다 — 남겨두면 카운터가 이미
+     * 한도에 도달해 있어 다음 실패 한 번에 곧바로 다시 잠긴다.
+     */
+    private final LoginAttemptStore loginAttemptStore;
+    /** 임시 비밀번호를 새로 낼 때 기존 세션을 끊는다. */
+    private final RefreshTokenStore refreshTokenStore;
     /**
      * 권한·상태 변경을 감사 로그로 남긴다 — 안 남기면 그 기간은 나중에 복구할 수 없다.
      *
@@ -320,6 +329,62 @@ public class StaffAccountService {
                 AuditEntityListener.Change.of("status",
                         before.name(), account.getStatus().name()));
         return account;
+    }
+
+    /**
+     * 잠금 해제 (로그인 5회 실패 → {@code locked_at}).
+     *
+     * <p><b>자동 해제가 없어 이 호출이 유일한 수단이다.</b> 없는 동안에는 직원이 잠기면
+     * DB를 직접 고치는 것 말고 방법이 없었다 — 앱 계정({@code /admin/app-accounts})에만
+     * 경로가 있었다.
+     *
+     * <p><b>실패 카운터도 함께 지운다.</b> 안 지우면 관리자가 풀어준 직후 실패 한 번에
+     * 다시 잠겨, 화면에서는 해제가 안 먹은 것처럼 보인다.
+     *
+     * <p>잠겨 있지 않은 계정에 불러도 성공으로 둔다 — 화면이 잠금 여부를 보고 누르는데,
+     * 그 사이 다른 관리자가 먼저 풀었다고 오류를 낼 이유가 없다(멱등).
+     */
+    @Transactional
+    public Account unlock(Long accountId, AuthPrincipal principal) {
+        Account account = loadStaffAccount(accountId);
+        verifyAccountScope(account, principal);
+        boolean wasLocked = account.isLocked();
+        account.unlock();
+        loginAttemptStore.clear(account.getLoginId());
+        if (wasLocked) {
+            auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
+                    AuditEntityListener.Change.of("locked", "true", "false"));
+        }
+        return account;
+    }
+
+    /**
+     * 임시 비밀번호 재발급 (분실·잠금 시).
+     *
+     * <p>평문을 <b>반환값으로 딱 한 번만</b> 돌려준다. 저장하지 않으므로 관리자가 놓치면
+     * 다시 발급해야 한다 — 되짚어 볼 수 있게 만들면 그 자체가 유출 경로다.
+     *
+     * <p><b>기존 Refresh Token을 지운다.</b> 계정 탈취 때문에 재발급하는 경우가 있는데
+     * 남겨두면 계속 갱신되어 비밀번호를 바꾼 의미가 사라진다. 다만 <b>이미 나간 Access
+     * Token은 만료(기본 1시간)까지 살아 있다</b> — 값을 알아야 블랙리스트에 올릴 수 있는데
+     * 서버가 들고 있지 않다. 즉시 끊어야 하면 탈퇴 처리해야 한다.
+     *
+     * <p>{@link Account#issueTemporaryPassword}가 잠금도 함께 푼다 — 잠긴 사람이
+     * 비밀번호를 잊은 경우가 대부분이라 둘을 따로 누르게 하면 한 번 더 잠긴다.
+     *
+     * @return 평문 임시 비밀번호
+     */
+    @Transactional
+    public String reissueTemporaryPassword(Long accountId, AuthPrincipal principal) {
+        Account account = loadStaffAccount(accountId);
+        verifyAccountScope(account, principal);
+        String temporary = PasswordPolicy.generateTemporary();
+        account.issueTemporaryPassword(passwordEncoder.encode(temporary));
+        loginAttemptStore.clear(account.getLoginId());
+        refreshTokenStore.delete(accountId);
+        auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
+                AuditEntityListener.Change.of("temporaryPassword", null, "reissued"));
+        return temporary;
     }
 
     /** 학생·학부모 계정은 이 화면 대상이 아니다 — 가입·승인 흐름이 통째로 다르다. */

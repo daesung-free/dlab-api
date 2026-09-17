@@ -7,6 +7,7 @@ import com.dlab.domain.penalty.entity.PenaltyCategory;
 import com.dlab.domain.penalty.entity.PenaltyItem;
 import com.dlab.domain.penalty.entity.PenaltyRule;
 import com.dlab.domain.penalty.entity.PenaltyTriggerType;
+import com.dlab.domain.penalty.entity.TriggerCondition;
 import com.dlab.domain.penalty.repository.PenaltyItemRepository;
 import com.dlab.domain.penalty.repository.PenaltyPointRepository;
 import com.dlab.domain.penalty.repository.PenaltyRuleRepository;
@@ -123,7 +124,7 @@ public class PenaltyMasterService {
                                   PenaltyTriggerType triggerType,
                                   String triggerCondition, Long itemId) {
         Long academyId = scope(me, requestedAcademyId);
-        verifyCondition(triggerCondition);
+        verifyCondition(triggerType, triggerCondition);
         PenaltyItem item = requireItem(me, itemId);
 
         if (item.getYear() != year) {
@@ -137,7 +138,7 @@ public class PenaltyMasterService {
     @Transactional
     public PenaltyRule updateRule(AuthPrincipal me, Long ruleId, PenaltyTriggerType triggerType,
                                   String triggerCondition, Long itemId) {
-        verifyCondition(triggerCondition);
+        verifyCondition(triggerType, triggerCondition);
         PenaltyRule rule = requireRule(me, ruleId);
         PenaltyItem item = requireItem(me, itemId);
         rule.change(triggerType, triggerCondition.trim(), item);
@@ -225,9 +226,24 @@ public class PenaltyMasterService {
      * <p>비워두면 그 트리거의 <b>모든 상황</b>에 걸린다 — 출결 규칙 하나가 등원·하원·외출까지
      * 전부 벌점 대상으로 만든다. 스키마도 {@code NOT NULL}이다.
      */
-    private void verifyCondition(String triggerCondition) {
+    /**
+     * 조건값 검증.
+     *
+     * <p>★ <b>목록에 없는 값을 거절한다.</b> 전에는 비었는지만 봤다 — {@code "ZZZZ"} 도
+     * 200 으로 저장됐고, 그렇게 만들어진 규칙은 <b>영영 걸리지 않는다.</b> 화면에는
+     * "규칙을 만들었는데 점수가 안 붙는다" 로만 보이고 단서가 없다.
+     *
+     * <p>허용값을 메시지에 함께 준다 — 목록 API 를 몰라도 그 자리에서 알 수 있어야 한다.
+     */
+    private void verifyCondition(PenaltyTriggerType triggerType, String triggerCondition) {
         if (triggerCondition == null || triggerCondition.isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "트리거 조건을 입력해 주세요.");
+        }
+        if (!TriggerCondition.isValid(triggerType, triggerCondition)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "%s 트리거에 쓸 수 없는 조건입니다: %s (가능한 값: %s)".formatted(
+                            triggerType, triggerCondition.trim(),
+                            TriggerCondition.allowedValues(triggerType)));
         }
     }
 }

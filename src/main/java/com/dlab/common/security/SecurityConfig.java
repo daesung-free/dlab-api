@@ -86,9 +86,19 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // ★ /me 는 permitAll 앞에 둔다. 뒤에 두면 auth/** 에 먼저 걸려
-                        //   토큰 없이 들어오고, 컨트롤러가 principal 을 null 로 받아 500 이 난다
+                        // ★★ auth/** 중 토큰이 있어야 하는 것들. permitAll 앞에 둔다.
+                        //
+                        //   뒤에 두면 auth/** 에 먼저 걸려 토큰 없이 들어오고, 컨트롤러가
+                        //   principal 을 null 로 받아 NPE → 500 이 난다.
+                        //   /me 만 막아뒀다가 logout·password 에서 같은 500 이 났다 —
+                        //   "누구인지" 를 쓰는 엔드포인트는 전부 여기 있어야 한다.
+                        //
+                        //   로그인·토큰재발급만 열려 있으면 된다. 그 둘은 토큰을 만드는 쪽이다.
                         .requestMatchers("/api/v1/admin/auth/me").authenticated()
+                        .requestMatchers("/api/v1/admin/auth/logout").authenticated()
+                        .requestMatchers("/api/v1/admin/auth/password").authenticated()
+                        .requestMatchers("/api/v1/app/auth/logout").authenticated()
+                        .requestMatchers("/api/v1/app/auth/password").authenticated()
                         // 로그인·토큰재발급은 인증 전에 호출된다
                         .requestMatchers("/api/v1/app/auth/**").permitAll()
                         .requestMatchers("/api/v1/admin/auth/**").permitAll()

@@ -131,8 +131,19 @@ public class AppNotificationSettingService {
      * <p>물리 삭제하지 않는다 — 만료 단말 목록(F-4.12-2)에서 "언제부터 안 쓰였나"를 봐야 한다.
      */
     @Transactional
-    public void removeToken(String token) {
+    /**
+     * 토큰 해제 (로그아웃·앱 삭제).
+     *
+     * <p>★ <b>내 토큰인지 확인한다.</b> 전에는 토큰 문자열만 맞으면 지웠다 — 값을 아는
+     * 사람이면 <b>남의 단말 알림을 끊을 수 있었고</b>, 끊긴 쪽은 알 방법이 없다.
+     * 미등원 알림처럼 안 오면 곤란한 것들이 이 경로를 탄다.
+     *
+     * <p>남의 토큰이면 조용히 넘어간다. 있는지 없는지를 응답으로 알려주면 그 자체가
+     * 토큰 존재 확인 수단이 된다.
+     */
+    public void removeToken(Long accountId, String token) {
         pushTokenRepository.findByTokenAndDeletedFalse(token)
+                .filter(t -> t.getAccount().getId().equals(accountId))
                 .ifPresent(PushToken::markDeleted);
     }
 

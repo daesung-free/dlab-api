@@ -6,6 +6,7 @@ import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository;
+import com.dlab.domain.facility.entity.AreaType;
 import com.dlab.domain.facility.entity.SeatAssignment;
 import com.dlab.domain.facility.entity.SeatPresence;
 import com.dlab.domain.facility.entity.StudyArea;
@@ -60,7 +61,7 @@ public class SeatLayoutService {
 
     /** 구역 목록. 화면이 구역을 골라야 배치도를 열 수 있다. */
     public List<AreaSummary> areas(AuthPrincipal me, Long academyId) {
-        return areas(me, academyId, false, null);
+        return areas(me, academyId, false, null, null);
     }
 
     /**
@@ -70,20 +71,30 @@ public class SeatLayoutService {
      * 구역을 보면 안 되지만(고를 수 있게 되면 안 쓰는 구역에 학생이 배정된다), 관리 화면에서
      * 까지 숨기면 <b>한 번 끈 구역을 다시 켤 방법이 없어진다.</b>
      */
+    public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive) {
+        return areas(me, academyId, includeInactive, null, null);
+    }
+
+    /**
+     * 구역 목록 — 관·종류로 거른다.
+     *
+     * <p>둘 다 비면 전부 내린다. <b>독서실 화면과 반 좌석표 화면은 각자 자기 종류를 걸어서
+     * 부른다</b> — 안 걸면 독서실 목록에 반이 섞인다.
+     */
     public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive,
-                                   Long buildingId) {
+                                   Long buildingId, AreaType areaType) {
         Long resolved = requireAcademyAccess(me, academyId);
-        var areas = includeInactive
-                ? studyAreaRepository.findAllByAcademyId(resolved, buildingId)
-                : studyAreaRepository.findActiveByAcademyId(resolved).stream()
-                        .filter(a -> buildingId == null
-                                || buildingId.equals(a.getBuilding().getId()))
-                        .toList();
+        List<StudyArea> areas = includeInactive
+                ? studyAreaRepository.findAll(resolved, buildingId, areaType)
+                : studyAreaRepository.findActive(resolved, buildingId, areaType);
         return areas.stream()
                 .map(a -> new AreaSummary(
                         a.getId(), a.getBuilding().getId(), a.getBuilding().getName(),
                         a.getAreaCd(), a.getKioskAreaCd(), a.getAreaNm(), a.getSortOrder(),
                         a.isActive(),
+                        a.getAreaType(),
+                        a.getClassMaster() == null ? null : a.getClassMaster().getId(),
+                        a.getClassMaster() == null ? null : a.getClassMaster().getName(),
                         seatMasterRepository.findByStudyAreaId(a.getId()).size()))
                 .toList();
     }
@@ -219,16 +230,20 @@ public class SeatLayoutService {
     }
 
     /**
-     * @param buildingName 어느 관인가. <b>화면이 이걸 안 띄우면 같은 이름의 구역이 둘씩
-     *                     보인다</b> — 본관 A 와 별관 A 를 구분할 수가 없다
-     * @param kioskAreaCd  단말이 쓰는 코드. 본관은 {@code areaCd}와 같고 별관은 관 코드가
-     *                     앞에 붙는다. <b>대조용</b>이다 — 단말에서 구역이 안 보인다는
-     *                     문의가 오면 이 값부터 확인한다
-     * @param seatCount    구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다
+     * @param buildingName  어느 관인가. <b>화면이 이걸 안 띄우면 같은 이름의 구역이 둘씩
+     *                      보인다</b> — 본관 A 와 별관 A 를 구분할 수가 없다
+     * @param kioskAreaCd   단말이 쓰는 코드. 본관은 {@code areaCd}와 같고 별관은 관 코드가
+     *                      앞에 붙는다. <b>대조용</b>이다 — 단말에서 구역이 안 보인다는
+     *                      문의가 오면 이 값부터 확인한다
+     * @param areaType      독서실({@code STUDY}) / 반 교실({@code CLASSROOM})
+     * @param classMasterId 반 교실이면 그 반. 독서실이면 {@code null}
+     * @param className     반 이름. 화면이 id 로 반을 다시 조회하지 않게 함께 내린다
+     * @param seatCount     구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다
      */
     public record AreaSummary(Long id, Long buildingId, String buildingName,
                               String areaCd, String kioskAreaCd, String areaNm, short sortOrder,
-                              boolean active, int seatCount) {
+                              boolean active, AreaType areaType, Long classMasterId,
+                              String className, int seatCount) {
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.dlab.api.admin.facility;
 
+import com.dlab.domain.facility.entity.AreaType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -41,7 +42,11 @@ public final class SeatRequests {
     /**
      * 구역 등록.
      *
-     * @param areaCd 키오스크가 이 코드로 좌석을 조회한다. <b>등록 후 변경 불가</b>
+     * @param areaCd        키오스크가 이 코드로 좌석을 조회한다. <b>등록 후 변경 불가</b>
+     * @param areaType      {@code STUDY}(독서실, 기본) / {@code CLASSROOM}(반 교실).
+     *                      키오스크에는 {@code STUDY}만 내려간다
+     * @param classMasterId 반. {@code CLASSROOM}일 때 필수이고 {@code STUDY}면 보내지 않는다.
+     *                      반 하나에 좌석표는 하나다
      */
     public record StudyAreaCreate(
             Long academyId,
@@ -54,10 +59,17 @@ public final class SeatRequests {
             @Size(max = 50, message = "구역 코드는 50자까지입니다.") String areaCd,
             @NotBlank(message = "구역 이름은 필수입니다.")
             @Size(max = 100, message = "구역 이름은 100자까지입니다.") String areaNm,
-            @Min(0) @Max(999) Short sortOrder) {
+            @Min(0) @Max(999) Short sortOrder,
+            AreaType areaType,
+            Long classMasterId) {
 
         public short sortOrderOrDefault() {
             return sortOrder == null ? (short) 0 : sortOrder;
+        }
+
+        /** 비우면 독서실이다 — 이 필드가 생기기 전 호출을 그대로 받기 위해서다. */
+        public AreaType areaTypeOrDefault() {
+            return areaType == null ? AreaType.STUDY : areaType;
         }
     }
 

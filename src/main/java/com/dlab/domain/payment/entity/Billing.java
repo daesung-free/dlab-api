@@ -3,6 +3,8 @@ package com.dlab.domain.payment.entity;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
+import com.dlab.common.exception.BusinessException;
+import com.dlab.common.exception.ErrorCode;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import jakarta.persistence.*;
@@ -182,7 +184,23 @@ public class Billing extends BaseEntity {
         this.status = unpaidAmount() == 0 ? BillingStatus.PAID : BillingStatus.PENDING;
     }
 
+    /**
+     * 청구 취소.
+     *
+     * <p>★ <b>받은 돈이 있으면 취소할 수 없다.</b> 전에는 그냥 상태만 바꿨다 — 수납 기록은
+     * 살아 있는데 청구가 취소되어, <b>실제로 받은 돈이 매출에서 사라졌다.</b> 화면에는
+     * "취소된 청구" 로만 보여서 그 돈이 어디 갔는지 추적할 단서가 없다.
+     *
+     * <p>수납을 먼저 취소하면 된다({@code DELETE /billings/payments/{id}}). 순서를 강제하는
+     * 이유는 <b>돈을 돌려준 기록</b>이 남아야 하기 때문이다 — 청구만 지우면 환불했는지
+     * 안 했는지 알 수 없다.
+     */
     public void cancel() {
+        if (receivedAmount() > 0) {
+            throw new BusinessException(ErrorCode.BILLING_HAS_PAYMENT,
+                    "수납 %,d원이 남아 있어 청구를 취소할 수 없습니다. 수납을 먼저 취소하세요."
+                            .formatted(receivedAmount()));
+        }
         this.status = BillingStatus.CANCELLED;
     }
 }

@@ -165,7 +165,7 @@ class SeatBuildingTest {
         area(annex.getId(), "A");
         em.flush();
 
-        assertThat(seatLayoutService.areas(admin, dongtan.getId(), true, null))
+        assertThat(seatLayoutService.areas(admin, dongtan.getId(), true, null, null))
                 .extracting(a -> a.buildingName() + "/" + a.areaCd() + "/" + a.kioskAreaCd())
                 .containsExactlyInAnyOrder("본관/A/A", "2관/A/2-A");
     }

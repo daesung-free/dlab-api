@@ -1,6 +1,7 @@
 package com.dlab.domain.lecture.service;
 
 import com.dlab.common.exception.BusinessException;
+import com.dlab.common.web.Patch;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.lecture.entity.*;
@@ -111,17 +112,19 @@ public class LectureService {
 
     @Transactional
     public Lecture update(Long lectureId, String name, String code,
-                          String description, Integer capacity,
-                          Instant applyFrom, Instant applyTo, LocalDate startDate,
-                          LocalDate endDate, Integer fee, Long teacherId, Long categoryId,
+                          Patch<String> description, Patch<Integer> capacity,
+                          Patch<Instant> applyFrom, Patch<Instant> applyTo,
+                          Patch<LocalDate> startDate, Patch<LocalDate> endDate,
+                          Patch<Integer> fee, Patch<Long> teacherId, Patch<Long> categoryId,
                           AuthPrincipal principal) {
         Lecture lecture = require(lectureId, principal);
         // ★ 정원을 현재 확정 인원보다 낮추지 못하게 막는다.
         //   허용하면 이미 확정된 학생이 정원 밖으로 밀려나는데, 누구를 뺄지 정할 방법이 없다.
-        if (capacity != null) {
+        //   ⚠️ 비우는 것(제한 없음)은 막지 않는다 — 늘리는 방향이라 밀려나는 학생이 없다.
+        if (capacity != null && !capacity.isCleared()) {
             long confirmed = applicationRepository.countByLectureIdAndStatus(
                     lectureId, ApplicationStatus.APPLIED);
-            if (capacity < confirmed) {
+            if (capacity.value() < confirmed) {
                 throw new BusinessException(ErrorCode.LECTURE_CAPACITY_BELOW_CONFIRMED,
                         "이미 확정된 인원(%d명)보다 적은 정원으로 줄일 수 없습니다.".formatted(confirmed));
             }
@@ -129,15 +132,19 @@ public class LectureService {
         lecture.update(name, code, description, capacity, applyFrom, applyTo,
                 startDate, endDate, fee);
 
+        // 보냈으면 반영한다 — 비우라고 보냈으면 해제다.
         if (categoryId != null) {
-            lecture.changeCategory(resolveCategory(categoryId, lecture.getAcademy().getId()));
+            lecture.changeCategory(categoryId.isCleared() ? null
+                    : resolveCategory(categoryId.value(), lecture.getAcademy().getId()));
         }
         if (teacherId != null) {
-            lecture.changeTeacher(teacherRepository.findById(teacherId)
-                    .filter(t -> !t.isDeleted())
-                    .filter(t -> t.getAcademy().getId().equals(lecture.getAcademy().getId()))
-                    .orElseThrow(() -> new BusinessException(ErrorCode.EMPLOYEE_NOT_FOUND,
-                            "선생님을 찾을 수 없습니다.")));
+            lecture.changeTeacher(teacherId.isCleared() ? null
+                    : teacherRepository.findById(teacherId.value())
+                            .filter(t -> !t.isDeleted())
+                            .filter(t -> t.getAcademy().getId()
+                                    .equals(lecture.getAcademy().getId()))
+                            .orElseThrow(() -> new BusinessException(
+                                    ErrorCode.EMPLOYEE_NOT_FOUND, "선생님을 찾을 수 없습니다.")));
         }
         return lecture;
     }

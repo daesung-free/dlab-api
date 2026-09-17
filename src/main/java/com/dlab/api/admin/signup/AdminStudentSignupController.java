@@ -27,15 +27,21 @@ public class AdminStudentSignupController {
     /**
      * 승인 대기 목록. 지점 스코프가 걸린다.
      *
-     * @param academyId 조회할 지점. <b>비우면 내 지점</b>이다.
-     *                  전 지점 권한자(본사)는 지정해야 한다
+     * @param academyId       조회할 지점. <b>비우면 내 지점</b>이다.
+     *                        전 지점 권한자(본사)는 지정해야 한다
+     * @param includeApproved 승인했지만 <b>온보딩이 안 끝난</b> 학생까지 함께 본다.
+     *                        <p>★ OT 완료는 승인 <b>뒤에</b> 관리자가 눌러야 하는 단계인데,
+     *                        승인하는 순간 목록에서 사라져 누구를 처리해야 하는지 알 수
+     *                        없었다. 화면에 「OT 대기」 탭을 둔다면 이 값을 켜서 부른다.
+     *                        <p>온보딩이 끝난 학생은 여기서도 빠진다 — 안 그러면 전교생이 나온다
      */
     @GetMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN', 'STAFF')")
     public ApiResponse<List<PendingSignupResponse>> pending(
             @CurrentAccount AuthPrincipal me,
-            @RequestParam(required = false) Long academyId) {
-        return ApiResponse.success(approvalService.pending(me, academyId).stream()
+            @RequestParam(required = false) Long academyId,
+            @RequestParam(defaultValue = "false") boolean includeApproved) {
+        return ApiResponse.success(approvalService.pending(me, academyId, includeApproved).stream()
                 .map(PendingSignupResponse::from)
                 .toList());
     }
@@ -72,6 +78,8 @@ public class AdminStudentSignupController {
             String studentNo,
             String name,
             String phone,
+            /** 계정 상태. {@code PENDING}=승인 전, {@code ACTIVE}=승인됨(OT 대기) */
+            String accountStatus,
             OnboardingStatus onboardingStatus
     ) {
         static PendingSignupResponse from(StudentSignupApprovalService.PendingSignup p) {
@@ -81,6 +89,7 @@ public class AdminStudentSignupController {
                     p.enrollment().getStudentNo(),
                     p.enrollment().getStudent().getName(),
                     p.enrollment().getStudent().getPhone(),
+                    p.account().getStatus().name(),
                     p.enrollment().getStudent().getOnboardingStatus());
         }
     }

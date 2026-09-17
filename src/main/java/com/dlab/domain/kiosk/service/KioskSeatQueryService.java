@@ -6,6 +6,7 @@ import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository;
 import com.dlab.domain.facility.entity.SeatMaster;
 import com.dlab.domain.facility.entity.SeatPresence;
+import com.dlab.domain.facility.entity.AreaType;
 import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.facility.repository.SeatAssignmentRepository;
 import com.dlab.domain.facility.repository.SeatMasterRepository;
@@ -56,7 +57,10 @@ public class KioskSeatQueryService {
      * 키오스크 화면의 정원과 실제 좌석 수가 다르게 보인다.
      */
     public List<DsaRows.AreaRow> areas(Long academyId) {
-        return studyAreaRepository.findActiveByAcademyId(academyId).stream()
+        // ★ STUDY 만 내린다. 반 교실도 같은 테이블에 있어서 종류를 안 걸면
+        //   단말 좌석 선택 화면에 반이 뜬다.
+        return studyAreaRepository.findActive(academyId, null, AreaType.STUDY)
+                .stream()
                 .map(a -> new DsaRows.AreaRow(
                         a.getKioskAreaCd(),
                         a.getAreaNm(),
@@ -170,6 +174,10 @@ public class KioskSeatQueryService {
         if (areaCd == null || areaCd.isBlank()) {
             return Optional.empty();
         }
-        return studyAreaRepository.findByAcademyIdAndKioskAreaCd(academyId, areaCd);
+        // ★ 코드와 종류를 둘 다 건다 — 하나만 걸면 각각 다른 사고가 난다.
+        //   코드를 안 걸면 별관을 물었는데 본관 좌석이 내려가고,
+        //   종류를 안 걸면 반 교실 좌석이 단말에 그대로 나간다
+        return studyAreaRepository.findByAcademyIdAndKioskAreaCdAndType(
+                academyId, areaCd, AreaType.STUDY);
     }
 }
