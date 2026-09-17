@@ -238,6 +238,34 @@ class SeatBuildingTest {
                 .containsExactly("1->1001");
     }
 
+    @Test
+    @DisplayName("★★ 키오스크가 받은 코드를 그대로 되돌려줘도 찾아진다 — 단말 수정이 필요 없는 근거")
+    void kioskRoundTripClosesWithoutTerminalChange() {
+        // 단말은 우리가 준 문자열을 그대로 다음 호출에 싣는다. 그 왕복이 닫히면
+        // 키오스크 코드는 한 줄도 안 바뀐다 — 이 설계의 전제다.
+        Building annex = buildingAdminService.create(
+                admin, dongtan.getId(), "2", "2관", (short) 1, null, true);
+        StudyArea annexA = area(annex.getId(), "A");
+        seat(annexA, "1");
+        em.flush();
+
+        // ① 구역 목록에서 받은 area_cd
+        String areaCd = kioskSeatQueryService.areas(dongtan.getId()).stream()
+                .map(r -> r.areaCd())
+                .filter(c -> !"A".equals(c))
+                .findFirst().orElseThrow();
+
+        // ② 그 값으로 좌석을 물으면 그 관 좌석이 온다
+        String seatCd = kioskSeatQueryService.seats(dongtan.getId(), areaCd).stream()
+                .map(r -> r.seatCd()).findFirst().orElseThrow();
+        assertThat(seatCd).isEqualTo("1001");
+
+        // ③ 상태 조회도 같은 코드로 맞물린다 (단말이 3.8 과 3.10 을 seat_cd 로 머지한다)
+        assertThat(kioskSeatQueryService.seatStates(dongtan.getId(), areaCd))
+                .extracting(r -> r.seatCd())
+                .containsExactly(seatCd);
+    }
+
     // ── 준비물 ───────────────────────────────────────────────────────────────
 
     private StudyArea area(Long buildingId, String areaCd) {

@@ -59,10 +59,13 @@ public class KioskStudentQueryService {
      * 대기생은 카드가 없어 태깅 대상이 아니므로 지금 누락돼도 동작에 영향은 없다.
      */
     public List<DsaRows.StudentRow> studentList(Long academyId) {
+        // ★ 단말에 내리는 좌석은 kiosk_seat_cd 다. 우리 seat_cd 를 그대로 주면
+        //   별관 학생의 자리가 좌석표(3.8·3.10)와 어긋난다 — 학생 정보에는 1번,
+        //   좌석표에는 1001번으로 뜨고 단말은 둘을 같은 자리로 못 본다
         Map<Long, String> seatByEnrollment = new HashMap<>();
         seatAssignmentRepository.findActiveByAcademyId(academyId)
                 .forEach(sa -> seatByEnrollment.put(
-                        sa.getEnrollment().getId(), sa.getSeat().getSeatCd()));
+                        sa.getEnrollment().getId(), sa.getSeat().getKioskSeatCd()));
 
         // ★ 직원까지 내려보낸다 — 카드를 인식해야 키오스크에서 출퇴근을 찍는다.
         //   여기가 직원을 포함하는 유일한 경로다
