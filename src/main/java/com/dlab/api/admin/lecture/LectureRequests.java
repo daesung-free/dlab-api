@@ -1,5 +1,6 @@
 package com.dlab.api.admin.lecture;
 
+import com.dlab.common.web.Patch;
 import com.dlab.domain.lecture.entity.LectureAttendanceStatus;
 import com.dlab.domain.lecture.entity.LectureStatus;
 import com.dlab.domain.lecture.entity.LectureType;
@@ -31,20 +32,41 @@ public final class LectureRequests {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */
+    /**
+     * 특강 수정.
+     *
+     * <h2>비울 수 있는 값은 {@link Patch} 로 받는다</h2>
+     * 보내지 않으면 건드리지 않고, {@code null} 을 <b>명시적으로</b> 보내면 비운다.
+     * 그냥 {@code Integer} 로 두면 둘이 구분되지 않아 <b>"정원 제한을 없앤다"가 불가능</b>했다 —
+     * {@code {"capacity": null}} 이 200 을 받고도 아무 일도 하지 않았다.
+     *
+     * <pre>
+     *   {}                    건드리지 않음
+     *   {"capacity": 30}      30 으로
+     *   {"capacity": null}    제한 없음으로
+     * </pre>
+     *
+     * <p><b>이름과 코드는 상자에 담지 않았다</b> — 없으면 목록에 빈 줄이 생기고 신청 화면이
+     * 무엇을 신청하는지 알 수 없다. 값을 바꾸는 것만 된다.
+     */
     public record LectureUpdate(
             @Size(max = 100) String name,
             @Size(max = 30) String code,
-            String description,
-            @Positive(message = "정원은 1명 이상이어야 합니다.") Integer capacity,
-            Instant applyFrom,
-            Instant applyTo,
-            LocalDate startDate,
-            LocalDate endDate,
-            @PositiveOrZero Integer fee,
-            /** 담당 강사. {@code null}은 "변경하지 않음"이라 <b>해제는 이 값으로 못 한다.</b> */
-            Long teacherId,
-            /** 유형 세분류(단과·실전·해설). {@code null}은 "변경하지 않음"이다. */
-            Long categoryId) {
+            /** 안내 문구. 비우면 상세에서 설명이 사라진다 */
+            Patch<String> description,
+            /** 비우면 <b>정원 제한 없음</b>이다 */
+            Patch<Integer> capacity,
+            /** 비우면 신청 시작 제한 없음 */
+            Patch<Instant> applyFrom,
+            /** 비우면 신청 마감 제한 없음 */
+            Patch<Instant> applyTo,
+            Patch<LocalDate> startDate,
+            Patch<LocalDate> endDate,
+            Patch<Integer> fee,
+            /** 담당 강사. 비우면 <b>미지정</b>이 된다 */
+            Patch<Long> teacherId,
+            /** 유형 세분류(단과·실전·해설). 비우면 분류 없음 */
+            Patch<Long> categoryId) {
     }
 
     public record LectureChangeStatus(@NotNull(message = "상태는 필수입니다.") LectureStatus status) {

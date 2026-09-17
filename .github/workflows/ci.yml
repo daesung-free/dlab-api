@@ -91,8 +91,14 @@ jobs:
         run: ./gradlew test --no-daemon
 
       # 실패했을 때 무엇이 깨졌는지 로그만 보고 알기 어렵다. 리포트를 받아둔다.
+      #
+      # ★ continue-on-error — 이 단계가 실패해도 CI 를 빨간불로 만들지 않는다.
+      #   업로드는 GitHub 아티팩트 저장소를 타는데 여기서 403 이 나면서 CI 전체가
+      #   실패로 잡힌 적이 있다. 테스트는 전부 통과했는데 배포가 막혔고, 로그를 끝까지
+      #   읽기 전에는 "테스트가 깨졌다" 로 보인다 — 편의 기능이 본 작업을 막으면 안 된다.
       - name: 테스트 리포트 업로드
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: test-report

@@ -324,6 +324,32 @@ class AppSettingsFlowTest {
     }
 
     @Test
+    @DisplayName("★ 남의 토큰은 지워지지 않는다 — 값만 알면 남의 알림을 끊을 수 있었다")
+    void cannotRemoveSomeoneElsesToken() throws Exception {
+        mvc.perform(post("/api/v1/app/settings/push-token")
+                .header("Authorization", appToken(PARENT_PHONE))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"token":"fcm-victim","platform":"IOS"}""")).andExpect(status().isOk());
+        em.flush();
+
+        // 다른 계정이 그 토큰으로 해제를 시도한다.
+        // 존재 여부를 떠볼 수 없도록 응답은 성공이고, 실제로는 지워지지 않아야 한다.
+        mvc.perform(delete("/api/v1/app/settings/push-token")
+                .header("Authorization", appToken(OTHER_PHONE))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"token":"fcm-victim"}""")).andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        Long alive = em.createQuery("""
+                SELECT COUNT(p) FROM PushToken p WHERE p.token = 'fcm-victim' AND p.deleted = false
+                """, Long.class).getSingleResult();
+        assertThat(alive).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("토큰 해제는 soft delete다 — 만료 단말 목록에서 언제부터 안 쓰였는지 봐야 한다")
     void removeTokenIsSoftDelete() throws Exception {
         String token = appToken(PARENT_PHONE);

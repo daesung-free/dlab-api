@@ -39,6 +39,7 @@ public class AdminGradeController {
     private final ExamFormService examFormService;
     private final StudentGradeService gradeService;
     private final StudentService studentService;
+    private final com.dlab.domain.grade.service.MockExamUploadService mockExamUploadService;
 
     /**
      * 등록된 시험 회차 목록.
@@ -88,6 +89,122 @@ public class AdminGradeController {
      * <p>{@code examSkipped}가 {@code true}면 <b>"모른다"고 체크한 것</b>이지 미입력이
      * 아니다 — 사유가 함께 온다. 승인 심사에서 이 둘을 같게 취급하지 말 것.
      */
+    /**
+     * 모의고사 성적 엑셀 미리보기.
+     *
+     * <p><b>저장하지 않는다.</b> 605명짜리 파일을 바로 반영하면 매칭이 어긋났을 때 무엇이
+     * 잘못 들어갔는지 모른 채 전교생 성적이 바뀐다. 누가 매칭됐고 누가 안 됐는지 먼저 본다.
+     *
+     * <p>양식은 <b>대성전산이 쓰던 담임용 파일 그대로</b>다 — 우리가 새로 만들지 않는다.
+     * 더프리미엄과 평가원이 같은 양식이라 파일 종류를 구분해 올리지 않아도 된다.
+     *
+     * @param academyId    업로드할 지점. ★ 파일의 학교코드를 지점과 잇는 매핑이 아직 없어
+     *                     <b>관리자가 고른다</b>(§4)
+     * @param examMasterId 어느 회차 성적인지. 파일에는 회차 정보가 없다
+     */
+    @PostMapping("/grades/exam-scores/upload/preview")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<com.dlab.domain.grade.service.MockExamUploadService.Preview> previewUpload(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam Long examMasterId,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file)
+            throws java.io.IOException {
+        return ApiResponse.success(
+                mockExamUploadService.preview(me, academyId, examMasterId, file.getInputStream()));
+    }
+
+    /**
+     * 모의고사 성적 엑셀 반영.
+     *
+     * <p><b>매칭된 학생만 저장한다.</b> 못 찾은 행 때문에 전체를 되돌리면 한 명 때문에
+     * 604명을 다시 올려야 한다 — 못 찾은 행은 응답에 사유와 함께 남는다.
+     *
+     * <p>같은 회차를 다시 올리면 그 회차 점수가 <b>교체</b>된다. 다른 회차는 건드리지 않는다.
+     */
+    @PostMapping("/grades/exam-scores/upload")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<com.dlab.domain.grade.service.MockExamUploadService.Preview> upload(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam Long examMasterId,
+            @RequestPart("file") org.springframework.web.multipart.MultipartFile file)
+            throws java.io.IOException {
+        return ApiResponse.success(
+                mockExamUploadService.apply(me, academyId, examMasterId, file.getInputStream()));
+    }
+
+    /**
+     * 동명이인 등으로 멈춘 행을 학생에 연결한다.
+     *
+     * <p>★ <b>한 번 정하면 다음 회차부터 자동이다.</b> 그러지 않으면 같은 학생이 회차마다
+     * 미매칭으로 빠지고, 매번 사람이 같은 판단을 다시 해야 한다.
+     *
+     * <p>⚠️ 반이 바뀌면 파일의 번호 앞자리가 바뀌어 이 연결이 맞지 않게 된다. 그때는
+     * 다시 이름 매칭으로 떨어진다 — <b>틀린 학생에게 들어가는 게 아니라 다시 물어본다.</b>
+     *
+     * @param year 회차 연도. 학번·반이 해마다 초기화되므로 연도까지 묶는다
+     */
+    @PostMapping("/grades/exam-scores/upload/links")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<MockExamLinkView> linkUploadRow(
+            @CurrentAccount AuthPrincipal me,
+            @jakarta.validation.Valid @RequestBody MockExamLink request) {
+        return ApiResponse.success(MockExamLinkView.from(mockExamUploadService.link(
+                me, request.academyId(), request.year(), request.schoolCode(),
+                request.classNo(), request.studentNo(), request.enrollmentId())));
+    }
+
+    /** 사람이 정해둔 연결 목록. */
+    @GetMapping("/grades/exam-scores/upload/links")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<java.util.List<MockExamLinkView>> uploadLinks(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam short year) {
+        return ApiResponse.success(mockExamUploadService.links(me, academyId, year)
+                .stream().map(MockExamLinkView::from).toList());
+    }
+
+    /** 잘못 이었으면 해제한다. 지우면 다시 이름으로 찾는다. */
+    @DeleteMapping("/grades/exam-scores/upload/links/{linkId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<Void> unlinkUploadRow(@CurrentAccount AuthPrincipal me,
+                                             @PathVariable Long linkId) {
+        mockExamUploadService.unlink(me, linkId);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * @param schoolCode 파일의 학교코드(분당 {@code 99700}). 미리보기 응답에 함께 온다
+     */
+    public record MockExamLink(
+            Long academyId,
+            @jakarta.validation.constraints.NotNull(message = "연도는 필수입니다.") Short year,
+            @jakarta.validation.constraints.NotBlank(message = "학교코드는 필수입니다.")
+            @jakarta.validation.constraints.Size(max = 20) String schoolCode,
+            @jakarta.validation.constraints.NotBlank(message = "반은 필수입니다.")
+            @jakarta.validation.constraints.Size(max = 20) String classNo,
+            @jakarta.validation.constraints.NotBlank(message = "번호는 필수입니다.")
+            @jakarta.validation.constraints.Size(max = 20) String studentNo,
+            @jakarta.validation.constraints.NotNull(message = "학생은 필수입니다.") Long enrollmentId) {
+    }
+
+    /**
+     * @param fileStudentNo 파일의 번호("반 번호 + 3자리 순번")
+     * @param studentNo     우리 학번. 둘은 서로 다른 체계라 같은 칸에 두면 헷갈린다
+     */
+    public record MockExamLinkView(Long id, short year, String schoolCode, String classNo,
+                                   String fileStudentNo, Long enrollmentId, String studentNo,
+                                   String studentName) {
+
+        static MockExamLinkView from(com.dlab.domain.grade.entity.MockExamStudentKey k) {
+            return new MockExamLinkView(k.getId(), k.getYear(), k.getSchoolCode(),
+                    k.getClassNo(), k.getStudentNo(), k.getEnrollment().getId(),
+                    k.getEnrollment().getStudentNo(), k.getEnrollment().getStudent().getName());
+        }
+    }
+
     @GetMapping("/students/{enrollmentId}/grades")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
     public ApiResponse<GradeResponse.Submission> studentGrades(

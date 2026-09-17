@@ -60,7 +60,11 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public StudentEnrollment get(Long enrollmentId, AuthPrincipal principal) {
+        // ★ 삭제분을 걸러야 한다. 목록은 거르는데 상세가 안 걸러서, 지운 학생이
+        //   목록에서는 사라지고 상세는 200 으로 열렸다 — 화면이 "있는데 안 보이는"
+        //   상태로 읽고, 거기서 수정까지 시도하게 된다.
         StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .filter(e -> !e.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
         if (!principal.canAccessAcademy(enrollment.getAcademy().getId())) {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
@@ -347,15 +351,33 @@ public class StudentService {
         }
 
         Student student = enrollment.getStudent();
+        boolean wasCurrent = enrollment.isCurrent();
         enrollment.markDeleted();
+        // ★ 현재 플래그도 같이 내린다. 지운 행에 is_current 가 남으면 그 사람에게
+        //   "현재 등록"이 있는 것으로 보이는데 조회는 삭제분을 걸러서 아무것도 못 찾는다 —
+        //   앱이 통째로 ENROLLMENT_NOT_FOUND 를 받고, 화면에서는 원인이 안 보인다.
+        //   실제로 재등록 → 삭제 순서로 그 상태가 만들어졌다.
+        enrollment.expire();
 
-        boolean lastOne = enrollmentRepository.findByStudentId(student.getId()).stream()
-                .noneMatch(e -> !e.isDeleted() && !e.getId().equals(enrollmentId));
-        if (lastOne) {
+        var remaining = enrollmentRepository.findByStudentId(student.getId()).stream()
+                .filter(e -> !e.isDeleted() && !e.getId().equals(enrollmentId))
+                .toList();
+
+        if (remaining.isEmpty()) {
             student.markDeleted();
+        } else if (wasCurrent) {
+            // ★ 직전 등록을 다시 현재로 올린다.
+            //
+            //   재등록은 직전 건을 내리고 새 건을 만든다. 그 새 건을 지우면 아무 등록도
+            //   current 가 아닌 상태가 남아, 앱이 통째로 ENROLLMENT_NOT_FOUND 를 받고
+            //   관리자 목록에서도 학생이 사라진다. 화면에 되돌릴 방법이 없어 DB 를 직접
+            //   고쳐야 했다 — 실제로 두 번 고쳤다.
+            remaining.stream()
+                    .max(java.util.Comparator.comparing(StudentEnrollment::getId))
+                    .ifPresent(StudentEnrollment::makeCurrent);
         }
-        log.info("학생 삭제(오등록 정리): enrollmentId={}, studentNo={}, 사람도 삭제={}",
-                enrollmentId, enrollment.getStudentNo(), lastOne);
+        log.info("학생 삭제(오등록 정리): enrollmentId={}, studentNo={}, 남은 등록={}건",
+                enrollmentId, enrollment.getStudentNo(), remaining.size());
     }
 
     /**
@@ -377,6 +399,19 @@ public class StudentService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
 
             enrollmentRepository.findCurrentByStudentId(studentId).ifPresent(previous -> {
+                // ★ 재등록은 "끝난 학생을 다시 받는 것"이다.
+                //
+                //   전에는 현재 등록이 어떤 상태든 조용히 종료시키고 새 건을 만들었다.
+                //   그래서 재원 중인 학생에게 호출하면 학번이 하나 더 생기고, 같은 사람이
+                //   두 번 등록된 것처럼 보였다(먼저 것은 이력으로 묻힌다).
+                //
+                //   같은 해에는 막는다. 다른 해는 기수가 갈리는 정상 흐름이라 허용하고,
+                //   그때는 지난 기수를 종료시키는 것이 맞다(1년 코호트 — §3).
+                if (previous.getYear() == year && !previous.getEnrollmentStatus().requiresCleanup()) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                            "%s 상태입니다. 재등록은 퇴원·제적·수료 뒤에 합니다."
+                                    .formatted(previous.getEnrollmentStatus()));
+                }
                 previous.expire();
                 // 재배정과 같은 이유 — is_current 부분 유니크가 있다면 순서를 강제해야 한다
                 enrollmentRepository.flush();

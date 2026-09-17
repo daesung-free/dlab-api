@@ -16,6 +16,15 @@
 spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/dlab_test
+    hikari:
+      # ★ 테스트는 컨텍스트를 여러 벌 띄운다(@MockitoBean 조합이 다르면 캐시가 갈린다).
+      #   컨텍스트마다 풀을 열기 때문에 기본값(10)이면 PostgreSQL max_connections(100)를
+      #   금방 넘어 "sorry, too many clients already" 로 무관한 테스트가 무더기로 깨진다.
+      #   원인이 방금 추가한 테스트처럼 보여서 찾는 데 오래 걸린다.
+      maximum-pool-size: 4
+      minimum-idle: 0
+      # 안 쓰는 풀은 빨리 닫아 다음 컨텍스트에 자리를 내준다
+      idle-timeout: 10000
     username: dlab
     password: dlab_local_password
 

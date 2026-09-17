@@ -419,7 +419,9 @@ public class ApprovalService {
      */
     private void notifyApproved(ApprovalRequest request, ResolutionCase resolutionCase) {
         NotificationEvent event = switch (resolutionCase) {
-            case PARENT_IN_TIME -> NotificationEvent.APPROVAL_APPROVED_BY_PARENT;
+            // 늦은 승인도 같은 문구다 — 학부모가 승인했다는 사실은 같다
+            case PARENT_IN_TIME, PARENT_AFTER_TIMEOUT ->
+                    NotificationEvent.APPROVAL_APPROVED_BY_PARENT;
             case STAFF_AFTER_TIMEOUT -> NotificationEvent.APPROVAL_APPROVED_AFTER_TIMEOUT;
             case STAFF_BEFORE_TIMEOUT -> NotificationEvent.APPROVAL_APPROVED_BEFORE_TIMEOUT;
             case STAFF_PRIMARY -> NotificationEvent.APPROVAL_APPROVED_BY_STAFF_PRIMARY;

@@ -1,6 +1,7 @@
 package com.dlab.api.admin.facility;
 
 import com.dlab.common.response.ApiResponse;
+import com.dlab.domain.facility.entity.AreaType;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.facility.entity.SeatPresence;
@@ -50,8 +51,10 @@ public class AdminSeatController {
     public ApiResponse<List<SeatLayoutService.AreaSummary>> areas(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
-            @RequestParam(defaultValue = "false") boolean includeInactive) {
-        return ApiResponse.success(seatLayoutService.areas(me, academyId, includeInactive));
+            @RequestParam(defaultValue = "false") boolean includeInactive,
+            @RequestParam(required = false) AreaType areaType) {
+        return ApiResponse.success(
+                seatLayoutService.areas(me, academyId, includeInactive, areaType));
     }
 
     /**
@@ -59,13 +62,18 @@ public class AdminSeatController {
      *
      * <p><b>{@code areaCd}는 등록 후 바꿀 수 없다</b> — 키오스크가 이 코드로 좌석을 조회한다
      * (3.7·3.8). 지운 구역과 코드가 겹치면 그 구역이 되살아난다.
+     *
+     * <p><b>종류를 함께 받는다.</b> 독서실은 {@code STUDY}(기본), 반 교실은
+     * {@code CLASSROOM} + {@code classMasterId}다. 반 좌석표를 만들 때는 이 호출에 이어
+     * {@code POST /masters/grid} 로 좌석을 한 번에 만든다 — 한 칸씩 찍게 하지 말 것.
      */
     @PostMapping("/areas")
     public ApiResponse<StudyAreaResponse> createArea(
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody SeatRequests.StudyAreaCreate request) {
         var area = studyAreaAdminService.create(me, request.academyId(), request.areaCd(),
-                request.areaNm(), request.sortOrderOrDefault());
+                request.areaNm(), request.sortOrderOrDefault(),
+                request.areaTypeOrDefault(), request.classMasterId());
         return ApiResponse.success(StudyAreaResponse.from(area, 0));
     }
 

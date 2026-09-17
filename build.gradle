@@ -51,6 +51,20 @@ dependencies {
     implementation 'com.github.therapi:therapi-runtime-javadoc:0.15.0'
     annotationProcessor 'com.github.therapi:therapi-runtime-javadoc-scribe:0.15.0'
 
+    // S3 파일 저장. 첨부(성적표·재학증명서·사유 증빙)와 공개 이미지가 여기 의존한다.
+    //
+    // ★ v2 를 쓴다 — v1(com.amazonaws)은 2025 년에 지원이 끝났다.
+    // ★ BOM 으로 버전을 한 곳에서 잡는다. s3 와 presigner 버전이 어긋나면
+    //   서명 방식이 달라져 presigned URL 이 403 을 낸다.
+    implementation platform('software.amazon.awssdk:bom:2.29.0')
+    implementation 'software.amazon.awssdk:s3'
+    // presigned URL 발급용. 비공개 파일은 CloudFront 를 두지 않고 이걸로 내려준다.
+    implementation 'software.amazon.awssdk:s3-transfer-manager'
+
+    // KCP 개인키 복호화. ★ KCP 가 발급하는 개인키는 **암호화된 PKCS8** 이고 비밀번호가 붙는다 —
+    // JDK 기본 KeyFactory 로는 못 읽는다(테스트 키도 "changeit" 으로 잠겨 있다).
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.78.1'
+
     // 엑셀 Import/Export. 학생 일괄 등록(P1-02)·명단 출력(F-4.9)이 여기 의존한다.
     implementation 'org.apache.poi:poi-ooxml:5.4.1'
 
@@ -75,4 +89,7 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // ★ 스프링 컨텍스트를 여러 벌 캐싱해 들고 있어서 기본 힙으로는 전체 실행 중 OOM 이 난다.
+    //   그때 실패가 '컨텍스트 로딩 실패'로 보여서 원인이 코드인 줄 알기 쉽다.
+    maxHeapSize = '2g'
 }
