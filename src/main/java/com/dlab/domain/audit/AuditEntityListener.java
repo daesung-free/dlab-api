@@ -66,11 +66,26 @@ public class AuditEntityListener {
                     AuditContext.actorName(),
                     AuditContext.actorIp(),
                     null,
-                    Instant.now()));
+                    Instant.now(),
+                    targetEnrollmentOf(entity)));
         } catch (Exception e) {
             // 감사 로그를 못 남겼다고 원래 작업을 되돌리면 운영이 멈춘다
             log.error("감사 로그 기록 실패: {} {}", entity.getClass().getSimpleName(), action, e);
         }
+    }
+
+    /**
+     * 대상 학생(등록 건). 등록 건 자신이거나 {@code enrollment} 연관을 가진 엔티티만.
+     *
+     * <p>★ 연관은 필드로 읽지 않고 {@code getId()}를 부른다 — 지연 로딩 프록시는 필드가 비어 있어
+     * 필드로 읽으면 {@code null}이 나온다. 프록시의 {@code getId()}는 초기화 없이 id 를 준다.
+     */
+    private Long targetEnrollmentOf(Object entity) {
+        if (entity instanceof com.dlab.domain.user.entity.StudentEnrollment self) {
+            return self.getId();
+        }
+        return read(entity, "enrollment") instanceof com.dlab.domain.user.entity.StudentEnrollment e
+                ? e.getId() : null;
     }
 
     private Long idOf(Object entity) {

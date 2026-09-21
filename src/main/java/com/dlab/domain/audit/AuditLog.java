@@ -54,6 +54,19 @@ public class AuditLog extends BaseEntity {
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
 
+    /**
+     * 대상 학생(등록 건). 학생에 붙은 기록(벌점·사유신청·청구·성적)만 채워진다.
+     * 이름·학번은 저장하지 않고 조회할 때 붙인다 — 이력으로 개인정보가 복제되지 않게.
+     */
+    @Column(name = "target_enrollment_id")
+    private Long targetEnrollmentId;
+
+    /** 대상 학생을 붙인다. 생성자 인자를 늘리지 않으려고 따로 둔다. */
+    public AuditLog withTarget(Long enrollmentId) {
+        this.targetEnrollmentId = enrollmentId;
+        return this;
+    }
+
     public AuditLog(String entityType, Long entityId, AuditAction action, Long academyId,
                     Long actorId, String actorName, String actorIp,
                     String changes, Instant occurredAt) {

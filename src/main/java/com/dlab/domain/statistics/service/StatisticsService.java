@@ -80,18 +80,37 @@ public class StatisticsService {
     }
 
     private List<GroupRow> byClass(Long scope, short year) {
+        java.util.Map<Long, java.util.Map<com.dlab.domain.user.entity.EnrollmentStatus, Long>> statuses =
+                new java.util.HashMap<>();
+        for (Object[] r : repository.countStatusByClass(scope, year)) {
+            statuses.computeIfAbsent((Long) r[0], k -> new java.util.EnumMap<>(
+                            com.dlab.domain.user.entity.EnrollmentStatus.class))
+                    .put((com.dlab.domain.user.entity.EnrollmentStatus) r[1], ((Number) r[2]).longValue());
+        }
+        java.util.Map<Long, java.util.Map<String, Long>> tracks = new java.util.HashMap<>();
+        for (Object[] r : repository.countTrackByClass(scope, year)) {
+            tracks.computeIfAbsent((Long) r[0], k -> new java.util.TreeMap<>())
+                    .put(r[1] == null ? "UNASSIGNED" : String.valueOf(r[1]), ((Number) r[2]).longValue());
+        }
+
         return repository.countByClass(scope, year).stream()
                 .map(r -> {
+                    Long classId = (Long) r[0];
                     Short capacity = (Short) r[2];
                     long count = ((Number) r[3]).longValue();
-                    return new GroupRow(String.valueOf(r[0]), (String) r[1],
+                    var byStatus = statuses.getOrDefault(classId, java.util.Map.of());
+                    return new GroupRow(String.valueOf(classId), (String) r[1],
                             count,
                             capacity == null ? null : (long) capacity,
                             // 정원이 없으면 충원율을 내지 않는다 — 0으로 두면 화면이
                             // "아무도 없음"으로, 100으로 두면 "만석"으로 잘못 읽는다
                             capacity == null || capacity == 0 ? null
                                     : Math.round(count * 100.0 / capacity),
-                            null);
+                            null,
+                            byStatus.getOrDefault(com.dlab.domain.user.entity.EnrollmentStatus.LEAVE, 0L),
+                            byStatus.getOrDefault(com.dlab.domain.user.entity.EnrollmentStatus.WITHDRAWN, 0L)
+                                    + byStatus.getOrDefault(com.dlab.domain.user.entity.EnrollmentStatus.EXPELLED, 0L),
+                            tracks.getOrDefault(classId, java.util.Map.of()));
                 })
                 .toList();
     }
@@ -137,9 +156,19 @@ public class StatisticsService {
      * @param capacity 반에만 있다. 정원이 안 정해진 반은 비어 있다
      * @param fillRate 충원율(%). 정원이 없으면 비어 있다 — 0이나 100으로 채우면 오독된다
      * @param delta    전월 대비 증감. 월별에만 있고, 첫 달은 비교 대상이 없어 비어 있다
+     * @param onLeave  반별에만 있다 — 그 반 휴원 인원. {@code count}(재원)에는 안 들어간다
+     * @param withdrawn 반별에만 있다 — 그 반에서 나간 인원(퇴원 + 제적). 나가기 직전 반으로 센다
+     * @param tracks   반별에만 있다 — 재원생의 계열별 인원. 계열이 없으면 {@code UNASSIGNED}
      */
     public record GroupRow(String key, String label, long count,
-                           Long capacity, Long fillRate, Long delta) {
+                           Long capacity, Long fillRate, Long delta,
+                           Long onLeave, Long withdrawn, java.util.Map<String, Long> tracks) {
+
+        /** 반별이 아닌 축 — 휴원·퇴원·계열 칸이 없다. */
+        public GroupRow(String key, String label, long count, Long capacity, Long fillRate,
+                        Long delta) {
+            this(key, label, count, capacity, fillRate, delta, null, null, null);
+        }
     }
 
     /** 집계 축. */

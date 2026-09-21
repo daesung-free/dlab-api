@@ -319,6 +319,23 @@ public class StudentService {
     }
 
     /**
+     * 영문명·졸업연도. 등록·수정과 따로 둔다 — 둘 다 선택값이라 기존 인자 목록을 늘리면
+     * 호출부마다 빈 값을 넘겨야 한다. 지점 검사는 {@link #get}과 같다.
+     */
+    @Transactional
+    public StudentEnrollment updateExtra(Long enrollmentId, String englishName,
+                                         Short graduationYear, boolean clearGraduationYear,
+                                         AuthPrincipal principal) {
+        StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+        if (!principal.canAccessAcademy(enrollment.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        enrollment.getStudent().updateExtra(englishName, graduationYear, clearGraduationYear);
+        return enrollment;
+    }
+
+    /**
      * 잘못 등록한 학생 삭제 (soft).
      *
      * <p><b>정상 퇴원·제적에는 쓰지 않는다.</b> 그건 {@code POST /students/{id}/status}이고,

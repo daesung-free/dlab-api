@@ -27,7 +27,10 @@ public record ClassResponse(
         String homeroomTeacherName,
         Short capacity,
         Integer memberCount,
-        Short examClassNo
+        Short examClassNo,
+        /** 강의실. 지정 안 했으면 비어 있다 */
+        Long roomId,
+        String roomName
 ) {
 
     /** 단건 응답 — 인원수는 세지 않는다. */
@@ -51,7 +54,11 @@ public record ClassResponse(
                 c.getHomeroomTeacher() == null ? null : c.getHomeroomTeacher().getName(),
                 c.getCapacity(),
                 memberCount,
-                c.getExamClassNo());
+                c.getExamClassNo(),
+                c.getRoom() == null ? null : c.getRoom().getId(),
+                // 이름이 없는 강의실은 호실 번호로 보여준다
+                c.getRoom() == null ? null
+                        : (c.getRoom().getName() != null ? c.getRoom().getName() : c.getRoom().getRoomNo()));
     }
 
     /**

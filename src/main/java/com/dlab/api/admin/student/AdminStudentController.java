@@ -181,11 +181,16 @@ public class AdminStudentController {
     @PostMapping
     public ApiResponse<StudentResponse> admit(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody StudentRequests.Admit request) {
-        return ApiResponse.success(single(studentService.admit(
+        StudentEnrollment admitted = studentService.admit(
                 request.academyId(), request.year().shortValue(), request.name(),
                 request.phone(), request.grade(), request.retakeCount(), request.track(),
                 request.birthDate(), request.gender(), request.schoolName(),
-                request.address(), request.admissionDate(), me), me));
+                request.address(), request.admissionDate(), me);
+        if (request.englishName() != null || request.graduationYear() != null) {
+            admitted = studentService.updateExtra(admitted.getId(), request.englishName(),
+                    request.graduationYear(), false, me);
+        }
+        return ApiResponse.success(single(admitted, me));
     }
 
     /**
@@ -236,10 +241,16 @@ public class AdminStudentController {
     public ApiResponse<StudentResponse> update(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long enrollmentId,
                                                @Valid @RequestBody StudentRequests.StudentUpdate request) {
-        return ApiResponse.success(single(studentService.update(
+        StudentEnrollment updated = studentService.update(
                 enrollmentId, request.name(), request.phone(), request.birthDate(),
                 request.gender(), request.schoolName(), request.address(), request.grade(),
-                request.retakeCount(), request.track(), request.status(), me), me));
+                request.retakeCount(), request.track(), request.status(), me);
+        if (request.englishName() != null || request.graduationYear() != null
+                || request.clearsGraduationYear()) {
+            updated = studentService.updateExtra(enrollmentId, request.englishName(),
+                    request.graduationYear(), request.clearsGraduationYear(), me);
+        }
+        return ApiResponse.success(single(updated, me));
     }
 
     /**

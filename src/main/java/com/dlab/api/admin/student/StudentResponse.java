@@ -57,6 +57,10 @@ public record StudentResponse(
          */
         String gender,
         String schoolName,
+        /** 영문명(선택) */
+        String englishName,
+        /** 고교 졸업연도(선택) */
+        Short graduationYear,
         short year,
         GradeType grade,
         /** N수 차수 — 1=재수, 2=삼수. {@code grade}가 N_SU 가 아니면 비어 있다 */
@@ -92,6 +96,8 @@ public record StudentResponse(
                 PersonalDataPolicy.birthDate(me, s.getBirthDate()),
                 s.getGender(),
                 s.getSchoolName(),
+                s.getEnglishName(),
+                s.getGraduationYear(),
                 e.getYear(),
                 e.getGrade(),
                 e.getRetakeCount(),

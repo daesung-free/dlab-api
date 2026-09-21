@@ -95,6 +95,19 @@ public class AdminClassController {
     public record ExamClassNo(Short examClassNo) {
     }
 
+    /** 강의실 지정·해제. {@code roomId}를 비우면 해제다. 같은 지점 강의실만 붙는다. */
+    @PutMapping("/{classId}/room")
+    public ApiResponse<ClassResponse> assignRoom(@CurrentAccount AuthPrincipal me,
+                                                 @PathVariable Long classId,
+                                                 @RequestBody ClassRoom request) {
+        return ApiResponse.success(
+                ClassResponse.from(classService.assignRoom(classId, request.roomId(), me)));
+    }
+
+    /** @param roomId 강의실 마스터 id. 비우면 해제 */
+    public record ClassRoom(Long roomId) {
+    }
+
     /** 담임 지정·변경. 이미 처리된 승인 건은 스냅샷이라 영향받지 않는다. */
     @PutMapping("/{classId}/homeroom")
     public ApiResponse<ClassResponse> assignHomeroom(@CurrentAccount AuthPrincipal me,
