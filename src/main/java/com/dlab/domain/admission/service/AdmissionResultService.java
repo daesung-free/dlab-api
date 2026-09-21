@@ -36,6 +36,44 @@ public class AdmissionResultService {
 
     private final AdmissionResultRepository resultRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
+
+    /**
+     * 그해 전체 실적 목록.
+     *
+     * <p>담임은 맡은 학생 것만 본다(예외 지정 포함) — 학생 목록과 같은 범위다.
+     *
+     * @param keyword 학생 이름·학번·대학명·학과명 중 하나라도 포함하면 나온다
+     */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<AdmissionResult> search(
+            AuthPrincipal me, Long academyId, short year, AdmissionResultStatus result,
+            AdmissionType admissionType, String keyword,
+            org.springframework.data.domain.Pageable pageable) {
+        Long scope = me.requireAcademyScope(academyId);
+        var students = homeroomScopeService.enrollmentIdsOf(me, year);
+        String q = keyword == null || keyword.isBlank() ? null : keyword.trim();
+
+        List<AdmissionResult> rows = resultRepository.findInYear(scope, year).stream()
+                .filter(r -> com.dlab.domain.user.service.HomeroomScopeService.allows(
+                        students, r.getEnrollment().getId()))
+                .filter(r -> result == null || r.getResult() == result)
+                .filter(r -> admissionType == null || r.getAdmissionType() == admissionType)
+                .filter(r -> q == null || contains(r, q))
+                .toList();
+
+        int from = (int) Math.min(pageable.getOffset(), rows.size());
+        int to = Math.min(from + pageable.getPageSize(), rows.size());
+        return new org.springframework.data.domain.PageImpl<>(rows.subList(from, to),
+                pageable, rows.size());
+    }
+
+    private static boolean contains(AdmissionResult r, String q) {
+        return java.util.stream.Stream.of(r.getEnrollment().getStudent().getName(),
+                        r.getEnrollment().getStudentNo(), r.getUniversityName(),
+                        r.getDepartmentName())
+                .anyMatch(v -> v != null && v.contains(q));
+    }
 
     @Transactional(readOnly = true)
     public List<AdmissionResult> findByStudent(AuthPrincipal me, Long enrollmentId) {

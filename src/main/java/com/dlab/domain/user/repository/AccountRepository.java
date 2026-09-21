@@ -117,4 +117,27 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
             @org.springframework.data.repository.query.Param("academyId") Long academyId,
             @org.springframework.data.repository.query.Param("status")
             com.dlab.domain.user.entity.AccountStatus status);
+
+    /** 이 학생들의 학생 계정. 앱 가입 현황 집계용. */
+    @Query("""
+            SELECT a FROM Account a
+            WHERE a.deleted = false
+              AND a.accountType = com.dlab.domain.user.entity.AccountType.STUDENT
+              AND a.student.id IN :studentIds
+            """)
+    List<Account> findStudentAccountsOf(@Param("studentIds") java.util.Collection<Long> studentIds);
+
+    /**
+     * 이 학생들에게 연결된 학부모 계정. 한 학부모가 형제 둘에 연결돼 있어도 한 번만 나온다.
+     *
+     * @return {@code [계정, 학생 id]} — 학부모가 연결된 학생 수를 세는 데 학생 쪽도 필요하다
+     */
+    @Query("""
+            SELECT a, l.student.id FROM Account a, StudentGuardianLink l
+            WHERE a.deleted = false
+              AND a.accountType = com.dlab.domain.user.entity.AccountType.PARENT
+              AND a.guardian = l.guardian
+              AND l.student.id IN :studentIds
+            """)
+    List<Object[]> findParentAccountsOf(@Param("studentIds") java.util.Collection<Long> studentIds);
 }

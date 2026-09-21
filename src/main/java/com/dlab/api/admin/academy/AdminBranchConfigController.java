@@ -77,6 +77,28 @@ public class AdminBranchConfigController {
         return ApiResponse.empty();
     }
 
+    /**
+     * PG 가맹점 코드 비우기. {@code confirm}에 <b>지금 값을 그대로</b> 넣어야 지워진다 —
+     * 비우면 그 지점 결제가 통째로 멈춘다. 이미 비어 있으면 그대로 성공한다.
+     */
+    @DeleteMapping("/{academyId}/pg-merchant-code")
+    public ApiResponse<Void> clearPgMerchantCode(@PathVariable Long academyId,
+                                                 @RequestParam(required = false) String confirm) {
+        branchConfigService.clearPgMerchantCode(academyId, confirm);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * Nebula 장비 ID 비우기. {@code confirm}에 <b>지금 값을 그대로</b> 넣어야 지워진다 —
+     * 비우면 그 지점 와이파이 해제가 멈춘다. 이미 비어 있으면 그대로 성공한다.
+     */
+    @DeleteMapping("/{academyId}/nebula-device-id")
+    public ApiResponse<Void> clearNebulaDeviceId(@PathVariable Long academyId,
+                                                 @RequestParam(required = false) String confirm) {
+        branchConfigService.clearNebulaDeviceId(academyId, confirm);
+        return ApiResponse.empty();
+    }
+
     /** 정책 JSON 교체. 부분 병합이 아니라 통째로 갈아끼운다. */
     @PutMapping("/{academyId}/policy")
     public ApiResponse<Void> replacePolicy(@PathVariable Long academyId,

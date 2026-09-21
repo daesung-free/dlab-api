@@ -42,20 +42,26 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
      * <p><b>미배정 학생은 여기 안 나온다.</b> 반이 없으니 반별 집계에 자리가 없다 —
      * 그 수는 {@code /students?unassignedClass=true}로 따로 센다.
      *
+     * <p><b>재원 0명인 반도 0으로 나온다.</b> 배정에서 출발하면 학생이 없는 반은 줄 자체가
+     * 안 생겨 화면의 반 수가 실제와 달라진다 — 그래서 반에서 출발한다.
+     *
      * @return {@code [classId, className, capacity, 인원]}
      */
     @Query("""
-            SELECT c.id, c.name, c.capacity, COUNT(a)
-            FROM ClassAssignment a
-            JOIN a.classMaster c
-            JOIN a.enrollment e
-            WHERE (:academyId IS NULL OR a.academy.id = :academyId)
+            SELECT c.id, c.name, c.capacity, COUNT(e)
+            FROM ClassMaster c
+            LEFT JOIN ClassAssignment a
+                   ON a.classMaster = c
+                  AND a.classType = com.dlab.domain.user.entity.ClassType.FIXED
+                  AND a.active = true
+                  AND a.deleted = false
+            LEFT JOIN a.enrollment e
+                   ON e.enrollmentStatus = com.dlab.domain.user.entity.EnrollmentStatus.ENROLLED
+                  AND e.deleted = false
+            WHERE (:academyId IS NULL OR c.academy.id = :academyId)
               AND c.year = :year
-              AND a.classType = com.dlab.domain.user.entity.ClassType.FIXED
-              AND a.active = true
-              AND a.deleted = false
-              AND e.enrollmentStatus = com.dlab.domain.user.entity.EnrollmentStatus.ENROLLED
-              AND e.deleted = false
+              AND c.classType = com.dlab.domain.user.entity.ClassType.FIXED
+              AND c.deleted = false
             GROUP BY c.id, c.name, c.capacity
             ORDER BY c.name
             """)

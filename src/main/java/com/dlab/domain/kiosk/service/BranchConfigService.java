@@ -98,6 +98,40 @@ public class BranchConfigService {
     }
 
     /**
+     * PG 가맹점 코드 비우기. {@code confirm}에 <b>지금 값을 그대로</b> 넣어야 지워진다.
+     *
+     * <p>비우면 그 지점 결제가 통째로 멈춘다. 빈 값으로 덮어쓰기를 허용하면 입력란을 실수로
+     * 비운 채 저장만 눌러도 결제가 멈춘다 — 그래서 변경과 경로를 나누고 확인값을 받는다.
+     */
+    @Transactional
+    public void clearPgMerchantCode(Long academyId, String confirm) {
+        BranchConfig config = configOrCreate(academyId);
+        requireConfirm(config.getPgMerchantCode(), confirm);
+        config.changePgMerchantCode(null);
+        record(academyId, BranchConfigAction.PG_MERCHANT_CHANGED, "PG 가맹점코드 비움");
+    }
+
+    /** Nebula 장비 ID 비우기. 비우면 그 지점 와이파이 해제가 멈춘다 — 확인값은 PG 코드와 같다. */
+    @Transactional
+    public void clearNebulaDeviceId(Long academyId, String confirm) {
+        BranchConfig config = configOrCreate(academyId);
+        requireConfirm(config.getNebulaDeviceId(), confirm);
+        config.changeNebulaDeviceId(null);
+        record(academyId, BranchConfigAction.NEBULA_DEVICE_CHANGED, "Nebula 장비 ID 비움");
+    }
+
+    /** 이미 비어 있으면 그대로 통과한다 — 두 번 눌러도 오류가 나지 않게. */
+    private void requireConfirm(String current, String confirm) {
+        if (current == null) {
+            return;
+        }
+        if (confirm == null || !current.equals(confirm.trim())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "지우려면 지금 값을 그대로 다시 입력해야 합니다.");
+        }
+    }
+
+    /**
      * 지점별 정책 JSON 교체.
      *
      * <p><b>통째로 갈아끼운다</b> — 화면이 편집한 전체 맵을 보낸다. 부분 병합으로 두면
