@@ -59,6 +59,7 @@ public class ReadinessService {
     private final TuitionMonthRepository tuitionMonthRepository;
     private final TuitionRepository tuitionRepository;
     private final ExamMasterRepository examMasterRepository;
+    private final com.dlab.domain.grade.repository.ExamSubjectPresetRepository presetRepository;
     private final NotificationTemplateRepository templateRepository;
     private final MenuRepository menuRepository;
     private final SmsSender smsSender;
@@ -95,6 +96,13 @@ public class ReadinessService {
                 forms > 0,
                 forms > 0 ? "%d개 회차 등록됨".formatted(forms)
                         : "없으면 그 해 가입자가 전부 EXAM_FORM_NOT_FOUND 를 받는다"));
+
+        int presets = presetRepository.findOwn(year, null).size();
+        checks.add(Check.of("EXAM_SUBJECT_PRESET", "학년별 기본 과목 구성", Severity.WARNING,
+                presets > 0,
+                presets > 0 ? "%d개 과목 등록됨".formatted(presets)
+                        : "없으면 디랩 시험 회차를 만들 때 과목을 매번 손으로 넣어야 한다. "
+                          + "POST /exam-forms/rollover 로 전년도를 복사할 수 있다"));
 
         boolean templates = !templateRepository.findAllByDeletedFalseOrderByEventCode().isEmpty();
         checks.add(Check.of("NOTIFICATION_TEMPLATE", "알림 템플릿", Severity.WARNING,

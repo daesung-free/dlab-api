@@ -7,7 +7,6 @@ import com.dlab.domain.grade.service.ExamFormAdminService;
 import com.dlab.domain.user.entity.GradeType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -28,6 +27,8 @@ public final class ExamFormRequests {
      *                   {@code ACADEMY} — 성적 업로드는 이 양식에만 된다
      * @param examDate   시행일. <b>{@code ACADEMY} 는 필수</b> — 월례고사가 코드만으로는
      *                   달이 구분되지 않는다
+     * @param subjects   과목. <b>디랩 시험({@code ACADEMY})은 비워도 된다</b> — 학년별 기본 구성
+     *                   ({@code GET /exam-forms/subject-presets})으로 채운다. 입학 전 성적은 필수
      * @param examName   신상기록부에 적힌 문구 그대로. 서버가 연도를 조합해 만들지 않는다 —
      *                   수능은 응시 연도와 학년도가 어긋나(2025년 11월 = 2026학년도)
      *                   조합식이 매번 틀린다
@@ -39,7 +40,6 @@ public final class ExamFormRequests {
             @NotNull(message = "시험 구분은 필수입니다.") ExamCode examCode,
             @NotBlank(message = "시험 이름은 필수입니다.") @Size(max = 64) String examName,
             Integer sortOrder,
-            @NotEmpty(message = "과목이 없는 시험은 만들 수 없습니다.")
             @Valid List<ExamFormSubject> subjects,
             com.dlab.domain.grade.entity.ExamPurpose purpose,
             java.time.LocalDate examDate) {
@@ -52,11 +52,8 @@ public final class ExamFormRequests {
         public ExamFormAdminService.Command toCommand() {
             return new ExamFormAdminService.Command(academyId, year, gradeType, examCode,
                     examName, sortOrder,
-                    subjects.stream()
-                            .map(s -> new ExamFormAdminService.SubjectInput(
-                                    s.subjectCode(), s.subjectName(), s.sortOrder(),
-                                    s.hasStandardScore(), s.hasPercentile(), s.hasGradeLevel(),
-                                    s.hasRawScore()))
+                    subjects == null ? List.of() : subjects.stream()
+                            .map(ExamFormSubject::toInput)
                             .toList(),
                     purpose, examDate);
         }
@@ -77,6 +74,45 @@ public final class ExamFormRequests {
             boolean hasPercentile,
             boolean hasGradeLevel,
             Boolean hasRawScore) {
+
+        public ExamFormAdminService.SubjectInput toInput() {
+            return new ExamFormAdminService.SubjectInput(subjectCode, subjectName, sortOrder,
+                    hasStandardScore, hasPercentile, hasGradeLevel, hasRawScore);
+        }
+    }
+
+    /**
+     * 한 학년의 기본 과목 구성 교체.
+     *
+     * @param academyId 비우면 <b>전 지점 공통</b> — 본사만
+     * @param subjects  비우면 그 범위의 행을 전부 지운다(지점 행이면 공통본으로 돌아간다).
+     *                  {@code hasRawScore} 를 비우면 켠다 — 디랩 시험용 구성이다
+     */
+    public record PresetReplace(
+            Long academyId,
+            @NotNull(message = "연도는 필수입니다.") Short year,
+            @NotNull(message = "학년은 필수입니다.") GradeType gradeType,
+            @NotNull(message = "과목 목록은 필수입니다.") @Valid List<ExamFormSubject> subjects) {
+    }
+
+    public record PresetView(Long presetId, Long academyId, short year, String gradeType,
+                             String subjectCode, String subjectName, int sortOrder,
+                             boolean hasStandardScore, boolean hasPercentile,
+                             boolean hasGradeLevel, boolean hasRawScore) {
+
+        public static PresetView from(com.dlab.domain.grade.entity.ExamSubjectPreset p) {
+            return new PresetView(p.getId(), p.isCommon() ? null : p.getAcademy().getId(),
+                    p.getYear(), p.getGradeType().name(), p.getSubjectCode(),
+                    p.getSubjectName(), p.getSortOrder(), p.isHasStandardScore(),
+                    p.isHasPercentile(), p.isHasGradeLevel(), p.isHasRawScore());
+        }
+    }
+
+    /** @param academyId 비우면 공통본 — 본사만 */
+    public record Rollover(
+            Long academyId,
+            @NotNull(message = "원본 연도는 필수입니다.") Short fromYear,
+            @NotNull(message = "새 연도는 필수입니다.") Short toYear) {
     }
 
     /** 등록된 회차 한 줄. */
