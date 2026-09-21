@@ -45,6 +45,13 @@ public record StudentResponse(
         String phone,
         String address,
         String birthDate,
+        /**
+         * 성별 {@code M}/{@code F}.
+         *
+         * <p>★ <b>등록에서는 받는데 조회에 없었다.</b> 넣은 값을 다시 꺼낼 방법이 없어
+         * 화면에서는 저장됐는지조차 확인되지 않았다.
+         */
+        String gender,
         String schoolName,
         short year,
         GradeType grade,
@@ -77,6 +84,7 @@ public record StudentResponse(
                 PersonalDataPolicy.phone(me, s.getPhone()),
                 PersonalDataPolicy.address(me, s.getAddress()),
                 PersonalDataPolicy.birthDate(me, s.getBirthDate()),
+                s.getGender(),
                 s.getSchoolName(),
                 e.getYear(),
                 e.getGrade(),

@@ -303,6 +303,8 @@ class StudentListFieldsTest {
                         .param("year", "2026").param("keyword", "생일학생"))
                 .andExpect(jsonPath("$.data[0].birthDate").value("2007-**-**"))
                 .andExpect(jsonPath("$.data[0].phone").value("010-****-4444"))
+                // ★ 성별은 마스킹 대상이 아니다. 등록에서 받는데 조회에 없어 꺼낼 길이 없었다
+                .andExpect(jsonPath("$.data[0].gender").value("M"))
                 // 화면이 마스킹 여부를 알아야 "번호가 잘못 저장됐다"는 오인 문의가 안 생긴다
                 .andExpect(jsonPath("$.data[0].masked").value(true));
     }
