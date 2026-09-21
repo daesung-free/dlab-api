@@ -68,6 +68,52 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
     List<Object[]> countByClass(@Param("academyId") Long academyId, @Param("year") short year);
 
     /**
+     * 반별 재적 상태 인원 — 학생의 <b>마지막 고정반 배정</b> 기준.
+     *
+     * <p>퇴원·제적하면 반 배정이 비활성으로 내려가(후속처리) 활성 배정으로는 셀 수 없다.
+     * 그래서 등록 건마다 마지막 고정반 배정을 "그 학생의 반" 으로 본다 — 퇴원 직전에 있던 반이다.
+     *
+     * @return {@code [classId, 재적 상태, 인원]}
+     */
+    @Query("""
+            SELECT a.classMaster.id, e.enrollmentStatus, COUNT(e)
+            FROM ClassAssignment a
+            JOIN a.enrollment e
+            WHERE (:academyId IS NULL OR a.academy.id = :academyId)
+              AND a.classMaster.year = :year
+              AND a.classType = com.dlab.domain.user.entity.ClassType.FIXED
+              AND a.deleted = false
+              AND e.deleted = false
+              AND a.id = (
+                    SELECT MAX(a2.id) FROM ClassAssignment a2
+                    WHERE a2.enrollment = e
+                      AND a2.classType = com.dlab.domain.user.entity.ClassType.FIXED
+                      AND a2.deleted = false)
+            GROUP BY a.classMaster.id, e.enrollmentStatus
+            """)
+    List<Object[]> countStatusByClass(@Param("academyId") Long academyId, @Param("year") short year);
+
+    /**
+     * 반 안의 계열 구분 — 재원생만.
+     *
+     * @return {@code [classId, track, 인원]}. 계열이 없으면 {@code track}이 {@code null}
+     */
+    @Query("""
+            SELECT a.classMaster.id, e.track, COUNT(e)
+            FROM ClassAssignment a
+            JOIN a.enrollment e
+            WHERE (:academyId IS NULL OR a.academy.id = :academyId)
+              AND a.classMaster.year = :year
+              AND a.classType = com.dlab.domain.user.entity.ClassType.FIXED
+              AND a.active = true
+              AND a.deleted = false
+              AND e.deleted = false
+              AND e.enrollmentStatus = com.dlab.domain.user.entity.EnrollmentStatus.ENROLLED
+            GROUP BY a.classMaster.id, e.track
+            """)
+    List<Object[]> countTrackByClass(@Param("academyId") Long academyId, @Param("year") short year);
+
+    /**
      * 계열별 인원.
      *
      * <p>계열이 안 정해진 학생이 있어 {@code track}이 {@code null}인 행이 나온다 —

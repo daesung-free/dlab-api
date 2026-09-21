@@ -56,6 +56,14 @@ public class Student extends BaseEntity {
     @Column(length = 200)
     private String address;
 
+    /** 영문명(선택). 성적표·증명서 영문 표기용이다. */
+    @Column(name = "english_name", length = 100)
+    private String englishName;
+
+    /** 고교 졸업연도(선택). N수 차수와 따로 받는다 — 차수는 학원이 세는 값이고 이건 서류 값이다. */
+    @Column(name = "graduation_year")
+    private Short graduationYear;
+
     @Column(name = "search_name_normalized", length = 20)
     private String searchNameNormalized;
 
@@ -115,6 +123,21 @@ public class Student extends BaseEntity {
     public void advanceOnboarding(OnboardingStatus expected) {
         if (this.onboardingStatus == expected) {
             this.onboardingStatus = expected.next();
+        }
+    }
+
+    /**
+     * 영문명·졸업연도. {@code null}은 "변경 없음", <b>빈 문자열은 지움</b>이다(영문명).
+     * 졸업연도를 지우려면 {@code clearGraduationYear}를 쓴다.
+     */
+    public void updateExtra(String englishName, Short graduationYear, boolean clearGraduationYear) {
+        if (englishName != null) {
+            this.englishName = englishName.isBlank() ? null : englishName.trim();
+        }
+        if (clearGraduationYear) {
+            this.graduationYear = null;
+        } else if (graduationYear != null) {
+            this.graduationYear = graduationYear;
         }
     }
 }

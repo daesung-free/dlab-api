@@ -43,6 +43,7 @@ public class AdminGradeController {
     private final com.dlab.domain.grade.service.ExamItemService examItemService;
     private final com.dlab.domain.grade.service.ItemResponseService itemResponseService;
     private final com.dlab.domain.grade.service.AcademyExamQueryService academyExamQueryService;
+    private final com.dlab.domain.grade.service.ScoringQueryService scoringQueryService;
 
     /**
      * 등록된 시험 회차 목록.
@@ -344,6 +345,20 @@ public class AdminGradeController {
             @PathVariable Long enrollmentId,
             @PathVariable Long examMasterId) {
         return ApiResponse.success(academyExamQueryService.exam(
+                studentService.get(enrollmentId, me), examMasterId));
+    }
+
+    /**
+     * 채점 — 영역별 맞은 수·틀린 문항·단원별 정답률(전국 대비).
+     * 앱 {@code GET /app/grades/exams/{id}/scoring} 과 같은 모양이다.
+     */
+    @GetMapping("/students/{enrollmentId}/grades/exams/{examMasterId}/scoring")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<List<com.dlab.domain.grade.service.ScoringQueryService.Area>> studentScoring(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long enrollmentId,
+            @PathVariable Long examMasterId) {
+        return ApiResponse.success(scoringQueryService.scoring(
                 studentService.get(enrollmentId, me), examMasterId));
     }
 

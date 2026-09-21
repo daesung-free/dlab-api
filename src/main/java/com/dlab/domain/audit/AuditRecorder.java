@@ -37,7 +37,7 @@ public class AuditRecorder {
         auditLogRepository.save(new AuditLog(
                 entry.entityType(), entry.entityId(), entry.action(), entry.academyId(),
                 entry.actorId(), entry.actorName(), entry.actorIp(),
-                entry.changes(), entry.occurredAt()));
+                entry.changes(), entry.occurredAt()).withTarget(entry.targetEnrollmentId()));
     }
 
     /**
@@ -82,8 +82,16 @@ public class AuditRecorder {
                 .replace("\n", "\\n").replace("\r", "") + '"';
     }
 
+    /** @param targetEnrollmentId 대상 학생(등록 건). 학생에 붙은 기록이 아니면 비어 있다 */
     public record Entry(String entityType, Long entityId, AuditAction action, Long academyId,
                         Long actorId, String actorName, String actorIp,
-                        String changes, Instant occurredAt) {
+                        String changes, Instant occurredAt, Long targetEnrollmentId) {
+
+        public Entry(String entityType, Long entityId, AuditAction action, Long academyId,
+                     Long actorId, String actorName, String actorIp,
+                     String changes, Instant occurredAt) {
+            this(entityType, entityId, action, academyId, actorId, actorName, actorIp,
+                    changes, occurredAt, null);
+        }
     }
 }

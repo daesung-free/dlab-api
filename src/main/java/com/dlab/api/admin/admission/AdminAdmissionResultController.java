@@ -39,6 +39,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminAdmissionResultController {
 
     private final AdmissionResultService resultService;
+    private final com.dlab.domain.admission.service.AdmissionResultImportService importService;
 
     /**
      * 그해 전체 실적 — 학생을 고르지 않고 지점 전체를 본다. 학번순.
@@ -59,6 +60,38 @@ public class AdminAdmissionResultController {
             org.springframework.data.domain.Pageable pageable) {
         return ApiResponse.from(resultService.search(me, academyId, year, result, admissionType,
                 keyword, pageable).map(ResultView::from));
+    }
+
+    /**
+     * 엑셀 일괄 등록 미리보기 — <b>아무것도 저장하지 않는다.</b>
+     *
+     * <p>열: 학번(필수) · 구분(수시/정시, 필수) · 대학명(필수) · 학과명(필수) · 이름 · 전형명 ·
+     * 결과(합격/불합격/발표전/등록포기, 비우면 발표전) · 메모. 열 순서는 상관없다(헤더명으로 찾는다).
+     *
+     * <p>이름 칸이 있으면 학번의 학생과 대조한다 — 학번 오타로 다른 학생 실적이 들어가지 않게.
+     * 정원 초과·이미 있는 지원(같은 구분·대학·학과)은 오류로 잡혀, 같은 파일을 다시 올려도 중복이 안 쌓인다.
+     */
+    @PostMapping("/import/preview")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+    public ApiResponse<com.dlab.common.excel.ImportPreview<
+            com.dlab.domain.admission.service.AdmissionResultImportService.ParsedResult>> previewImport(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @org.springframework.web.bind.annotation.RequestPart("file")
+            org.springframework.web.multipart.MultipartFile file) throws java.io.IOException {
+        return ApiResponse.success(importService.preview(me, academyId, file.getInputStream()));
+    }
+
+    /** 반영 — <b>오류행이 있어도 정상행은 넣는다.</b> 결과는 미리보기와 같은 모양이다. */
+    @PostMapping("/import")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+    public ApiResponse<com.dlab.common.excel.ImportPreview<
+            com.dlab.domain.admission.service.AdmissionResultImportService.ParsedResult>> importResults(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @org.springframework.web.bind.annotation.RequestPart("file")
+            org.springframework.web.multipart.MultipartFile file) throws java.io.IOException {
+        return ApiResponse.success(importService.importResults(me, academyId, file.getInputStream()));
     }
 
     /** 학생 한 명의 지원 목록. 수시·정시가 함께 온다. */

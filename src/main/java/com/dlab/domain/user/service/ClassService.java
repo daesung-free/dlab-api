@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ClassService {
 
+    private final com.dlab.domain.master.repository.RoomMasterRepository roomMasterRepository;
     private final ClassMasterRepository classMasterRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
     private final com.dlab.domain.grade.service.ExamNumberService examNumberService;
@@ -203,6 +204,28 @@ public class ClassService {
     public ClassMaster assignHomeroom(Long classId, Long teacherId, AuthPrincipal principal) {
         ClassMaster classMaster = loadAccessible(classId, principal);
         classMaster.assignHomeroom(resolveTeacher(teacherId, classMaster.getAcademy().getId()));
+        return classMaster;
+    }
+
+    /**
+     * 강의실 지정·해제. {@code roomId}가 {@code null}이면 해제다.
+     *
+     * <p><b>같은 지점 강의실만</b> 붙는다 — 다른 지점 강의실 id 를 넣어도 통하면 반 목록에
+     * 남의 지점 강의실 이름이 뜬다.
+     */
+    @Transactional
+    public ClassMaster assignRoom(Long classId, Long roomId, AuthPrincipal principal) {
+        ClassMaster classMaster = loadAccessible(classId, principal);
+        if (roomId == null) {
+            classMaster.assignRoom(null);
+            return classMaster;
+        }
+        var room = roomMasterRepository.findById(roomId)
+                .filter(r -> !r.isDeleted())
+                .filter(r -> r.getAcademy().getId().equals(classMaster.getAcademy().getId()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "이 지점의 강의실이 아닙니다."));
+        classMaster.assignRoom(room);
         return classMaster;
     }
 

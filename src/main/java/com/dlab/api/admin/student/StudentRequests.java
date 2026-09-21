@@ -67,7 +67,18 @@ public final class StudentRequests {
             @Pattern(regexp = GENDER_PATTERN, message = "성별은 M 또는 F입니다.") String gender,
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,
-            LocalDate admissionDate) {
+            LocalDate admissionDate,
+            /** 영문명(선택) */
+            @Size(max = 100) String englishName,
+            /** 고교 졸업연도(선택) */
+            @Min(1990) @Max(2100) Short graduationYear) {
+
+        public Admit(Long academyId, Integer year, String name, String phone, GradeType grade,
+                     Short retakeCount, TrackType track, LocalDate birthDate, String gender,
+                     String schoolName, String address, LocalDate admissionDate) {
+            this(academyId, year, name, phone, grade, retakeCount, track, birthDate, gender,
+                    schoolName, address, admissionDate, null, null);
+        }
     }
 
     /**
@@ -96,7 +107,16 @@ public final class StudentRequests {
             GradeType grade,
             @Min(1) @Max(10) Short retakeCount,
             TrackType track,
-            EnrollmentStatus status) {
+            EnrollmentStatus status,
+            /** 영문명. 빈 문자열을 보내면 지운다 */
+            @Size(max = 100) String englishName,
+            @Min(1990) @Max(2100) Short graduationYear,
+            /** {@code true}면 졸업연도를 지운다 — {@code null}은 "안 바꿈"이라 따로 받는다 */
+            Boolean clearGraduationYear) {
+
+        public boolean clearsGraduationYear() {
+            return Boolean.TRUE.equals(clearGraduationYear);
+        }
     }
 
     /**

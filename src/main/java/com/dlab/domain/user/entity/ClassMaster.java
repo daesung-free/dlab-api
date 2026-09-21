@@ -75,6 +75,11 @@ public class ClassMaster extends BaseEntity {
         this.examClassNo = examClassNo;
     }
 
+    /** 강의실. 없으면 비어 있다 — 반마다 하나다. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "room_id")
+    private com.dlab.domain.master.entity.RoomMaster room;
+
     public ClassMaster(Academy academy, short year, String name, ClassType classType, Teacher homeroomTeacher) {
         this.academy = academy;
         this.year = year;
@@ -125,4 +130,8 @@ public class ClassMaster extends BaseEntity {
         this.copiedFromId = sourceId;
     }
 
+    /** 강의실 지정·해제. 같은 지점 강의실인지는 호출부가 확인한다. */
+    public void assignRoom(com.dlab.domain.master.entity.RoomMaster room) {
+        this.room = room;
+    }
 }

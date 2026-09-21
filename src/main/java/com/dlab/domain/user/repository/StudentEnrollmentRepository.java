@@ -216,4 +216,12 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
               AND e.deleted = false
             """)
     short findMaxExamSeq(Long academyId, short year, short examClassNo);
+
+    /** 여러 등록 건을 학생과 함께 한 번에. 목록 화면이 이름·학번을 붙일 때 쓴다. */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            WHERE e.id IN :ids
+            """)
+    List<StudentEnrollment> findWithStudentByIds(java.util.Collection<Long> ids);
 }
