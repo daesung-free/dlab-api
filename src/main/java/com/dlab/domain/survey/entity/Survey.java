@@ -77,6 +77,14 @@ public class Survey extends BaseEntity {
     @Column(nullable = false)
     private boolean anonymous;
 
+    /**
+     * 제출 후 기간 안에 고칠 수 있는가. 가채점은 오타 정정이 잦다.
+     *
+     * <p><b>익명 설문은 켤 수 없다</b> — 응답 행에 응답자가 없어 고칠 응답을 찾을 수 없다.
+     */
+    @Column(name = "allow_edit", nullable = false)
+    private boolean allowEdit;
+
     @Column(name = "opens_at", nullable = false)
     private Instant opensAt;
 
@@ -172,6 +180,14 @@ public class Survey extends BaseEntity {
         this.description = description;
         this.opensAt = opensAt;
         this.closesAt = closesAt;
+    }
+
+    /** 제출 후 수정 허용. 익명이면 켜지 않는다 — 호출부가 막고, 여기서도 한 번 더 막는다. */
+    public void allowEdit(boolean allow) {
+        if (allow && anonymous) {
+            throw new IllegalStateException("익명 설문은 제출 후 수정을 허용할 수 없습니다.");
+        }
+        this.allowEdit = allow;
     }
 
     /** 즉시 마감. 마감 시각을 지금으로 당긴다. */
