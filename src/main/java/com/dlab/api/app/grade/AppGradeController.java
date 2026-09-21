@@ -38,6 +38,7 @@ public class AppGradeController {
     private final AppScopeResolver scopeResolver;
     private final ExamFormService examFormService;
     private final StudentGradeService gradeService;
+    private final com.dlab.domain.grade.service.AcademyExamQueryService academyExamQueryService;
 
     /**
      * 성적 입력 양식.
@@ -54,6 +55,54 @@ public class AppGradeController {
         StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         return ApiResponse.success(examFormService.formOf(enrollment).stream()
                 .map(GradeResponse.Form::from).toList());
+    }
+
+    /**
+     * 디랩에서 본 시험 목록 — 최근순 (시안 4.1).
+     *
+     * <p><b>성적이 있는 회차만</b> 내린다. {@code kice=true} 면 평가원 모의고사다 — 「평가원」
+     * 표시와 "지망대학 진단 없음" 안내의 근거다.
+     *
+     * <p>입학 때 입력한 성적은 여기 없다 — {@code GET /app/grades} 가 따로 내린다.
+     */
+    @GetMapping("/exams")
+    public ApiResponse<List<com.dlab.domain.grade.service.AcademyExamQueryService.ExamSummary>> exams(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long studentId) {
+        StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
+        return ApiResponse.success(academyExamQueryService.exams(enrollment));
+    }
+
+    /**
+     * 한 회차 — 과목별 성적 + 지망대학 진단 (시안 4.2 · 4.6).
+     *
+     * <p>과목별 값 중 <b>없는 것은 {@code null}</b> 이다. 영어·한국사는 절대평가라 원점수와
+     * 등급만 있다.
+     *
+     * <p>⚠️ 지점 안 등수·유사 학생 비교·수능 환산 예상은 <b>아직 없다</b> — 노출 여부와 계산
+     * 방식이 확정되지 않았다(시안 6장 2·3·4번).
+     */
+    @GetMapping("/exams/{examMasterId}")
+    public ApiResponse<com.dlab.domain.grade.service.AcademyExamQueryService.ExamDetail> exam(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long examMasterId,
+            @RequestParam(required = false) Long studentId) {
+        StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
+        return ApiResponse.success(academyExamQueryService.exam(enrollment, examMasterId));
+    }
+
+    /**
+     * 성적 변화 — 회차별 과목 등급·백분위, 오래된 순 (시안 4.2 그래프).
+     *
+     * <p>디랩 시험만 담는다. 입학 전 성적은 출처가 달라(학생 입력 + 선생님 대조) 한 줄로
+     * 이을지는 화면이 정한다 — 필요하면 {@code GET /app/grades} 와 합쳐 그린다.
+     */
+    @GetMapping("/trend")
+    public ApiResponse<List<com.dlab.domain.grade.service.AcademyExamQueryService.TrendPoint>> trend(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long studentId) {
+        StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
+        return ApiResponse.success(academyExamQueryService.trend(enrollment));
     }
 
     /** 내가 낸 성적. 아직 안 냈으면 빈 값으로 내려온다 — 앱이 분기하지 않게. */
