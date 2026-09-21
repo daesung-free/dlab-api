@@ -31,6 +31,7 @@ public class AdminStaffController {
 
     private final StaffAccountService staffAccountService;
     private final AuditLogRepository auditLogRepository;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
 
     /**
      * 계정 목록 (F-4.10-2 사용자 관리).
@@ -203,8 +204,24 @@ public class AdminStaffController {
      */
     @GetMapping("/accounts/{accountId}/history")
     public ApiResponse<List<AccountHistoryRow>> accountHistory(@PathVariable Long accountId) {
-        return ApiResponse.success(auditLogRepository.findByEntity("Account", accountId).stream()
-                .map(AccountHistoryRow::from).toList());
+        var logs = auditLogRepository.findByEntity("Account", accountId);
+        // ★ 저장된 actor_name 은 이름이 아니라 계정 종류("EMPLOYEE")다 — 기록 시점에 이름을 찾으면
+        //   플러시 중 조회가 돼 깨진다. 수정 이력 화면과 같이 조회 시점에 이름을 붙인다
+        java.util.Set<Long> ids = logs.stream()
+                .map(com.dlab.domain.audit.AuditLog::getActorId)
+                .filter(java.util.Objects::nonNull)
+                .filter(id -> !id.equals(com.dlab.common.config.SecurityAuditorAware.SYSTEM_ACCOUNT_ID))
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.Map<Long, String> names = new java.util.HashMap<>();
+        if (!ids.isEmpty()) {
+            for (Object[] row : accountRepository.findActorNames(ids)) {
+                if (row[1] != null) {
+                    names.put((Long) row[0], (String) row[1]);
+                }
+            }
+        }
+        return ApiResponse.success(logs.stream()
+                .map(l -> AccountHistoryRow.from(l, names)).toList());
     }
 
     /**
@@ -215,9 +232,13 @@ public class AdminStaffController {
                                     Long actorId, String actorName,
                                     java.time.Instant occurredAt) {
 
-        static AccountHistoryRow from(com.dlab.domain.audit.AuditLog log) {
+        static AccountHistoryRow from(com.dlab.domain.audit.AuditLog log,
+                                      java.util.Map<Long, String> names) {
+            String actorName = com.dlab.common.config.SecurityAuditorAware.SYSTEM_ACCOUNT_ID
+                    .equals(log.getActorId()) ? "시스템"
+                    : names.getOrDefault(log.getActorId(), log.getActorName());
             return new AccountHistoryRow(log.getId(), log.getAction().name(), log.getChanges(),
-                    log.getActorId(), log.getActorName(), log.getOccurredAt());
+                    log.getActorId(), actorName, log.getOccurredAt());
         }
     }
 

@@ -120,4 +120,41 @@ public class DailyRoutineResult extends BaseEntity {
     public void markAbsent() {
         this.status = RoutineResultStatus.ABSENT;
     }
+
+    /**
+     * 그리드 한 줄을 <b>보낸 그대로</b> 반영한다 — 관리자 일괄 입력용.
+     *
+     * <p>상태별 메서드는 자기 칸만 건드려서, 그리드에서 가채점을 지우거나 "예정" 으로 되돌려도
+     * 조용히 무시되고 저장 건수에는 잡혔다. 그리드는 한 줄이 곧 전체 상태라 두 점수 칸을 모두
+     * 보낸 값으로 맞춘다. 제출 전 상태(예정·배부·미제출·결시)에는 점수가 없고, 제출 상태로
+     * 되돌리면 검수 점수가 지워진다. <b>예외는 검수 이후의 가채점</b> — 비워 보내면 남긴다.
+     *
+     * <p>모순되는 입력(제출 전 상태에 점수, 제출 상태에 검수 점수)은 호출부가 먼저 막는다.
+     */
+    public void overwrite(RoutineResultStatus status, Short selfScore, Short reviewedScore,
+                          String memo, Instant at) {
+        this.status = status;
+        this.memo = memo;
+        switch (status) {
+            case PLANNED, DISTRIBUTED, NOT_SUBMITTED, ABSENT -> {
+                this.selfScore = null;
+                this.reviewedScore = null;
+                this.reviewedAt = null;
+            }
+            case SUBMITTED -> {
+                this.selfScore = selfScore;
+                this.reviewedScore = null;
+                this.reviewedAt = null;
+            }
+            case REVIEWED, PUBLISHED -> {
+                // ★ 가채점은 비워 보내면 남긴다 — 학생이 적어낸 값이라 검수 점수와 대조하는 기준이다.
+                //   교사가 검수 칸만 채워 보내는 게 보통이라 null 을 "지움" 으로 읽으면 대조가 사라진다
+                if (selfScore != null) {
+                    this.selfScore = selfScore;
+                }
+                this.reviewedScore = reviewedScore;
+                this.reviewedAt = at;
+            }
+        }
+    }
 }

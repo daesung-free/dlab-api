@@ -67,7 +67,11 @@ public final class LectureResponse {
      * @param phone     연락처. {@code masked}가 참이면 가려진 값이다
      * @param masked    실제로 가려졌는지. 화면이 또 가리지 않도록 알려준다
      */
-    public record RosterRow(Long applicationId, Long studentId, String studentNo,
+    /**
+     * @param studentId    사람(student) id
+     * @param enrollmentId 등록 건 id — 학생 상세·출결 등 다른 관리자 화면으로 넘어갈 때 쓴다
+     */
+    public record RosterRow(Long applicationId, Long studentId, Long enrollmentId, String studentNo,
                             String studentName, String className, String phone,
                             String status, boolean waitlisted,
                             Instant appliedAt, String memo, boolean masked) {
@@ -85,6 +89,7 @@ public final class LectureResponse {
             String phone = a.getEnrollment().getStudent().getPhone();
             return new RosterRow(a.getId(),
                     a.getEnrollment().getStudent().getId(),
+                    a.getEnrollment().getId(),
                     a.getEnrollment().getStudentNo(),
                     a.getEnrollment().getStudent().getName(),
                     className,

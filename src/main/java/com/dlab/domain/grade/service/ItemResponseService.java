@@ -207,6 +207,7 @@ public class ItemResponseService {
         }
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "ItemResponseUnmatched")
     public record Unmatched(int rowNumber, String name, String reason) {
     }
 

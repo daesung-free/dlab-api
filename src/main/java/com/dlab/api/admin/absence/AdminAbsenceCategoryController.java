@@ -131,16 +131,19 @@ public class AdminAbsenceCategoryController {
     }
 
     /** @param academyId 비우면 <b>전 지점 공통</b>이다. 본사만 만들 수 있다 */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "AbsenceCategoryRequest")
     public record CategoryRequest(Long academyId, Integer year,
                                   @NotBlank(message = "이름은 필수입니다.")
                                   @Size(max = 50) String name,
                                   Short sortOrder) {
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "AbsenceCategoryUpdate")
     public record CategoryUpdate(@Size(max = 50) String name, Short sortOrder, Boolean active) {
     }
 
     /** @param nationwide 전 지점 공통인지. 지점 관리자는 이 항목을 못 고친다 */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "AbsenceCategoryResponse")
     public record CategoryResponse(Long id, Long academyId, boolean nationwide, short year,
                                    String name, short sortOrder, boolean active) {
 

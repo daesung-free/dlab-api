@@ -98,6 +98,7 @@ public class AdminBillingController {
         return ApiResponse.empty();
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "BillingCreateRequest")
     public record CreateRequest(
             @NotNull(message = "학생은 필수입니다.") Long enrollmentId,
             @NotBlank(message = "청구명은 필수입니다.") @Size(max = 100) String name,

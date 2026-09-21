@@ -101,6 +101,7 @@ public class AdminApprovalBoardController {
      *                        <b>우선 승인자만 보여주면 "왜 학부모가 안 하지"로 읽힌다</b>
      * @param overdue         대기 중인데 에스컬레이션 시각이 지났는가. 화면이 이 값으로 강조한다
      */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "ApprovalBoardRow")
     public record Row(Long id, RequestType requestType, ApprovalStatus status,
                       Long enrollmentId, String studentNo, String studentName,
                       Instant requestedAt, Instant escalationAt, short timeoutMinutes,

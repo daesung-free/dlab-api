@@ -52,6 +52,7 @@ public final class AdminSurveyResponses {
         }
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "SurveyResultResponse")
     public record Result(AdminSurveySummary survey, int responseCount, List<QuestionResult> questions) {
 
         static Result from(SurveyService.SurveyResult r) {

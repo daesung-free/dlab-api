@@ -110,6 +110,7 @@ public class AdminNotificationLogController {
      *                   목록에는 남는다("왜 안 왔지"에 답해야 한다)
      * @param failReason {@code SKIPPED}면 왜 안 보냈는지가 여기 있다(문구 미확정 등)
      */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "NotificationLogResponse")
     public record LogResponse(Long id, Long academyId, NotificationEvent event,
                               NotificationChannel channel, NotificationStatus status,
                               Long studentId, String studentName, String title, String body,
