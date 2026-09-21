@@ -24,6 +24,10 @@ public final class ExamFormRequests {
      *
      * @param academyId  비우면 <b>전 지점 공통</b> — 본사만 만들 수 있다.
      *                   지점 행이 있으면 그 지점에서는 공통본 대신 그것이 쓰인다
+     * @param purpose    비우면 <b>입학 전 성적</b> 양식이다(기존 동작). 디랩에서 본 시험은
+     *                   {@code ACADEMY} — 성적 업로드는 이 양식에만 된다
+     * @param examDate   시행일. <b>{@code ACADEMY} 는 필수</b> — 월례고사가 코드만으로는
+     *                   달이 구분되지 않는다
      * @param examName   신상기록부에 적힌 문구 그대로. 서버가 연도를 조합해 만들지 않는다 —
      *                   수능은 응시 연도와 학년도가 어긋나(2025년 11월 = 2026학년도)
      *                   조합식이 매번 틀린다
@@ -36,7 +40,9 @@ public final class ExamFormRequests {
             @NotBlank(message = "시험 이름은 필수입니다.") @Size(max = 64) String examName,
             Integer sortOrder,
             @NotEmpty(message = "과목이 없는 시험은 만들 수 없습니다.")
-            @Valid List<ExamFormSubject> subjects) {
+            @Valid List<ExamFormSubject> subjects,
+            com.dlab.domain.grade.entity.ExamPurpose purpose,
+            java.time.LocalDate examDate) {
 
         /** 생략 가능 — 없으면 0. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
         public int sortOrderOrZero() {
@@ -50,7 +56,8 @@ public final class ExamFormRequests {
                             .map(s -> new ExamFormAdminService.SubjectInput(
                                     s.subjectCode(), s.subjectName(), s.sortOrder(),
                                     s.hasStandardScore(), s.hasPercentile(), s.hasGradeLevel()))
-                            .toList());
+                            .toList(),
+                    purpose, examDate);
         }
     }
 
@@ -70,16 +77,24 @@ public final class ExamFormRequests {
     }
 
     /** 등록된 회차 한 줄. */
+    /**
+     * @param purpose  {@code ADMISSION}=입학 전 성적 / {@code ACADEMY}=디랩에서 본 시험.
+     *                 <b>업로드 회차 목록은 {@code ACADEMY} 만 보여줄 것</b> — 입학 양식에 올리면
+     *                 학생이 넣은 입학 성적이 교체된다(서버도 막는다)
+     * @param examDate 시행일. 입학 양식은 비어 있다
+     */
     public record FormView(Long examMasterId, Long academyId, short year, String gradeType,
                            String examCode, String examName, int sortOrder,
-                           List<SubjectView> subjects) {
+                           List<SubjectView> subjects, String purpose,
+                           java.time.LocalDate examDate) {
 
         public static FormView from(ExamMaster exam) {
             return new FormView(exam.getId(),
                     exam.isCommon() ? null : exam.getAcademy().getId(),
                     exam.getYear(), exam.getGradeType().name(), exam.getExamCode().name(),
                     exam.getExamName(), exam.getSortOrder(),
-                    exam.activeSubjects().stream().map(SubjectView::from).toList());
+                    exam.activeSubjects().stream().map(SubjectView::from).toList(),
+                    exam.getPurpose().name(), exam.getExamDate());
         }
     }
 

@@ -39,6 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class MockExamUploadTest {
 
     @Autowired MockExamUploadService uploadService;
+    @Autowired com.dlab.domain.grade.service.StudentGradeService gradeService;
     @Autowired EntityManager em;
 
     @MockitoBean
@@ -61,7 +62,9 @@ class MockExamUploadTest {
         enrollment("이중복", "2098-0003");
         enrollment("이중복", "2098-0004");
 
-        june = ExamMaster.common(YEAR, GradeType.HIGH3, ExamCode.JUNE, "6월 평가원 모의고사", 1);
+        // ★ 업로드는 디랩에서 본 시험 양식에만 된다 — 입학 전 성적 양식과 분리됐다
+        june = ExamMaster.academyExam(null, YEAR, GradeType.HIGH3, ExamCode.JUNE,
+                "6월 평가원 모의고사", java.time.LocalDate.of(YEAR, 6, 4), 1);
         june.addSubject("KOREAN", "국어", 1);
         june.addSubject("MATH", "수학", 2);
         // ★ 파일에는 있지만 이 회차 양식에는 없는 과목(한국사)은 저장되지 않아야 한다
@@ -194,6 +197,61 @@ class MockExamUploadTest {
                         "SELECT e.id FROM StudentEnrollment e WHERE e.studentNo = :no", Long.class)
                 .setParameter("no", studentNo)
                 .getSingleResult();
+    }
+
+    @Test
+    @DisplayName("★★ 입학 전 성적 양식에는 업로드할 수 없다 — 학생이 넣은 입학 성적이 교체된다")
+    void rejectsUploadToAdmissionForm() {
+        ExamMaster admission = ExamMaster.common(YEAR, GradeType.HIGH3, ExamCode.SEPT,
+                "9월 평가원 모의고사", 2);
+        admission.addSubject("KOREAN", "국어", 1);
+        em.persist(admission);
+        em.flush();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> uploadService.preview(
+                        admin, bundang.getId(), admission.getId(), new ByteArrayInputStream(sample())))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class)
+                .hasMessageContaining("입학 전 성적");
+    }
+
+    @Test
+    @DisplayName("★★ 업로드가 입학 성적을 지우지 않는다 — 같은 6월이라도 입학분과 디랩분은 다른 행이다")
+    void uploadKeepsAdmissionScores() {
+        // 학생이 가입 때 넣은 "작년 6평" — 입학 전 성적 양식
+        ExamMaster admissionJune = ExamMaster.common(YEAR, GradeType.HIGH3, ExamCode.JUNE,
+                "6월 평가원 모의고사(입학 전)", 1);
+        admissionJune.addSubject("KOREAN", "국어", 1);
+        em.persist(admissionJune);
+        em.flush();
+
+        StudentEnrollment 전승은 = em.createQuery(
+                        "SELECT e FROM StudentEnrollment e WHERE e.studentNo = '2098-0001'",
+                        StudentEnrollment.class).getSingleResult();
+        var submission = gradeService.mine(전승은);
+        submission.addScore(admissionJune.activeSubjects().get(0), (short) 101, (short) 50, (short) 5);
+        em.flush();
+
+        // 올해 디랩 6평 업로드
+        uploadService.apply(admin, bundang.getId(), june.getId(), new ByteArrayInputStream(sample()));
+        em.flush();
+
+        Long admissionLeft = em.createQuery("""
+                SELECT COUNT(s) FROM StudentExamScore s
+                WHERE s.examMaster.id = :id AND s.deleted = false
+                """, Long.class).setParameter("id", admissionJune.getId()).getSingleResult();
+        assertThat(admissionLeft).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("업로드는 입학 성적의 제출 상태를 바꾸지 않는다 — 연구소 성적이 들어왔다고 학생이 낸 게 아니다")
+    void uploadDoesNotMarkAdmissionSubmitted() {
+        uploadService.apply(admin, bundang.getId(), june.getId(), new ByteArrayInputStream(sample()));
+        em.flush();
+
+        StudentEnrollment 전승은 = em.createQuery(
+                        "SELECT e FROM StudentEnrollment e WHERE e.studentNo = '2098-0001'",
+                        StudentEnrollment.class).getSingleResult();
+        assertThat(gradeService.mine(전승은).getSubmittedAt()).isNull();
     }
 
     /** 실물과 같은 2단 헤더 구조의 축소본. */
