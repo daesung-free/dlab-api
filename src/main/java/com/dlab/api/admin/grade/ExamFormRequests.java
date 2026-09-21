@@ -51,7 +51,8 @@ public final class ExamFormRequests {
 
         public ExamFormAdminService.Command toCommand() {
             return new ExamFormAdminService.Command(academyId, year, gradeType, examCode,
-                    examName, sortOrder,
+                    // ★ sortOrder 는 생략 가능하다 — 그대로 넘기면 int 로 풀리며 NPE 가 난다
+                    examName, sortOrderOrZero(),
                     subjects == null ? List.of() : subjects.stream()
                             .map(ExamFormSubject::toInput)
                             .toList(),
