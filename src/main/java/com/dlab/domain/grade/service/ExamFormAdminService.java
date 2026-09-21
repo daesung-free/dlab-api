@@ -40,6 +40,7 @@ import java.util.stream.Collectors;
 public class ExamFormAdminService {
 
     private final ExamMasterRepository examMasterRepository;
+    private final com.dlab.domain.grade.repository.ExamItemRepository examItemRepository;
     private final com.dlab.domain.grade.repository.ExamSubjectPresetRepository presetRepository;
     private final jakarta.persistence.EntityManager em;
     private final AcademyRepository academyRepository;
@@ -48,6 +49,29 @@ public class ExamFormAdminService {
     public List<ExamMaster> list(AuthPrincipal me, short year, Long academyId) {
         requireScope(me, academyId);
         return examMasterRepository.findAllByScope(year, academyId);
+    }
+
+    /**
+     * 회차별로 올라간 문항 정보. 없는 회차는 맵에 없다(문항 0).
+     *
+     * <p>업로드 화면이 "문항 정보가 없으면 정오표 업로드를 잠근다" 에 쓴다 — 정오표는 문항의
+     * 정답·배점으로 채점하므로 문항 정보 없이 올리면 채점할 수 없다.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<Long, ItemStat> itemStats(List<Long> examMasterIds) {
+        if (examMasterIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+        java.util.Map<Long, ItemStat> result = new java.util.HashMap<>();
+        for (Object[] row : examItemRepository.countByExamMasterIds(examMasterIds)) {
+            result.put((Long) row[0],
+                    new ItemStat(((Number) row[1]).intValue(), (java.time.Instant) row[2]));
+        }
+        return result;
+    }
+
+    /** @param uploadedAt 마지막으로 올린 시각 — 다시 올리면 통째로 교체되므로 전부 같은 시각이다 */
+    public record ItemStat(int count, java.time.Instant uploadedAt) {
     }
 
     /**
