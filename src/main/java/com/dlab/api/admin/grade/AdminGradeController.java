@@ -42,6 +42,7 @@ public class AdminGradeController {
     private final com.dlab.domain.grade.service.MockExamUploadService mockExamUploadService;
     private final com.dlab.domain.grade.service.ExamItemService examItemService;
     private final com.dlab.domain.grade.service.ItemResponseService itemResponseService;
+    private final com.dlab.domain.grade.service.AcademyExamQueryService academyExamQueryService;
 
     /**
      * 등록된 시험 회차 목록.
@@ -318,6 +319,41 @@ public class AdminGradeController {
         StudentEnrollment enrollment = studentService.get(enrollmentId, me);
         return ApiResponse.success(GradeResponse.Submission.from(
                 gradeService.of(enrollment), examFormService.formOf(enrollment)));
+    }
+
+    /**
+     * 디랩에서 본 시험 목록 — 성적 업로드로 반영된 회차, 최근순.
+     *
+     * <p>앱 {@code GET /app/grades/exams} 와 같은 모양이다. 입학 전 성적은 여기 없다 —
+     * {@code GET /students/{id}/grades} 가 따로 내린다.
+     */
+    @GetMapping("/students/{enrollmentId}/grades/exams")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<List<com.dlab.domain.grade.service.AcademyExamQueryService.ExamSummary>> studentAcademyExams(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long enrollmentId) {
+        // 지점 검사는 studentService.get 에 있다
+        return ApiResponse.success(academyExamQueryService.exams(studentService.get(enrollmentId, me)));
+    }
+
+    /** 한 회차 — 과목별 성적 + 지망대학 진단. 앱 {@code GET /app/grades/exams/{id}} 와 같은 모양. */
+    @GetMapping("/students/{enrollmentId}/grades/exams/{examMasterId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<com.dlab.domain.grade.service.AcademyExamQueryService.ExamDetail> studentAcademyExam(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long enrollmentId,
+            @PathVariable Long examMasterId) {
+        return ApiResponse.success(academyExamQueryService.exam(
+                studentService.get(enrollmentId, me), examMasterId));
+    }
+
+    /** 성적 변화 — 회차별 과목 등급·백분위, 오래된 순. 앱 {@code GET /app/grades/trend} 와 같은 모양. */
+    @GetMapping("/students/{enrollmentId}/grades/trend")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<List<com.dlab.domain.grade.service.AcademyExamQueryService.TrendPoint>> studentAcademyTrend(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long enrollmentId) {
+        return ApiResponse.success(academyExamQueryService.trend(studentService.get(enrollmentId, me)));
     }
 
     // ── 직원 수정 (0826 회신 · API_GAPS 12-1) ──────────────────
