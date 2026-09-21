@@ -36,6 +36,7 @@ class HomeroomOverrideTest {
     @Autowired HomeroomResolver resolver;
     @Autowired ClassService classService;
     @Autowired ConsultService consultService;
+    @Autowired com.dlab.api.admin.student.AdminStudentController studentController;
     @Autowired EntityManager em;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
@@ -154,5 +155,25 @@ class HomeroomOverrideTest {
         em.flush();
 
         assertThat(resolver.of(student)).isEqualTo(classHomeroom);
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles = "BRANCH_ADMIN")
+    @DisplayName("학생 상세에 지정 상태가 실린다 — 화면이 지정·해제 버튼을 고르는 근거다")
+    void detailShowsOverride() {
+        var before = studentController.get(branchAdmin, student.getId()).data();
+        assertThat(before.homeroomOverridden()).isFalse();
+        assertThat(before.homeroomOverride()).isNull();
+
+        overrideService.override(branchAdmin, student.getId(), overrideTeacher.getId(), "학부모 요청");
+        em.flush();
+
+        var after = studentController.get(branchAdmin, student.getId()).data();
+        assertThat(after.homeroomOverridden()).isTrue();
+        assertThat(after.homeroomTeacher()).isEqualTo("이예외");
+        assertThat(after.homeroomOverride().teacherId()).isEqualTo(overrideTeacher.getId());
+        assertThat(after.homeroomOverride().teacherName()).isEqualTo("이예외");
+        assertThat(after.homeroomOverride().reason()).isEqualTo("학부모 요청");
+        assertThat(after.homeroomOverride().at()).isNotNull();
     }
 }
