@@ -76,6 +76,62 @@ public class TwoRowHeaderReader {
         }
     }
 
+    /**
+     * 열 위치로 읽는다 — 키를 만들지 않는다.
+     *
+     * <p>★ <b>키로 읽으면 안 되는 파일이 있다.</b> 연구소 정오표·답안표는 위 줄이 여러 영역에
+     * 걸쳐 병합돼 있고(탐구1·탐구2·한국사가 한 병합 칸), 병합 안쪽 칸에 값이 남아 있기도
+     * 하고 비어 있기도 하다. 그러면 영역 키가 파일마다 달라지고, <b>탐구1 1번과 탐구2 1번이
+     * 같은 키가 되어 뒤 값이 앞 값에 덮인다.</b> 이런 파일은 아래 줄 라벨과 열 위치만 쓴다.
+     *
+     * @param labelRowIndex 아래 줄(항목) 인덱스. 0부터 센다
+     */
+    public Grid readGrid(InputStream input, int labelRowIndex) {
+        try (Workbook workbook = WorkbookFactory.create(input)) {
+            Sheet sheet = workbook.getSheetAt(0);
+            Row labelRow = sheet.getRow(labelRowIndex);
+            if (labelRow == null) {
+                throw new IllegalArgumentException(
+                        "헤더 행을 찾을 수 없습니다: %d 행".formatted(labelRowIndex + 1));
+            }
+            List<String> labels = new ArrayList<>();
+            for (int c = 0; c < labelRow.getLastCellNum(); c++) {
+                labels.add(normalize(text(labelRow.getCell(c))));
+            }
+            List<GridRow> rows = new ArrayList<>();
+            for (int i = labelRowIndex + 1; i <= sheet.getLastRowNum(); i++) {
+                Row row = sheet.getRow(i);
+                if (row == null) {
+                    continue;
+                }
+                List<String> cells = new ArrayList<>(labels.size());
+                boolean empty = true;
+                for (int c = 0; c < labels.size(); c++) {
+                    String value = text(row.getCell(c));
+                    empty &= value.isEmpty();
+                    cells.add(value);
+                }
+                if (!empty) {
+                    rows.add(new GridRow(i + 1, cells));
+                }
+            }
+            return new Grid(labels, rows);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("엑셀 파일을 읽을 수 없습니다.", e);
+        }
+    }
+
+    /** @param labels 아래 줄 라벨(공백 제거) · @param rows 열 순서 그대로의 값 */
+    public record Grid(List<String> labels, List<GridRow> rows) {
+    }
+
+    /** @param rowNumber 엑셀 기준 1부터 */
+    public record GridRow(int rowNumber, List<String> cells) {
+        public String at(int column) {
+            return column < cells.size() ? cells.get(column).trim() : "";
+        }
+    }
+
     /** 행 번호를 값에 얹는다. 별도 필드로 두면 호출부마다 짝지어 들고 다녀야 한다. */
     private Map<String, String> withRowNumber(Map<String, String> values, int rowNumber) {
         values.put(ROW_NUMBER, String.valueOf(rowNumber));
