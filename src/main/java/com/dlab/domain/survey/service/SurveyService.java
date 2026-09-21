@@ -69,6 +69,8 @@ public class SurveyService {
     private final ClassMasterRepository classMasterRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final com.dlab.domain.survey.repository.SurveyDraftRepository draftRepository;
+    private final tools.jackson.databind.ObjectMapper objectMapper;
     private final Clock clock;
 
     // ── 관리자: 생성·관리 ──────────────────────────────────
@@ -115,6 +117,7 @@ public class SurveyService {
             }
         };
 
+        List<SurveyQuestion> built = new ArrayList<>();
         for (QuestionCommand q : command.questions()) {
             SurveyQuestion question = survey.addQuestion(
                     q.type(), q.title(), q.required(), q.minValue(), q.maxValue());
@@ -126,12 +129,87 @@ public class SurveyService {
                 }
                 q.options().forEach(question::addOption);
             }
+            built.add(question);
         }
+        for (int i = 0; i < built.size(); i++) {
+            applyCondition(built, i, command.questions().get(i));
+            applySum(built, i, command.questions());
+        }
+
+        boolean allowEdit = command.allowEdit() != null ? command.allowEdit()
+                // 가채점은 기본으로 고칠 수 있게 한다 — 오타 정정이 잦다
+                : command.surveyType() == SurveyType.GRADE_INPUT && !command.anonymous();
+        if (allowEdit && command.anonymous()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "익명 설문은 제출 후 수정을 허용할 수 없습니다 — 고칠 응답을 찾을 수 없습니다.");
+        }
+        survey.allowEdit(allowEdit);
 
         Survey saved = surveyRepository.save(survey);
         log.info("설문 개설: id={}, 범위={}, 문항={}건, 익명={}",
                 saved.getId(), saved.getScope(), command.questions().size(), saved.isAnonymous());
         return saved;
+    }
+
+    /**
+     * 조건부 문항. 조건 문항은 <b>앞쪽의 단일 선택 문항</b>이어야 한다 — 뒤쪽 문항에 걸면 화면이
+     * 아직 안 그린 답에 따라 이미 지나간 문항이 숨었다 나타났다 한다.
+     */
+    private void applyCondition(List<SurveyQuestion> built, int index, QuestionCommand q) {
+        if (q.showIfQuestionIndex() == null && q.showIfOptionIndex() == null) {
+            return;
+        }
+        if (q.showIfQuestionIndex() == null || q.showIfOptionIndex() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "'%s' 문항의 조건은 문항과 선택지를 함께 지정해야 합니다.".formatted(q.title()));
+        }
+        int controlIndex = q.showIfQuestionIndex() - 1;
+        if (controlIndex < 0 || controlIndex >= index) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "'%s' 문항의 조건은 앞쪽 문항이어야 합니다.".formatted(q.title()));
+        }
+        SurveyQuestion control = built.get(controlIndex);
+        if (control.getQuestionType() != SurveyQuestionType.SINGLE_CHOICE) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "'%s' 문항의 조건은 단일 선택 문항이어야 합니다.".formatted(q.title()));
+        }
+        List<SurveyQuestionOption> options = control.activeOptions();
+        int optionIndex = q.showIfOptionIndex() - 1;
+        if (optionIndex < 0 || optionIndex >= options.size()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "'%s' 문항의 조건 선택지가 없습니다.".formatted(q.title()));
+        }
+        built.get(index).showIf(control, options.get(optionIndex));
+    }
+
+    /** 합산 문항. 숫자 문항만, 합산이 아닌 숫자 문항만 더한다(합산의 합산은 순서 문제가 생긴다). */
+    private void applySum(List<SurveyQuestion> built, int index, List<QuestionCommand> commands) {
+        QuestionCommand q = commands.get(index);
+        if (q.sumOfIndexes() == null || q.sumOfIndexes().isEmpty()) {
+            return;
+        }
+        SurveyQuestion self = built.get(index);
+        if (self.getQuestionType() != SurveyQuestionType.NUMBER) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "'%s' — 합산 문항은 숫자 문항이어야 합니다.".formatted(q.title()));
+        }
+        List<Short> seqs = new ArrayList<>();
+        for (Integer partIndex : q.sumOfIndexes().stream().distinct().toList()) {
+            int i = partIndex == null ? -1 : partIndex - 1;
+            if (i < 0 || i >= built.size() || i == index) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "'%s' — 더할 문항 번호가 잘못됐습니다: %s".formatted(q.title(), partIndex));
+            }
+            SurveyQuestion part = built.get(i);
+            List<Integer> partSums = commands.get(i).sumOfIndexes();
+            if (part.getQuestionType() != SurveyQuestionType.NUMBER
+                    || (partSums != null && !partSums.isEmpty())) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "'%s' — 합산이 아닌 숫자 문항만 더할 수 있습니다.".formatted(q.title()));
+            }
+            seqs.add(part.getSeq());
+        }
+        self.computeAsSumOf(seqs);
     }
 
     @Transactional(readOnly = true)
@@ -344,12 +422,16 @@ public class SurveyService {
             throw new BusinessException(ErrorCode.SURVEY_CLOSED);
         }
         if (participantRepository.hasSubmitted(surveyId, enrollmentId)) {
-            throw new BusinessException(ErrorCode.SURVEY_ALREADY_SUBMITTED);
+            if (!survey.isAllowEdit()) {
+                throw new BusinessException(ErrorCode.SURVEY_ALREADY_SUBMITTED);
+            }
+            return resubmit(survey, enrollmentId, answers, now);
         }
 
         StudentEnrollment enrollment = requireEnrollment(enrollmentId);
         SurveyResponse response = SurveyResponse.of(survey, enrollment, now);
         fillAnswers(survey, response, answers);
+        clearDraft(surveyId, enrollmentId);
 
         // 참여 기록이 중복 제출을 막는다. 유니크 제약이 최종 방어선이라
         // 동시에 두 번 눌러도 한 건만 남는다
@@ -359,6 +441,75 @@ public class SurveyService {
         log.info("설문 응답 제출: 설문={}, 등록건={}, 익명={}",
                 surveyId, enrollmentId, survey.isAnonymous());
         return saved;
+    }
+
+    /**
+     * 재제출 — 기간 안이고 수정이 허용된 설문만.
+     *
+     * <p>응답 행을 새로 만들지 않고 답만 바꾼다. 두 벌이 되면 집계에 한 사람이 두 번 들어간다.
+     */
+    private SurveyResponse resubmit(Survey survey, Long enrollmentId,
+                                    List<AnswerCommand> answers, Instant now) {
+        SurveyResponse response = responseRepository.findMine(survey.getId(), enrollmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SURVEY_NOT_FOUND,
+                        "고칠 응답을 찾을 수 없습니다."));
+        response.resubmit(now);
+        fillAnswers(survey, response, answers);
+        participantRepository.findMine(survey.getId(), enrollmentId)
+                .ifPresent(p -> p.resubmitted(now));
+
+        log.info("설문 응답 재제출: 설문={}, 등록건={}", survey.getId(), enrollmentId);
+        return response;
+    }
+
+    // ── 임시저장 ──────────────────────────────────────────
+
+    /**
+     * 임시저장. <b>검증하지 않는다</b> — 중간 저장에서 필수 누락으로 막으면 저장이 의미가 없다.
+     *
+     * <p>익명 설문은 받지 않는다(응답자와 답이 한 행에 묶인다). 이미 낸 설문도 받지 않는다 —
+     * 그때는 낸 응답을 불러와 재제출한다.
+     */
+    @Transactional
+    public com.dlab.domain.survey.entity.SurveyDraft saveDraft(Long enrollmentId, Long surveyId,
+                                                                List<AnswerCommand> answers) {
+        Survey survey = detail(enrollmentId, surveyId).survey();
+        Instant now = Instant.now(clock);
+        if (!survey.isOpenAt(now)) {
+            throw new BusinessException(ErrorCode.SURVEY_CLOSED);
+        }
+        if (survey.isAnonymous()) {
+            throw new BusinessException(ErrorCode.SURVEY_ANSWER_INVALID,
+                    "익명 설문은 임시저장할 수 없습니다.");
+        }
+        if (participantRepository.hasSubmitted(surveyId, enrollmentId)) {
+            throw new BusinessException(ErrorCode.SURVEY_ALREADY_SUBMITTED,
+                    "이미 제출한 설문입니다. 낸 응답을 고쳐서 다시 제출하세요.");
+        }
+
+        String json = objectMapper.writeValueAsString(answers == null ? List.of() : answers);
+        return draftRepository.findMine(surveyId, enrollmentId)
+                .map(d -> {
+                    d.overwrite(json, now);
+                    return d;
+                })
+                .orElseGet(() -> draftRepository.save(new com.dlab.domain.survey.entity.SurveyDraft(
+                        survey, requireEnrollment(enrollmentId), json, now)));
+    }
+
+    /** 임시저장 불러오기. 없으면 빈 값이다. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<Draft> draft(Long enrollmentId, Long surveyId) {
+        detail(enrollmentId, surveyId);
+        return draftRepository.findMine(surveyId, enrollmentId)
+                .map(d -> new Draft(objectMapper.readValue(d.getAnswersJson(),
+                        new tools.jackson.core.type.TypeReference<List<AnswerCommand>>() {
+                        }), d.getSavedAt()));
+    }
+
+    private void clearDraft(Long surveyId, Long enrollmentId) {
+        draftRepository.findMine(surveyId, enrollmentId)
+                .ifPresent(com.dlab.common.entity.BaseEntity::markDeleted);
     }
 
     /**
@@ -391,13 +542,22 @@ public class SurveyService {
                              List<AnswerCommand> answers) {
         Map<Long, SurveyQuestion> questions = survey.activeQuestions().stream()
                 .collect(Collectors.toMap(SurveyQuestion::getId, Function.identity()));
+        for (AnswerCommand answer : answers) {
+            if (!questions.containsKey(answer.questionId())) {
+                throw new BusinessException(ErrorCode.SURVEY_QUESTION_NOT_FOUND,
+                        "이 설문의 문항이 아닙니다: " + answer.questionId());
+            }
+        }
+        Set<Long> visible = visibleQuestions(survey, answers);
         Set<Long> answered = new HashSet<>();
+        Map<Long, BigDecimal> numbers = new java.util.HashMap<>();
 
         for (AnswerCommand answer : answers) {
             SurveyQuestion question = questions.get(answer.questionId());
-            if (question == null) {
-                throw new BusinessException(ErrorCode.SURVEY_QUESTION_NOT_FOUND,
-                        "이 설문의 문항이 아닙니다: " + answer.questionId());
+            // ★ 숨은 문항의 답은 버린다 — 미응시로 바꾼 뒤 이전에 적은 점수가 남으면
+            //   안 본 시험 점수가 집계에 들어간다. 합산 문항은 서버가 채운다
+            if (!visible.contains(question.getId()) || question.isComputed()) {
+                continue;
             }
 
             switch (question.getQuestionType()) {
@@ -439,20 +599,80 @@ public class SurveyService {
                                 "'%s' 문항의 입력 범위를 벗어났습니다.".formatted(question.getTitle()));
                     }
                     response.addNumber(question, answer.numberValue());
+                    numbers.put(question.getId(), answer.numberValue());
                 }
             }
             answered.add(question.getId());
         }
 
-        // 필수 누락은 마지막에 한 번에 본다 — 하나씩 알려주면 사용자가 여러 번 왕복한다
+        // 필수 누락은 마지막에 한 번에 본다 — 하나씩 알려주면 사용자가 여러 번 왕복한다.
+        // 숨은 문항과 합산 문항은 필수여도 묻지 않는다
         List<String> missing = survey.activeQuestions().stream()
                 .filter(SurveyQuestion::isRequired)
+                .filter(q -> visible.contains(q.getId()) && !q.isComputed())
                 .filter(q -> !answered.contains(q.getId()))
                 .map(SurveyQuestion::getTitle)
                 .toList();
         if (!missing.isEmpty()) {
             throw new BusinessException(ErrorCode.SURVEY_REQUIRED_ANSWER_MISSING,
                     "필수 문항에 답하지 않았습니다: " + String.join(", ", missing));
+        }
+
+        fillSums(survey, response, visible, numbers);
+    }
+
+    /**
+     * 보이는 문항. 조건 문항이 숨었으면 거기 걸린 문항도 숨는다(앞에서부터 차례로 판정한다).
+     */
+    private Set<Long> visibleQuestions(Survey survey, List<AnswerCommand> answers) {
+        Map<Long, Set<Long>> chosen = new java.util.HashMap<>();
+        for (AnswerCommand a : answers) {
+            if (a.optionIds() != null) {
+                chosen.computeIfAbsent(a.questionId(), k -> new HashSet<>()).addAll(a.optionIds());
+            }
+        }
+        Set<Long> visible = new HashSet<>();
+        for (SurveyQuestion q : survey.activeQuestions()) {
+            if (!q.isConditional()) {
+                visible.add(q.getId());
+                continue;
+            }
+            Long controlId = q.getShowIfQuestion().getId();
+            if (visible.contains(controlId)
+                    && chosen.getOrDefault(controlId, Set.of()).contains(q.getShowIfOption().getId())) {
+                visible.add(q.getId());
+            }
+        }
+        return visible;
+    }
+
+    /**
+     * 합산 문항을 채운다. 더할 값이 하나도 없으면 비워 둔다 — 0 으로 채우면 진짜 0점과 구분되지 않는다.
+     */
+    private void fillSums(Survey survey, SurveyResponse response, Set<Long> visible,
+                          Map<Long, BigDecimal> numbers) {
+        Map<Short, SurveyQuestion> bySeq = survey.activeQuestions().stream()
+                .collect(Collectors.toMap(SurveyQuestion::getSeq, Function.identity()));
+        for (SurveyQuestion q : survey.activeQuestions()) {
+            if (!q.isComputed() || !visible.contains(q.getId())) {
+                continue;
+            }
+            List<BigDecimal> parts = q.sumOfSeqList().stream()
+                    .map(bySeq::get)
+                    .filter(java.util.Objects::nonNull)
+                    .filter(part -> !part.isComputed())
+                    .map(part -> numbers.get(part.getId()))
+                    .filter(java.util.Objects::nonNull)
+                    .toList();
+            if (parts.isEmpty()) {
+                continue;
+            }
+            BigDecimal sum = parts.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (!q.inRange(sum)) {
+                throw new BusinessException(ErrorCode.SURVEY_ANSWER_INVALID,
+                        "'%s' 합계가 범위를 벗어났습니다.".formatted(q.getTitle()));
+            }
+            response.addNumber(q, sum);
         }
     }
 
@@ -544,16 +764,39 @@ public class SurveyService {
     // ── 입출력 ───────────────────────────────────────────
 
     /** 개설 요청. 범위에 맞는 대상만 채운다. */
+    /** @param allowEdit 비우면 가채점(실명)만 켠다 */
     public record SurveyCommand(SurveyType surveyType, SurveyScope scope,
                                 Long academyId, Long classId,
                                 String title, String description, boolean anonymous,
                                 Instant opensAt, Instant closesAt,
-                                List<QuestionCommand> questions) {
+                                List<QuestionCommand> questions, Boolean allowEdit) {
+
+        public SurveyCommand(SurveyType surveyType, SurveyScope scope, Long academyId,
+                             Long classId, String title, String description, boolean anonymous,
+                             Instant opensAt, Instant closesAt, List<QuestionCommand> questions) {
+            this(surveyType, scope, academyId, classId, title, description, anonymous,
+                    opensAt, closesAt, questions, null);
+        }
     }
 
+    /**
+     * @param showIfQuestionIndex 조건 문항 — <b>1부터 센 문항 순서</b>. 앞쪽 단일 선택 문항이어야 한다
+     * @param showIfOptionIndex   그 문항의 선택지 순서(1부터)
+     * @param sumOfIndexes        합산 문항이면 더할 문항 순서(1부터). 숫자 문항만
+     */
     public record QuestionCommand(SurveyQuestionType type, String title, boolean required,
                                   BigDecimal minValue, BigDecimal maxValue,
-                                  List<String> options) {
+                                  List<String> options,
+                                  Integer showIfQuestionIndex, Integer showIfOptionIndex,
+                                  List<Integer> sumOfIndexes) {
+
+        public QuestionCommand(SurveyQuestionType type, String title, boolean required,
+                               BigDecimal minValue, BigDecimal maxValue, List<String> options) {
+            this(type, title, required, minValue, maxValue, options, null, null, null);
+        }
+    }
+
+    public record Draft(List<AnswerCommand> answers, Instant savedAt) {
     }
 
     /** 제출 요청 한 칸. 유형에 맞는 값만 채운다. */

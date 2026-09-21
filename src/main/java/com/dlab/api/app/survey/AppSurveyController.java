@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -63,7 +64,12 @@ public class AppSurveyController {
                 SurveyResponses.SurveyDetail.from(surveyService.detail(enrollmentId, surveyId)));
     }
 
-    /** 응답 제출. 한 번만 낼 수 있다. */
+    /**
+     * 응답 제출.
+     *
+     * <p>{@code allowEdit}이 켜진 설문은 기간 안에 <b>다시 낼 수 있다</b> — 같은 요청을 다시 보내면
+     * 응답이 교체된다. 꺼져 있으면 한 번만 낼 수 있다. 제출하면 임시저장은 지워진다.
+     */
     @PostMapping("/{surveyId}/responses")
     public ApiResponse<SurveyResponses.Submitted> submit(
             @CurrentAccount AuthPrincipal me,
@@ -86,5 +92,35 @@ public class AppSurveyController {
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         return ApiResponse.success(SurveyResponses.MyResponse.from(
                 surveyService.myResponse(enrollmentId, surveyId)));
+    }
+
+    /**
+     * 임시저장. <b>검증하지 않는다</b> — 필수가 빠져도 저장된다. 부를 때마다 덮어쓴다.
+     *
+     * <p>익명 설문과 이미 낸 설문은 받지 않는다(낸 설문은 {@code responses/me}로 불러와 다시 낸다).
+     */
+    @PutMapping("/{surveyId}/draft")
+    public ApiResponse<SurveyResponses.Draft> saveDraft(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long surveyId,
+            @RequestParam(required = false) Long studentId,
+            @RequestBody SurveyRequests.SurveyDraftSave request) {
+
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
+        surveyService.saveDraft(enrollmentId, surveyId, request.toCommands());
+        return ApiResponse.success(surveyService.draft(enrollmentId, surveyId)
+                .map(SurveyResponses.Draft::from).orElseGet(SurveyResponses.Draft::empty));
+    }
+
+    /** 임시저장 불러오기. 없으면 빈 목록({@code savedAt}이 비어 있다). */
+    @GetMapping("/{surveyId}/draft")
+    public ApiResponse<SurveyResponses.Draft> draft(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long surveyId,
+            @RequestParam(required = false) Long studentId) {
+
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
+        return ApiResponse.success(surveyService.draft(enrollmentId, surveyId)
+                .map(SurveyResponses.Draft::from).orElseGet(SurveyResponses.Draft::empty));
     }
 }

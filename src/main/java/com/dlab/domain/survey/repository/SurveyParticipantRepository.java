@@ -33,4 +33,14 @@ public interface SurveyParticipantRepository extends JpaRepository<SurveyPartici
             ORDER BY p.submittedAt ASC
             """)
     List<SurveyParticipant> findBySurvey(@Param("surveyId") Long surveyId);
+
+    /** 내 참여 기록. 재제출 시각을 갱신할 때 쓴다. */
+    @Query("""
+            SELECT p FROM SurveyParticipant p
+            WHERE p.survey.id = :surveyId
+              AND p.enrollment.id = :enrollmentId
+              AND p.deleted = false
+            """)
+    java.util.Optional<SurveyParticipant> findMine(@Param("surveyId") Long surveyId,
+                                                   @Param("enrollmentId") Long enrollmentId);
 }

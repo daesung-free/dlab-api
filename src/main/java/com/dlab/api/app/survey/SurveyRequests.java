@@ -21,11 +21,23 @@ public final class SurveyRequests {
     public record SurveySubmit(@NotEmpty(message = "응답이 비어 있습니다.") List<SurveyAnswerInput> answers) {
 
         List<SurveyService.AnswerCommand> toCommands() {
-            return answers.stream()
-                    .map(a -> new SurveyService.AnswerCommand(
-                            a.questionId(), a.optionIds(), a.textValue(), a.numberValue()))
-                    .toList();
+            return SurveyRequests.toCommands(answers);
         }
+    }
+
+    /** 임시저장. <b>검증하지 않는다</b> — 비어 있어도, 필수가 빠져도 저장된다. */
+    public record SurveyDraftSave(List<SurveyAnswerInput> answers) {
+
+        List<SurveyService.AnswerCommand> toCommands() {
+            return answers == null ? List.of() : SurveyRequests.toCommands(answers);
+        }
+    }
+
+    private static List<SurveyService.AnswerCommand> toCommands(List<SurveyAnswerInput> answers) {
+        return answers.stream()
+                .map(a -> new SurveyService.AnswerCommand(
+                        a.questionId(), a.optionIds(), a.textValue(), a.numberValue()))
+                .toList();
     }
 
     public record SurveyAnswerInput(@NotNull Long questionId,
