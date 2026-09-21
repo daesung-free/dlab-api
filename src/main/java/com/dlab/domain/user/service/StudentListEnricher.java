@@ -53,13 +53,17 @@ public class StudentListEnricher {
         List<Long> ids = enrollments.stream().map(StudentEnrollment::getId).toList();
 
         Map<Long, String> classNames = new HashMap<>();
-        Map<Long, String> homeroomTeachers = new HashMap<>();
+        Map<Long, ClassAssignment> fixedAssignments = new HashMap<>();
         for (ClassAssignment a : classAssignmentRepository.findActiveFixedByEnrollmentIds(ids)) {
-            Long enrollmentId = a.getEnrollment().getId();
-            classNames.put(enrollmentId, a.getClassMaster().getName());
-            Teacher homeroom = a.getHomeroomTeacher();
+            classNames.put(a.getEnrollment().getId(), a.getClassMaster().getName());
+            fixedAssignments.put(a.getEnrollment().getId(), a);
+        }
+        // ★ 담임은 "그 학생의 담임"(예외 지정 ?? 반 담임)이다 — 반 배정이 없어도 예외 지정은 있을 수 있다
+        Map<Long, String> homeroomTeachers = new HashMap<>();
+        for (StudentEnrollment e : enrollments) {
+            Teacher homeroom = HomeroomResolver.of(e, fixedAssignments.get(e.getId()));
             if (homeroom != null) {
-                homeroomTeachers.put(enrollmentId, homeroom.getName());
+                homeroomTeachers.put(e.getId(), homeroom.getName());
             }
         }
 

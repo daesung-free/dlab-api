@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
  * <p>담임은 {@link Teacher}만 될 수 있다 — 행정({@link Employee})은 애초에 다른 테이블이라
  * FK가 자격을 보장한다.
  */
+@lombok.extern.slf4j.Slf4j
 @Service
 @RequiredArgsConstructor
 public class ClassService {
@@ -257,6 +258,17 @@ public class ClassService {
         classAssignmentRepository
                 .findByEnrollmentIdAndClassTypeAndActiveTrue(enrollmentId, classMaster.getClassType())
                 .ifPresent(previous -> {
+                    // ★ 고정반이 바뀌면 담임 예외 지정을 푼다. 반을 옮기는 순간 예외의 전제
+                    //   ("반은 그대로인데 담임만 다르게")가 사라지는데, 남겨두면 옛 담임이 조용히
+                    //   따라다니며 승인·상담을 받는다
+                    if (classMaster.getClassType() == com.dlab.domain.user.entity.ClassType.FIXED
+                            && !previous.getClassMaster().getId().equals(classMaster.getId())
+                            && enrollment.getHomeroomOverride() != null) {
+                        log.info("반 이동으로 담임 예외 지정 해제: enrollmentId={}, 해제된 담임 teacherId={}, 사유였던 것={}",
+                                enrollmentId, enrollment.getHomeroomOverride().getId(),
+                                enrollment.getHomeroomOverrideReason());
+                        enrollment.clearHomeroomOverride();
+                    }
                     previous.deactivate();
                     // ★ 반드시 여기서 flush 한다. Hibernate는 기본적으로 INSERT를 UPDATE보다
                     //   먼저 내보내는데, 그러면 이전 배정이 아직 활성인 상태로 새 행이 들어가

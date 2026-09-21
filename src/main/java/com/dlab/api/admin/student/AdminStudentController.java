@@ -47,6 +47,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminStudentController {
 
     private final StudentService studentService;
+    private final com.dlab.domain.user.service.HomeroomOverrideService homeroomOverrideService;
     private final StudentImportService studentImportService;
     private final StudentExportService studentExportService;
     private final SavedSearchService savedSearchService;
@@ -185,6 +186,49 @@ public class AdminStudentController {
                 request.phone(), request.grade(), request.retakeCount(), request.track(),
                 request.birthDate(), request.gender(), request.schoolName(),
                 request.address(), request.admissionDate(), me), me));
+    }
+
+    /**
+     * 담임 예외 지정 — 같은 반의 이 학생만 다른 선생님에게 맡긴다.
+     *
+     * <p><b>반 전체 담임 교체는 여기가 아니다</b> — {@code PUT /admin/classes/{id}/homeroom}.
+     *
+     * <p>바뀌는 것: 승인 이양 대상 · 상담 담당 · 학생 목록의 담임 표시.
+     * <b>안 바뀌는 것</b>: 반공지·반설문 작성 권한(반 담임 그대로) — 예외 학생 하나 때문에 그 반
+     * 전체를 건드릴 수 있게 되면 안 된다.
+     *
+     * <p>반을 옮기면 자동으로 풀린다. 최고관리자·지점관리자만, 사유 필수.
+     */
+    @PutMapping("/{enrollmentId}/homeroom-override")
+    public ApiResponse<HomeroomOverrideView> overrideHomeroom(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId,
+            @RequestBody HomeroomOverride request) {
+        return ApiResponse.success(HomeroomOverrideView.from(homeroomOverrideService.override(
+                me, enrollmentId, request.teacherId(), request.reason())));
+    }
+
+    /** 담임 예외 해제 — 반 담임으로 돌아간다. */
+    @DeleteMapping("/{enrollmentId}/homeroom-override")
+    public ApiResponse<HomeroomOverrideView> clearHomeroomOverride(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId) {
+        return ApiResponse.success(HomeroomOverrideView.from(
+                homeroomOverrideService.clear(me, enrollmentId)));
+    }
+
+    /** @param reason 필수 — 권한이 따라 움직이는 값이라 "왜 바꿨나" 가 남아야 한다 */
+    public record HomeroomOverride(Long teacherId, String reason) {
+    }
+
+    /** @param overridden {@code false} 면 반 담임을 따른다 */
+    public record HomeroomOverrideView(Long enrollmentId, boolean overridden, Long teacherId,
+                                       String teacherName, String reason, java.time.Instant at) {
+
+        static HomeroomOverrideView from(com.dlab.domain.user.entity.StudentEnrollment e) {
+            var t = e.getHomeroomOverride();
+            return new HomeroomOverrideView(e.getId(), t != null,
+                    t == null ? null : t.getId(), t == null ? null : t.getName(),
+                    e.getHomeroomOverrideReason(), e.getHomeroomOverrideAt());
+        }
     }
 
     /** 학생 정보 수정. 보내지 않은 필드는 그대로 둔다 — 부분 수정이라 {@code PATCH}다. */

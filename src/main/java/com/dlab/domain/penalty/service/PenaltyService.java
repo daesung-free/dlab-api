@@ -144,24 +144,17 @@ public class PenaltyService {
         //   반 필터도 여기서 같이 쓴다
         java.util.Map<Long, String> classes = classNamesOf(points);
 
-        // ★ 담임은 맡은 반만 본다. classId는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다.
-        var classFilter = homeroomScopeService.resolveClassFilter(
+        // ★ 담임은 맡은 학생만 본다. classId는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다.
+        //   반이 아니라 학생으로 거른다 — 담임 예외 지정된 학생이 새 담임에게 보여야 한다
+        var studentFilter = homeroomScopeService.resolveStudentFilter(
                 principal, (short) from.getYear(), classId);
-        if (classFilter.blocksEverything()) {
+        if (studentFilter.blocksEverything()) {
             return new PenaltyBoard(List.of(), 0, 0, 0L, java.util.Map.of(), classes);
         }
 
-        // 반 필터를 행마다 조회하면 쿼리가 건수만큼 나간다. 대상 학생을 한 번에 받아 둔다
-        java.util.Set<Long> inClass = classFilter.restricted()
-                ? classFilter.classIds().stream()
-                        .flatMap(id -> classAssignmentRepository.findActiveByClassId(id).stream())
-                        .map(a -> a.getEnrollment().getId())
-                        .collect(java.util.stream.Collectors.toSet())
-                : null;
-
         List<PenaltyPoint> filtered = points.stream()
                 .filter(p -> matchesKeyword(p, keyword))
-                .filter(p -> inClass == null || inClass.contains(p.getEnrollment().getId()))
+                .filter(p -> studentFilter.matches(p.getEnrollment().getId()))
                 .toList();
 
         int plus = filtered.stream()
