@@ -49,6 +49,17 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class MockExamUploadService {
 
+    /**
+     * 외부생 학교코드.
+     *
+     * <p>★ <b>재원생이 아니다.</b> 연구소가 *"성적자료에 포함하지 않으셔도 됩니다"* 로
+     * 확정했는데, <b>받은 세트에는 이 파일이 들어 있다.</b> 조용히 버리면 "왜 인원이
+     * 다르냐" 가 되므로 건너뛴 건수를 미리보기에 실어 보낸다.
+     *
+     * <p>⚠️ <b>지점(`academy`) 행으로 만들지 말 것</b> — 통계·권한·좌석이 전부 오염된다.
+     */
+    private static final String EXTERNAL_SCHOOL_CODE = "99709";
+
     /** 파일 영역명 → 회차 과목명 후보. 앞에서부터 찾아 첫 번째로 맞는 것을 쓴다. */
     private static final Map<String, List<String>> SUBJECT_ALIASES = Map.of(
             "국어", List.of("국어"),
@@ -115,8 +126,13 @@ public class MockExamUploadService {
 
         List<Matched> matched = new ArrayList<>();
         List<Unmatched> unmatched = new ArrayList<>();
+        int skippedExternal = 0;
 
         for (MockExamExcelParser.StudentRow row : parsed.students()) {
+            if (EXTERNAL_SCHOOL_CODE.equals(trim(row.schoolCode()))) {
+                skippedExternal++;
+                continue;
+            }
             StudentEnrollment linked =
                     byKey.get(fileKey(row.schoolCode(), row.classNo(), row.studentNo()));
             if (linked != null) {
@@ -146,7 +162,8 @@ public class MockExamUploadService {
             log.info("모의고사 성적 업로드: examMasterId={}, 반영={}명, 미매칭={}건",
                     examMasterId, matched.size(), unmatched.size());
         }
-        return new Preview(exam.getExamName(), parsed.students().size(), matched, unmatched);
+        return new Preview(exam.getExamName(), parsed.students().size(),
+                skippedExternal, matched, unmatched);
     }
 
     /** 찾은 학생에 점수를 넣는다. 회차 양식과 겹치는 과목이 하나도 없으면 미매칭이다. */
@@ -181,6 +198,10 @@ public class MockExamUploadService {
 
     private static boolean isBlank(String v) {
         return v == null || v.isBlank();
+    }
+
+    private static String trim(String v) {
+        return v == null ? null : v.trim();
     }
 
     /**
@@ -293,10 +314,12 @@ public class MockExamUploadService {
 
     /**
      * @param totalRows 파일에서 읽은 학생 행 수
+     * @param skippedExternal 외부생(99709)이라 건너뛴 행. <b>조용히 버리면 "왜 인원이
+     *                        다르냐" 가 된다</b>
      * @param matched   찾은 학생. {@code apply} 면 이미 저장됐다
      * @param unmatched 못 찾은 행. <b>사유가 함께 온다</b> — 화면이 그대로 보여주면 된다
      */
-    public record Preview(String examName, int totalRows,
+    public record Preview(String examName, int totalRows, int skippedExternal,
                           List<Matched> matched, List<Unmatched> unmatched) {
     }
 

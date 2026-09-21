@@ -187,4 +187,20 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
             ORDER BY e.studentNo ASC
             """)
     List<StudentEnrollment> findCurrentStaff(Long academyId);
+
+    /**
+     * 그 반에서 마지막으로 쓴 모의고사 순번. 없으면 {@code 0} 이다.
+     *
+     * <p>반이 바뀌어도 번호는 고정이라 <b>지금 그 반에 있는 학생</b>이 아니라
+     * <b>그 반 번호로 채번된 적이 있는 전부</b>를 센다 — 그러지 않으면 반을 옮긴 학생의
+     * 번호가 재사용되어 같은 번호가 둘이 된다.
+     */
+    @Query("""
+            SELECT COALESCE(MAX(e.examSeq), 0) FROM StudentEnrollment e
+            WHERE e.academy.id = :academyId
+              AND e.year = :year
+              AND e.examClassNo = :examClassNo
+              AND e.deleted = false
+            """)
+    short findMaxExamSeq(Long academyId, short year, short examClassNo);
 }

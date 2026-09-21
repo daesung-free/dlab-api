@@ -58,6 +58,23 @@ public class ClassMaster extends BaseEntity {
     @JoinColumn(name = "course_type_id")
     private com.dlab.domain.master.entity.CourseType courseType;
 
+    /**
+     * 모의고사 반 번호.
+     *
+     * <p>★ <b>반 이름에서 뽑지 않는다.</b> "고3 1반" 과 "N수 1반" 이 둘 다 1반이 되어
+     * 수험번호가 겹친다 — 실제 자료는 지점 안에서 반 번호가 유일하다(1반 {@code 1003~} ·
+     * 2반 {@code 2002~}).
+     *
+     * <p>비어 있으면 그 반 학생은 <b>수험번호를 채번하지 않는다.</b> 틀린 번호를 주는 것보다
+     * 없는 편이 낫다 — 번호가 겹치면 남의 성적이 들어간다.
+     */
+    @Column(name = "exam_class_no")
+    private Short examClassNo;
+
+    public void changeExamClassNo(Short examClassNo) {
+        this.examClassNo = examClassNo;
+    }
+
     public ClassMaster(Academy academy, short year, String name, ClassType classType, Teacher homeroomTeacher) {
         this.academy = academy;
         this.year = year;

@@ -35,6 +35,7 @@ public class ClassService {
 
     private final ClassMasterRepository classMasterRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.grade.service.ExamNumberService examNumberService;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final AcademyRepository academyRepository;
     private final TeacherRepository teacherRepository;
@@ -205,10 +206,32 @@ public class ClassService {
     }
 
     /**
+     * 모의고사 반 번호 지정.
+     *
+     * <p>★ <b>반 이름에서 뽑지 않는다.</b> "고3 1반" 과 "N수 1반" 이 둘 다 1반이 되어
+     * 수험번호가 겹친다 — 실제 자료는 지점 안에서 반 번호가 유일하다.
+     *
+     * <p><b>이미 채번된 학생의 번호는 바뀌지 않는다.</b> 여기서 바꾼 값은 <b>다음에 배정되는
+     * 학생부터</b> 적용된다 — 연구소가 최초 부여 번호는 변경 불가라고 명시했다.
+     */
+    @Transactional
+    public ClassMaster changeExamClassNo(Long classId, Short examClassNo, AuthPrincipal principal) {
+        ClassMaster classMaster = loadAccessible(classId, principal);
+        if (examClassNo != null && (examClassNo < 1 || examClassNo > 99)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "모의고사 반 번호는 1~99 입니다.");
+        }
+        classMaster.changeExamClassNo(examClassNo);
+        return classMaster;
+    }
+
+    /**
      * 학생 반 배정.
      *
      * <p>같은 유형의 기존 배정이 있으면 <b>이전 것을 비활성으로 내리고 새 행을 넣는다</b> —
      * 매년 전체 재세팅되는 구조라 이력이 남아야 한다. 덮어쓰면 "작년에 어느 반이었나"를 잃는다.
+     *
+     * <p>★ 여기서 <b>모의고사 수험번호가 채번된다</b>(최초 배정 시 한 번).
      */
     @Transactional
     public ClassMemberView assignStudent(Long classId, Long enrollmentId, AuthPrincipal principal) {
@@ -243,6 +266,10 @@ public class ClassService {
 
         ClassAssignment saved = classAssignmentRepository.save(new ClassAssignment(
                 classMaster.getAcademy(), enrollment, classMaster, classMaster.getClassType()));
+
+        // ★ 모의고사 수험번호는 반 최초 배정에서 정해진다. 이미 있으면 덮어쓰지 않는다 —
+        //   반을 옮길 때마다 번호가 바뀌면 지난 회차 성적과 연결이 끊긴다
+        examNumberService.assignOnClassAssigned(enrollment, classMaster);
 
         // 명단과 같은 모양으로 돌려준다 — 배정 직후 화면이 그 줄을 그대로 쓴다
         return new ClassMemberView(saved,
