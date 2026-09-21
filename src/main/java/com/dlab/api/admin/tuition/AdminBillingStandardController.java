@@ -76,6 +76,29 @@ public class AdminBillingStandardController {
         return ApiResponse.success(standardService.refundRules());
     }
 
+    /**
+     * 전년도 청구 기준 복사. 같은 코드는 건너뛰어 두 번 눌러도 된다.
+     *
+     * <p>기초 데이터 전년도 복사와 달리 새 해에 다른 데이터가 있어도 된다. 교습비 표 금액은
+     * 옮기지 않는다 — 교습비 화면에서 새 해 가격을 넣는다.
+     *
+     * @param academyId 비우면 전 지점 공통(본사만)
+     */
+    @PostMapping("/copy-year")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
+    public ApiResponse<BillingStandardService.CopyResult> copyYear(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody CopyYear request) {
+        return ApiResponse.success(standardService.copyYear(me, request.academyId(),
+                request.fromYear(), request.toYear()));
+    }
+
+    @io.swagger.v3.oas.annotations.media.Schema(name = "BillingStandardCopyYear")
+    public record CopyYear(Long academyId,
+                           @jakarta.validation.constraints.NotNull Short fromYear,
+                           @jakarta.validation.constraints.NotNull Short toYear) {
+    }
+
     @PostMapping
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     public ApiResponse<BillingStandardService.Row> create(

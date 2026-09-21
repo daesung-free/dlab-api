@@ -183,6 +183,55 @@ public class BillingStandardService {
     }
 
     /** {@code academyId}가 {@code null}이면 전 지점 공통 — <b>본사만</b> 다룰 수 있다. */
+    /**
+     * 전년도 청구 기준 복사.
+     *
+     * <p>기초 데이터 전년도 복사({@code yearly-copy})에도 들어 있지만, 그건 새 해에 데이터가 하나라도
+     * 있으면 통째로 거부한다. 여기는 <b>청구 기준만</b> 옮기고 <b>같은 코드는 건너뛴다</b> —
+     * 두 번 눌러도 두 벌이 되지 않는다. 사용 중지 상태도 그대로 옮긴다.
+     *
+     * <p>금액이 교습비 표에서 오는 기준은 기준만 옮기고 <b>가격은 옮기지 않는다</b> — 가격은
+     * 해마다 바뀌어 교습비 화면에서 새로 넣는다.
+     *
+     * @param academyId 비우면 전 지점 공통(본사만)
+     */
+    @Transactional
+    public CopyResult copyYear(AuthPrincipal me, Long academyId, short fromYear, short toYear) {
+        requireScope(me, academyId);
+        if (toYear <= fromYear) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "새 연도는 원본 연도보다 커야 합니다.");
+        }
+        Academy academy = academyId == null ? null
+                : academyRepository.findById(academyId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
+
+        int copied = 0;
+        int skipped = 0;
+        for (BillingStandard src : standardRepository.findAllByScope(fromYear, academyId, null, null)) {
+            if (standardRepository.findByCode(toYear, src.getCode(), academyId).isPresent()) {
+                skipped++;
+                continue;
+            }
+            BillingStandard copy = src.getAmountSource() == BillingStandard.AmountSource.PRICE_MATRIX
+                    ? BillingStandard.priceMatrix(academy, toYear, src.getCode(), src.getItemType(),
+                            src.getName(), src.getRoundName(), src.getDueDesc(),
+                            src.getPaymentMethod(), src.getSortOrder(), src.getMemo())
+                    : BillingStandard.fixed(academy, toYear, src.getCode(), src.getItemType(),
+                            src.getName(), src.getRoundName(),
+                            src.getAmount() == null ? 0 : src.getAmount(), src.getDueDesc(),
+                            src.getPaymentMethod(), src.getSortOrder(), src.getMemo());
+            copy.changeActive(src.isActive());
+            standardRepository.save(copy);
+            copied++;
+        }
+        return new CopyResult(copied, skipped);
+    }
+
+    /** @param skipped 새 해에 같은 코드가 이미 있어 건너뛴 수 */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "BillingStandardCopyResult")
+    public record CopyResult(int copied, int skipped) {
+    }
+
     private void requireScope(AuthPrincipal me, Long academyId) {
         if (academyId == null) {
             if (me.academyScopeFilter() != null) {

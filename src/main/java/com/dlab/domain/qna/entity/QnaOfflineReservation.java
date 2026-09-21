@@ -49,6 +49,10 @@ public class QnaOfflineReservation extends BaseEntity {
     @Column(length = 500)
     private String question;
 
+    /** 과목(자유 입력). 선생님이 무엇을 준비할지 안다. 사진은 첨부로 따로 붙는다. */
+    @Column(length = 30)
+    private String subject;
+
     @Column(name = "reserved_at", nullable = false)
     private Instant reservedAt;
 
@@ -63,6 +67,11 @@ public class QnaOfflineReservation extends BaseEntity {
         this.enrollment = enrollment;
         this.question = question;
         this.reservedAt = reservedAt;
+    }
+
+    public QnaOfflineReservation withSubject(String subject) {
+        this.subject = subject == null || subject.isBlank() ? null : subject.trim();
+        return this;
     }
 
     public void cancel(Instant at) {

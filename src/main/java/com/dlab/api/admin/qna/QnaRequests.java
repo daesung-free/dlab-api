@@ -38,6 +38,7 @@ public final class QnaRequests {
     }
 
     /** 학생 예약. 질문은 선택 — ▷[0803] 회신 항목이라 시트 미반영이다. */
-    public record QnaReserve(@Size(max = 500) String question) {
+    /** @param subject 과목(자유 입력, 선택). 사진은 예약 후 {@code .../photos}로 따로 올린다 */
+    public record QnaReserve(@Size(max = 500) String question, @Size(max = 30) String subject) {
     }
 }

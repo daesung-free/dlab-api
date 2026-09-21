@@ -68,6 +68,29 @@ public class AdminAnnualEventController {
     }
 
     /** 등록. <b>지점을 비우면 전 지점 공통</b>이고 그건 본사만 만들 수 있다. */
+    /**
+     * 전년도 행사 복사 — 날짜는 연도 차이만큼 민다. 같은 이름·시작일은 건너뛰어 두 번 눌러도 된다.
+     *
+     * <p>기초 데이터 전년도 복사와 달리 새 해에 다른 데이터가 있어도 된다. 시험·설명회는 해마다
+     * 날이 달라 복사 후 확인이 필요하다.
+     *
+     * @param academyId 비우면 전 지점 공통 행사(본사만)
+     */
+    @PostMapping("/copy-year")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
+    public ApiResponse<com.dlab.domain.event.service.AnnualEventService.CopyResult> copyYear(
+            @CurrentAccount AuthPrincipal me,
+            @jakarta.validation.Valid @RequestBody CopyYear request) {
+        return ApiResponse.success(eventService.copyYear(me, request.academyId(),
+                request.fromYear(), request.toYear()));
+    }
+
+    @io.swagger.v3.oas.annotations.media.Schema(name = "AnnualEventCopyYear")
+    public record CopyYear(Long academyId,
+                           @jakarta.validation.constraints.NotNull Short fromYear,
+                           @jakarta.validation.constraints.NotNull Short toYear) {
+    }
+
     @PostMapping
     public ApiResponse<EventView> create(@CurrentAccount AuthPrincipal me,
                                          @Valid @RequestBody SaveEvent request) {
