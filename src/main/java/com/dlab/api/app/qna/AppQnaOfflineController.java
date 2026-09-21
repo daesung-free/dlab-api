@@ -58,7 +58,8 @@ public class AppQnaOfflineController {
             @Valid @RequestBody(required = false) QnaRequests.QnaReserve request) {
         StudentEnrollment enrollment = scopeResolver.requireStudent(me.accountId(), "대면 예약");
         return ApiResponse.success(QnaResponse.MyReservation.from(qnaOfflineService.reserve(
-                slotId, enrollment.getId(), request == null ? null : request.question())));
+                slotId, enrollment.getId(), request == null ? null : request.question(),
+                request == null ? null : request.subject())));
     }
 
     /** 본인 예약만 취소된다. 지난 타임은 취소할 수 없다. */
@@ -76,10 +77,42 @@ public class AppQnaOfflineController {
             @CurrentAccount AuthPrincipal me,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return ApiResponse.success(
-                qnaOfflineService.myReservations(
-                                scopeResolver.requireStudent(me.accountId(), "대면 예약").getId(),
-                                from, to).stream()
-                        .map(QnaResponse.MyReservation::from).toList());
+        var reservations = qnaOfflineService.myReservations(
+                scopeResolver.requireStudent(me.accountId(), "대면 예약").getId(), from, to);
+        var photos = qnaOfflineService.photosOf(reservations.stream()
+                .map(com.dlab.domain.qna.entity.QnaOfflineReservation::getId).toList());
+        return ApiResponse.success(reservations.stream()
+                .map(r -> QnaResponse.MyReservation.from(r, photos.getOrDefault(r.getId(), List.of())))
+                .toList());
+    }
+
+    /**
+     * 질문 사진 올리기 — 예약한 뒤 한 장씩. 한 예약에 3장까지, 이미지·PDF 만.
+     *
+     * <p>비공개로 저장된다 — 문제 사진에 이름·학교가 찍혀 있는 일이 흔하다.
+     */
+    @PostMapping("/reservations/{reservationId}/photos")
+    public ApiResponse<com.dlab.domain.qna.service.QnaOfflineService.Photo> addPhoto(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long reservationId,
+            @org.springframework.web.bind.annotation.RequestPart("file")
+            org.springframework.web.multipart.MultipartFile file) throws java.io.IOException {
+        Long enrollmentId = scopeResolver.requireStudent(me.accountId(), "대면 예약").getId();
+        var saved = qnaOfflineService.addPhoto(reservationId, enrollmentId,
+                file.getOriginalFilename(), file.getContentType(), file.getBytes());
+        return ApiResponse.success(qnaOfflineService.photosOf(List.of(reservationId))
+                .getOrDefault(reservationId, List.of()).stream()
+                .filter(p -> p.attachmentId().equals(saved.getId()))
+                .findFirst().orElseThrow());
+    }
+
+    /** 질문 사진 지우기 — 본인 예약의 사진만. */
+    @DeleteMapping("/reservations/{reservationId}/photos/{attachmentId}")
+    public ApiResponse<Void> deletePhoto(@CurrentAccount AuthPrincipal me,
+                                         @PathVariable Long reservationId,
+                                         @PathVariable Long attachmentId) {
+        qnaOfflineService.deletePhoto(reservationId,
+                scopeResolver.requireStudent(me.accountId(), "대면 예약").getId(), attachmentId);
+        return ApiResponse.empty();
     }
 }

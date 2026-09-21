@@ -48,6 +48,13 @@ public class QnaOfflineService {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
     private final Clock clock;
+    private final com.dlab.domain.file.service.FileAttachmentService fileAttachmentService;
+
+    /** 첨부 대상 종류. 사진은 비공개 버킷에 둔다 — 문제 사진에 이름·학교가 찍혀 있을 수 있다. */
+    public static final String PHOTO_OWNER = "QNA_RESERVATION";
+
+    /** 예약 한 건에 붙일 수 있는 사진 수. 문제 몇 장이면 충분하고, 무제한이면 저장소가 샌다. */
+    static final int MAX_PHOTOS = 3;
 
     /**
      * 슬롯 + 예약 현황.
@@ -234,6 +241,12 @@ public class QnaOfflineService {
      * <p>정원이 차면 <b>거절한다</b>. 특강과 달리 대기 개념이 없다 — 상담 시간은 겹칠 수 없다.
      */
     @Transactional
+    public QnaOfflineReservation reserve(Long slotId, Long enrollmentId, String question,
+                                         String subject) {
+        return reserve(slotId, enrollmentId, question).withSubject(subject);
+    }
+
+    @Transactional
     public QnaOfflineReservation reserve(Long slotId, Long enrollmentId, String question) {
         QnaOfflineSlot slot = slotRepository.findByIdForUpdate(slotId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.QNA_SLOT_NOT_FOUND));
@@ -291,6 +304,72 @@ public class QnaOfflineService {
             throw new BusinessException(ErrorCode.QNA_SLOT_PAST, "지난 상담은 취소할 수 없습니다.");
         }
         reservation.cancel(Instant.now(clock));
+    }
+
+    /**
+     * 질문 사진 첨부 — 본인 예약에만, 지나지 않은 활성 예약에만, 최대 3장.
+     *
+     * <p>비공개로 올린다. 문제 사진에 이름·학교·수험번호가 찍혀 있는 일이 흔하다.
+     */
+    @Transactional
+    public com.dlab.domain.file.entity.FileAttachment addPhoto(Long reservationId, Long enrollmentId,
+                                                               String originalName, String contentType,
+                                                               byte[] content) {
+        QnaOfflineReservation reservation = requireMine(reservationId, enrollmentId);
+        if (!reservation.isActive()) {
+            throw new BusinessException(ErrorCode.QNA_ALREADY_CANCELED);
+        }
+        if (reservation.getSlot().isPast(LocalDate.now(clock), LocalTime.now(clock))) {
+            throw new BusinessException(ErrorCode.QNA_SLOT_PAST);
+        }
+        if (fileAttachmentService.findByOwner(PHOTO_OWNER, reservationId).size() >= MAX_PHOTOS) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "사진은 예약 한 건에 %d장까지 올릴 수 있습니다.".formatted(MAX_PHOTOS));
+        }
+        return fileAttachmentService.upload(com.dlab.domain.file.entity.FileVisibility.PRIVATE,
+                PHOTO_OWNER, reservationId, originalName, contentType, content);
+    }
+
+    /** 질문 사진 삭제 — 본인 예약의 사진만. */
+    @Transactional
+    public void deletePhoto(Long reservationId, Long enrollmentId, Long attachmentId) {
+        requireMine(reservationId, enrollmentId);
+        boolean mine = fileAttachmentService.findByOwner(PHOTO_OWNER, reservationId).stream()
+                .anyMatch(f -> f.getId().equals(attachmentId));
+        if (!mine) {
+            throw new BusinessException(ErrorCode.FILE_NOT_FOUND);
+        }
+        fileAttachmentService.delete(attachmentId);
+    }
+
+    /**
+     * 예약별 사진 — 보는 주소까지 붙인다. 주소는 짧게 유효한 presigned URL 이라 화면에 오래 두지 말 것.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Map<Long, List<Photo>> photosOf(java.util.Collection<Long> reservationIds) {
+        java.util.Map<Long, List<Photo>> result = new java.util.HashMap<>();
+        for (Long id : reservationIds) {
+            List<Photo> photos = fileAttachmentService.findByOwner(PHOTO_OWNER, id).stream()
+                    .map(f -> new Photo(f.getId(), f.getOriginalName(),
+                            fileAttachmentService.url(f.getId())))
+                    .toList();
+            if (!photos.isEmpty()) {
+                result.put(id, photos);
+            }
+        }
+        return result;
+    }
+
+    public record Photo(Long attachmentId, String name, String url) {
+    }
+
+    private QnaOfflineReservation requireMine(Long reservationId, Long enrollmentId) {
+        QnaOfflineReservation reservation = reservationRepository.findById(reservationId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.QNA_RESERVATION_NOT_FOUND));
+        if (!reservation.getEnrollment().getId().equals(enrollmentId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        return reservation;
     }
 
     /** 학생 본인 예약 내역. 취소분도 이력으로 나온다. */

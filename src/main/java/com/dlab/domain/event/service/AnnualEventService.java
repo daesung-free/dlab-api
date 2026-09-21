@@ -54,6 +54,52 @@ public class AnnualEventService {
                 startDate, endDate, type, showInPlan, memo));
     }
 
+    /**
+     * 전년도 행사 복사 — 날짜를 연도 차이만큼 민다(2/29 → 2/28).
+     *
+     * <p>기초 데이터 전년도 복사({@code yearly-copy})는 새 해에 데이터가 하나라도 있으면 통째로
+     * 거부해서, 행사만 옮길 방법이 없었다. 여기는 <b>행사만</b> 옮기고 <b>같은 이름·같은 시작일은
+     * 건너뛴다</b> — 두 번 눌러도 두 벌이 되지 않는다.
+     *
+     * <p>{@code academyId}를 비우면 전 지점 공통 행사(본사만). 지점을 넣으면 그 지점 행사만 옮긴다 —
+     * 공통 행사를 지점 행사로 늘리지 않는다. 시험·설명회는 해마다 날이 달라 <b>복사 후 확인</b>이 필요하다.
+     */
+    @Transactional
+    public CopyResult copyYear(AuthPrincipal me, Long academyId, short fromYear, short toYear) {
+        if (toYear <= fromYear) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "새 연도는 원본 연도보다 커야 합니다.");
+        }
+        Long scope = resolveScope(me, academyId);
+        int delta = toYear - fromYear;
+        java.util.Set<String> existing = eventRepository.findAllOfYear(toYear, scope).stream()
+                .filter(e -> java.util.Objects.equals(e.getAcademyId(), scope))
+                .map(e -> e.getName() + "|" + e.getStartDate())
+                .collect(java.util.stream.Collectors.toSet());
+
+        int copied = 0;
+        int skipped = 0;
+        for (AnnualEvent src : eventRepository.findAllOfYear(fromYear, scope)) {
+            if (!java.util.Objects.equals(src.getAcademyId(), scope)) {
+                continue;
+            }
+            LocalDate start = src.getStartDate().plusYears(delta);
+            if (!existing.add(src.getName() + "|" + start)) {
+                skipped++;
+                continue;
+            }
+            eventRepository.save(new AnnualEvent(toYear, scope, src.getName(), start,
+                    src.getEndDate() == null ? null : src.getEndDate().plusYears(delta),
+                    src.getEventType(), src.isShowInPlan(), src.getMemo()));
+            copied++;
+        }
+        return new CopyResult(copied, skipped);
+    }
+
+    /** @param skipped 새 해에 같은 이름·시작일이 이미 있어 건너뛴 수 */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "AnnualEventCopyResult")
+    public record CopyResult(int copied, int skipped) {
+    }
+
     @Transactional
     public AnnualEvent update(AuthPrincipal me, Long eventId, String name,
                               LocalDate startDate, LocalDate endDate, AnnualEventType type,
