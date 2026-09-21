@@ -254,6 +254,60 @@ class MockExamUploadTest {
         assertThat(gradeService.mine(전승은).getSubmittedAt()).isNull();
     }
 
+    @Test
+    @DisplayName("★★ 원점수가 저장된다 — 파서는 읽고 있었는데 저장에서 버려 영어·한국사 칸이 비었다")
+    void savesRawScore() {
+        june.activeSubjects().forEach(sub -> sub.acceptRawScore(true));
+        em.flush();
+
+        uploadService.apply(admin, bundang.getId(), june.getId(), new ByteArrayInputStream(sampleWithRaw()));
+        em.flush();
+
+        List<Short> raws = em.createQuery("""
+                SELECT s.rawScore FROM StudentExamScore s
+                WHERE s.examMaster.id = :id AND s.deleted = false AND s.rawScore IS NOT NULL
+                """, Short.class).setParameter("id", june.getId()).getResultList();
+        assertThat(raws).contains((short) 88, (short) 92);
+    }
+
+    @Test
+    @DisplayName("원점수를 안 받는 과목이면 버린다 — 양식이 정한 칸만 저장한다")
+    void dropsRawScoreWhenSubjectDisallows() {
+        uploadService.apply(admin, bundang.getId(), june.getId(), new ByteArrayInputStream(sampleWithRaw()));
+        em.flush();
+
+        Long withRaw = em.createQuery("""
+                SELECT COUNT(s) FROM StudentExamScore s
+                WHERE s.examMaster.id = :id AND s.deleted = false AND s.rawScore IS NOT NULL
+                """, Long.class).setParameter("id", june.getId()).getSingleResult();
+        assertThat(withRaw).isZero();
+    }
+
+    /** 국어 블록에 원점수 열이 있는 축소본. */
+    private byte[] sampleWithRaw() {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("성적");
+            write(sheet.createRow(0), List.of("01. 학생별 성적"));
+            write(sheet.createRow(1), List.of(
+                    "학교코드", "학교명", "반", "번호", "이름",
+                    "국어", "", "", ""));
+            write(sheet.createRow(2), List.of(
+                    "학교", "학교명", "반", "번호", "이름",
+                    "선택과목", "원점수", "표준점수", "등급"));
+            write(sheet.createRow(3), List.of(
+                    "99700", "디랩 분당", "1", "1003", "전승은",
+                    "언어와 매체", "88", "125", "2"));
+            write(sheet.createRow(4), List.of(
+                    "99700", "디랩 분당", "1", "1006", "김지성",
+                    "화법과 작문", "92", "118", "3"));
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /** 실물과 같은 2단 헤더 구조의 축소본. */
     private byte[] sample() {
         try (XSSFWorkbook workbook = new XSSFWorkbook();

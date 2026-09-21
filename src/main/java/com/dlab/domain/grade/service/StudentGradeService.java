@@ -155,7 +155,8 @@ public class StudentGradeService {
                 continue;
             }
             StudentExamScore score = submission.addScore(subject,
-                    input.standardScore(), input.percentile(), input.gradeLevel());
+                    input.standardScore(), input.percentile(), input.gradeLevel(),
+                    input.rawScore());
             if (score.isBlank()) {
                 score.markDeleted();
             }
@@ -180,11 +181,21 @@ public class StudentGradeService {
     }
 
     /** 과목 한 칸. 세 값 모두 {@code null}일 수 있다 — 미응시·절대평가·기억 안 남. */
+    /**
+     * @param rawScore 원점수. 학생 입력(입학 전 성적)에는 없다 — 연구소 파일에서만 온다
+     */
     public record ScoreInput(Long examSubjectId, Short standardScore, Short percentile,
-                             Short gradeLevel) {
+                             Short gradeLevel, Short rawScore) {
+
+        /** 원점수가 없는 입력(학생·직원 입력). */
+        public ScoreInput(Long examSubjectId, Short standardScore, Short percentile,
+                          Short gradeLevel) {
+            this(examSubjectId, standardScore, percentile, gradeLevel, null);
+        }
 
         boolean hasValue() {
-            return standardScore != null || percentile != null || gradeLevel != null;
+            return standardScore != null || percentile != null || gradeLevel != null
+                    || rawScore != null;
         }
     }
 }

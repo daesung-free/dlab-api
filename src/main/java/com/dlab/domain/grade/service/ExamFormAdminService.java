@@ -75,8 +75,12 @@ public class ExamFormAdminService {
         if (command.subjects().isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "과목이 없는 시험은 만들 수 없습니다.");
         }
+        boolean academyExam = purpose == com.dlab.domain.grade.entity.ExamPurpose.ACADEMY;
         command.subjects().forEach(s -> exam.addSubject(s.subjectCode(), s.subjectName(),
-                s.sortOrder(), s.hasStandardScore(), s.hasPercentile(), s.hasGradeLevel()));
+                        s.sortOrder(), s.hasStandardScore(), s.hasPercentile(), s.hasGradeLevel())
+                // ★ 비우면 디랩 시험은 켜고 입학 전 성적은 끈다. 연구소 파일에는 원점수가
+                //   있고, 신상기록부에는 없다 — 기본값이 반대면 가입 화면에 없던 칸이 생긴다
+                .acceptRawScore(s.hasRawScore() == null ? academyExam : s.hasRawScore()));
 
         return examMasterRepository.save(exam);
     }
@@ -150,8 +154,16 @@ public class ExamFormAdminService {
         }
     }
 
+    /** @param hasRawScore 비우면 디랩 시험은 켜고 입학 전 성적은 끈다 */
     public record SubjectInput(String subjectCode, String subjectName, int sortOrder,
                                boolean hasStandardScore, boolean hasPercentile,
-                               boolean hasGradeLevel) {
+                               boolean hasGradeLevel, Boolean hasRawScore) {
+
+        public SubjectInput(String subjectCode, String subjectName, int sortOrder,
+                            boolean hasStandardScore, boolean hasPercentile,
+                            boolean hasGradeLevel) {
+            this(subjectCode, subjectName, sortOrder, hasStandardScore, hasPercentile,
+                    hasGradeLevel, null);
+        }
     }
 }

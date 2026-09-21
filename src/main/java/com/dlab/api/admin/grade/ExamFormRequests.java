@@ -55,7 +55,8 @@ public final class ExamFormRequests {
                     subjects.stream()
                             .map(s -> new ExamFormAdminService.SubjectInput(
                                     s.subjectCode(), s.subjectName(), s.sortOrder(),
-                                    s.hasStandardScore(), s.hasPercentile(), s.hasGradeLevel()))
+                                    s.hasStandardScore(), s.hasPercentile(), s.hasGradeLevel(),
+                                    s.hasRawScore()))
                             .toList(),
                     purpose, examDate);
         }
@@ -64,6 +65,7 @@ public final class ExamFormRequests {
     /**
      * @param subjectCode 통계 축. 학년이 달라도 국어끼리 묶이게 하는 값이라
      *                    표시명과 분리한다 — 표시명("통합사회")은 해마다 바뀐다
+     * @param hasRawScore 원점수를 받는가. <b>비우면 디랩 시험은 켜고 입학 전 성적은 끈다</b>
      * @param hasStandardScore 한국사처럼 절대평가 과목은 {@code false}로 둘 것.
      *                         일괄로 열면 학생이 없는 점수를 지어내 채운다
      */
@@ -73,7 +75,8 @@ public final class ExamFormRequests {
             int sortOrder,
             boolean hasStandardScore,
             boolean hasPercentile,
-            boolean hasGradeLevel) {
+            boolean hasGradeLevel,
+            Boolean hasRawScore) {
     }
 
     /** 등록된 회차 한 줄. */
@@ -100,13 +103,13 @@ public final class ExamFormRequests {
 
     public record SubjectView(Long examSubjectId, String subjectCode, String subjectName,
                               int sortOrder, boolean hasStandardScore, boolean hasPercentile,
-                              boolean hasGradeLevel) {
+                              boolean hasGradeLevel, boolean hasRawScore) {
 
         static SubjectView from(ExamSubject subject) {
             return new SubjectView(subject.getId(), subject.getSubjectCode(),
                     subject.getSubjectName(), subject.getSortOrder(),
                     subject.isHasStandardScore(), subject.isHasPercentile(),
-                    subject.isHasGradeLevel());
+                    subject.isHasGradeLevel(), subject.isHasRawScore());
         }
     }
 }

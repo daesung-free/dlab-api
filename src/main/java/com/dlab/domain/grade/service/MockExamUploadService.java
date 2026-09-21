@@ -280,9 +280,11 @@ public class MockExamUploadService {
             Short standard = number(score.standardScore());
             Short percentile = number(score.percentile());
             Short gradeLevel = number(score.gradeLevel());
-            if (standard != null || percentile != null || gradeLevel != null) {
+            // ★ 파서는 원점수를 원래 읽고 있었는데 여기서 버리고 있었다 — 영어·한국사 칸이 빈 이유
+            Short raw = number(score.rawScore());
+            if (standard != null || percentile != null || gradeLevel != null || raw != null) {
                 inputs.add(new StudentGradeService.ScoreInput(
-                        subject.getId(), standard, percentile, gradeLevel));
+                        subject.getId(), standard, percentile, gradeLevel, raw));
             }
         }));
         return inputs;
