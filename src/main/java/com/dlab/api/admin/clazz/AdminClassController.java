@@ -74,6 +74,27 @@ public class AdminClassController {
                 classId, request.name(), request.capacity(), request.clearsCapacity(), me)));
     }
 
+    /**
+     * 모의고사 반 번호 지정.
+     *
+     * <p>★ <b>비워 두면 그 반 학생은 수험번호를 채번하지 않는다</b> — 성적 업로드가 이름
+     * 매칭으로 떨어져 동명이인에서 멈춘다.
+     *
+     * <p><b>이미 채번된 학생의 번호는 바뀌지 않는다.</b> 바꾼 값은 다음에 배정되는 학생부터
+     * 적용된다 — 연구소가 *"최초 부여받은 학번은 절대 변경 불가"* 라고 명시했다.
+     */
+    @PutMapping("/{classId}/exam-class-no")
+    public ApiResponse<ClassResponse> changeExamClassNo(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long classId,
+            @RequestBody ExamClassNo request) {
+        return ApiResponse.success(ClassResponse.from(
+                classService.changeExamClassNo(classId, request.examClassNo(), me)));
+    }
+
+    /** @param examClassNo 1~99. 비우면 채번하지 않는다 */
+    public record ExamClassNo(Short examClassNo) {
+    }
+
     /** 담임 지정·변경. 이미 처리된 승인 건은 스냅샷이라 영향받지 않는다. */
     @PutMapping("/{classId}/homeroom")
     public ApiResponse<ClassResponse> assignHomeroom(@CurrentAccount AuthPrincipal me,

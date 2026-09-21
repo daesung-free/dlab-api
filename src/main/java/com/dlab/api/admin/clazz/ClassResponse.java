@@ -12,6 +12,8 @@ import com.dlab.domain.user.service.ClassService;
  *
  * @param capacity    정원. <b>{@code null}이면 정원을 두지 않는 반</b>이다 — 0이 아니다.
  *                    화면은 정원이 없으면 충원율을 그리지 않는다
+ * @param examClassNo 모의고사 반 번호. <b>비면 그 반 학생은 수험번호를 채번하지 않는다</b> —
+ *                    성적 업로드가 이름 매칭으로 떨어진다
  * @param memberCount 현재 인원. <b>목록에서만 채운다.</b> 단건 응답(생성·수정·담임지정)은
  *                    {@code null}이다 — 세지 않았다는 뜻이라 0과 구분해야 한다
  */
@@ -24,7 +26,8 @@ public record ClassResponse(
         Long homeroomTeacherId,
         String homeroomTeacherName,
         Short capacity,
-        Integer memberCount
+        Integer memberCount,
+        Short examClassNo
 ) {
 
     /** 단건 응답 — 인원수는 세지 않는다. */
@@ -47,7 +50,8 @@ public record ClassResponse(
                 c.getHomeroomTeacher() == null ? null : c.getHomeroomTeacher().getId(),
                 c.getHomeroomTeacher() == null ? null : c.getHomeroomTeacher().getName(),
                 c.getCapacity(),
-                memberCount);
+                memberCount,
+                c.getExamClassNo());
     }
 
     /**

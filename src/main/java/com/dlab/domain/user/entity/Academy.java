@@ -58,6 +58,16 @@ public class Academy extends BaseEntity {
     @Column(name = "attendance_deadline", nullable = false)
     private LocalTime attendanceDeadline;
 
+    /**
+     * 모의고사 자료의 학교코드({@code 99700}~{@code 99711}).
+     *
+     * <p>★ <b>{@code acadCd} 와 다른 체계다.</b> 김포·동탄이 서로 뒤집혀 있어
+     * (34→99702, 33→99703) <b>순서로 유추할 수 없다.</b> 비어 있으면 그 지점은
+     * 성적 업로드에서 키 매칭이 안 되고 이름 매칭으로 떨어진다.
+     */
+    @Column(name = "exam_school_cd", length = 10)
+    private String examSchoolCd;
+
     @Column(nullable = false)
     private boolean active;
 
