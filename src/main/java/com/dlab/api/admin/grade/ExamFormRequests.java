@@ -122,19 +122,29 @@ public final class ExamFormRequests {
      *                 <b>업로드 회차 목록은 {@code ACADEMY} 만 보여줄 것</b> — 입학 양식에 올리면
      *                 학생이 넣은 입학 성적이 교체된다(서버도 막는다)
      * @param examDate 시행일. 입학 양식은 비어 있다
+     * @param itemCount 올라간 문항 정보(②) 수. 없으면 0 — <b>0이면 정오표(③) 업로드를 막을 것</b>.
+     *                  정오표는 문항의 정답·배점으로 채점한다
+     * @param itemsUploadedAt 문항 정보를 올린 시각. 없으면 비어 있다
      */
     public record FormView(Long examMasterId, Long academyId, short year, String gradeType,
                            String examCode, String examName, int sortOrder,
                            List<SubjectView> subjects, String purpose,
-                           java.time.LocalDate examDate) {
+                           java.time.LocalDate examDate,
+                           int itemCount, java.time.Instant itemsUploadedAt) {
 
         public static FormView from(ExamMaster exam) {
+            return from(exam, null);
+        }
+
+        public static FormView from(ExamMaster exam, ExamFormAdminService.ItemStat items) {
             return new FormView(exam.getId(),
                     exam.isCommon() ? null : exam.getAcademy().getId(),
                     exam.getYear(), exam.getGradeType().name(), exam.getExamCode().name(),
                     exam.getExamName(), exam.getSortOrder(),
                     exam.activeSubjects().stream().map(SubjectView::from).toList(),
-                    exam.getPurpose().name(), exam.getExamDate());
+                    exam.getPurpose().name(), exam.getExamDate(),
+                    items == null ? 0 : items.count(),
+                    items == null ? null : items.uploadedAt());
         }
     }
 

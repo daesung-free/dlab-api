@@ -188,4 +188,28 @@ class ExamSubjectPresetTest {
         assertThat(ExamFormAdminService.shiftYears("2026학년도 수능", 2)).isEqualTo("2028학년도 수능");
         assertThat(ExamFormAdminService.shiftYears("9월 평가원 모의고사", 1)).isEqualTo("9월 평가원 모의고사");
     }
+
+    @Test
+    @DisplayName("★ 회차 목록에 문항 정보 수가 실린다 — 없으면 0, 정오표 업로드를 막는 근거다")
+    void formListShowsItemCount() {
+        ExamMaster withItems = adminService.create(head, new ExamFormAdminService.Command(
+                null, (short) 2026, GradeType.HIGH3, ExamCode.MONTHLY, "8월 더프", 1,
+                List.of(), ExamPurpose.ACADEMY, LocalDate.of(2026, 8, 18)));
+        ExamMaster empty = adminService.create(head, new ExamFormAdminService.Command(
+                null, (short) 2026, GradeType.HIGH3, ExamCode.MONTHLY, "9월 더프", 2,
+                List.of(), ExamPurpose.ACADEMY, LocalDate.of(2026, 9, 17)));
+        em.persist(new com.dlab.domain.grade.entity.ExamItem(withItems, "1", "국어", (short) 1,
+                (short) 3, (short) 2, false, null, null, null, null));
+        em.persist(new com.dlab.domain.grade.entity.ExamItem(withItems, "1", "국어", (short) 2,
+                (short) 1, (short) 2, false, null, null, null, null));
+        em.flush();
+
+        var stats = adminService.itemStats(List.of(withItems.getId(), empty.getId()));
+
+        assertThat(stats.get(withItems.getId()).count()).isEqualTo(2);
+        assertThat(stats.get(withItems.getId()).uploadedAt()).isNotNull();
+        assertThat(stats).doesNotContainKey(empty.getId());
+        assertThat(com.dlab.api.admin.grade.ExamFormRequests.FormView.from(empty, stats.get(empty.getId()))
+                .itemCount()).isZero();
+    }
 }

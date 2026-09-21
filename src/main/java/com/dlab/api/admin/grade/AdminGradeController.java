@@ -55,8 +55,13 @@ public class AdminGradeController {
             @RequestParam short year,
             @RequestParam(required = false) Long academyId) {
 
-        return ApiResponse.success(examFormAdminService.list(me, year, academyId).stream()
-                .map(ExamFormRequests.FormView::from).toList());
+        var forms = examFormAdminService.list(me, year, academyId);
+        // 문항 수는 한 번에 센다 — 회차마다 부르면 쿼리가 회차 수만큼 나간다
+        var items = examFormAdminService.itemStats(
+                forms.stream().map(com.dlab.domain.grade.entity.ExamMaster::getId).toList());
+        return ApiResponse.success(forms.stream()
+                .map(f -> ExamFormRequests.FormView.from(f, items.get(f.getId())))
+                .toList());
     }
 
     /**
