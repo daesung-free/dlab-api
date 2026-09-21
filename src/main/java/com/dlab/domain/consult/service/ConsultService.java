@@ -167,7 +167,7 @@ public class ConsultService {
                     ClassAssignment a = classes.get(e.getId());
                     return classFilter.matches(a == null ? null : a.getClassMaster().getId());
                 })
-                .filter(e -> matchesTeacher(classes.get(e.getId()), teacherId))
+                .filter(e -> matchesTeacher(e, classes.get(e.getId()), teacherId))
                 .map(e -> {
                     ConsultLog last = latest.get(e.getId());
                     ClassAssignment assignment = classes.get(e.getId());
@@ -176,8 +176,7 @@ public class ConsultService {
                             e.getStudentNo(),
                             e.getStudent().getName(),
                             assignment == null ? null : assignment.getClassMaster().getName(),
-                            assignment == null || assignment.getHomeroomTeacher() == null
-                                    ? null : assignment.getHomeroomTeacher().getName(),
+                            homeroomName(e, assignment),
                             last == null ? null : last.getConsultedAt(),
                             last == null ? null : last.getConsultType(),
                             last == null ? null : last.getNextDueDate(),
@@ -219,13 +218,24 @@ public class ConsultService {
         return result;
     }
 
-    private boolean matchesTeacher(ClassAssignment assignment, Long teacherId) {
+    /**
+     * 담임 필터 — <b>그 학생의 담임</b>(예외 지정 ?? 반 담임)으로 판정한다.
+     *
+     * <p>예외 지정된 학생은 지정된 선생님의 상담 대상이다. 반 담임 기준으로 두면 맡은 학생이
+     * 목록에서 빠지고 맡지 않은 학생이 뜬다.
+     */
+    private boolean matchesTeacher(StudentEnrollment enrollment, ClassAssignment assignment,
+                                   Long teacherId) {
         if (teacherId == null) {
             return true;
         }
-        return assignment != null
-                && assignment.getHomeroomTeacher() != null
-                && assignment.getHomeroomTeacher().getId().equals(teacherId);
+        var homeroom = com.dlab.domain.user.service.HomeroomResolver.of(enrollment, assignment);
+        return homeroom != null && homeroom.getId().equals(teacherId);
+    }
+
+    private String homeroomName(StudentEnrollment enrollment, ClassAssignment assignment) {
+        var homeroom = com.dlab.domain.user.service.HomeroomResolver.of(enrollment, assignment);
+        return homeroom == null ? null : homeroom.getName();
     }
 
     // ── 태그 마스터 ────────────────────────────────────────────

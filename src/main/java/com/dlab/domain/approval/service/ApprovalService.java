@@ -52,6 +52,7 @@ public class ApprovalService {
     private final ApproverPreferenceRepository preferenceRepository;
     private final ApprovalRequestRepository approvalRequestRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.user.service.HomeroomResolver homeroomResolver;
     private final AccountRepository accountRepository;
     private final NotificationService notificationService;
     private final Clock clock;
@@ -317,10 +318,14 @@ public class ApprovalService {
     }
 
     /** 담당선생님은 반 배정 → 반 담임으로 자동 결정된다. 미배정이거나 담임 미지정이면 null. */
+    /**
+     * 이양 대상 = <b>그 학생의 담임</b>(예외 지정 ?? 반 담임).
+     *
+     * <p>예외 지정된 학생의 승인은 반 담임이 아니라 지정된 선생님에게 가야 한다 — 그 학생을
+     * 맡은 사람이다.
+     */
     private Teacher resolveEscalationTarget(StudentEnrollment enrollment) {
-        return classAssignmentRepository.findActiveFixedByEnrollmentId(enrollment.getId())
-                .map(ClassAssignment::getHomeroomTeacher)
-                .orElse(null);
+        return homeroomResolver.of(enrollment);
     }
 
     private ApprovalRequest loadPending(Long requestId) {

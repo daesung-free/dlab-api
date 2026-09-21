@@ -82,6 +82,22 @@ public class StudentEnrollment extends BaseEntity {
     @Column(name = "exam_no_fixed_at")
     private java.time.Instant examNoFixedAt;
 
+    /**
+     * 담임 예외 지정. <b>비어 있으면 반 담임</b>이다.
+     *
+     * <p>★ 직접 읽지 말고 {@code HomeroomResolver} 를 거칠 것 — "예외 ?? 반 담임" 해석을 한
+     * 곳에서만 해야 사용처마다 다른 담임이 나오지 않는다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "homeroom_override_teacher_id")
+    private Teacher homeroomOverride;
+
+    @Column(name = "homeroom_override_reason", length = 200)
+    private String homeroomOverrideReason;
+
+    @Column(name = "homeroom_override_at")
+    private java.time.Instant homeroomOverrideAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private GradeType grade;
@@ -192,6 +208,20 @@ public class StudentEnrollment extends BaseEntity {
         this.examSeq = seq;
         this.examStudentNo = "%d%03d".formatted(classNo, seq);
         this.examNoFixedAt = at;
+    }
+
+    /** 담임 예외 지정. 사유는 호출부가 필수로 받는다 */
+    public void overrideHomeroom(Teacher teacher, String reason, java.time.Instant at) {
+        this.homeroomOverride = teacher;
+        this.homeroomOverrideReason = reason;
+        this.homeroomOverrideAt = at;
+    }
+
+    /** 예외 해제 — 반 담임으로 돌아간다 */
+    public void clearHomeroomOverride() {
+        this.homeroomOverride = null;
+        this.homeroomOverrideReason = null;
+        this.homeroomOverrideAt = null;
     }
 
     public boolean hasExamNo() {
