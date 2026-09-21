@@ -95,6 +95,7 @@ public class ExamItemService {
      * @param unmatchedRates 문항분석표에 없는 정답률 행. 과목명 표기가 달라졌을 가능성이 크다 —
      *                       비어 있지 않으면 화면이 경고해야 한다
      */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "ExamItemUploadResult")
     public record Result(int itemCount, int ratesApplied, List<String> unmatchedRates) {
     }
 }

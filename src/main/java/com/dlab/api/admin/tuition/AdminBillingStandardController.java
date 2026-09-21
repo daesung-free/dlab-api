@@ -182,6 +182,7 @@ public class AdminBillingStandardController {
         }
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "BillingStandardChangeActive")
     public record ChangeActive(@NotNull(message = "사용 여부는 필수입니다.") Boolean active) {
     }
 }

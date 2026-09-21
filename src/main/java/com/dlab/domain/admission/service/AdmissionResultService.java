@@ -195,6 +195,7 @@ public class AdmissionResultService {
     public record Suggestions(List<String> universities, List<String> departments) {
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "AdmissionResultStatistics")
     public record Statistics(int total, long early, long regular,
                              long decided, long passed,
                              Map<AdmissionResultStatus, Long> byResult,

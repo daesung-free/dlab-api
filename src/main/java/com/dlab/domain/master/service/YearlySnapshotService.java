@@ -83,6 +83,7 @@ public class YearlySnapshotService {
     private final ScholarshipMasterRepository scholarshipMasterRepository;
     /** 화면의 '전년도 기준 복사'가 이걸 탄다 — 없어서 눌러도 아무 일도 안 일어났다. */
     private final com.dlab.domain.payment.repository.BillingStandardRepository billingStandardRepository;
+    private final com.dlab.domain.event.repository.AnnualEventRepository annualEventRepository;
 
     @PersistenceContext
     private EntityManager em;
@@ -129,6 +130,7 @@ public class YearlySnapshotService {
         copied.put("scholarshipMaster", copyScholarshipMasters(academy, fromYear, toYear));
         copied.put("billingStandard", copyBillingStandards(academy, fromYear, toYear));
         copied.put("staff", copyStaffEnrollments(academy, fromYear, toYear));
+        copied.put("annualEvent", copyAnnualEvents(academy, fromYear, toYear));
 
         SnapshotResult result = new SnapshotResult(fromYear, toYear, copied);
         log.info("전년도 복사 완료: academy={}, {} → {}, 합계 {}건 {}",
@@ -186,6 +188,37 @@ public class YearlySnapshotService {
      * <p>복사되는 표를 전부 확인한다 — 일부만 보면, 예컨대 학과만 손으로 만들어 둔 연도에
      * 복사가 통과해서 학과만 두 벌이 되는 상태가 만들어진다.
      */
+    /**
+     * 연간 행사 — <b>이 지점 행사만</b> 옮기고 날짜를 연도 차이만큼 민다.
+     *
+     * <p>전 지점 공통 행사는 본사 것이라 지점 복사로 늘리지 않는다. 날짜는 같은 월·일로 가지만
+     * 시험·설명회는 해마다 날이 달라 <b>복사 후 확인이 필요하다</b>. 2월 29일은 28일이 된다.
+     *
+     * <p><b>공휴일은 복사하지 않는다</b> — 설·추석은 음력이고 대체·임시공휴일은 해마다 달라,
+     * 같은 날짜로 옮기면 틀린 휴일이 급식·교습일수 계산에 들어간다.
+     *
+     * <p>새 해에 이 지점 행사가 이미 있으면 건너뛴다 — 두 벌이 되지 않게.
+     */
+    private int copyAnnualEvents(Academy academy, short fromYear, short toYear) {
+        Long academyId = academy.getId();
+        boolean targetHasOwn = annualEventRepository.findAllOfYear(toYear, academyId).stream()
+                .anyMatch(e -> academyId.equals(e.getAcademyId()));
+        if (targetHasOwn) {
+            return 0;
+        }
+        int delta = toYear - fromYear;
+        List<com.dlab.domain.event.entity.AnnualEvent> sources =
+                annualEventRepository.findAllOfYear(fromYear, academyId).stream()
+                        .filter(e -> academyId.equals(e.getAcademyId()))
+                        .toList();
+        sources.forEach(src -> annualEventRepository.save(new com.dlab.domain.event.entity.AnnualEvent(
+                toYear, academyId, src.getName(),
+                src.getStartDate().plusYears(delta),
+                src.getEndDate() == null ? null : src.getEndDate().plusYears(delta),
+                src.getEventType(), src.isShowInPlan(), src.getMemo())));
+        return sources.size();
+    }
+
     private void verifyTargetEmpty(Long academyId, short toYear) {
         boolean hasData =
                 !departmentRepository.search(academyId, toYear).isEmpty()
