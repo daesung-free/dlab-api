@@ -40,6 +40,27 @@ public class AdminAdmissionResultController {
 
     private final AdmissionResultService resultService;
 
+    /**
+     * 그해 전체 실적 — 학생을 고르지 않고 지점 전체를 본다. 학번순.
+     *
+     * @param academyId 비우면 내 지점. 전 지점 권한자는 지정해야 한다
+     * @param result    비우면 전체. {@code PENDING}=발표 전
+     * @param keyword   학생 이름·학번·대학명·학과명
+     */
+    @GetMapping
+    public ApiResponse<List<ResultView>> search(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam short year,
+            @RequestParam(required = false) AdmissionResultStatus result,
+            @RequestParam(required = false) AdmissionType admissionType,
+            @RequestParam(required = false) String keyword,
+            @org.springframework.data.web.PageableDefault(size = 50)
+            org.springframework.data.domain.Pageable pageable) {
+        return ApiResponse.from(resultService.search(me, academyId, year, result, admissionType,
+                keyword, pageable).map(ResultView::from));
+    }
+
     /** 학생 한 명의 지원 목록. 수시·정시가 함께 온다. */
     @GetMapping("/students/{enrollmentId}")
     public ApiResponse<List<ResultView>> byStudent(@CurrentAccount AuthPrincipal me,

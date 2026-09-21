@@ -44,6 +44,20 @@ public interface AdmissionResultRepository extends JpaRepository<AdmissionResult
     List<AdmissionResult> findInPeriod(Long academyId, short year, Instant from, Instant to);
 
     /**
+     * 그해 지점 전체 실적. 거르기·페이징은 서비스가 한다 — 지점 한 해치라 수백 건 수준이다.
+     */
+    @Query("""
+            SELECT r FROM AdmissionResult r
+            JOIN FETCH r.enrollment e
+            JOIN FETCH e.student
+            WHERE r.academy.id = :academyId
+              AND r.year = :year
+              AND r.deleted = false
+            ORDER BY e.studentNo, r.admissionType, r.id
+            """)
+    List<AdmissionResult> findInYear(Long academyId, short year);
+
+    /**
      * 자동완성 후보 — <b>이미 입력된 값에서 만든다.</b>
      *
      * <p>전국 대학 전형 마스터는 매년 바뀌어 갱신 부담이 크다(§4). 쌓인 값을 쓰면
