@@ -37,19 +37,21 @@ class AcademyExamQueryTest {
     @Autowired AcademyExamQueryService queryService;
     @Autowired StudentGradeService gradeService;
     @Autowired EntityManager em;
+    @Autowired com.dlab.api.admin.grade.AdminGradeController adminController;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
     static final short YEAR = 2090;
 
     StudentEnrollment student;
+    Academy bundang;
     ExamMaster june;     // 평가원 — 진단 없음
     ExamMaster august;   // 더프 — 진단 있음
     ExamMaster admission;
 
     @BeforeEach
     void setUp() {
-        Academy bundang = new Academy("31", "분당", LocalTime.of(9, 0));
+        bundang = new Academy("31", "분당", LocalTime.of(9, 0));
         em.persist(bundang);
         Student s = new Student("DL-Q1", "조회학생", "010-1111-3333");
         em.persist(s);
@@ -159,5 +161,37 @@ class AcademyExamQueryTest {
         assertThat(queryService.trend(student))
                 .extracting(p -> p.exam().examName())
                 .containsExactly("6월 평가원", "8월 더 프리미엄");
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles = "BRANCH_ADMIN")
+    @DisplayName("★ 관리자 웹도 학생별로 본다 — 앱과 같은 모양")
+    void adminSeesSameAsApp() {
+        score(june, (short) 80);
+        var admin = new com.dlab.common.security.AuthPrincipal(1L, "branch", bundang.getId(),
+                java.util.Set.of(com.dlab.common.security.Role.BRANCH_ADMIN), false, false);
+
+        assertThat(adminController.studentAcademyExams(admin, student.getId()).data())
+                .extracting(AcademyExamQueryService.ExamSummary::examName)
+                .containsExactly("6월 평가원");
+        assertThat(adminController.studentAcademyExam(admin, student.getId(), june.getId())
+                .data().subjects()).isNotEmpty();
+        assertThat(adminController.studentAcademyTrend(admin, student.getId()).data()).hasSize(1);
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles = "BRANCH_ADMIN")
+    @DisplayName("다른 지점 학생 성적은 열리지 않는다")
+    void adminOtherBranchDenied() {
+        score(june, (short) 80);
+        Academy ilsan = new Academy("32", "일산", LocalTime.of(9, 0));
+        em.persist(ilsan);
+        em.flush();
+        var other = new com.dlab.common.security.AuthPrincipal(1L, "branch", ilsan.getId(),
+                java.util.Set.of(com.dlab.common.security.Role.BRANCH_ADMIN), false, false);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                () -> adminController.studentAcademyExams(other, student.getId()))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class);
     }
 }
