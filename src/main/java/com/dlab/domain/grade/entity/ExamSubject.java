@@ -52,6 +52,15 @@ public class ExamSubject extends BaseEntity {
     @Column(name = "has_grade_level", nullable = false)
     private boolean hasGradeLevel = true;
 
+    /**
+     * 원점수를 받는가.
+     *
+     * <p>입학 전 성적 양식은 {@code false} 다 — 신상기록부에 원점수 칸이 없다. 디랩 시험은
+     * 켠다: 영어·한국사가 절대평가라 <b>원점수와 등급만</b> 온다.
+     */
+    @Column(name = "has_raw_score", nullable = false)
+    private boolean hasRawScore = false;
+
     ExamSubject(ExamMaster examMaster, String subjectCode, String subjectName, short sortOrder,
                 boolean hasStandardScore, boolean hasPercentile, boolean hasGradeLevel) {
         this.examMaster = examMaster;
@@ -75,11 +84,17 @@ public class ExamSubject extends BaseEntity {
             case STANDARD_SCORE -> hasStandardScore ? value : null;
             case PERCENTILE -> hasPercentile ? value : null;
             case GRADE_LEVEL -> hasGradeLevel ? value : null;
+            case RAW_SCORE -> hasRawScore ? value : null;
         };
     }
 
     /** 점수 칸 종류. */
     public enum ScoreField {
-        STANDARD_SCORE, PERCENTILE, GRADE_LEVEL
+        STANDARD_SCORE, PERCENTILE, GRADE_LEVEL, RAW_SCORE
+    }
+
+    /** 원점수를 받게 한다. 디랩 시험 양식에서 쓴다. */
+    public void acceptRawScore(boolean accept) {
+        this.hasRawScore = accept;
     }
 }

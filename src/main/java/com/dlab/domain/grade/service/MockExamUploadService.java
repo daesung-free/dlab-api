@@ -75,6 +75,7 @@ public class MockExamUploadService {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final StudentGradeService gradeService;
     private final com.dlab.domain.grade.repository.MockExamStudentKeyRepository keyRepository;
+    private final com.dlab.domain.grade.repository.ExamUniversityChoiceRepository choiceRepository;
 
     /** 저장하지 않고 결과만 본다. */
     @Transactional(readOnly = true)
@@ -186,9 +187,50 @@ public class MockExamUploadService {
         if (save) {
             // 업로드 전용 경로 — 입학 성적의 제출·"모른다" 상태를 건드리지 않는다
             gradeService.saveAcademyScores(enrollment, exam, inputs);
+            saveChoices(enrollment, exam, row.choices());
         }
         matched.add(new Matched(row.rowNumber(), enrollment.getId(),
                 enrollment.getStudentNo(), row.name(), inputs.size()));
+    }
+
+    /**
+     * 지망대학 진단을 교체한다 — 같은 회차를 다시 올리면 점수와 함께 바뀐다.
+     *
+     * <p>★ <b>숫자로 못 읽는 칸은 비워 둔다.</b> 오류로 막으면 기준점수 한 칸 때문에 그 학생
+     * 성적 전체가 안 들어간다. 대학명만 있으면 담는다.
+     */
+    private void saveChoices(StudentEnrollment enrollment, ExamMaster exam,
+                             List<MockExamExcelParser.UniversityChoice> choices) {
+        choiceRepository.softDeleteOf(enrollment.getId(), exam.getId());
+        for (MockExamExcelParser.UniversityChoice c : choices) {
+            choiceRepository.save(new com.dlab.domain.grade.entity.ExamUniversityChoice(
+                    enrollment, exam, (short) c.rank(), c.universityName(),
+                    blankToNull(c.departmentName()),
+                    integer(c.quota()), integer(c.applicantCount()), integer(c.applicantRank()),
+                    blankToNull(c.appliedAreas()),
+                    decimal(c.expectedScore()), decimal(c.cutoffScore()),
+                    blankToNull(c.diagnosis())));
+        }
+    }
+
+    private static Integer integer(String v) {
+        try {
+            return isBlank(v) ? null : new java.math.BigDecimal(v.trim()).intValueExact();
+        } catch (ArithmeticException | NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static java.math.BigDecimal decimal(String v) {
+        try {
+            return isBlank(v) ? null : new java.math.BigDecimal(v.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static String blankToNull(String v) {
+        return isBlank(v) ? null : v.trim();
     }
 
     /**
@@ -280,9 +322,11 @@ public class MockExamUploadService {
             Short standard = number(score.standardScore());
             Short percentile = number(score.percentile());
             Short gradeLevel = number(score.gradeLevel());
-            if (standard != null || percentile != null || gradeLevel != null) {
+            // ★ 파서는 원점수를 원래 읽고 있었는데 여기서 버리고 있었다 — 영어·한국사 칸이 빈 이유
+            Short raw = number(score.rawScore());
+            if (standard != null || percentile != null || gradeLevel != null || raw != null) {
                 inputs.add(new StudentGradeService.ScoreInput(
-                        subject.getId(), standard, percentile, gradeLevel));
+                        subject.getId(), standard, percentile, gradeLevel, raw));
             }
         }));
         return inputs;

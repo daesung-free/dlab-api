@@ -108,8 +108,15 @@ public class TwoRowHeaderReader {
     }
 
     /** 줄바꿈·공백을 없앤다 — 같은 항목이 {@code "원점수\n(공통)"} 처럼 들어온다. */
+    /**
+     * 공백과 엑셀 줄바꿈 이스케이프를 지운다.
+     *
+     * <p>★ <b>{@code _x000D_} 가 글자 그대로 들어온다.</b> 셀 안의 줄바꿈(CR)을 엑셀이 이렇게
+     * 저장하는데, 연구소 파일의 지망대학 헤더가 {@code "지원자 중 석차_x000D_"} 처럼 되어 있다.
+     * 지우지 않으면 {@code "지원자중석차"} 로 찾을 수 없어 그 열이 통째로 빈다.
+     */
     private static String normalize(String value) {
-        return value == null ? "" : value.replaceAll("\\s+", "");
+        return value == null ? "" : value.replace("_x000D_", "").replaceAll("\\s+", "");
     }
 
     private String text(Cell cell) {
