@@ -74,6 +74,58 @@ public class AdminGradeController {
     }
 
     /**
+     * 학년별 기본 과목 구성.
+     *
+     * <p>디랩 시험 회차를 만들 때 과목을 비우면 이걸로 채워진다. 화면은 회차 등록 폼에
+     * 미리 채워 두는 데 써도 된다.
+     *
+     * @param academyId 비우면 공통본. 지점을 넣으면 <b>그 지점에 실제로 쓰일</b> 구성이다
+     * @param gradeType 비우면 전 학년
+     */
+    @GetMapping("/exam-forms/subject-presets")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<List<ExamFormRequests.PresetView>> presets(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam short year,
+            @RequestParam(required = false) com.dlab.domain.user.entity.GradeType gradeType,
+            @RequestParam(required = false) Long academyId) {
+        return ApiResponse.success(examFormAdminService.presets(me, year, gradeType, academyId)
+                .stream().map(ExamFormRequests.PresetView::from).toList());
+    }
+
+    /**
+     * 한 학년의 기본 과목 구성을 통째로 바꾼다. <b>이미 만든 회차는 안 바뀐다</b> —
+     * 다음에 만드는 회차부터 적용된다.
+     */
+    @PutMapping("/exam-forms/subject-presets")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
+    public ApiResponse<List<ExamFormRequests.PresetView>> replacePresets(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody ExamFormRequests.PresetReplace request) {
+        return ApiResponse.success(examFormAdminService.replacePresets(me, request.academyId(),
+                        request.year(), request.gradeType(),
+                        request.subjects().stream()
+                                .map(ExamFormRequests.ExamFormSubject::toInput).toList())
+                .stream().map(ExamFormRequests.PresetView::from).toList());
+    }
+
+    /**
+     * 연도 롤오버 — 전년도 입학 전 성적 양식과 기본 과목 구성을 새 해로 복사한다.
+     *
+     * <p>이미 있는 것은 건너뛰어 두 번 불러도 된다. 디랩 시험 회차는 복사하지 않는다(시행일이
+     * 붙은 한 번뿐인 시험이다). 시험 이름의 연도는 올려 주지만 제도 변경(9평 → 8평 등)은
+     * 반영하지 않는다 — 복사 후 확인할 것.
+     */
+    @PostMapping("/exam-forms/rollover")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
+    public ApiResponse<ExamFormAdminService.RolloverResult> rollover(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody ExamFormRequests.Rollover request) {
+        return ApiResponse.success(examFormAdminService.rollover(me, request.academyId(),
+                request.fromYear(), request.toYear()));
+    }
+
+    /**
      * 회차 삭제. <b>이미 낸 성적은 남는다</b> — 새 학생 양식에서만 빠진다.
      * 물리 삭제하면 과거 성적이 어느 시험이었는지 알 수 없게 된다.
      */

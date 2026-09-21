@@ -14,7 +14,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * 성적 입력 양식 관리.
@@ -35,6 +40,8 @@ import java.util.List;
 public class ExamFormAdminService {
 
     private final ExamMasterRepository examMasterRepository;
+    private final com.dlab.domain.grade.repository.ExamSubjectPresetRepository presetRepository;
+    private final jakarta.persistence.EntityManager em;
     private final AcademyRepository academyRepository;
 
     @Transactional(readOnly = true)
@@ -72,11 +79,23 @@ public class ExamFormAdminService {
                 : new ExamMaster(academy, command.year(), command.gradeType(),
                         command.examCode(), command.examName(), (short) command.sortOrder());
 
-        if (command.subjects().isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "과목이 없는 시험은 만들 수 없습니다.");
-        }
         boolean academyExam = purpose == com.dlab.domain.grade.entity.ExamPurpose.ACADEMY;
-        command.subjects().forEach(s -> exam.addSubject(s.subjectCode(), s.subjectName(),
+        List<SubjectInput> subjects = command.subjects() == null ? List.of() : command.subjects();
+        if (subjects.isEmpty() && academyExam) {
+            // 디랩 시험은 과목을 비우면 학년별 기본 구성으로 채운다 — 매달 6과목을 손으로 넣지 않게
+            subjects = presetRepository.findEffective(command.year(), command.gradeType(),
+                            command.academyId()).stream()
+                    .map(p -> new SubjectInput(p.getSubjectCode(), p.getSubjectName(),
+                            p.getSortOrder(), p.isHasStandardScore(), p.isHasPercentile(),
+                            p.isHasGradeLevel(), p.isHasRawScore()))
+                    .toList();
+        }
+        if (subjects.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, academyExam
+                    ? "과목이 없고 이 학년의 기본 과목 구성도 등록되지 않았습니다."
+                    : "과목이 없는 시험은 만들 수 없습니다.");
+        }
+        subjects.forEach(s -> exam.addSubject(s.subjectCode(), s.subjectName(),
                         s.sortOrder(), s.hasStandardScore(), s.hasPercentile(), s.hasGradeLevel())
                 // ★ 비우면 디랩 시험은 켜고 입학 전 성적은 끈다. 연구소 파일에는 원점수가
                 //   있고, 신상기록부에는 없다 — 기본값이 반대면 가입 화면에 없던 칸이 생긴다
@@ -117,6 +136,156 @@ public class ExamFormAdminService {
         if (!me.canAccessAcademy(academyId)) {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
+    }
+
+    // ── 학년별 과목 기본 구성 ──────────────────────────────────
+
+    /**
+     * 기본 구성 목록.
+     *
+     * @param academyId {@code null}이면 공통본. 지점을 넣으면 <b>그 지점에 실제로 쓰일</b>
+     *                  구성이다(지점 행이 없으면 공통본)
+     */
+    @Transactional(readOnly = true)
+    public List<com.dlab.domain.grade.entity.ExamSubjectPreset> presets(
+            AuthPrincipal me, short year, GradeType gradeType, Long academyId) {
+        requireScope(me, academyId);
+        if (academyId == null) {
+            return presetRepository.findOwn(year, null).stream()
+                    .filter(p -> gradeType == null || p.getGradeType() == gradeType)
+                    .toList();
+        }
+        List<GradeType> grades = gradeType != null ? List.of(gradeType)
+                : List.of(GradeType.HIGH2, GradeType.HIGH3, GradeType.N_SU);
+        return grades.stream()
+                .flatMap(g -> presetRepository.findEffective(year, g, academyId).stream())
+                .toList();
+    }
+
+    /**
+     * 한 학년의 기본 구성을 통째로 바꾼다.
+     *
+     * <p><b>이미 만든 회차는 바뀌지 않는다</b> — 과목은 회차마다 복사되어 있어, 여기를 고쳐도
+     * 지난 성적의 과목 구성이 소급해서 바뀌지 않는다. 다음에 만드는 회차부터 적용된다.
+     *
+     * <p>빈 목록을 보내면 그 범위의 행을 전부 지운다 — 지점 행을 지우면 공통본으로 돌아간다.
+     */
+    @Transactional
+    public List<com.dlab.domain.grade.entity.ExamSubjectPreset> replacePresets(
+            AuthPrincipal me, Long academyId, short year, GradeType gradeType,
+            List<SubjectInput> subjects) {
+        requireScope(me, academyId);
+        long distinctCodes = subjects.stream().map(SubjectInput::subjectCode).distinct().count();
+        if (distinctCodes != subjects.size()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "같은 과목 코드가 두 번 있습니다.");
+        }
+        Academy academy = academyId == null ? null
+                : academyRepository.findById(academyId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
+
+        presetRepository.findOwn(year, academyId).stream()
+                .filter(p -> p.getGradeType() == gradeType)
+                .forEach(com.dlab.common.entity.BaseEntity::markDeleted);
+        // ★ 지운 것을 먼저 내보낸다. Hibernate 가 INSERT 를 UPDATE 보다 먼저 보내서,
+        //   같은 과목 코드를 다시 넣으면 부분 유니크 인덱스에 걸린다
+        em.flush();
+
+        return presetRepository.saveAll(subjects.stream()
+                .map(s -> new com.dlab.domain.grade.entity.ExamSubjectPreset(academy, year,
+                        gradeType, s.subjectCode(), s.subjectName(), s.sortOrder(),
+                        s.hasStandardScore(), s.hasPercentile(), s.hasGradeLevel(),
+                        s.hasRawScore() == null || s.hasRawScore()))
+                .toList());
+    }
+
+    // ── 연도 롤오버 ──────────────────────────────────────────
+
+    /**
+     * 전년도 양식을 새 해로 복사한다 — 입학 전 성적 양식 + 학년별 기본 구성.
+     *
+     * <p><b>디랩 시험 회차는 복사하지 않는다.</b> 시행일이 붙은 한 번뿐인 시험이라 새 해에
+     * 같은 날짜로 있을 리 없다 — 새 해에는 기본 구성으로 새로 만든다.
+     *
+     * <p><b>이미 있는 것은 건너뛴다.</b> 두 번 불러도 같은 결과다. 기본 구성은 학년 단위로
+     * 판단한다 — 새 해에 그 학년 행이 하나라도 있으면 일부만 섞이지 않게 통째로 건너뛴다.
+     *
+     * <p>시험 이름의 연도는 차이만큼 올린다("2026년 6월 학력평가" → "2027년 6월 학력평가",
+     * "2026학년도 수능" → "2027학년도 수능"). <b>9평이 8월로 옮겨가는 것 같은 제도 변경은
+     * 반영하지 않는다</b> — 복사한 뒤 관리자가 고친다.
+     *
+     * @param academyId {@code null}이면 공통본 — 본사만
+     */
+    @Transactional
+    public RolloverResult rollover(AuthPrincipal me, Long academyId, short fromYear, short toYear) {
+        requireScope(me, academyId);
+        if (toYear <= fromYear) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "새 연도는 원본 연도보다 커야 합니다.");
+        }
+        int delta = toYear - fromYear;
+
+        int formsCreated = 0;
+        int formsSkipped = 0;
+        for (ExamMaster source : examMasterRepository.findAllByScope(fromYear, academyId)) {
+            if (source.isAcademyExam()) {
+                continue;
+            }
+            boolean exists = examMasterRepository.findOne(toYear, source.getGradeType(),
+                    source.getExamCode(), source.getPurpose(), null, academyId).isPresent();
+            if (exists) {
+                formsSkipped++;
+                continue;
+            }
+            ExamMaster copy = new ExamMaster(source.getAcademy(), toYear, source.getGradeType(),
+                    source.getExamCode(), shiftYears(source.getExamName(), delta),
+                    source.getSortOrder());
+            source.activeSubjects().forEach(sub -> copy.addSubject(sub.getSubjectCode(),
+                            sub.getSubjectName(), sub.getSortOrder(), sub.isHasStandardScore(),
+                            sub.isHasPercentile(), sub.isHasGradeLevel())
+                    .acceptRawScore(sub.isHasRawScore()));
+            examMasterRepository.save(copy);
+            formsCreated++;
+        }
+
+        List<com.dlab.domain.grade.entity.ExamSubjectPreset> target =
+                presetRepository.findOwn(toYear, academyId);
+        Set<GradeType> filled = target.stream()
+                .map(com.dlab.domain.grade.entity.ExamSubjectPreset::getGradeType)
+                .collect(Collectors.toSet());
+        List<com.dlab.domain.grade.entity.ExamSubjectPreset> copies = new ArrayList<>();
+        Set<GradeType> skippedGrades = new java.util.TreeSet<>();
+        for (var preset : presetRepository.findOwn(fromYear, academyId)) {
+            if (filled.contains(preset.getGradeType())) {
+                skippedGrades.add(preset.getGradeType());
+                continue;
+            }
+            copies.add(preset.copyTo(toYear));
+        }
+        presetRepository.saveAll(copies);
+
+        log.info("성적 양식 롤오버: academyId={}, {} → {}, 회차 {}건 생성 / {}건 건너뜀, 기본 과목 {}건",
+                academyId, fromYear, toYear, formsCreated, formsSkipped, copies.size());
+        return new RolloverResult(formsCreated, formsSkipped, copies.size(),
+                List.copyOf(skippedGrades));
+    }
+
+    private static final Pattern YEAR = Pattern.compile("(?<!\\d)(20\\d{2})(?!\\d)");
+
+    /** 이름 속 연도를 차이만큼 올린다. 연도가 없으면 그대로다("6월 평가원 모의고사"). */
+    public static String shiftYears(String name, int delta) {
+        Matcher m = YEAR.matcher(name);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            m.appendReplacement(out, String.valueOf(Integer.parseInt(m.group(1)) + delta));
+        }
+        m.appendTail(out);
+        return out.toString();
+    }
+
+    /**
+     * @param presetsSkippedGrades 새 해에 이미 행이 있어 건너뛴 학년
+     */
+    public record RolloverResult(int formsCreated, int formsSkipped, int presetsCreated,
+                                 List<GradeType> presetsSkippedGrades) {
     }
 
     /**
