@@ -34,6 +34,10 @@ import java.util.List;
  *                         반에 담임이 없으면 {@code null}
  * @param seatCd           현재 좌석 코드. 미배정이면 {@code null}
  * @param scholarshipTypes 장학 유형. <b>여러 건일 수 있어 목록</b>이고, 없으면 빈 목록이다
+ * @param homeroomOverridden 담임 예외 지정 여부. {@code true} 면 {@code homeroomTeacher} 가
+ *                           반 담임이 아니라 지정된 선생님이다
+ * @param homeroomOverride   담임 예외 지정 상세 — {@code PUT .../homeroom-override} 응답과 같은 모양이다.
+ *                           지정이 없으면 {@code null}
  * @param masked           개인정보가 가려졌는지. 화면이 "원본 보기" 안내를 띄우는 근거다
  */
 public record StudentResponse(
@@ -66,6 +70,8 @@ public record StudentResponse(
         String homeroomTeacher,
         String seatCd,
         List<String> scholarshipTypes,
+        boolean homeroomOverridden,
+        AdminStudentController.HomeroomOverrideView homeroomOverride,
         boolean masked
 ) {
 
@@ -98,6 +104,10 @@ public record StudentResponse(
                 extras.homeroomTeacher(id),
                 extras.seatCd(id),
                 extras.scholarships(id),
+                e.getHomeroomOverride() != null,
+                // 지정된 학생만 선생님 이름을 읽는다 — 드문 경우라 목록에서 학생마다 쿼리가 나가지 않는다
+                e.getHomeroomOverride() == null ? null
+                        : AdminStudentController.HomeroomOverrideView.from(e),
                 masked);
     }
 }
