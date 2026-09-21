@@ -40,6 +40,8 @@ public class AdminGradeController {
     private final StudentGradeService gradeService;
     private final StudentService studentService;
     private final com.dlab.domain.grade.service.MockExamUploadService mockExamUploadService;
+    private final com.dlab.domain.grade.service.ExamItemService examItemService;
+    private final com.dlab.domain.grade.service.ItemResponseService itemResponseService;
 
     /**
      * 등록된 시험 회차 목록.
@@ -203,6 +205,50 @@ public class AdminGradeController {
                     k.getClassNo(), k.getStudentNo(), k.getEnrollment().getId(),
                     k.getEnrollment().getStudentNo(), k.getEnrollment().getStudent().getName());
         }
+    }
+
+    /**
+     * 회차 문항 정보 반영 — 문항분석표 + 정답률 (채점 탭의 근거).
+     *
+     * <p><b>디랩에서 본 시험 회차에만</b> 올린다. 다시 올리면 그 회차 문항이 통째로 교체된다.
+     *
+     * <p>{@code unmatchedRates} 가 비어 있지 않으면 <b>경고할 것</b> — 과목명 표기가 달라져
+     * 그 문항의 전국 정답률이 붙지 않았다는 뜻이다.
+     *
+     * @param rates 정답률 파일. 없어도 된다 — 문항분석표만 먼저 올릴 수 있다
+     */
+    @PostMapping("/grades/exam-items/upload")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+    public ApiResponse<com.dlab.domain.grade.service.ExamItemService.Result> uploadExamItems(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam Long examMasterId,
+            @RequestPart("analysis") org.springframework.web.multipart.MultipartFile analysis,
+            @RequestPart(value = "rates", required = false)
+            org.springframework.web.multipart.MultipartFile rates) throws java.io.IOException {
+        return ApiResponse.success(examItemService.upload(me, examMasterId,
+                analysis.getInputStream(), rates == null ? null : rates.getInputStream()));
+    }
+
+    /**
+     * 학생 정오·답안 반영 — 정오표(필수) + 답안표(선택). 채점 탭의 근거.
+     *
+     * <p>★ <b>문항 정보({@code /grades/exam-items/upload})를 먼저 올려야 한다</b> — 국어·수학의
+     * 공통·선택 경계를 거기서 안다.
+     *
+     * <p>학생 매칭은 성적 업로드와 같은 규칙이다(외부생 제외 → 연결 키 → 이름). {@code unknownSubjects}
+     * 가 비어 있지 않으면 <b>그 과목 채점이 빠졌다</b> — 경고할 것.
+     */
+    @PostMapping("/grades/exam-responses/upload")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+    public ApiResponse<com.dlab.domain.grade.service.ItemResponseService.Result> uploadExamResponses(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam Long examMasterId,
+            @RequestPart("results") org.springframework.web.multipart.MultipartFile results,
+            @RequestPart(value = "answers", required = false)
+            org.springframework.web.multipart.MultipartFile answers) throws java.io.IOException {
+        return ApiResponse.success(itemResponseService.upload(me, academyId, examMasterId,
+                results.getInputStream(), answers == null ? null : answers.getInputStream()));
     }
 
     @GetMapping("/students/{enrollmentId}/grades")

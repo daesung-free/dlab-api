@@ -49,16 +49,6 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class MockExamUploadService {
 
-    /**
-     * 외부생 학교코드.
-     *
-     * <p>★ <b>재원생이 아니다.</b> 연구소가 *"성적자료에 포함하지 않으셔도 됩니다"* 로
-     * 확정했는데, <b>받은 세트에는 이 파일이 들어 있다.</b> 조용히 버리면 "왜 인원이
-     * 다르냐" 가 되므로 건너뛴 건수를 미리보기에 실어 보낸다.
-     *
-     * <p>⚠️ <b>지점(`academy`) 행으로 만들지 말 것</b> — 통계·권한·좌석이 전부 오염된다.
-     */
-    private static final String EXTERNAL_SCHOOL_CODE = "99709";
 
     /** 파일 영역명 → 회차 과목명 후보. 앞에서부터 찾아 첫 번째로 맞는 것을 쓴다. */
     private static final Map<String, List<String>> SUBJECT_ALIASES = Map.of(
@@ -75,6 +65,7 @@ public class MockExamUploadService {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final StudentGradeService gradeService;
     private final com.dlab.domain.grade.repository.MockExamStudentKeyRepository keyRepository;
+    private final MockExamStudentMatcher matcher;
     private final com.dlab.domain.grade.repository.ExamUniversityChoiceRepository choiceRepository;
 
     /** 저장하지 않고 결과만 본다. */
@@ -115,21 +106,7 @@ public class MockExamUploadService {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
 
-        // ★ 사람이 한 번 정해준 연결이 먼저다. 이름은 동명이인에서 멈추는데, 그러면
-        //   그 학생은 회차마다 계속 빠진다
-        Map<String, StudentEnrollment> byKey = keyRepository
-                .findAllByScope(academyId, exam.getYear()).stream()
-                .collect(java.util.stream.Collectors.toMap(
-                        k -> fileKey(k.getSchoolCode(), k.getClassNo(), k.getStudentNo()),
-                        com.dlab.domain.grade.entity.MockExamStudentKey::getEnrollment,
-                        (a, b) -> a));
-
-        Map<String, List<StudentEnrollment>> byName = enrollmentRepository
-                .findCurrentByAcademyId(academyId).stream()
-                .collect(java.util.stream.Collectors.groupingBy(
-                        e -> normalize(e.getStudent().getName()),
-                        LinkedHashMap::new, java.util.stream.Collectors.toList()));
-
+        MockExamStudentMatcher.Table table = matcher.prepare(academyId, exam.getYear());
         MockExamExcelParser.Result parsed = parser.parse(file);
 
         List<Matched> matched = new ArrayList<>();
@@ -137,33 +114,18 @@ public class MockExamUploadService {
         int skippedExternal = 0;
 
         for (MockExamExcelParser.StudentRow row : parsed.students()) {
-            if (EXTERNAL_SCHOOL_CODE.equals(trim(row.schoolCode()))) {
+            MockExamStudentMatcher.Match match =
+                    table.match(row.schoolCode(), row.classNo(), row.studentNo(), row.name());
+            if (match.external()) {
                 skippedExternal++;
                 continue;
             }
-            StudentEnrollment linked =
-                    byKey.get(fileKey(row.schoolCode(), row.classNo(), row.studentNo()));
-            if (linked != null) {
-                record(exam, row, linked, save, matched, unmatched);
+            if (match.enrollment() == null) {
+                unmatched.add(new Unmatched(row.rowNumber(), row.schoolCode(), row.name(),
+                        row.classNo(), row.studentNo(), match.reason()));
                 continue;
             }
-
-            List<StudentEnrollment> candidates = byName.getOrDefault(normalize(row.name()), List.of());
-            if (candidates.isEmpty()) {
-                unmatched.add(new Unmatched(row.rowNumber(), row.schoolCode(), row.name(), row.classNo(),
-                        row.studentNo(), "이 지점 재원생 중에 같은 이름이 없습니다."));
-                continue;
-            }
-            if (candidates.size() > 1) {
-                // 동명이인을 임의로 고르면 남의 성적이 들어간다 — 사람이 정해야 한다
-                unmatched.add(new Unmatched(row.rowNumber(), row.schoolCode(), row.name(), row.classNo(),
-                        row.studentNo(),
-                        "같은 이름이 %d명입니다. 학생을 지정하면 다음 회차부터 자동으로 연결됩니다."
-                                .formatted(candidates.size())));
-                continue;
-            }
-
-            record(exam, row, candidates.get(0), save, matched, unmatched);
+            record(exam, row, match.enrollment(), save, matched, unmatched);
         }
 
         if (save) {
