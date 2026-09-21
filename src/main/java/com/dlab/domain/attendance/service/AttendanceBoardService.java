@@ -150,14 +150,16 @@ public class AttendanceBoardService {
                 ? LocalTime.now(clock)
                 : LocalTime.MAX;
 
-        // ★ 담임은 맡은 반만 본다. classId는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다.
-        var classFilter = homeroomScopeService.resolveClassFilter(me, targets.get(0).getYear(), classId);
-        if (classFilter.blocksEverything()) {
+        // ★ 담임은 맡은 학생만 본다. classId는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다.
+        //   반이 아니라 학생으로 거른다 — 담임 예외 지정된 학생이 새 담임에게 보여야 한다
+        var studentFilter = homeroomScopeService.resolveStudentFilter(
+                me, targets.get(0).getYear(), classId);
+        if (studentFilter.blocksEverything()) {
             return List.of();
         }
 
         return targets.stream()
-                .filter(e -> matchesClass(classes.get(e.getId()), classFilter))
+                .filter(e -> studentFilter.matches(e.getId()))
                 .map(e -> {
                     List<AttendanceTaggingLog> logs =
                             logsByEnrollment.getOrDefault(e.getId(), List.of());
@@ -286,12 +288,6 @@ public class AttendanceBoardService {
      */
     private LocalTime timeOf(AttendanceTaggingLog log) {
         return log.getRecordedAt().atZone(TimeConfig.KST).toLocalTime();
-    }
-
-    /** 반 미배정 학생은 {@code assignment}가 없다 — 제한이 걸린 담임에게는 안 보인다. */
-    private boolean matchesClass(ClassAssignment assignment,
-                                 com.dlab.domain.user.service.HomeroomScopeService.ClassFilter filter) {
-        return filter.matches(assignment == null ? null : assignment.getClassMaster().getId());
     }
 
     private Map<Long, List<AttendanceTaggingLog>> logsOf(Long academyId, LocalDate date) {

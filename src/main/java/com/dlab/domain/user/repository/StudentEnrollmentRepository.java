@@ -11,6 +11,19 @@ import java.util.Optional;
 public interface StudentEnrollmentRepository extends JpaRepository<StudentEnrollment, Long> {
 
     /**
+     * 이 선생님에게 담임 예외로 지정된 학생(등록 건). 담임 조회 범위가 쓴다.
+     *
+     * <p>반으로만 범위를 잡으면 예외 학생이 새 담임에게 안 보이고 원래 담임에게 계속 보인다.
+     */
+    @Query("""
+            SELECT e.id FROM StudentEnrollment e
+            WHERE e.homeroomOverride.id = :teacherId
+              AND e.year = :year
+              AND e.deleted = false
+            """)
+    List<Long> findIdsByHomeroomOverride(Long teacherId, short year);
+
+    /**
      * 그 해 그 지점의 등록 건. 엑셀 일괄 업로드가 "이미 있는 학생인가"를 판정할 때 쓴다.
      *
      * <p>{@code is_current}로 거르지 않는다 — 같은 연도·지점에는 등록 건이 하나뿐이고,

@@ -3,11 +3,14 @@ package com.dlab.domain.user.service;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
 import com.dlab.domain.user.entity.Account;
+import com.dlab.domain.user.entity.ClassAssignment;
 import com.dlab.domain.user.entity.ClassMaster;
 import com.dlab.domain.user.entity.Teacher;
 import com.dlab.domain.user.repository.AccountRepository;
 import com.dlab.domain.user.repository.ClassAssignmentRepository;
 import com.dlab.domain.user.repository.ClassMasterRepository;
+import com.dlab.domain.user.repository.StudentEnrollmentRepository;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -39,6 +42,12 @@ import org.springframework.transaction.annotation.Transactional;
  * 출결·상벌점 행은 반이 아니라 <b>학생</b>에 붙는다. 반 미배정 학생은 {@code classId}가 없어
  * 반으로 거르면 조용히 빠지는데, 담임 입장에서는 원래 안 보여야 하는 학생이라 그게 맞다.
  * 대신 판정을 한 곳에 모아 두려고 {@link #enrollmentIdsOf}로 학생 집합까지 같이 낸다.
+ *
+ * <h2>★ 담임 예외 지정이 반보다 앞선다 (2026-09-21)</h2>
+ * 같은 반의 일부 학생만 다른 선생님이 맡을 수 있다({@code HomeroomResolver}). 그 학생은
+ * <b>새 담임에게 보이고 원래 반 담임에게는 안 보인다</b> — 승인 이양·상담 담당이 이미
+ * 새 담임으로 가는데 목록만 반을 따르면, 승인 요청은 오는데 출결은 못 보는 담임이 생긴다.
+ * 그래서 목록 필터는 반이 아니라 {@link StudentFilter}(학생 단위)로 건다.
  */
 @Service
 @RequiredArgsConstructor
@@ -47,6 +56,7 @@ public class HomeroomScopeService {
     private final AccountRepository accountRepository;
     private final ClassMasterRepository classMasterRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final StudentEnrollmentRepository enrollmentRepository;
 
     /**
      * 이 계정이 볼 수 있는 반. 담임이 아니면 {@code empty()}(제한 없음)다.
@@ -69,64 +79,85 @@ public class HomeroomScopeService {
     /**
      * 이 계정이 볼 수 있는 학생(등록 건). 담임이 아니면 {@code empty()}(제한 없음)다.
      *
-     * <p>반 미배정 학생은 어느 담임에게도 안 잡힌다 — 담임이 없는 학생이라 맞는 동작이다.
+     * <p><b>맡은 반 학생 − 다른 선생님에게 예외 지정된 학생 + 나에게 예외 지정된 학생</b>이다.
+     * 반 미배정 학생은 예외 지정이 없는 한 어느 담임에게도 안 잡힌다.
      */
     @Transactional(readOnly = true)
     public Optional<Set<Long>> enrollmentIdsOf(AuthPrincipal me, short year) {
-        return classIdsOf(me, year).map(classIds -> classIds.stream()
+        if (!isHomeroomOnly(me)) {
+            return Optional.empty();
+        }
+        Optional<Long> teacherId = teacherIdOf(me);
+        if (teacherId.isEmpty()) {
+            return Optional.of(Set.of());
+        }
+        Long mine = teacherId.get();
+
+        Set<Long> result = new HashSet<>();
+        classIdsOf(me, year).orElseGet(Set::of).stream()
                 .flatMap(classId -> classAssignmentRepository.findActiveByClassId(classId).stream())
-                .map(a -> a.getEnrollment().getId())
-                .collect(Collectors.toSet()));
+                .map(ClassAssignment::getEnrollment)
+                .filter(e -> e.getHomeroomOverride() == null
+                        || mine.equals(e.getHomeroomOverride().getId()))
+                .forEach(e -> result.add(e.getId()));
+        result.addAll(enrollmentRepository.findIdsByHomeroomOverride(mine, year));
+        return Optional.of(result);
     }
 
     /**
-     * 실제로 적용할 반 필터. 담임이면 맡은 반으로 좁혀지고, 남의 반 번호를 직접 넣어도 통하지 않는다.
+     * 목록에 실제로 적용할 학생 필터. 담임이면 맡은 학생으로 좁혀지고, 화면이 고른 반은
+     * <b>그 안에서</b> 한 번 더 좁힌다 — 남의 반 번호를 넣어도 내 학생 밖으로 넓어지지 않는다.
      *
-     * <p>★ <b>반환값의 {@code empty()}와 빈 집합을 반드시 구분해서 받아야 한다.</b>
-     * 둘을 같게 다루면 <b>정반대</b>가 된다 — 맡은 반이 없는 담임과 남의 반을 찍은 담임에게
-     * 지점 전체가 열린다. {@link ClassFilter#matches(Long)}를 쓰면 이 실수를 할 수 없다.
+     * <p>남의 반을 지정하면 빈 결과다(그 반에 나에게 예외 지정된 학생이 있으면 그 학생만).
+     * 403으로 막으면 "그 반이 존재한다"는 사실이 새어나간다.
+     *
+     * <p>★ 반환값의 "제한 없음"과 "볼 학생 없음"을 섞지 말 것 —
+     * {@link StudentFilter#matches(Long)}를 쓰면 이 실수를 할 수 없다.
      */
     @Transactional(readOnly = true)
-    public ClassFilter resolveClassFilter(AuthPrincipal me, short year, Long requestedClassId) {
-        Optional<Set<Long>> allowed = classIdsOf(me, year);
+    public StudentFilter resolveStudentFilter(AuthPrincipal me, short year, Long requestedClassId) {
+        Optional<Set<Long>> allowed = enrollmentIdsOf(me, year);
+        Set<Long> inClass = requestedClassId == null ? null
+                : classAssignmentRepository.findActiveByClassId(requestedClassId).stream()
+                        .map(a -> a.getEnrollment().getId())
+                        .collect(Collectors.toSet());
+
         if (allowed.isEmpty()) {
-            // 담임이 아니다 — 화면이 고른 반만 반영한다
-            return requestedClassId == null ? ClassFilter.unrestricted()
-                    : ClassFilter.only(Set.of(requestedClassId));
+            return inClass == null ? StudentFilter.unrestricted() : StudentFilter.only(inClass);
         }
-        Set<Long> mine = allowed.get();
-        if (requestedClassId == null) {
-            return ClassFilter.only(mine);
+        if (inClass == null) {
+            return StudentFilter.only(allowed.get());
         }
-        // 남의 반을 지정하면 빈 결과다 — 403으로 막으면 "그 반이 존재한다"는 사실이 새어나간다
-        return ClassFilter.only(mine.contains(requestedClassId) ? Set.of(requestedClassId) : Set.of());
+        Set<Long> both = new HashSet<>(allowed.get());
+        both.retainAll(inClass);
+        return StudentFilter.only(both);
     }
 
     /**
-     * 반 필터. "제한 없음"과 "볼 수 있는 반이 없음"을 타입으로 갈라 둔다 —
+     * 학생 필터. "제한 없음"과 "볼 수 있는 학생이 없음"을 타입으로 갈라 둔다 —
      * {@code Set}만 돌려주면 빈 집합이 두 뜻을 겸해 권한이 거꾸로 열린다.
      */
-    public record ClassFilter(boolean restricted, Set<Long> classIds) {
+    public record StudentFilter(boolean restricted, Set<Long> enrollmentIds) {
 
-        public static ClassFilter unrestricted() {
-            return new ClassFilter(false, Set.of());
+        public static StudentFilter unrestricted() {
+            return new StudentFilter(false, Set.of());
         }
 
-        public static ClassFilter only(Set<Long> classIds) {
-            return new ClassFilter(true, Set.copyOf(classIds));
+        public static StudentFilter only(Set<Long> enrollmentIds) {
+            return new StudentFilter(true, Set.copyOf(enrollmentIds));
         }
 
-        /** 이 반이 보이는가. 제한이 없으면 {@code classId}가 {@code null}이어도 통과다. */
-        public boolean matches(Long classId) {
+        /** 이 학생이 보이는가. */
+        public boolean matches(Long enrollmentId) {
             if (!restricted) {
                 return true;
             }
-            return classId != null && classIds.contains(classId);
+            return enrollmentId != null && enrollmentIds.contains(enrollmentId);
         }
 
-        /** 볼 수 있는 반이 하나도 없는가. 이때는 조회 자체를 건너뛸 수 있다. */
+        /** 볼 수 있는 학생이 하나도 없는가. 이때는 조회 자체를 건너뛸 수 있다. */
         public boolean blocksEverything() {
-            return restricted && classIds.isEmpty();
+            return restricted && enrollmentIds.isEmpty();
         }
     }
 
