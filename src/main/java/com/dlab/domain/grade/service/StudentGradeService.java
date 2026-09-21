@@ -105,6 +105,10 @@ public class StudentGradeService {
                 .map(in -> subjects.get(in.examSubjectId()).getExamMaster().getId())
                 .distinct()
                 .forEach(submission::clearScoresOf);
+        // ★ 반드시 여기서 flush 한다. Hibernate 는 INSERT 를 UPDATE 보다 먼저 내보내서,
+        //   지운 표시(soft delete)가 반영되기 전에 새 점수가 들어가 uq_student_exam_score
+        //   (부분 유니크)에 걸린다 — 같은 회차를 다시 내면 커밋 시점에 실패했다
+        submissionRepository.flush();
 
         for (ScoreInput input : inputs) {
             if (!input.hasValue()) {
@@ -149,6 +153,9 @@ public class StudentGradeService {
 
         StudentGradeSubmission submission = mine(enrollment);
         submission.clearScoresOf(exam.getId());
+        // ★ 지운 표시를 먼저 반영한다 — 위 saveExamScores 와 같은 이유. 같은 회차를 다시
+        //   올리면 부분 유니크에 걸린다
+        submissionRepository.flush();
         for (ScoreInput input : inputs) {
             ExamSubject subject = subjects.get(input.examSubjectId());
             if (subject == null || !input.hasValue()) {

@@ -308,6 +308,62 @@ class MockExamUploadTest {
         }
     }
 
+    @Test
+    @DisplayName("★ 지망대학 진단이 저장된다 — 연구소 판정 그대로, 기준점수까지 남은 점수가 나온다")
+    void savesUniversityChoices() {
+        uploadService.apply(admin, bundang.getId(), june.getId(), new ByteArrayInputStream(sampleWithChoice()));
+        em.flush();
+
+        var choices = em.createQuery("""
+                SELECT c FROM ExamUniversityChoice c WHERE c.deleted = false ORDER BY c.choiceRank
+                """, com.dlab.domain.grade.entity.ExamUniversityChoice.class).getResultList();
+
+        assertThat(choices).hasSize(2);
+        assertThat(choices.get(0).getDiagnosis()).isEqualTo("위험");
+        assertThat(choices.get(0).getApplicantRank()).isEqualTo(11);
+        assertThat(choices.get(0).gapToCutoff()).isEqualByComparingTo("32");
+    }
+
+    @Test
+    @DisplayName("같은 회차를 다시 올리면 지망대학도 교체된다 — 두 벌이 쌓이지 않는다")
+    void reuploadReplacesChoices() {
+        uploadService.apply(admin, bundang.getId(), june.getId(), new ByteArrayInputStream(sampleWithChoice()));
+        em.flush();
+        uploadService.apply(admin, bundang.getId(), june.getId(), new ByteArrayInputStream(sampleWithChoice()));
+        em.flush();
+
+        Long active = em.createQuery("""
+                SELECT COUNT(c) FROM ExamUniversityChoice c WHERE c.deleted = false
+                """, Long.class).getSingleResult();
+        assertThat(active).isEqualTo(2);
+    }
+
+    /** 국어 점수 + 지망대학 1·2지망이 있는 축소본. */
+    private byte[] sampleWithChoice() {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("성적");
+            write(sheet.createRow(0), List.of("01. 학생별 성적"));
+            write(sheet.createRow(1), List.of("학교코드", "학교명", "반", "번호", "이름",
+                    "국어", "", "",
+                    "지망대학 (1지망 선택)", "", "", "", "", "", "", "", "",
+                    "지망대학 (2지망 선택)", ""));
+            write(sheet.createRow(2), List.of("학교", "학교명", "반", "번호", "이름",
+                    "선택과목", "표준점수", "등급",
+                    "대학명", "학과(부)명", "모집정원", "지원자수", "지원자 중 석차_x000D_",
+                    "적용된 본인의 수능영역", "본인수능 예상점수", "기준점수", "가능성진단",
+                    "대학명", "학과(부)명"));
+            write(sheet.createRow(3), List.of("99700", "디랩 분당", "1", "1003", "전승은",
+                    "언어와 매체", "125", "2",
+                    "가나대", "국어국문", "5", "22", "11", "국수영사", "479", "511", "위험",
+                    "다라대", "철학"));
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     /** 실물과 같은 2단 헤더 구조의 축소본. */
     private byte[] sample() {
         try (XSSFWorkbook workbook = new XSSFWorkbook();

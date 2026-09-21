@@ -27,6 +27,48 @@ class MockExamExcelParserTest {
     private final MockExamExcelParser parser = new MockExamExcelParser(new TwoRowHeaderReader());
 
     @Test
+    @DisplayName("★ 지망대학 1·2지망을 읽는다 — 헤더에 엑셀 줄바꿈(_x000D_)이 글자로 박혀 있다")
+    void readsUniversityChoices() {
+        try (XSSFWorkbook workbook = new XSSFWorkbook();
+             ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("성적");
+            write(sheet.createRow(0), List.of("01. 학생별 성적"));
+            write(sheet.createRow(1), List.of("학교코드", "학교명", "반", "번호", "이름",
+                    "지망대학 (1지망 선택)", "", "", "", "", "", "", "", "",
+                    "지망대학 (2지망 선택)", ""));
+            write(sheet.createRow(2), List.of("학교", "학교명", "반", "번호", "이름",
+                    "대학명", "학과(부)명", "모집정원", "지원자수", "지원자 중 석차_x000D_",
+                    "적용된 본인의_x000D_\n 수능영역", "본인수능\n예상점수", "기준점수", "가능성진단",
+                    "대학명", "학과(부)명"));
+            write(sheet.createRow(3), List.of("99700", "디랩 분당", "1", "1002", "홍길동",
+                    "가나대", "국어국문", "5", "22", "11", "국수영사", "479", "511", "위험",
+                    "다라대", "철학"));
+            workbook.write(out);
+
+            var row = parser.parse(new ByteArrayInputStream(out.toByteArray())).students().get(0);
+
+            assertThat(row.choices()).hasSize(2);
+            var first = row.choices().get(0);
+            assertThat(first.rank()).isEqualTo(1);
+            assertThat(first.applicantRank()).isEqualTo("11");
+            assertThat(first.expectedScore()).isEqualTo("479");
+            assertThat(first.cutoffScore()).isEqualTo("511");
+            assertThat(first.diagnosis()).isEqualTo("위험");
+            assertThat(row.choices().get(1).universityName()).isEqualTo("다라대");
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    @Test
+    @DisplayName("지망대학이 비어 있으면 담지 않는다 — 평가원 회차는 원래 전원 비어 있다")
+    void skipsEmptyUniversityChoices() {
+        var row = parser.parse(new ByteArrayInputStream(sample())).students().get(0);
+
+        assertThat(row.choices()).isEmpty();
+    }
+
+    @Test
     @DisplayName("★ 같은 항목명이 영역마다 반복돼도 어느 과목인지 구분한다")
     void readsByTwoRowKey() {
         var result = parser.parse(new ByteArrayInputStream(sample()));

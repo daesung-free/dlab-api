@@ -67,7 +67,8 @@ public class MockExamExcelParser {
                     get(row, "번호"),
                     name,
                     get(row, "응시영역"),
-                    subjects(row)));
+                    subjects(row),
+                    choices(row)));
         }
         return new Result(raw.headerKeys(), students);
     }
@@ -95,6 +96,37 @@ public class MockExamExcelParser {
             }
         }
         return scores;
+    }
+
+    /**
+     * 지망대학 1·2지망.
+     *
+     * <p>★ <b>판정은 연구소가 한 것이다.</b> 기준점수·가능성진단·지원자 중 석차를 우리가
+     * 계산하지 않고 받은 그대로 둔다 — 시안도 "연구소 표기를 그대로 보여준다" 로 정했다.
+     *
+     * <p>★ <b>평가원 회차에는 이 블록이 전원 비어 있다</b>(6월 605명 실측). 오류가 아니라
+     * 원래 없는 것이다 — 더프 회차에만 채워져 온다. 대학명이 없으면 담지 않는다.
+     */
+    private List<UniversityChoice> choices(Map<String, String> row) {
+        List<UniversityChoice> choices = new ArrayList<>();
+        String[] blocks = {"지망대학 (1지망 선택)", "지망대학 (2지망 선택)"};
+        for (int i = 0; i < blocks.length; i++) {
+            String block = blocks[i];
+            String university = value(row, block, "대학명");
+            if (university.isEmpty()) {
+                continue;
+            }
+            choices.add(new UniversityChoice(i + 1, university,
+                    value(row, block, "학과(부)명"),
+                    value(row, block, "모집정원"),
+                    value(row, block, "지원자수"),
+                    value(row, block, "지원자 중 석차"),
+                    value(row, block, "적용된 본인의 수능영역"),
+                    value(row, block, "본인수능 예상점수"),
+                    value(row, block, "기준점수"),
+                    value(row, block, "가능성진단")));
+        }
+        return choices;
     }
 
     private String value(Map<String, String> row, String block, String label) {
@@ -150,7 +182,21 @@ public class MockExamExcelParser {
      */
     public record StudentRow(int rowNumber, String schoolCode, String schoolName,
                              String classNo, String studentNo, String name,
-                             String examArea, Map<String, SubjectScore> subjects) {
+                             String examArea, Map<String, SubjectScore> subjects,
+                             List<UniversityChoice> choices) {
+    }
+
+    /**
+     * 지망대학 한 줄. 전부 문자열이다 — 기준점수가 대학마다 소수점이 붙기도 하고
+     * 비기도 해서 여기서 숫자로 강제하면 그때마다 파싱이 깨진다. 변환은 저장하는 쪽이 한다.
+     *
+     * @param rank      1지망 / 2지망
+     * @param diagnosis 연구소 표기 그대로(위험·불안·소신·가능·안정)
+     */
+    public record UniversityChoice(int rank, String universityName, String departmentName,
+                                   String quota, String applicantCount, String applicantRank,
+                                   String appliedAreas, String expectedScore,
+                                   String cutoffScore, String diagnosis) {
     }
 
     /**
