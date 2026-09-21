@@ -53,8 +53,11 @@ public class ExamFormAdminService {
     public ExamMaster create(AuthPrincipal me, Command command) {
         requireScope(me, command.academyId());
 
+        com.dlab.domain.grade.entity.ExamPurpose purpose = command.purposeOrDefault();
+        requirePurposeRules(purpose, command.examCode(), command.examDate());
+
         examMasterRepository.findOne(command.year(), command.gradeType(), command.examCode(),
-                command.academyId()).ifPresent(e -> {
+                purpose, command.examDate(), command.academyId()).ifPresent(e -> {
             throw new BusinessException(ErrorCode.EXAM_MASTER_DUPLICATED);
         });
 
@@ -62,8 +65,12 @@ public class ExamFormAdminService {
                 : academyRepository.findById(command.academyId())
                         .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
 
-        ExamMaster exam = new ExamMaster(academy, command.year(), command.gradeType(),
-                command.examCode(), command.examName(), (short) command.sortOrder());
+        ExamMaster exam = purpose == com.dlab.domain.grade.entity.ExamPurpose.ACADEMY
+                ? ExamMaster.academyExam(academy, command.year(), command.gradeType(),
+                        command.examCode(), command.examName(), command.examDate(),
+                        command.sortOrder())
+                : new ExamMaster(academy, command.year(), command.gradeType(),
+                        command.examCode(), command.examName(), (short) command.sortOrder());
 
         if (command.subjects().isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "과목이 없는 시험은 만들 수 없습니다.");
@@ -108,8 +115,39 @@ public class ExamFormAdminService {
         }
     }
 
+    /**
+     * 용도별 규칙.
+     *
+     * <ul>
+     *   <li><b>디랩 시험은 시행일이 필수다</b> — 월례고사가 코드만으로는 구분되지 않는다</li>
+     *   <li><b>월례고사(MONTHLY)는 디랩 시험만 된다</b> — 입학 전 성적에는 더프가 없다</li>
+     * </ul>
+     */
+    private void requirePurposeRules(com.dlab.domain.grade.entity.ExamPurpose purpose,
+                                     ExamCode examCode, java.time.LocalDate examDate) {
+        boolean academy = purpose == com.dlab.domain.grade.entity.ExamPurpose.ACADEMY;
+        if (academy && examDate == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "디랩에서 본 시험은 시행일이 필요합니다.");
+        }
+        if (!academy && examCode == ExamCode.MONTHLY) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "월례고사는 디랩에서 본 시험으로만 등록합니다.");
+        }
+    }
+
+    /**
+     * @param purpose  비우면 입학 전 성적 양식이다(기존 동작)
+     * @param examDate 디랩 시험은 필수
+     */
     public record Command(Long academyId, short year, GradeType gradeType, ExamCode examCode,
-                          String examName, int sortOrder, List<SubjectInput> subjects) {
+                          String examName, int sortOrder, List<SubjectInput> subjects,
+                          com.dlab.domain.grade.entity.ExamPurpose purpose,
+                          java.time.LocalDate examDate) {
+
+        public com.dlab.domain.grade.entity.ExamPurpose purposeOrDefault() {
+            return purpose == null ? com.dlab.domain.grade.entity.ExamPurpose.ADMISSION : purpose;
+        }
     }
 
     public record SubjectInput(String subjectCode, String subjectName, int sortOrder,

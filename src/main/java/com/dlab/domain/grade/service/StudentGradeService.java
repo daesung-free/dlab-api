@@ -2,6 +2,7 @@ package com.dlab.domain.grade.service;
 
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
+import com.dlab.domain.grade.entity.ExamMaster;
 import com.dlab.domain.grade.entity.ExamSubject;
 import com.dlab.domain.grade.entity.StudentExamScore;
 import com.dlab.domain.grade.entity.StudentGradeSubmission;
@@ -121,6 +122,44 @@ public class StudentGradeService {
         submission.markSubmitted(Instant.now(clock));
         log.info("성적 제출: enrollmentId={}, 과목수={}", enrollment.getId(), inputs.size());
         return submission;
+    }
+
+    /**
+     * 디랩에서 본 시험 성적 반영 — 연구소 파일 업로드 전용.
+     *
+     * <p>★ <b>{@link #saveExamScores} 와 경로를 나눈 이유가 둘이다.</b>
+     * <ul>
+     *   <li>저쪽은 <b>학생의 입학 양식</b>으로 과목을 검증한다. 디랩 시험 과목은 그 양식에
+     *       없어서 전부 거절된다</li>
+     *   <li>저쪽은 입학 성적의 <b>"제출 완료"·"모른다" 상태를 바꾼다</b>. 연구소 성적이
+     *       들어왔다고 학생이 입학 성적을 낸 것으로 바뀌면 안 된다</li>
+     * </ul>
+     *
+     * <p>그 회차 점수만 교체한다. 다른 회차와 입학 성적은 건드리지 않는다.
+     */
+    @Transactional
+    public void saveAcademyScores(StudentEnrollment enrollment, ExamMaster exam,
+                                  List<ScoreInput> inputs) {
+        if (!exam.isAcademyExam()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "입학 전 성적 양식에는 반영할 수 없습니다.");
+        }
+        Map<Long, ExamSubject> subjects = exam.activeSubjects().stream()
+                .collect(Collectors.toMap(ExamSubject::getId, Function.identity()));
+
+        StudentGradeSubmission submission = mine(enrollment);
+        submission.clearScoresOf(exam.getId());
+        for (ScoreInput input : inputs) {
+            ExamSubject subject = subjects.get(input.examSubjectId());
+            if (subject == null || !input.hasValue()) {
+                continue;
+            }
+            StudentExamScore score = submission.addScore(subject,
+                    input.standardScore(), input.percentile(), input.gradeLevel());
+            if (score.isBlank()) {
+                score.markDeleted();
+            }
+        }
     }
 
     /**

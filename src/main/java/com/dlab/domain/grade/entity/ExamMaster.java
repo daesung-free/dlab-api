@@ -64,6 +64,24 @@ public class ExamMaster extends BaseEntity {
     @Column(name = "sort_order", nullable = false)
     private short sortOrder;
 
+    /**
+     * 용도 — 입학 전 성적 / 디랩에서 본 시험.
+     *
+     * <p>★ <b>둘이 같은 행을 쓰면 업로드가 입학 성적을 지운다.</b> {@link ExamPurpose} 참고.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private ExamPurpose purpose = ExamPurpose.ADMISSION;
+
+    /**
+     * 시행일. <b>디랩 시험은 필수다.</b>
+     *
+     * <p>더프는 매월 치르는 월례고사라 코드({@code MONTHLY})만으로는 8월과 9월이 구분되지
+     * 않는다 — 코드를 달마다 늘리지 않고 이 값으로 가른다.
+     */
+    @Column(name = "exam_date")
+    private java.time.LocalDate examDate;
+
     @OneToMany(mappedBy = "examMaster", cascade = CascadeType.ALL, orphanRemoval = false)
     @OrderBy("sortOrder ASC, id ASC")
     private List<ExamSubject> subjects = new ArrayList<>();
@@ -78,10 +96,29 @@ public class ExamMaster extends BaseEntity {
         this.sortOrder = sortOrder;
     }
 
-    /** 전 지점 공통 회차. */
+    /** 전 지점 공통 회차 — 입학 전 성적 양식. */
     public static ExamMaster common(short year, GradeType gradeType, ExamCode examCode,
                                     String examName, int sortOrder) {
         return new ExamMaster(null, year, gradeType, examCode, examName, (short) sortOrder);
+    }
+
+    /**
+     * 디랩에서 본 시험 회차.
+     *
+     * <p>시행일을 반드시 받는다 — 월례고사가 코드만으로는 구분되지 않는다.
+     */
+    public static ExamMaster academyExam(Academy academy, short year, GradeType gradeType,
+                                         ExamCode examCode, String examName,
+                                         java.time.LocalDate examDate, int sortOrder) {
+        ExamMaster exam = new ExamMaster(academy, year, gradeType, examCode, examName,
+                (short) sortOrder);
+        exam.purpose = ExamPurpose.ACADEMY;
+        exam.examDate = examDate;
+        return exam;
+    }
+
+    public boolean isAcademyExam() {
+        return purpose == ExamPurpose.ACADEMY;
     }
 
     public ExamSubject addSubject(String subjectCode, String subjectName, int sortOrder,

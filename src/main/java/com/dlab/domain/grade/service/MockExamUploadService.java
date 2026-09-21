@@ -101,6 +101,13 @@ public class MockExamUploadService {
                 .filter(m -> !m.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXAM_FORM_NOT_FOUND,
                         "회차를 찾을 수 없습니다."));
+        // ★★ 디랩에서 본 시험 양식에만 올린다. 입학 전 성적 양식에 올리면 업로드가 그
+        //    회차 점수를 교체하므로, 학생이 가입 때 넣고 선생님이 대조까지 끝낸 입학
+        //    성적이 흔적 없이 지워진다 — 예전에는 둘이 같은 행이라 실제로 가능했다
+        if (!exam.isAcademyExam()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "입학 전 성적 양식에는 업로드할 수 없습니다. 디랩에서 본 시험 회차를 골라 주세요.");
+        }
         // ★ 회차는 전 지점 공통일 수 있다(academy 가 null). 그때는 지점을 따지지 않는다 —
         //   공통 회차에 지점 검사를 걸면 어느 지점도 쓸 수 없다.
         if (exam.getAcademy() != null && !exam.getAcademy().getId().equals(academyId)) {
@@ -177,7 +184,8 @@ public class MockExamUploadService {
             return;
         }
         if (save) {
-            gradeService.saveExamScores(enrollment, inputs);
+            // 업로드 전용 경로 — 입학 성적의 제출·"모른다" 상태를 건드리지 않는다
+            gradeService.saveAcademyScores(enrollment, exam, inputs);
         }
         matched.add(new Matched(row.rowNumber(), enrollment.getId(),
                 enrollment.getStudentNo(), row.name(), inputs.size()));
