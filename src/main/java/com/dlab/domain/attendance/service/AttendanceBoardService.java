@@ -177,8 +177,11 @@ public class AttendanceBoardService {
                             screenStatus(date, logs, confirmed.get(e.getId())),
                             excused(confirmed.get(e.getId())),
                             studyMinutes(confirmed.get(e.getId()), logs, periods, until),
-                            guardianPhones.get(e.getId()),
-                            unexcusedLate(logs, confirmed.get(e.getId())));
+                            // ★ 연락처 원본은 상위 관리자만 본다(실행가이드 3.2). 이 화면은 담임도
+                            //   매일 보는데 학부모 번호가 원본으로 나가고 있었다 — 학생 목록과 같게 가린다
+                            com.dlab.common.privacy.PersonalDataPolicy.phone(me, guardianPhones.get(e.getId())),
+                            unexcusedLate(logs, confirmed.get(e.getId())),
+                            !com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me));
                 })
                 .sorted(Comparator.comparing(AttendanceRow::studentNo,
                         Comparator.nullsLast(Comparator.naturalOrder())))
@@ -369,8 +372,11 @@ public class AttendanceBoardService {
             ScreenStatus status,
             boolean excused,
             int studyMinutes,
+            /** 학부모 연락처. 상위 관리자가 아니면 가려져 있다({@code masked}) */
             String guardianPhone,
-            boolean unexcusedLate
+            boolean unexcusedLate,
+            /** 연락처가 가려졌는지 — 화면이 "번호가 잘못 저장됐다"로 오인하지 않게 */
+            boolean masked
     ) {
 
         /** 화면 표기 {@code "N시간 MM분"}. */
@@ -402,7 +408,9 @@ public class AttendanceBoardService {
                 STATUS_LABELS.get(r.status()),
                 r.excused() ? "사유 승인" : null,
                 r.studyTimeLabel(),
-                raw ? r.guardianPhone() : com.dlab.common.privacy.Masking.phone(r.guardianPhone()),
+                // 목록에서 이미 가려져 왔으면 그대로 둔다 — 가린 값을 다시 가리면 모양이 깨진다
+                raw || com.dlab.common.privacy.Masking.isMasked(r.guardianPhone()) ? r.guardianPhone()
+                        : com.dlab.common.privacy.Masking.phone(r.guardianPhone()),
                 r.unexcusedLate() ? "무단지각" : null));
     }
 }

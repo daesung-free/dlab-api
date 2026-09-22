@@ -221,4 +221,23 @@ class TeacherHomeroomScopeTest {
         assertThat(studentNosOf(boardService.board(rookiePrincipal, null, day, null)))
                 .containsExactly("2026-0001");
     }
+
+    @Test
+    @DisplayName("★ 학부모 연락처는 담임에게 가려져 나간다 — 원본은 상위 관리자만(실행가이드 3.2)")
+    void guardianPhoneMaskedForTeacher() {
+        StudentEnrollment e = enroll("DL-P", "연락처학생", "2026-0001", myClass);
+        com.dlab.domain.user.entity.ParentGuardian mom =
+                new com.dlab.domain.user.entity.ParentGuardian("엄마", "010-5555-6666", "F");
+        em.persist(mom);
+        em.persist(new com.dlab.domain.user.entity.StudentGuardianLink(e.getStudent(), mom, (short) 1, true));
+        em.flush();
+
+        AttendanceRow forTeacher = boardService.board(teacher, null, day, null).get(0);
+        assertThat(forTeacher.guardianPhone()).isEqualTo("010-****-6666");
+        assertThat(forTeacher.masked()).isTrue();
+
+        AttendanceRow forAdmin = boardService.board(branchAdmin, null, day, null).get(0);
+        assertThat(forAdmin.guardianPhone()).isEqualTo("010-5555-6666");
+        assertThat(forAdmin.masked()).isFalse();
+    }
 }
