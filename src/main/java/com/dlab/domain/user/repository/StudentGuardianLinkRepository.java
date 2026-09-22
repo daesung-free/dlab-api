@@ -28,6 +28,20 @@ public interface StudentGuardianLinkRepository
     List<StudentGuardianLink> findByStudentId(@Param("studentId") Long studentId);
 
     /**
+     * 여러 학생의 보호자 연결을 <b>한 번에</b>. 목록 화면이 학부모 연락처를 붙일 때 쓴다.
+     *
+     * <p>승인자가 먼저, 그다음 관계 순서다 — 대표 연락처를 고를 때 이 순서로 첫 번째를 쓴다.
+     */
+    @Query("""
+            SELECT l FROM StudentGuardianLink l
+            JOIN FETCH l.guardian g
+            WHERE l.student.id IN :studentIds
+              AND g.deleted = false
+            ORDER BY l.approver DESC, l.relationOrder ASC
+            """)
+    List<StudentGuardianLink> findByStudentIds(@Param("studentIds") java.util.Collection<Long> studentIds);
+
+    /**
      * 이 학생에 <b>앱 계정을 가진 학부모</b>가 이미 연결돼 있는가.
      *
      * <p>I-12(0803) "학부모 최대 1인"이 실제로 막아야 하는 것이 이것이다 — 승인 요청을

@@ -47,6 +47,12 @@ public record StudentResponse(
         String studentNo,
         String name,
         String phone,
+        /**
+         * 학부모 대표 연락처 — 출결 현황의 {@code guardianPhone}과 같은 값이다.
+         * 보호자가 여럿이면 승인자 → 관계 순서로 첫 번째. 없으면 비어 있다.
+         * 학생 연락처와 같이 <b>권한에 따라 마스킹</b>된다({@code masked}).
+         */
+        String guardianPhone,
         String address,
         String birthDate,
         /**
@@ -92,6 +98,7 @@ public record StudentResponse(
                 e.getStudentNo(),
                 s.getName(),
                 PersonalDataPolicy.phone(me, s.getPhone()),
+                PersonalDataPolicy.phone(me, extras.guardianPhone(id)),
                 PersonalDataPolicy.address(me, s.getAddress()),
                 PersonalDataPolicy.birthDate(me, s.getBirthDate()),
                 s.getGender(),
