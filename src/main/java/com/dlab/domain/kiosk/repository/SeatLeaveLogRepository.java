@@ -32,6 +32,23 @@ public interface SeatLeaveLogRepository extends JpaRepository<SeatLeaveLog, Long
     List<SeatLeaveLog> findUnresolved(@Param("academyId") Long academyId);
 
     /**
+     * 지점의 기간 로그. 관리자 이탈 현황이 이탈·복귀를 짝지을 때 쓴다.
+     *
+     * <p>학생을 못 찾은 행도 함께 온다(LEFT JOIN) — 빠뜨리면 그 이탈이 화면에서 사라진다.
+     */
+    @Query("""
+            SELECT l FROM SeatLeaveLog l
+            LEFT JOIN FETCH l.enrollment e
+            LEFT JOIN FETCH e.student
+            WHERE l.academy.id = :academyId
+              AND l.occurredAt >= :from AND l.occurredAt < :to
+              AND l.deleted = false
+            ORDER BY l.occurredAt, l.id
+            """)
+    List<SeatLeaveLog> findByAcademyBetween(@Param("academyId") Long academyId,
+                                            @Param("from") Instant from, @Param("to") Instant to);
+
+    /**
      * 학생별 기간 로그. 미복귀 감지가 <b>확정되면</b> 여기를 쓴다.
      *
      * <p>지금은 읽는 곳이 없다 — 임계값(I-16)·벌점 트리거(I-5) 대기 중이다.
