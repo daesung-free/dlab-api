@@ -309,6 +309,29 @@ class StudentListFieldsTest {
                 .andExpect(jsonPath("$.data[0].masked").value(true));
     }
 
+    @Test
+    @DisplayName("★ 학부모 연락처가 목록에 실린다 — 보호자가 둘이면 승인자 번호, 권한 없으면 가린다")
+    void guardianPhoneOnList() throws Exception {
+        StudentEnrollment e = student("보호자학생", "2026-0061", null, null, LocalDate.of(2026, 3, 2));
+        com.dlab.domain.user.entity.ParentGuardian dad =
+                new com.dlab.domain.user.entity.ParentGuardian("아빠", "010-1111-2222", "M");
+        com.dlab.domain.user.entity.ParentGuardian mom =
+                new com.dlab.domain.user.entity.ParentGuardian("엄마", "010-5555-6666", "F");
+        em.persist(dad);
+        em.persist(mom);
+        // 관계 순서는 아빠가 먼저지만 승인자는 엄마다 — 연락을 받는 사람이 승인자라 그쪽이 대표다
+        em.persist(new com.dlab.domain.user.entity.StudentGuardianLink(e.getStudent(), dad, (short) 1, false));
+        em.persist(new com.dlab.domain.user.entity.StudentGuardianLink(e.getStudent(), mom, (short) 2, true));
+        em.flush();
+
+        mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
+                        .param("year", "2026").param("keyword", "보호자학생"))
+                .andExpect(jsonPath("$.data[0].guardianPhone").value("010-5555-6666"));
+
+        mvc.perform(get("/api/v1/admin/students/{id}", e.getId()).header("Authorization", token()))
+                .andExpect(jsonPath("$.data.guardianPhone").value("010-5555-6666"));
+    }
+
     // ── N+1 ──
 
     @Test

@@ -61,6 +61,7 @@ public class AttendanceBoardService {
     private final ClassAssignmentRepository classAssignmentRepository;
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final StudentGuardianLinkRepository guardianLinkRepository;
+    private final com.dlab.domain.user.service.StudentListEnricher studentListEnricher;
     private final PeriodMasterRepository periodMasterRepository;
     private final StudyTimeCalculator studyTimeCalculator;
     private final com.dlab.common.excel.ExcelExporter excelExporter;
@@ -324,15 +325,9 @@ public class AttendanceBoardService {
     }
 
     /** 화면 컬럼이 "학부모 연락처"다. 승인자 1인 기준으로 첫 번째만 내린다. */
+    /** 학부모 대표 연락처. 학생 목록과 <b>같은 규칙</b>(승인자 → 관계 순서)으로 고른다. */
     private Map<Long, String> guardianPhonesOf(List<StudentEnrollment> targets) {
-        Map<Long, String> result = new HashMap<>();
-        targets.forEach(e -> guardianLinkRepository
-                .findByStudentId(e.getStudent().getId()).stream()
-                .map(link -> link.getGuardian().getPhone())
-                .filter(p -> p != null && !p.isBlank())
-                .findFirst()
-                .ifPresent(p -> result.put(e.getId(), p)));
-        return result;
+        return studentListEnricher.guardianPhones(targets);
     }
 
     /** 화면(`Attendance.tsx`)이 쓰는 상태값. 우리 {@link DailyStatus}와 축이 다르다. */
