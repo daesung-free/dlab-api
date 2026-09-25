@@ -12,6 +12,7 @@ import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
+import com.dlab.support.FacilityFixtures;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -48,6 +49,9 @@ class ClassAssignmentFlowTest {
 
     @Autowired WebApplicationContext context;
     @Autowired EntityManager em;
+
+    /** 지점당 하나. {@link #assignSeat}가 여러 번 불려도 한 번만 만든다 */
+    com.dlab.domain.facility.entity.Building mainBuilding;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired ObjectMapper objectMapper;
     @Autowired ClassService classService;
@@ -116,9 +120,13 @@ class ClassAssignmentFlowTest {
 
     /** 좌석을 만들어 배정한다. */
     private void assignSeat(StudentEnrollment enrollment, String seatCd) {
-        StudyArea area = new StudyArea(academy, "A" + seq, "구역" + seq, (short) 1);
+        // ★ 관은 지점당 하나다. 학생마다 만들면 uq_building_code 에 걸린다
+        if (mainBuilding == null) {
+            mainBuilding = FacilityFixtures.mainBuilding(em, academy);
+        }
+        StudyArea area = new StudyArea(mainBuilding, "A" + seq, "A" + seq, "구역" + seq, (short) 1);
         em.persist(area);
-        SeatMaster seat = new SeatMaster(academy, area, seatCd, seatCd + "번", 0, 0);
+        SeatMaster seat = new SeatMaster(area, seatCd, seatCd, seatCd + "번", 0, 0);
         em.persist(seat);
         em.persist(new SeatAssignment(academy, seat, enrollment));
     }

@@ -32,6 +32,7 @@ public final class NotificationTemplateRequests {
     public record UpdateMapping(NotificationChannel channel, RecipientType recipientType) {
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "NotificationTemplateChangeActive")
     public record ChangeActive(@NotNull(message = "활성 여부는 필수입니다.") Boolean active) {
     }
 

@@ -42,12 +42,30 @@ public enum ErrorCode {
     // 지점 / 조직
     ACADEMY_NOT_FOUND(HttpStatus.NOT_FOUND, "지점을 찾을 수 없습니다."),
     CLASS_NOT_FOUND(HttpStatus.NOT_FOUND, "반을 찾을 수 없습니다."),
+    /** 수납이 남은 청구는 취소할 수 없다 — 받은 돈이 매출에서 사라진다. */
+    BILLING_HAS_PAYMENT(HttpStatus.BAD_REQUEST, "수납 내역이 있어 청구를 취소할 수 없습니다."),
+    /** KCP 인증서·개인키가 없다. 기동은 되지만 결제만 동작하지 않는다. */
+    PG_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "결제 연동이 설정되지 않았습니다."),
+    /** KCP 가 요청을 거절했다(한도·카드 문제 등). 통신 실패와 구분한다. */
+    PG_REQUEST_FAILED(HttpStatus.BAD_REQUEST, "결제 요청이 거절되었습니다."),
+    /** KCP 와 통신하지 못했다. 재시도로 풀릴 수 있다. */
+    PG_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "결제 서버와 통신하지 못했습니다."),
+    PG_SITE_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 사이트코드가 등록되지 않았습니다."),
+    PG_SITE_DUPLICATED(HttpStatus.CONFLICT, "같은 지점·용도·채널의 사이트코드가 이미 있습니다."),
+    /** S3 설정이 비어 있다. 기동은 되지만 파일 기능만 동작하지 않는다 — 기동 로그에 경고가 있다. */
+    FILE_STORAGE_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "파일 저장소가 설정되지 않았습니다."),
+    FILE_NOT_FOUND(HttpStatus.NOT_FOUND, "파일을 찾을 수 없습니다."),
+    FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "파일이 너무 큽니다."),
+    FILE_TYPE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "허용되지 않는 파일 형식입니다."),
     SEAT_NOT_FOUND(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."),
     SEAT_ALREADY_OCCUPIED(HttpStatus.CONFLICT, "이미 배정된 좌석입니다."),
     SEAT_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "배정된 좌석이 없습니다."),
     CLASS_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "그 반에 배정된 학생이 아닙니다."),
     STUDY_AREA_NOT_FOUND(HttpStatus.NOT_FOUND, "구역을 찾을 수 없습니다."),
-    STUDY_AREA_DUPLICATED(HttpStatus.CONFLICT, "같은 지점에 이미 있는 구역 코드입니다."),
+    BUILDING_NOT_FOUND(HttpStatus.NOT_FOUND, "관을 찾을 수 없습니다."),
+    BUILDING_DUPLICATED(HttpStatus.CONFLICT, "같은 지점에 이미 있는 관 코드입니다."),
+    BUILDING_HAS_AREAS(HttpStatus.CONFLICT, "구역이 남아 있는 관은 삭제할 수 없습니다."),
+    STUDY_AREA_DUPLICATED(HttpStatus.CONFLICT, "같은 관에 이미 있는 구역 코드입니다."),
     STUDY_AREA_HAS_SEATS(HttpStatus.CONFLICT, "좌석이 남아 있는 구역은 삭제할 수 없습니다."),
     SEAT_CD_DUPLICATED(HttpStatus.CONFLICT, "같은 지점에 이미 있는 좌석번호입니다."),
     SEAT_ASSIGN_PARTIAL_FAILED(HttpStatus.CONFLICT, "배정할 수 없는 건이 있어 전체를 취소했습니다."),

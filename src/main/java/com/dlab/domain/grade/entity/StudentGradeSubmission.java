@@ -120,10 +120,16 @@ public class StudentGradeSubmission extends BaseEntity {
 
     public StudentExamScore addScore(ExamSubject subject, Short standardScore,
                                      Short percentile, Short gradeLevel) {
+        return addScore(subject, standardScore, percentile, gradeLevel, null);
+    }
+
+    public StudentExamScore addScore(ExamSubject subject, Short standardScore,
+                                     Short percentile, Short gradeLevel, Short rawScore) {
         StudentExamScore score = new StudentExamScore(this, subject,
                 subject.accept(ExamSubject.ScoreField.STANDARD_SCORE, standardScore),
                 subject.accept(ExamSubject.ScoreField.PERCENTILE, percentile),
-                subject.accept(ExamSubject.ScoreField.GRADE_LEVEL, gradeLevel));
+                subject.accept(ExamSubject.ScoreField.GRADE_LEVEL, gradeLevel),
+                subject.accept(ExamSubject.ScoreField.RAW_SCORE, rawScore));
         scores.add(score);
         return score;
     }

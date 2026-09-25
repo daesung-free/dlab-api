@@ -21,6 +21,7 @@ import com.dlab.domain.user.entity.ParentGuardian;
 import com.dlab.domain.user.entity.Student;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.entity.StudentGuardianLink;
+import com.dlab.support.FacilityFixtures;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
@@ -92,9 +93,9 @@ class KioskQueryIntegrationTest {
         em.persist(father);
         em.persist(new StudentGuardianLink(student, father, (short) 1));
 
-        StudyArea area = new StudyArea(bundang, "A", "A구역", (short) 1);
+        StudyArea area = new StudyArea(FacilityFixtures.mainBuilding(em, bundang), "A", "A", "A구역", (short) 1);
         em.persist(area);
-        seatA1 = new SeatMaster(bundang, area, "A-01", "1번", 10, 20);
+        seatA1 = new SeatMaster(area, "A-01", "A-01", "1번", 10, 20);
         em.persist(seatA1);
         em.persist(new SeatAssignment(bundang, seatA1, minji));
 
@@ -296,7 +297,7 @@ class KioskQueryIntegrationTest {
     @DisplayName("★ 아무도 배정되지 않은 좌석만 B(공석)다")
     void unassignedSeatIsEmpty() throws Exception {
         StudyArea area = em.find(SeatMaster.class, seatA1.getId()).getStudyArea();
-        em.persist(new SeatMaster(bundang, area, "A-02", "2번", 11, 20));
+        em.persist(new SeatMaster(area, "A-02", "A-02", "2번", 11, 20));
         em.flush();
 
         call("/kiosk/getStudyAreaSeatState",

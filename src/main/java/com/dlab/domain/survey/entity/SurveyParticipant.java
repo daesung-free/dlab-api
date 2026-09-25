@@ -47,6 +47,11 @@ public class SurveyParticipant extends BaseEntity {
     @Column(name = "submitted_at", nullable = false)
     private Instant submittedAt;
 
+    /** 재제출 시각으로 갱신한다. */
+    public void resubmitted(Instant at) {
+        this.submittedAt = at;
+    }
+
     public SurveyParticipant(Survey survey, StudentEnrollment enrollment, Instant submittedAt) {
         this.survey = survey;
         this.enrollment = enrollment;

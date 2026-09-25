@@ -29,7 +29,7 @@ public final class AdminSurveyResponses {
                           Long academyId, Long classId,
                           String title, String description, boolean anonymous,
                           Instant opensAt, Instant closesAt, int questionCount,
-                          String status) {
+                          String status, boolean allowEdit) {
 
         static AdminSurveySummary from(Survey s) {
             return from(s, Instant.now());
@@ -41,7 +41,7 @@ public final class AdminSurveyResponses {
                     s.getClassMaster() != null ? s.getClassMaster().getId() : null,
                     s.getTitle(), s.getDescription(), s.isAnonymous(),
                     s.getOpensAt(), s.getClosesAt(), s.activeQuestions().size(),
-                    statusOf(s, now));
+                    statusOf(s, now), s.isAllowEdit());
         }
 
         private static String statusOf(Survey s, Instant now) {
@@ -52,6 +52,7 @@ public final class AdminSurveyResponses {
         }
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "SurveyResultResponse")
     public record Result(AdminSurveySummary survey, int responseCount, List<QuestionResult> questions) {
 
         static Result from(SurveyService.SurveyResult r) {

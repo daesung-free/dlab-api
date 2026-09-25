@@ -58,13 +58,19 @@ public class AdminBillingController {
                 .map(BillingResponse::from).toList());
     }
 
-    /** 청구 생성. <b>할인은 값으로 받는다</b> — 할인 정책이 미확정이라 산출하지 않는다. */
+    /**
+     * 청구 생성. <b>할인은 값으로 받는다</b> — 할인 정책이 미확정이라 산출하지 않는다.
+     *
+     * <p><b>같은 학생에게 같은 이름으로 또 청구하면 거부된다.</b> 정말 두 번 받는 경우에만
+     * {@code allowDuplicate}를 켠다.
+     */
     @PostMapping
     public ApiResponse<BillingResponse> create(@CurrentAccount AuthPrincipal me,
                                                @Valid @RequestBody CreateRequest request) {
         return ApiResponse.success(BillingResponse.from(billingService.create(
                 me, request.enrollmentId(), request.name(), request.billingType(),
-                request.suppliedAmount(), request.discountOrZero(), request.dueDate())));
+                request.suppliedAmount(), request.discountOrZero(), request.dueDate(),
+                request.duplicateAllowed())));
     }
 
     /** 수납 기록. 분납을 허용한다 — 완납되면 미납자 목록에서 빠진다. */
@@ -98,13 +104,21 @@ public class AdminBillingController {
         return ApiResponse.empty();
     }
 
+    @io.swagger.v3.oas.annotations.media.Schema(name = "BillingCreateRequest")
     public record CreateRequest(
             @NotNull(message = "학생은 필수입니다.") Long enrollmentId,
             @NotBlank(message = "청구명은 필수입니다.") @Size(max = 100) String name,
             @NotNull(message = "청구 유형은 필수입니다.") BillingType billingType,
             @NotNull @Positive(message = "정가는 0보다 커야 합니다.") Integer suppliedAmount,
             Integer discountAmount,
-            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDate) {
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDate,
+            /** 같은 이름으로 또 청구한다. 비우면 막는다 — 저장 두 번 누르기를 거른다 */
+            Boolean allowDuplicate) {
+
+        /** 비우면 막는다 — 대부분은 중복이 실수다. */
+        public boolean duplicateAllowed() {
+            return Boolean.TRUE.equals(allowDuplicate);
+        }
 
         /** 할인 미입력은 0으로 본다 — 대부분의 청구에 할인이 없다. */
         public int discountOrZero() {

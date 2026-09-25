@@ -7,11 +7,13 @@ import com.dlab.domain.penalty.entity.PenaltyCategory;
 import com.dlab.domain.penalty.entity.PenaltyItem;
 import com.dlab.domain.penalty.entity.PenaltyRule;
 import com.dlab.domain.penalty.entity.PenaltyTriggerType;
+import com.dlab.domain.penalty.entity.TriggerCondition;
 import com.dlab.domain.penalty.service.PenaltyMasterService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.util.Arrays;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -78,6 +80,23 @@ public class AdminPenaltyMasterController {
 
     // ── 규칙 ──────────────────────────────────────────────────
 
+    /**
+     * 트리거별로 고를 수 있는 조건값.
+     *
+     * <p><b>화면이 드롭다운을 이걸로 채운다.</b> 전에는 조건이 자유 문자열인데 코드표가
+     * 없어서, 화면이 값을 추측해 넣을 수밖에 없었다 — 틀리면 <b>영영 걸리지 않는 규칙</b>이
+     * 만들어지고 "규칙은 있는데 점수가 안 붙는다" 로만 보인다.
+     *
+     * <p>값은 엔진이 실제로 비교하는 문자열이라 <b>서버가 유일한 출처</b>다. 화면에 목록을
+     * 박아두면 서버가 코드를 바꿀 때 조용히 어긋난다.
+     */
+    @GetMapping("/penalty-rules/conditions")
+    public ApiResponse<List<ConditionGroup>> ruleConditions() {
+        return ApiResponse.success(Arrays.stream(PenaltyTriggerType.values())
+                .map(t -> new ConditionGroup(t, TriggerCondition.optionsOf(t)))
+                .toList());
+    }
+
     /** 꺼진 규칙까지 전부. 화면이 on/off 토글을 그린다. */
     @GetMapping("/penalty-rules")
     public ApiResponse<List<PenaltyRuleRow>> rules(@CurrentAccount AuthPrincipal me,
@@ -133,7 +152,9 @@ public class AdminPenaltyMasterController {
     }
 
     /**
-     * @param triggerCondition 출결이면 {@code att_gn}(A=지각 등), 루틴이면 결과 상태,
+     * @param triggerCondition 트리거 조건값. <b>{@code GET /penalty-rules/conditions} 가 주는
+     *                         값만 받는다</b> — 목록에 없으면 400 이고, 메시지에 허용값이 붙는다.
+     *                         출결이면 태깅 코드(A=지각 등)와 {@code ABSENT}, 루틴이면 결과 상태,
      *                         정기일정이면 {@code NOT_RECOGNIZED}
      */
     public record PenaltyRuleRequest(Long academyId,
@@ -143,15 +164,30 @@ public class AdminPenaltyMasterController {
                               @NotNull Long penaltyItemId) {
     }
 
-    /** @param point 저장된 부호 그대로다 — 벌점은 음수 */
+    /**
+     * @param point 벌점은 음수, 상점은 양수다.
+     *              <p>★ <b>{@code GET /penalties/items} 와 같은 부호로 내린다.</b> 전에는
+     *              이쪽만 저장값을 그대로 줘서, 부호가 잘못 저장된 옛 행에서 두 경로가
+     *              다른 값을 보였다 — 화면이 어느 쪽을 믿어야 할지 알 수 없다.
+     */
     public record ItemRow(Long id, String itemName, PenaltyCategory category, int point) {
 
         static ItemRow from(PenaltyItem i) {
-            return new ItemRow(i.getId(), i.getItemName(), i.getCategory(), i.getPointValue());
+            int magnitude = Math.abs(i.getPointValue());
+            return new ItemRow(i.getId(), i.getItemName(), i.getCategory(),
+                    i.getCategory() == PenaltyCategory.DEMERIT ? -magnitude : magnitude);
         }
     }
 
     /** @param active {@code false}면 만들어만 두고 안 도는 규칙이다 */
+    /**
+     * @param triggerType 트리거 종류
+     * @param conditions  그 트리거에 넣을 수 있는 값. {@code value} 를 그대로 저장한다
+     */
+    public record ConditionGroup(PenaltyTriggerType triggerType,
+                                 List<TriggerCondition.Option> conditions) {
+    }
+
     public record PenaltyRuleRow(Long id, PenaltyTriggerType triggerType, String triggerCondition,
                           Long penaltyItemId, String itemName, int point, boolean active) {
 

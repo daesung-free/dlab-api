@@ -6,6 +6,7 @@ import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.master.entity.LockerMaster;
 import com.dlab.domain.master.entity.Scholarship;
 import com.dlab.domain.user.entity.*;
+import com.dlab.support.FacilityFixtures;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -88,7 +89,7 @@ class StudentAssignmentFilterTest {
         classMaster = new ClassMaster(academy, (short) 2026, "가온반", ClassType.FIXED, homeroom);
         em.persist(classMaster);
 
-        studyArea = new StudyArea(academy, "A", "A구역", (short) 1);
+        studyArea = new StudyArea(FacilityFixtures.mainBuilding(em, academy), "A", "A", "A구역", (short) 1);
         em.persist(studyArea);
         em.flush();
     }
@@ -118,7 +119,7 @@ class StudentAssignmentFilterTest {
     }
 
     private void assignSeat(StudentEnrollment e, String seatCd) {
-        SeatMaster seat = new SeatMaster(academy, studyArea, seatCd, seatCd + "번", 1, 1);
+        SeatMaster seat = new SeatMaster(studyArea, seatCd, seatCd, seatCd + "번", 1, 1);
         em.persist(seat);
         em.persist(new SeatAssignment(academy, seat, e));
     }
@@ -216,7 +217,7 @@ class StudentAssignmentFilterTest {
     @DisplayName("좌석을 반납(released_at)한 학생은 좌석 미배정으로 걸린다")
     void releasedSeatCountsAsUnassigned() throws Exception {
         StudentEnrollment e = student("좌석반납학생", "2026-0041");
-        SeatMaster seat = new SeatMaster(academy, studyArea, "A-99", "99번", 1, 1);
+        SeatMaster seat = new SeatMaster(studyArea, "A-99", "A-99", "99번", 1, 1);
         em.persist(seat);
         SeatAssignment a = new SeatAssignment(academy, seat, e);
         a.release(Instant.now());

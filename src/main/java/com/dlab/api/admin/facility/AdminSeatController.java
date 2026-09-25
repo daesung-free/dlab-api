@@ -1,9 +1,11 @@
 package com.dlab.api.admin.facility;
 
 import com.dlab.common.response.ApiResponse;
+import com.dlab.domain.facility.entity.AreaType;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.facility.entity.SeatPresence;
+import com.dlab.domain.facility.service.BuildingAdminService;
 import com.dlab.domain.facility.service.SeatAssignmentService;
 import com.dlab.domain.facility.service.SeatLayoutService;
 import com.dlab.domain.facility.service.SeatMasterAdminService;
@@ -33,6 +35,58 @@ public class AdminSeatController {
     private final SeatLayoutService seatLayoutService;
     private final StudyAreaAdminService studyAreaAdminService;
     private final SeatMasterAdminService seatMasterAdminService;
+    private final BuildingAdminService buildingAdminService;
+
+    // ── 관(본관/별관) ────────────────────────────────────────────────────────
+    //
+    // ★ 구역 위에 층이 하나 더 있는 이유는 동탄2관 때문이다. 본관과 구역명·좌석번호가
+    //   같아서 구역만으로는 구분되지 않는다. 상세는 Building 참고.
+
+    /** 관 목록. 구역을 만들려면 먼저 관을 골라야 한다. */
+    @GetMapping("/buildings")
+    public ApiResponse<List<BuildingResponse>> buildings(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId) {
+        return ApiResponse.success(buildingAdminService.list(me, academyId).stream()
+                .map(BuildingResponse::from).toList());
+    }
+
+    /**
+     * 관 등록.
+     *
+     * <p><b>{@code seatCdOffset} 은 생략하는 것을 권한다.</b> {@code annex=true} 면 서버가
+     * 겹치지 않는 번호대를 채번한다 — 화면이 계산해서 보내면 두 사람이 동시에 등록할 때
+     * 같은 값이 나온다.
+     *
+     * <p>등록 후에는 바꿀 수 없다 — 좌석의 키오스크 번호에 이미 반영돼 저장된다.
+     * 본관은 지점당 하나, 번호대가 겹치는 별관도 만들 수 없다.
+     */
+    @PostMapping("/buildings")
+    public ApiResponse<BuildingResponse> createBuilding(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody BuildingRequests.BuildingCreate request) {
+        return ApiResponse.success(BuildingResponse.from(buildingAdminService.create(
+                me, request.academyId(), request.code(), request.name(),
+                request.sortOrderOrDefault(), request.seatCdOffset(), request.isAnnex())));
+    }
+
+    /** 관 수정 — 이름·정렬·노출만. 코드·오프셋은 대상이 아니다. */
+    @PatchMapping("/buildings/{buildingId}")
+    public ApiResponse<BuildingResponse> updateBuilding(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long buildingId,
+            @Valid @RequestBody BuildingRequests.BuildingUpdate request) {
+        return ApiResponse.success(BuildingResponse.from(buildingAdminService.update(
+                me, buildingId, request.name(), request.sortOrder(), request.active())));
+    }
+
+    /** 관 삭제(soft). 구역이 남아 있으면 거부한다. */
+    @DeleteMapping("/buildings/{buildingId}")
+    public ApiResponse<Void> deleteBuilding(@CurrentAccount AuthPrincipal me,
+                                            @PathVariable Long buildingId) {
+        buildingAdminService.delete(me, buildingId);
+        return ApiResponse.empty();
+    }
 
     /** 구역별 현재 배정 현황. 좌석배치도에 뿌린다. */
     @GetMapping
@@ -50,8 +104,11 @@ public class AdminSeatController {
     public ApiResponse<List<SeatLayoutService.AreaSummary>> areas(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
-            @RequestParam(defaultValue = "false") boolean includeInactive) {
-        return ApiResponse.success(seatLayoutService.areas(me, academyId, includeInactive));
+            @RequestParam(defaultValue = "false") boolean includeInactive,
+            @RequestParam(required = false) Long buildingId,
+            @RequestParam(required = false) AreaType areaType) {
+        return ApiResponse.success(
+                seatLayoutService.areas(me, academyId, includeInactive, buildingId, areaType));
     }
 
     /**
@@ -59,13 +116,18 @@ public class AdminSeatController {
      *
      * <p><b>{@code areaCd}는 등록 후 바꿀 수 없다</b> — 키오스크가 이 코드로 좌석을 조회한다
      * (3.7·3.8). 지운 구역과 코드가 겹치면 그 구역이 되살아난다.
+     *
+     * <p><b>종류를 함께 받는다.</b> 독서실은 {@code STUDY}(기본), 반 교실은
+     * {@code CLASSROOM} + {@code classMasterId}다. 반 좌석표를 만들 때는 이 호출에 이어
+     * {@code POST /masters/grid} 로 좌석을 한 번에 만든다 — 한 칸씩 찍게 하지 말 것.
      */
     @PostMapping("/areas")
     public ApiResponse<StudyAreaResponse> createArea(
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody SeatRequests.StudyAreaCreate request) {
-        var area = studyAreaAdminService.create(me, request.academyId(), request.areaCd(),
-                request.areaNm(), request.sortOrderOrDefault());
+        var area = studyAreaAdminService.create(me, request.academyId(), request.buildingId(),
+                request.areaCd(), request.areaNm(), request.sortOrderOrDefault(),
+                request.areaTypeOrDefault(), request.classMasterId());
         return ApiResponse.success(StudyAreaResponse.from(area, 0));
     }
 
@@ -124,7 +186,7 @@ public class AdminSeatController {
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody SeatRequests.SeatGridCreate request) {
         var spec = new SeatMasterAdminService.SeatGridSpec(
-                request.studyAreaId(), request.rows(), request.columns(), request.seatCdPrefix(),
+                request.studyAreaId(), request.rows(), request.columns(), request.seatCdPrefixOrEmpty(),
                 request.startNumberOrDefault(), request.numberPaddingOrDefault(),
                 request.startXOrDefault(), request.startYOrDefault(),
                 request.columnMajorOrDefault(),
@@ -193,15 +255,24 @@ public class AdminSeatController {
         return ApiResponse.empty();
     }
 
-    /** @param assignmentState 배정 축. {@code presence}(재실 축)와 별개다 */
+    /**
+     * @param assignmentState 배정 축. {@code presence}(재실 축)와 별개다
+     * @param onSeatLeave     지금 자리를 비웠는지(좌석이탈). <b>{@code presence}와 또 다른 축</b>이다 —
+     *                        이탈해도 출결로는 재실이라 화면이 이 값으로 덮어 표시한다
+     * @param seatLeftAt      이탈 시작 시각. 이탈 중이 아니면 비어 있다
+     */
     public record SeatCellResponse(
             Long seatId,
             String seatCd,
+            /** 단말이 아는 번호. 별관이면 {@code seatCd}와 다르다 — 대조용이다 */
+            String kioskSeatCd,
             String seatNm,
             int xPos,
             int yPos,
             String assignmentState,
             SeatPresence presence,
+            boolean onSeatLeave,
+            java.time.Instant seatLeftAt,
             Long enrollmentId,
             String studentNo,
             String studentName,
@@ -210,8 +281,9 @@ public class AdminSeatController {
             boolean masked) {
 
         public static SeatCellResponse from(SeatLayoutService.SeatCell c) {
-            return new SeatCellResponse(c.seatId(), c.seatCd(), c.seatNm(),
+            return new SeatCellResponse(c.seatId(), c.seatCd(), c.kioskSeatCd(), c.seatNm(),
                     c.xPos(), c.yPos(), c.assignmentState(), c.presence(),
+                    c.onSeatLeave(), c.seatLeftAt(),
                     c.enrollmentId(), c.studentNo(), c.studentName(),
                     c.classId(), c.className(), c.masked());
         }

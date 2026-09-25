@@ -1,5 +1,6 @@
 package com.dlab.api.admin.facility;
 
+import com.dlab.domain.facility.entity.AreaType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -41,18 +42,34 @@ public final class SeatRequests {
     /**
      * 구역 등록.
      *
-     * @param areaCd 키오스크가 이 코드로 좌석을 조회한다. <b>등록 후 변경 불가</b>
+     * @param areaCd        키오스크가 이 코드로 좌석을 조회한다. <b>등록 후 변경 불가</b>
+     * @param areaType      {@code STUDY}(독서실, 기본) / {@code CLASSROOM}(반 교실).
+     *                      키오스크에는 {@code STUDY}만 내려간다
+     * @param classMasterId 반. {@code CLASSROOM}일 때 필수이고 {@code STUDY}면 보내지 않는다.
+     *                      반 하나에 좌석표는 하나다
      */
     public record StudyAreaCreate(
             Long academyId,
+            /**
+             * 어느 관에 만들 것인가. <b>생략하면 본관</b>이다 — 관 개념이 새로 생긴 것이라
+             * 화면이 아직 안 보낼 수 있는데, 그때 등록이 막히면 좌석 화면이 통째로 멈춘다.
+             */
+            Long buildingId,
             @NotBlank(message = "구역 코드는 필수입니다.")
             @Size(max = 50, message = "구역 코드는 50자까지입니다.") String areaCd,
             @NotBlank(message = "구역 이름은 필수입니다.")
             @Size(max = 100, message = "구역 이름은 100자까지입니다.") String areaNm,
-            @Min(0) @Max(999) Short sortOrder) {
+            @Min(0) @Max(999) Short sortOrder,
+            AreaType areaType,
+            Long classMasterId) {
 
         public short sortOrderOrDefault() {
             return sortOrder == null ? (short) 0 : sortOrder;
+        }
+
+        /** 비우면 독서실이다 — 이 필드가 생기기 전 호출을 그대로 받기 위해서다. */
+        public AreaType areaTypeOrDefault() {
+            return areaType == null ? AreaType.STUDY : areaType;
         }
     }
 
@@ -79,7 +96,8 @@ public final class SeatRequests {
      * <p>수십 석을 한 칸씩 등록하게 하면 실무에서 안 쓴다. 행·열과 시작 번호만 받아
      * 좌표·좌석번호를 서버가 만든다.
      *
-     * @param seatCdPrefix  좌석번호 접두어. {@code "A-"} + 번호 → {@code A-01}
+     * @param seatCdPrefix  좌석번호 접두어. {@code "A-"} + 번호 → {@code A-01}.
+     *                      <b>비워도 된다</b> — 그러면 번호만 남는다({@code 1}, {@code 2}…)
      * @param startNumber   시작 번호(기본 1). 기존 격자에 이어붙일 때 지정한다
      * @param numberPadding 번호 자릿수(기본 2). {@code 2}면 {@code 01}
      * @param startX        x 좌표 시작값(기본 1)
@@ -91,7 +109,11 @@ public final class SeatRequests {
             @NotNull(message = "구역은 필수입니다.") Long studyAreaId,
             @Min(value = 1, message = "행은 1 이상이어야 합니다.") @Max(100) @NotNull(message = "행 수는 필수입니다.") Integer rows,
             @Min(value = 1, message = "열은 1 이상이어야 합니다.") @Max(100) @NotNull(message = "열 수는 필수입니다.") Integer columns,
-            @NotBlank(message = "좌석번호 접두어는 필수입니다.")
+            /*
+             * ★ 필수가 아니다. 접두어 없는 **순수 숫자** 좌석번호가 정상 케이스다 —
+             *   동탄이 그렇고, 별관 오프셋 변환(1번 → 1001번)도 숫자일 때만 걸린다.
+             *   @NotBlank 였을 때 정작 이 기능이 필요한 지점이 격자를 못 만들었다.
+             */
             @Size(max = 30, message = "접두어는 30자까지입니다.") String seatCdPrefix,
             @Min(0) Integer startNumber,
             @Min(0) @Max(6) Integer numberPadding,
@@ -99,6 +121,10 @@ public final class SeatRequests {
             @Min(0) Integer startY,
             Boolean columnMajor,
             @Valid List<SeatGridSkipCell> skips) {
+
+        public String seatCdPrefixOrEmpty() {
+            return seatCdPrefix == null ? "" : seatCdPrefix;
+        }
 
         public int startNumberOrDefault() {
             return startNumber == null ? 1 : startNumber;

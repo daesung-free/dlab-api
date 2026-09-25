@@ -248,21 +248,54 @@ public class DailyRoutineService {
 
             verifyScore(routine, input.selfScore());
             verifyScore(routine, input.reviewedScore());
+            verifyConsistent(result, input);
 
-            switch (input.status()) {
-                case DISTRIBUTED -> result.distribute();
-                case SUBMITTED -> result.submit(input.selfScore());
-                case REVIEWED -> result.review(input.reviewedScore(), input.memo(), now);
-                case PUBLISHED -> {
-                    result.review(input.reviewedScore(), input.memo(), now);
-                    result.publish();
-                }
-                case NOT_SUBMITTED -> result.markNotSubmitted();
-                case ABSENT -> result.markAbsent();
-                case PLANNED -> { /* 초기 상태 유지 */ }
-            }
+            result.overwrite(input.status(), input.selfScore(), input.reviewedScore(),
+                    input.memo(), now);
         }
         return inputs.size();
+    }
+
+    /**
+     * 조용히 버리지 않고 막는다 — 예전에는 모순된 값이 무시되면서도 "저장 1건"으로 답했다.
+     *
+     * <ul>
+     *   <li>제출 전 상태(예정·배부·미제출·결시)에 점수 — 어느 쪽이 맞는지 알 수 없다</li>
+     *   <li>제출 상태에 검수 점수 — 검수 점수가 있으면 검수완료다</li>
+     *   <li>공개된 결과를 검수 전으로 되돌리기 — 학생이 이미 봤고, 공개 때 상벌점도 걸렸다.
+     *       점수 정정은 공개 상태 그대로 보내면 된다</li>
+     * </ul>
+     */
+    private void verifyConsistent(DailyRoutineResult current, ResultInput input) {
+        // ★ 등록 건 번호는 화면이 읽을 수 없는 값이다 — 사람 이름으로 말한다.
+        //   현재 행에 학생이 붙어 있으므로 추가 조회가 없다
+        String who = current != null && current.getEnrollment() != null
+                ? "%s(%s)".formatted(current.getEnrollment().getStudent().getName(),
+                        current.getEnrollment().getStudentNo())
+                : "학생(등록 건 %d)".formatted(input.enrollmentId());
+        boolean hasScore = input.selfScore() != null || input.reviewedScore() != null;
+        switch (input.status()) {
+            case PLANNED, DISTRIBUTED, NOT_SUBMITTED, ABSENT -> {
+                if (hasScore) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                            "%s: 제출 전 상태에는 점수를 넣을 수 없습니다. 점수를 지우거나 상태를 바꿔 주세요."
+                                    .formatted(who));
+                }
+            }
+            case SUBMITTED -> {
+                if (input.reviewedScore() != null) {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                            "%s: 검수 점수가 있으면 상태는 검수완료입니다.".formatted(who));
+                }
+            }
+            case REVIEWED, PUBLISHED -> { }
+        }
+        if (current.getStatus() == RoutineResultStatus.PUBLISHED
+                && input.status() != RoutineResultStatus.PUBLISHED
+                && input.status() != RoutineResultStatus.REVIEWED) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "%s: 이미 학생에게 공개된 결과는 검수 전 상태로 되돌릴 수 없습니다.".formatted(who));
+        }
     }
 
     /**

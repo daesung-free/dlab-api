@@ -29,6 +29,7 @@ public class AdminAppConfigController {
 
     private final AppConfigService appConfigService;
     private final TermsService termsService;
+    private final com.dlab.domain.appconfig.service.AppUsageService appUsageService;
 
     /** 앱 설정 목록(최소 지원 버전·점검 모드). 앱이 부팅할 때 첫 번째로 읽는 값이다. */
     @GetMapping
@@ -115,5 +116,19 @@ public class AdminAppConfigController {
             return new AgreementHistoryResponse(a.getTerms().getCode(), a.getTerms().getVersion(),
                     a.isAgreed(), a.getAgreedAt());
         }
+    }
+
+    /**
+     * 앱 가입·동의 현황 — 앱 운영 화면 상단 카드.
+     *
+     * <p>기준은 <b>지금 재원 중인 학생</b>이다(퇴원생 계정은 분모에 안 들어간다).
+     * 동의율은 약관마다 따로이고 분모는 활성 앱 계정(학생 + 학부모)이다.
+     *
+     * @param academyId 비우면 전 지점. 그때 약관은 공통 약관만 본다
+     */
+    @GetMapping("/usage")
+    public ApiResponse<com.dlab.domain.appconfig.service.AppUsageService.Usage> usage(
+            @RequestParam(required = false) Long academyId) {
+        return ApiResponse.success(appUsageService.usage(academyId));
     }
 }

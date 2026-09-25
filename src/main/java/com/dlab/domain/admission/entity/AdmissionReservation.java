@@ -133,6 +133,16 @@ public class AdmissionReservation extends BaseEntity {
     @Column(name = "std_grade", nullable = false, length = 1)
     private String stdGrade;
 
+    /**
+     * 상담 진행 상태 (2026-09-18 답변서).
+     *
+     * <p>★ <b>재적 상태와 다른 축이다.</b> 두 축이 만나는 지점은 {@code CONFIRMED} 하나뿐이고
+     * 거기서 학생으로 전환한다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "consult_status", nullable = false, length = 20)
+    private ConsultStatus consultStatus = ConsultStatus.CALL_NEEDED;
+
     /** 합격 처리로 학생이 되면 그 등록 건. 전환 전에는 {@code null}. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "enrollment_id")
@@ -182,5 +192,14 @@ public class AdmissionReservation extends BaseEntity {
     /** 합격 → 학생 전환. */
     public void linkEnrollment(StudentEnrollment enrollment) {
         this.enrollment = enrollment;
+    }
+
+    public void changeStatus(ConsultStatus status) {
+        this.consultStatus = status;
+    }
+
+    /** 이미 학생으로 전환됐는가. 두 번 전환하면 학번이 두 개 생긴다 */
+    public boolean converted() {
+        return enrollment != null;
     }
 }

@@ -14,6 +14,7 @@ import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.GradeType;
 import com.dlab.domain.user.entity.Student;
 import com.dlab.domain.user.entity.StudentEnrollment;
+import com.dlab.support.FacilityFixtures;
 import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -72,15 +73,15 @@ class KioskSeatChangeIntegrationTest {
         minji = enroll("DL-2026-0419", "김민지", "2026-0001", "ABC001");
         seojun = enroll("DL-2026-0420", "박서준", "2026-0002", "ABC002");
 
-        StudyArea area = new StudyArea(bundang, "A", "A구역", (short) 1);
+        StudyArea area = new StudyArea(FacilityFixtures.mainBuilding(em, bundang), "A", "A", "A구역", (short) 1);
         em.persist(area);
-        seatA1 = new SeatMaster(bundang, area, "A-01", "1번", 1, 1);
+        seatA1 = new SeatMaster(area, "A-01", "A-01", "1번", 1, 1);
         em.persist(seatA1);
-        seatA2 = new SeatMaster(bundang, area, "A-02", "2번", 2, 1);
+        seatA2 = new SeatMaster(area, "A-02", "A-02", "2번", 2, 1);
         em.persist(seatA2);
 
         // 통로 — 좌석표에는 보이지만 앉을 수 없다
-        aisle = new SeatMaster(bundang, area, "A-99", "통로", 3, 1);
+        aisle = new SeatMaster(area, "A-99", "A-99", "통로", 3, 1);
         ReflectionTestUtils.setField(aisle, "usable", false);
         em.persist(aisle);
 

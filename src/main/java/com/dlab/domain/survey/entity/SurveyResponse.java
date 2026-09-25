@@ -74,6 +74,16 @@ public class SurveyResponse extends BaseEntity {
         answers.add(SurveyAnswer.ofNumber(this, question, number));
     }
 
+    /**
+     * 재제출 — 이전 답을 지우고 새로 채울 준비를 한다.
+     *
+     * <p>행을 새로 만들지 않는다. 응답이 두 벌이 되면 집계에 한 사람이 두 번 들어간다.
+     */
+    public void resubmit(Instant at) {
+        answers.forEach(SurveyAnswer::markDeleted);
+        this.submittedAt = at;
+    }
+
     public List<SurveyAnswer> activeAnswers() {
         return answers.stream().filter(a -> !a.isDeleted()).toList();
     }

@@ -19,6 +19,11 @@ import java.time.LocalDate;
  */
 @Getter
 @Entity
+@com.dlab.domain.audit.Audited("학생")
+// ★ @Audited 만으로는 안 남는다 — 리스너를 함께 붙여야 콜백이 온다.
+//   이게 빠져 있어서 학생 이름·연락처·영문명 수정이 감사 로그에 아예 없었다
+//   (등록 건은 붙어 있어 재원 상태 변경만 남고 있었다)
+@jakarta.persistence.EntityListeners(com.dlab.domain.audit.AuditEntityListener.class)
 @Table(name = "student")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Student extends BaseEntity {
@@ -39,10 +44,13 @@ public class Student extends BaseEntity {
     @Column(nullable = false, length = 20)
     private String name;
 
+    /** ★ 값은 감사 로그에 남기지 않는다 — 바뀐 사실만 남는다. */
+    @com.dlab.domain.audit.AuditMasked
     @Column(length = 20)
     private String phone;
 
     /** 암호화 여부 미정 — 동명이인 구분 조회조건으로 쓰이면 인덱스를 못 탄다. */
+    @com.dlab.domain.audit.AuditMasked
     @Column(name = "birth_date")
     private LocalDate birthDate;
 
@@ -53,8 +61,17 @@ public class Student extends BaseEntity {
     private String schoolName;
 
     /** ★ 민감 필드. 전화·생년월일과 같은 등급으로 다룬다(마스킹·상위 관리자 전용). */
+    @com.dlab.domain.audit.AuditMasked
     @Column(length = 200)
     private String address;
+
+    /** 영문명(선택). 성적표·증명서 영문 표기용이다. */
+    @Column(name = "english_name", length = 100)
+    private String englishName;
+
+    /** 고교 졸업연도(선택). N수 차수와 따로 받는다 — 차수는 학원이 세는 값이고 이건 서류 값이다. */
+    @Column(name = "graduation_year")
+    private Short graduationYear;
 
     @Column(name = "search_name_normalized", length = 20)
     private String searchNameNormalized;
@@ -115,6 +132,21 @@ public class Student extends BaseEntity {
     public void advanceOnboarding(OnboardingStatus expected) {
         if (this.onboardingStatus == expected) {
             this.onboardingStatus = expected.next();
+        }
+    }
+
+    /**
+     * 영문명·졸업연도. {@code null}은 "변경 없음", <b>빈 문자열은 지움</b>이다(영문명).
+     * 졸업연도를 지우려면 {@code clearGraduationYear}를 쓴다.
+     */
+    public void updateExtra(String englishName, Short graduationYear, boolean clearGraduationYear) {
+        if (englishName != null) {
+            this.englishName = englishName.isBlank() ? null : englishName.trim();
+        }
+        if (clearGraduationYear) {
+            this.graduationYear = null;
+        } else if (graduationYear != null) {
+            this.graduationYear = graduationYear;
         }
     }
 }

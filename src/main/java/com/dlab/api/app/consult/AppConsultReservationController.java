@@ -33,9 +33,25 @@ public class AppConsultReservationController {
 
     private final AppScopeResolver scopeResolver;
     private final ConsultReservationService consultService;
+    private final com.dlab.domain.consult.service.ConsultPlanQueryService planQueryService;
     private final Clock clock;
 
     /** 예약 가능한 일정. @param from/to 비우면 오늘부터 2주 */
+    /**
+     * 지난 상담에서 함께 정한 계획 (시안 4.8-③).
+     *
+     * <p><b>상담 내용은 내리지 않는다</b> — 계획만이다. 학부모는 <b>담임이 학부모 공개로 지정한
+     * 상담만</b> 본다(관리자 웹 기본값이 비공개다).
+     */
+    @GetMapping("/plans")
+    public ApiResponse<java.util.List<com.dlab.domain.consult.service.ConsultPlanQueryService.Plan>> plans(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long studentId) {
+        StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
+        boolean forParent = scopeResolver.account(me.accountId()).getGuardian() != null;
+        return ApiResponse.success(planQueryService.plans(enrollment, forParent));
+    }
+
     @GetMapping("/slots")
     public ApiResponse<List<ConsultResponse.ConsultSlotView>> slots(
             @CurrentAccount AuthPrincipal me,

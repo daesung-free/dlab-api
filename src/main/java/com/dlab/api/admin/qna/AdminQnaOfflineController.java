@@ -79,7 +79,12 @@ public class AdminQnaOfflineController {
                 : qnaOfflineService.slotsWithReservations(academyId, from,
                         to == null ? from : to, me);
 
-        return ApiResponse.success(views.stream().map(QnaResponse.QnaSlot::from).toList());
+        var photos = qnaOfflineService.photosOf(views.stream()
+                .flatMap(v -> v.reservations().stream())
+                .map(com.dlab.domain.qna.entity.QnaOfflineReservation::getId)
+                .toList());
+        return ApiResponse.success(views.stream()
+                .map(v -> QnaResponse.QnaSlot.from(v, photos)).toList());
     }
 
     /**

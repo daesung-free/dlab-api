@@ -58,6 +58,29 @@ public class SurveyQuestion extends BaseEntity {
     @Column(name = "max_value", precision = 10, scale = 2)
     private BigDecimal maxValue;
 
+    /**
+     * 조건부 문항 — 이 문항은 {@code showIfQuestion}에서 {@code showIfOption}을 골랐을 때만 보인다.
+     * 가채점의 "응시/미응시" 가 이걸 쓴다. 비어 있으면 항상 보인다.
+     *
+     * <p><b>보이지 않는 문항은 필수여도 답하지 않아도 되고, 보낸 답은 버린다</b> — 미응시로 고친 뒤
+     * 이전에 적은 점수가 그대로 저장되면 안 낸 시험 점수가 집계에 들어간다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "show_if_question_id")
+    private SurveyQuestion showIfQuestion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "show_if_option_id")
+    private SurveyQuestionOption showIfOption;
+
+    /**
+     * 합산 문항 — 같은 설문 문항 번호(seq) 목록. 가채점의 "공통 + 선택 = 총점" 이다.
+     *
+     * <p><b>값은 서버가 채운다.</b> 앱이 보낸 값을 받으면 합과 다른 총점이 저장될 수 있다.
+     */
+    @Column(name = "sum_of_seqs", length = 100)
+    private String sumOfSeqs;
+
     @OneToMany(mappedBy = "question", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("seq ASC")
     private List<SurveyQuestionOption> options = new ArrayList<>();
@@ -85,6 +108,34 @@ public class SurveyQuestion extends BaseEntity {
                 .filter(o -> !o.isDeleted())
                 .sorted(Comparator.comparing(SurveyQuestionOption::getSeq))
                 .toList();
+    }
+
+    /** 조건을 건다. 조건 문항은 이 문항보다 앞의 단일 선택 문항이어야 한다(서비스가 검사한다). */
+    public void showIf(SurveyQuestion question, SurveyQuestionOption option) {
+        this.showIfQuestion = question;
+        this.showIfOption = option;
+    }
+
+    /** 합산 문항으로 만든다. */
+    public void computeAsSumOf(List<Short> seqs) {
+        this.sumOfSeqs = seqs.stream().map(String::valueOf)
+                .collect(java.util.stream.Collectors.joining(","));
+    }
+
+    public boolean isComputed() {
+        return sumOfSeqs != null && !sumOfSeqs.isBlank();
+    }
+
+    public List<Short> sumOfSeqList() {
+        if (!isComputed()) {
+            return List.of();
+        }
+        return java.util.Arrays.stream(sumOfSeqs.split(","))
+                .map(String::trim).map(Short::valueOf).toList();
+    }
+
+    public boolean isConditional() {
+        return showIfQuestion != null;
     }
 
     /** 이 문항의 선택지인가. 남의 문항 선택지를 답으로 보내는 걸 막는다. */

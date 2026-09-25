@@ -52,6 +52,9 @@ public class AdminReceiptStatusController {
      *                   한 번에 뿌리면 어느 지점 미납인지 구분 없이 독촉이 나간다
      * @param from       납부기한 시작. <b>기한이 없는 청구는 기간 필터에 안 걸린다</b> —
      *                   걸면 기한 미지정 건이 통째로 사라진다
+     * @param type       청구 항목. <b>여러 개를 보낼 수 있다</b> — 화면이 체크박스로 고른다
+     * @param keyword    이름·학번·청구항목·전표번호 통합 검색
+     * @param method     결제수단. 취소된 거래는 세지 않는다
      * @param unpaidOnly 미납 건만. 미납자 추출·독촉이 쓴다
      */
     @GetMapping
@@ -63,11 +66,14 @@ public class AdminReceiptStatusController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) BillingType type,
+            @RequestParam(required = false) List<BillingType> type,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) com.dlab.domain.payment.entity.PaymentMethod method,
             @RequestParam(defaultValue = "false") boolean unpaidOnly) {
 
         return ApiResponse.success(
-                receiptStatusService.find(me, academyId, year, from, to, type, unpaidOnly)
+                receiptStatusService.find(me, academyId, year, from, to, type, unpaidOnly,
+                                keyword, method)
                         .stream().map(RowView::from).toList());
     }
 
@@ -81,10 +87,13 @@ public class AdminReceiptStatusController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) BillingType type) {
+            @RequestParam(required = false) List<BillingType> type,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) com.dlab.domain.payment.entity.PaymentMethod method) {
 
         return ApiResponse.success(SummaryView.from(
-                receiptStatusService.summarize(me, academyId, year, from, to, type)));
+                receiptStatusService.summarize(me, academyId, year, from, to,
+                        type, keyword, method)));
     }
 
     /** 엑셀 내려받기. ⚠️ <b>연락처가 마스킹된다</b>(기본 ON). */
@@ -97,10 +106,14 @@ public class AdminReceiptStatusController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-            @RequestParam(required = false) BillingType type,
+            @RequestParam(required = false) List<BillingType> type,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) com.dlab.domain.payment.entity.PaymentMethod method,
             @RequestParam(defaultValue = "false") boolean unpaidOnly) {
 
-        byte[] bytes = receiptStatusService.export(me, academyId, year, from, to, type, unpaidOnly);
+        // 조회와 같은 조건으로 뽑는다 — 못 받으면 화면에서 좁혀 놓고 받은 파일에 전체가 담긴다
+        byte[] bytes = receiptStatusService.export(me, academyId, year, from, to, type,
+                unpaidOnly, keyword, method);
         String filename = URLEncoder.encode("수납현황_%d.xlsx".formatted(year),
                 StandardCharsets.UTF_8);
 

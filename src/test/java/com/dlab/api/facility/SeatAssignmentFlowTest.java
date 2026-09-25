@@ -67,10 +67,15 @@ class SeatAssignmentFlowTest {
         otherEnrollmentId = createStudent(academy, "다른학생", "SESTU02", "0002");
 
         // 구역·좌석은 V2 스키마(다른 담당자) — 여기서는 배정만 검증하므로 직접 넣는다
+        Long buildingId = com.dlab.support.FacilityFixtures
+                .mainBuilding(em, academy).getId();
+        em.flush();
         em.createNativeQuery("""
-                INSERT INTO study_area (academy_id, area_cd, area_nm, sort_order)
-                VALUES (:aid, 'A', '자습실A', 1)
-                """).setParameter("aid", academy.getId()).executeUpdate();
+                INSERT INTO study_area
+                    (academy_id, building_id, area_cd, kiosk_area_cd, area_nm, sort_order)
+                VALUES (:aid, :bid, 'A', 'A', '자습실A', 1)
+                """).setParameter("aid", academy.getId())
+                .setParameter("bid", buildingId).executeUpdate();
         studyAreaId = ((Number) em.createNativeQuery(
                 "SELECT id FROM study_area WHERE academy_id = :aid")
                 .setParameter("aid", academy.getId()).getSingleResult()).longValue();
@@ -82,8 +87,9 @@ class SeatAssignmentFlowTest {
 
     private Long insertSeat(Long academyId, String seatCd, int x, int y) {
         em.createNativeQuery("""
-                        INSERT INTO seat_master (academy_id, study_area_id, seat_cd, seat_nm, x_pos, y_pos)
-                        VALUES (:aid, :sid, :cd, :cd, :x, :y)
+                        INSERT INTO seat_master
+                            (academy_id, study_area_id, seat_cd, kiosk_seat_cd, seat_nm, x_pos, y_pos)
+                        VALUES (:aid, :sid, :cd, :cd, :cd, :x, :y)
                         """)
                 .setParameter("aid", academyId).setParameter("sid", studyAreaId)
                 .setParameter("cd", seatCd).setParameter("x", x).setParameter("y", y)

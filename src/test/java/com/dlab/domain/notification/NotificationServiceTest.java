@@ -75,7 +75,7 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("학생명 변수가 빠지면 발송하지 않고 실패시킨다")
+    @DisplayName("★ 학생명이 빠지면 보내지 않는다 — 다만 예외를 던지지는 않는다")
     void studentNameIsAlwaysRequired() {
         when(templateRepository.findByEventCode(any()))
                 .thenReturn(Optional.of(template("미등원", "{studentName} 학생 미등원", "studentName", true)));
@@ -83,11 +83,12 @@ class NotificationServiceTest {
         NotificationCommand command = new NotificationCommand(
                 NotificationEvent.MISSING_ATTENDANCE, recipient(), null, null, null, Map.of(), null);
 
-        assertThatThrownBy(() -> service.send(command))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ErrorCode.NOTIFICATION_VARIABLE_MISSING);
+        // ★ 예외를 던지면 알림 하나 때문에 본 행위가 실패한다. 실제로 템플릿 설정이
+        //   어긋나 방화벽 해제 신청이 통째로 500 이 됐다 — 화면에는 원인이 안 보인다.
+        NotificationLog log = service.send(command);
 
+        assertThat(log.getStatus()).isEqualTo(NotificationStatus.SKIPPED);
+        assertThat(log.getFailReason()).contains("studentName");
         assertThat(sender.sent).isEmpty();
     }
 
@@ -102,9 +103,11 @@ class NotificationServiceTest {
                 NotificationEvent.MISSING_ATTENDANCE, recipient(), null, null, null,
                 Map.of("studentName", "홍길동"), null);
 
-        assertThatThrownBy(() -> service.send(command))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("attendanceDate");
+        NotificationLog log = service.send(command);
+
+        assertThat(log.getStatus()).isEqualTo(NotificationStatus.SKIPPED);
+        assertThat(log.getFailReason()).contains("attendanceDate");
+        assertThat(sender.sent).isEmpty();
     }
 
     @Test

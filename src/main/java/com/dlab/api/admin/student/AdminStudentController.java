@@ -47,6 +47,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminStudentController {
 
     private final StudentService studentService;
+    private final com.dlab.domain.user.service.HomeroomOverrideService homeroomOverrideService;
     private final StudentImportService studentImportService;
     private final StudentExportService studentExportService;
     private final SavedSearchService savedSearchService;
@@ -180,11 +181,59 @@ public class AdminStudentController {
     @PostMapping
     public ApiResponse<StudentResponse> admit(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody StudentRequests.Admit request) {
-        return ApiResponse.success(single(studentService.admit(
+        StudentEnrollment admitted = studentService.admit(
                 request.academyId(), request.year().shortValue(), request.name(),
                 request.phone(), request.grade(), request.retakeCount(), request.track(),
                 request.birthDate(), request.gender(), request.schoolName(),
-                request.address(), request.admissionDate(), me), me));
+                request.address(), request.admissionDate(), me);
+        if (request.englishName() != null || request.graduationYear() != null) {
+            admitted = studentService.updateExtra(admitted.getId(), request.englishName(),
+                    request.graduationYear(), false, me);
+        }
+        return ApiResponse.success(single(admitted, me));
+    }
+
+    /**
+     * 담임 예외 지정 — 같은 반의 이 학생만 다른 선생님에게 맡긴다.
+     *
+     * <p><b>반 전체 담임 교체는 여기가 아니다</b> — {@code PUT /admin/classes/{id}/homeroom}.
+     *
+     * <p>바뀌는 것: 승인 이양 대상 · 상담 담당 · 학생 목록의 담임 표시.
+     * <b>안 바뀌는 것</b>: 반공지·반설문 작성 권한(반 담임 그대로) — 예외 학생 하나 때문에 그 반
+     * 전체를 건드릴 수 있게 되면 안 된다.
+     *
+     * <p>반을 옮기면 자동으로 풀린다. 최고관리자·지점관리자만, 사유 필수.
+     */
+    @PutMapping("/{enrollmentId}/homeroom-override")
+    public ApiResponse<HomeroomOverrideView> overrideHomeroom(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId,
+            @RequestBody HomeroomOverride request) {
+        return ApiResponse.success(HomeroomOverrideView.from(homeroomOverrideService.override(
+                me, enrollmentId, request.teacherId(), request.reason())));
+    }
+
+    /** 담임 예외 해제 — 반 담임으로 돌아간다. */
+    @DeleteMapping("/{enrollmentId}/homeroom-override")
+    public ApiResponse<HomeroomOverrideView> clearHomeroomOverride(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId) {
+        return ApiResponse.success(HomeroomOverrideView.from(
+                homeroomOverrideService.clear(me, enrollmentId)));
+    }
+
+    /** @param reason 필수 — 권한이 따라 움직이는 값이라 "왜 바꿨나" 가 남아야 한다 */
+    public record HomeroomOverride(Long teacherId, String reason) {
+    }
+
+    /** @param overridden {@code false} 면 반 담임을 따른다 */
+    public record HomeroomOverrideView(Long enrollmentId, boolean overridden, Long teacherId,
+                                       String teacherName, String reason, java.time.Instant at) {
+
+        static HomeroomOverrideView from(com.dlab.domain.user.entity.StudentEnrollment e) {
+            var t = e.getHomeroomOverride();
+            return new HomeroomOverrideView(e.getId(), t != null,
+                    t == null ? null : t.getId(), t == null ? null : t.getName(),
+                    e.getHomeroomOverrideReason(), e.getHomeroomOverrideAt());
+        }
     }
 
     /** 학생 정보 수정. 보내지 않은 필드는 그대로 둔다 — 부분 수정이라 {@code PATCH}다. */
@@ -192,10 +241,16 @@ public class AdminStudentController {
     public ApiResponse<StudentResponse> update(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long enrollmentId,
                                                @Valid @RequestBody StudentRequests.StudentUpdate request) {
-        return ApiResponse.success(single(studentService.update(
+        StudentEnrollment updated = studentService.update(
                 enrollmentId, request.name(), request.phone(), request.birthDate(),
                 request.gender(), request.schoolName(), request.address(), request.grade(),
-                request.retakeCount(), request.track(), request.status(), me), me));
+                request.retakeCount(), request.track(), request.status(), me);
+        if (request.englishName() != null || request.graduationYear() != null
+                || request.clearsGraduationYear()) {
+            updated = studentService.updateExtra(enrollmentId, request.englishName(),
+                    request.graduationYear(), request.clearsGraduationYear(), me);
+        }
+        return ApiResponse.success(single(updated, me));
     }
 
     /**
@@ -307,10 +362,20 @@ public class AdminStudentController {
 
     // ── 검색조건 저장 ──
 
-    /** 본인이 저장한 조건만 나온다 — 개인 설정이다. */
+    /**
+     * 본인이 저장한 조건만 나온다 — 개인 설정이다.
+     *
+     * <p><b>학생 검색 전용이 아니다.</b> 조건 저장은 출결·상벌점·수납현황 등 <b>공통 검색창을
+     * 쓰는 화면 전체</b>가 쓴다(실행가이드 P1-01). 여기서 화면을 못 고르면 나머지 화면은
+     * 브라우저에만 저장하게 되어 <b>다른 PC에서는 안 보인다</b>.
+     *
+     * @param searchType 어느 화면의 조건인가. 비우면 학생 검색이다(기존 호출 호환)
+     */
     @GetMapping("/saved-searches")
-    public ApiResponse<List<SavedSearchResponse>> savedSearches(@CurrentAccount AuthPrincipal me) {
-        return ApiResponse.success(savedSearchService.list(SearchType.STUDENT, me).stream()
+    public ApiResponse<List<SavedSearchResponse>> savedSearches(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) SearchType searchType) {
+        return ApiResponse.success(savedSearchService.list(typeOr(searchType), me).stream()
                 .map(SavedSearchResponse::from).toList());
     }
 
@@ -318,9 +383,16 @@ public class AdminStudentController {
     @PostMapping("/saved-searches")
     public ApiResponse<SavedSearchResponse> saveSearch(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) SearchType searchType,
             @Valid @RequestBody StudentRequests.SaveSearch request) {
+        // 같은 이름 덮어쓰기는 화면 단위로 논다 — 출결의 "내 반"과 학생 검색의 "내 반"은 다른 조건이다
         return ApiResponse.success(SavedSearchResponse.from(savedSearchService.save(
-                SearchType.STUDENT, request.name(), request.conditions(), me)));
+                typeOr(searchType), request.name(), request.conditions(), me)));
+    }
+
+    /** 기존 호출이 화면을 안 보내므로 학생 검색으로 본다. */
+    private static SearchType typeOr(SearchType searchType) {
+        return searchType == null ? SearchType.STUDENT : searchType;
     }
 
     /** 저장한 검색 삭제. */

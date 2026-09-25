@@ -52,6 +52,7 @@ public class ApprovalService {
     private final ApproverPreferenceRepository preferenceRepository;
     private final ApprovalRequestRepository approvalRequestRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.user.service.HomeroomResolver homeroomResolver;
     private final AccountRepository accountRepository;
     private final NotificationService notificationService;
     private final Clock clock;
@@ -60,6 +61,15 @@ public class ApprovalService {
      * 승인 요청 생성. 담당선생님은 반 배정에서 자동으로 도출된다
      * — 그래서 학생별 승인자 사전지정 화면이 필요 없다.
      */
+    /** 화면에 보일 이름. enum 이름이 그대로 나가면 "ABSENCE_REASON이 뭐냐"는 문의가 온다. */
+    private static String label(RequestType requestType) {
+        return switch (requestType) {
+            case FIREWALL_UNLOCK -> "와이파이 해제";
+            case ABSENCE_REASON -> "사유 신청";
+            case REGULAR_SCHEDULE -> "정기 일정";
+        };
+    }
+
     @Transactional
     public ApprovalRequest create(StudentEnrollment enrollment, RequestType requestType) {
         Academy academy = enrollment.getAcademy();
@@ -67,8 +77,10 @@ public class ApprovalService {
 
         ApprovalItem item = approvalItemRepository
                 .findByAcademyIdAndYearAndRequestTypeAndDeletedFalse(academy.getId(), year, requestType)
+                // 화면에 그대로 뜨는 문구라 내부 코드(FIREWALL_UNLOCK 등) 대신 사람 말로 쓴다
                 .orElseThrow(() -> new BusinessException(ErrorCode.APPROVAL_ITEM_NOT_FOUND,
-                        "승인 정책이 없습니다: " + requestType));
+                        "%s 승인 정책이 등록되지 않았습니다. 기초관리에서 먼저 등록해 주세요."
+                                .formatted(label(requestType))));
 
         approvalRequestRepository
                 .findByEnrollmentIdAndApprovalItemIdAndStatus(enrollment.getId(), item.getId(), ApprovalStatus.PENDING)
@@ -317,10 +329,14 @@ public class ApprovalService {
     }
 
     /** 담당선생님은 반 배정 → 반 담임으로 자동 결정된다. 미배정이거나 담임 미지정이면 null. */
+    /**
+     * 이양 대상 = <b>그 학생의 담임</b>(예외 지정 ?? 반 담임).
+     *
+     * <p>예외 지정된 학생의 승인은 반 담임이 아니라 지정된 선생님에게 가야 한다 — 그 학생을
+     * 맡은 사람이다.
+     */
     private Teacher resolveEscalationTarget(StudentEnrollment enrollment) {
-        return classAssignmentRepository.findActiveFixedByEnrollmentId(enrollment.getId())
-                .map(ClassAssignment::getHomeroomTeacher)
-                .orElse(null);
+        return homeroomResolver.of(enrollment);
     }
 
     private ApprovalRequest loadPending(Long requestId) {
@@ -419,7 +435,9 @@ public class ApprovalService {
      */
     private void notifyApproved(ApprovalRequest request, ResolutionCase resolutionCase) {
         NotificationEvent event = switch (resolutionCase) {
-            case PARENT_IN_TIME -> NotificationEvent.APPROVAL_APPROVED_BY_PARENT;
+            // 늦은 승인도 같은 문구다 — 학부모가 승인했다는 사실은 같다
+            case PARENT_IN_TIME, PARENT_AFTER_TIMEOUT ->
+                    NotificationEvent.APPROVAL_APPROVED_BY_PARENT;
             case STAFF_AFTER_TIMEOUT -> NotificationEvent.APPROVAL_APPROVED_AFTER_TIMEOUT;
             case STAFF_BEFORE_TIMEOUT -> NotificationEvent.APPROVAL_APPROVED_BEFORE_TIMEOUT;
             case STAFF_PRIMARY -> NotificationEvent.APPROVAL_APPROVED_BY_STAFF_PRIMARY;

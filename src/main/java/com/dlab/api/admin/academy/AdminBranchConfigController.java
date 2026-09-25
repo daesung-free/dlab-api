@@ -30,6 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminBranchConfigController {
 
     private final BranchConfigService branchConfigService;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
 
     /** 전 지점. 설정이 없는 지점도 빈 행으로 나온다 — 화면이 9개를 다 그린다. */
     @GetMapping
@@ -77,6 +78,28 @@ public class AdminBranchConfigController {
         return ApiResponse.empty();
     }
 
+    /**
+     * PG 가맹점 코드 비우기. {@code confirm}에 <b>지금 값을 그대로</b> 넣어야 지워진다 —
+     * 비우면 그 지점 결제가 통째로 멈춘다. 이미 비어 있으면 그대로 성공한다.
+     */
+    @DeleteMapping("/{academyId}/pg-merchant-code")
+    public ApiResponse<Void> clearPgMerchantCode(@PathVariable Long academyId,
+                                                 @RequestParam(required = false) String confirm) {
+        branchConfigService.clearPgMerchantCode(academyId, confirm);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * Nebula 장비 ID 비우기. {@code confirm}에 <b>지금 값을 그대로</b> 넣어야 지워진다 —
+     * 비우면 그 지점 와이파이 해제가 멈춘다. 이미 비어 있으면 그대로 성공한다.
+     */
+    @DeleteMapping("/{academyId}/nebula-device-id")
+    public ApiResponse<Void> clearNebulaDeviceId(@PathVariable Long academyId,
+                                                 @RequestParam(required = false) String confirm) {
+        branchConfigService.clearNebulaDeviceId(academyId, confirm);
+        return ApiResponse.empty();
+    }
+
     /** 정책 JSON 교체. 부분 병합이 아니라 통째로 갈아끼운다. */
     @PutMapping("/{academyId}/policy")
     public ApiResponse<Void> replacePolicy(@PathVariable Long academyId,
@@ -85,23 +108,54 @@ public class AdminBranchConfigController {
         return ApiResponse.empty();
     }
 
-    /** 변경 이력(감사로그). 값은 남기지 않고 "언제 누가 무엇을"만 남는다. */
+    /**
+     * 변경 이력(감사로그). 값은 남기지 않고 "언제 누가 무엇을"만 남는다.
+     *
+     * <p><b>사람 이름을 붙여 내린다.</b> 계정 번호만 주면 화면에서 누가 바꿨는지 알 수 없어
+     * 이력의 쓸모가 없다. 이름은 <b>조회 시점에</b> 붙인다 — 이력에 박아두면 개인정보가
+     * 복제되고, 계정 이름이 바뀌어도 옛 이름이 남는다.
+     */
     @GetMapping("/{academyId}/history")
     public ApiResponse<List<HistoryRow>> history(@PathVariable Long academyId) {
-        return ApiResponse.success(branchConfigService.history(academyId).stream()
-                .map(HistoryRow::from).toList());
+        var rows = branchConfigService.history(academyId);
+        var names = changerNames(rows);
+        return ApiResponse.success(rows.stream()
+                .map(h -> HistoryRow.of(h, names.get(h.getCreatedBy()))).toList());
+    }
+
+    /** 계정 id → 사람 이름. 행마다 조회하면 화면 한 장에 쿼리가 그만큼 나간다. */
+    private Map<Long, String> changerNames(List<BranchConfigHistory> rows) {
+        var ids = rows.stream()
+                .map(BranchConfigHistory::getCreatedBy)
+                .filter(java.util.Objects::nonNull)
+                .filter(id -> !id.equals(
+                        com.dlab.common.config.SecurityAuditorAware.SYSTEM_ACCOUNT_ID))
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> names = new java.util.HashMap<>();
+        for (Object[] row : accountRepository.findActorNames(ids)) {
+            if (row[1] != null) {
+                names.put((Long) row[0], (String) row[1]);
+            }
+        }
+        return names;
     }
 
     public record ValueRequest(@NotBlank @Size(max = 100) String value) {
     }
 
-    /** @param changedBy 계정 ID. 배치·시스템 경로면 {@code 0}이다 */
+    /**
+     * @param changedBy     계정 ID. 배치·시스템 경로면 {@code 0}이다
+     * @param changedByName 바꾼 사람 이름. 시스템이거나 계정이 지워졌으면 비어 있다
+     */
     public record HistoryRow(Long id, String action, String detail,
-                             Long changedBy, Instant changedAt) {
+                             Long changedBy, String changedByName, Instant changedAt) {
 
-        static HistoryRow from(BranchConfigHistory h) {
+        static HistoryRow of(BranchConfigHistory h, String changedByName) {
             return new HistoryRow(h.getId(), h.getAction().name(), h.getDetail(),
-                    h.getCreatedBy(), h.getCreatedAt());
+                    h.getCreatedBy(), changedByName, h.getCreatedAt());
         }
     }
 }

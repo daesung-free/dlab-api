@@ -27,4 +27,22 @@ public interface TermAgreementRepository extends JpaRepository<TermAgreement, Lo
 
     /** 전체 이력 — 감사·분쟁 대응용. 최신순. */
     List<TermAgreement> findByAccountIdOrderByAgreedAtDesc(Long accountId);
+
+    /**
+     * 여러 계정 × 여러 약관의 <b>최신</b> 동의 여부. 동의율 집계용.
+     *
+     * <p>동의는 이력이라(철회도 행으로 쌓인다) 계정·약관마다 마지막 행만 본다.
+     *
+     * @return {@code [계정 id, 약관 id, 동의 여부]}
+     */
+    @Query("""
+            SELECT a.account.id, a.terms.id, a.agreed FROM TermAgreement a
+            WHERE a.account.id IN :accountIds
+              AND a.terms.id IN :termsIds
+              AND a.id = (
+                    SELECT MAX(a2.id) FROM TermAgreement a2
+                    WHERE a2.account = a.account AND a2.terms = a.terms)
+            """)
+    List<Object[]> findLatestOf(@Param("accountIds") java.util.Collection<Long> accountIds,
+                                @Param("termsIds") java.util.Collection<Long> termsIds);
 }

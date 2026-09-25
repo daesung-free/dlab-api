@@ -32,6 +32,14 @@ public class NotificationTemplate extends BaseEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    /**
+     * 마지막으로 고친 계정. 저장 시점에 자동으로 채워진다 — 서비스마다 넣으면 빠뜨린다.
+     * 배치·시스템 경로면 {@code 0}이다.
+     */
+    @org.springframework.data.annotation.LastModifiedBy
+    @Column(name = "updated_by")
+    private Long updatedBy;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "event_code", nullable = false, unique = true, length = 60)
     private NotificationEvent eventCode;

@@ -107,15 +107,21 @@ UPDATE locker_master l
 -- ★ 좌석 마스터를 만드는 관리자 API 가 아직 없다(API_GAPS 4-5).
 --   좌석을 쓰는 화면이 3개(배정 관리·좌석배치표·좌석 이탈)라 시드로라도 넣어 둔다.
 --   area_cd 는 키오스크 계약이 쓰는 값이라 DSA 표기(A/B)를 따른다.
-INSERT INTO study_area (academy_id, area_cd, area_nm, sort_order, active)
-SELECT (SELECT id FROM academy WHERE acad_cd = '31'), v.cd, v.nm, v.ord, TRUE
+-- 관(building)은 마이그레이션이 지점마다 'MAIN' 을 만들어 둔다. 여기 구역은 전부 본관이다.
+INSERT INTO study_area (academy_id, building_id, area_cd, kiosk_area_cd, area_nm, sort_order, active)
+SELECT (SELECT id FROM academy WHERE acad_cd = '31'),
+       (SELECT b.id FROM building b
+         WHERE b.academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND b.code = 'MAIN'),
+       v.cd, v.cd, v.nm, v.ord, TRUE
 FROM (VALUES ('A', 'A구역', 1::smallint), ('B', 'B구역', 2::smallint)) AS v(cd, nm, ord)
 WHERE NOT EXISTS (
     SELECT 1 FROM study_area s WHERE s.academy_id = (SELECT id FROM academy WHERE acad_cd = '31') AND s.area_cd = v.cd);
 
 -- 구역당 20석(4행 × 5열). 좌표는 배치도 그리기용이다.
-INSERT INTO seat_master (academy_id, study_area_id, seat_cd, seat_nm, x_pos, y_pos, usable)
+-- 본관이라 kiosk_seat_cd = seat_cd 다(별관이면 관 offset 이 더해진다).
+INSERT INTO seat_master (academy_id, study_area_id, seat_cd, kiosk_seat_cd, seat_nm, x_pos, y_pos, usable)
 SELECT (SELECT id FROM academy WHERE acad_cd = '31'), s.id,
+       s.area_cd || lpad(g.n::text, 2, '0'),
        s.area_cd || lpad(g.n::text, 2, '0'),
        s.area_cd || '-' || lpad(g.n::text, 2, '0'),
        ((g.n - 1) % 5) + 1,

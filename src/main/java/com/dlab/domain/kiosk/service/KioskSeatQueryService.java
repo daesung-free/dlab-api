@@ -6,6 +6,7 @@ import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository;
 import com.dlab.domain.facility.entity.SeatMaster;
 import com.dlab.domain.facility.entity.SeatPresence;
+import com.dlab.domain.facility.entity.AreaType;
 import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.facility.repository.SeatAssignmentRepository;
 import com.dlab.domain.facility.repository.SeatMasterRepository;
@@ -56,9 +57,12 @@ public class KioskSeatQueryService {
      * 키오스크 화면의 정원과 실제 좌석 수가 다르게 보인다.
      */
     public List<DsaRows.AreaRow> areas(Long academyId) {
-        return studyAreaRepository.findActiveByAcademyId(academyId).stream()
+        // ★ STUDY 만 내린다. 반 교실도 같은 테이블에 있어서 종류를 안 걸면
+        //   단말 좌석 선택 화면에 반이 뜬다.
+        return studyAreaRepository.findActive(academyId, null, AreaType.STUDY)
+                .stream()
                 .map(a -> new DsaRows.AreaRow(
-                        a.getAreaCd(),
+                        a.getKioskAreaCd(),
                         a.getAreaNm(),
                         String.valueOf(seatMasterRepository.findByStudyAreaId(a.getId()).size())))
                 .toList();
@@ -73,7 +77,7 @@ public class KioskSeatQueryService {
         return area(academyId, areaCd)
                 .map(a -> seatMasterRepository.findByStudyAreaId(a.getId()).stream()
                         .map(s -> new DsaRows.SeatRow(
-                                s.getSeatCd(),
+                                s.getKioskSeatCd(),
                                 String.valueOf(s.getXPos()),
                                 String.valueOf(s.getYPos()),
                                 s.getSeatNm(),
@@ -125,13 +129,13 @@ public class KioskSeatQueryService {
         Map<String, String> stateBySeat = new HashMap<>();
         seatAssignmentRepository.findActiveByStudyAreaId(area.get().getId())
                 .forEach(sa -> stateBySeat.put(
-                        sa.getSeat().getSeatCd(),
+                        sa.getSeat().getKioskSeatCd(),
                         stateOf(lastEvent.get(sa.getEnrollment().getId()))));
 
         return seatMasterRepository.findByStudyAreaId(area.get().getId()).stream()
                 .map(s -> new DsaRows.SeatStateRow(
-                        s.getSeatCd(),
-                        stateBySeat.getOrDefault(s.getSeatCd(), STATE_EMPTY)))
+                        s.getKioskSeatCd(),
+                        stateBySeat.getOrDefault(s.getKioskSeatCd(), STATE_EMPTY)))
                 .toList();
     }
 
@@ -159,10 +163,21 @@ public class KioskSeatQueryService {
         return SeatPresence.of(last).dsaCode();
     }
 
+    /**
+     * ★ 인자로 오는 {@code areaCd}는 <b>단말이 아는 코드</b>다.
+     *
+     * <p>우리 {@code area_cd}가 아니라 관까지 반영된 {@code kiosk_area_cd}로 찾아야 한다 —
+     * 본관은 둘이 같아 티가 안 나지만, 별관을 {@code area_cd}로 찾으면 본관 구역이 잡혀
+     * <b>다른 관의 좌석이 통째로 내려간다.</b>
+     */
     private Optional<StudyArea> area(Long academyId, String areaCd) {
         if (areaCd == null || areaCd.isBlank()) {
             return Optional.empty();
         }
-        return studyAreaRepository.findByAcademyIdAndAreaCd(academyId, areaCd);
+        // ★ 코드와 종류를 둘 다 건다 — 하나만 걸면 각각 다른 사고가 난다.
+        //   코드를 안 걸면 별관을 물었는데 본관 좌석이 내려가고,
+        //   종류를 안 걸면 반 교실 좌석이 단말에 그대로 나간다
+        return studyAreaRepository.findByAcademyIdAndKioskAreaCdAndType(
+                academyId, areaCd, AreaType.STUDY);
     }
 }

@@ -71,7 +71,8 @@ class LectureCapacityConcurrencyTest {
             academyId = academy.getId();
 
             Lecture lecture = new Lecture(academy, YEAR, LectureType.LECTURE, "정원테스트특강");
-            lecture.update(null, null, null, CAPACITY, null, null, null, null, null);
+            lecture.update(null, null, null, com.dlab.common.web.Patch.of(CAPACITY),
+                    null, null, null, null, null);
             lecture.changeStatus(LectureStatus.OPEN);
             lectureId = lectureRepository.save(lecture).getId();
 

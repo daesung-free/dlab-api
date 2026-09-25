@@ -2,6 +2,7 @@ package com.dlab.domain.grade.service;
 
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
+import com.dlab.domain.grade.entity.ExamMaster;
 import com.dlab.domain.grade.entity.ExamSubject;
 import com.dlab.domain.grade.entity.StudentExamScore;
 import com.dlab.domain.grade.entity.StudentGradeSubmission;
@@ -104,6 +105,10 @@ public class StudentGradeService {
                 .map(in -> subjects.get(in.examSubjectId()).getExamMaster().getId())
                 .distinct()
                 .forEach(submission::clearScoresOf);
+        // ★ 반드시 여기서 flush 한다. Hibernate 는 INSERT 를 UPDATE 보다 먼저 내보내서,
+        //   지운 표시(soft delete)가 반영되기 전에 새 점수가 들어가 uq_student_exam_score
+        //   (부분 유니크)에 걸린다 — 같은 회차를 다시 내면 커밋 시점에 실패했다
+        submissionRepository.flush();
 
         for (ScoreInput input : inputs) {
             if (!input.hasValue()) {
@@ -124,6 +129,48 @@ public class StudentGradeService {
     }
 
     /**
+     * 디랩에서 본 시험 성적 반영 — 연구소 파일 업로드 전용.
+     *
+     * <p>★ <b>{@link #saveExamScores} 와 경로를 나눈 이유가 둘이다.</b>
+     * <ul>
+     *   <li>저쪽은 <b>학생의 입학 양식</b>으로 과목을 검증한다. 디랩 시험 과목은 그 양식에
+     *       없어서 전부 거절된다</li>
+     *   <li>저쪽은 입학 성적의 <b>"제출 완료"·"모른다" 상태를 바꾼다</b>. 연구소 성적이
+     *       들어왔다고 학생이 입학 성적을 낸 것으로 바뀌면 안 된다</li>
+     * </ul>
+     *
+     * <p>그 회차 점수만 교체한다. 다른 회차와 입학 성적은 건드리지 않는다.
+     */
+    @Transactional
+    public void saveAcademyScores(StudentEnrollment enrollment, ExamMaster exam,
+                                  List<ScoreInput> inputs) {
+        if (!exam.isAcademyExam()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "입학 전 성적 양식에는 반영할 수 없습니다.");
+        }
+        Map<Long, ExamSubject> subjects = exam.activeSubjects().stream()
+                .collect(Collectors.toMap(ExamSubject::getId, Function.identity()));
+
+        StudentGradeSubmission submission = mine(enrollment);
+        submission.clearScoresOf(exam.getId());
+        // ★ 지운 표시를 먼저 반영한다 — 위 saveExamScores 와 같은 이유. 같은 회차를 다시
+        //   올리면 부분 유니크에 걸린다
+        submissionRepository.flush();
+        for (ScoreInput input : inputs) {
+            ExamSubject subject = subjects.get(input.examSubjectId());
+            if (subject == null || !input.hasValue()) {
+                continue;
+            }
+            StudentExamScore score = submission.addScore(subject,
+                    input.standardScore(), input.percentile(), input.gradeLevel(),
+                    input.rawScore());
+            if (score.isBlank()) {
+                score.markDeleted();
+            }
+        }
+    }
+
+    /**
      * 모의고사 성적을 모른다고 체크.
      *
      * <p>0으로 채우게 두면 통계에서 진짜 0점과 구분되지 않는다. 사유를 남기고 건너뛴다 —
@@ -141,11 +188,21 @@ public class StudentGradeService {
     }
 
     /** 과목 한 칸. 세 값 모두 {@code null}일 수 있다 — 미응시·절대평가·기억 안 남. */
+    /**
+     * @param rawScore 원점수. 학생 입력(입학 전 성적)에는 없다 — 연구소 파일에서만 온다
+     */
     public record ScoreInput(Long examSubjectId, Short standardScore, Short percentile,
-                             Short gradeLevel) {
+                             Short gradeLevel, Short rawScore) {
+
+        /** 원점수가 없는 입력(학생·직원 입력). */
+        public ScoreInput(Long examSubjectId, Short standardScore, Short percentile,
+                          Short gradeLevel) {
+            this(examSubjectId, standardScore, percentile, gradeLevel, null);
+        }
 
         boolean hasValue() {
-            return standardScore != null || percentile != null || gradeLevel != null;
+            return standardScore != null || percentile != null || gradeLevel != null
+                    || rawScore != null;
         }
     }
 }

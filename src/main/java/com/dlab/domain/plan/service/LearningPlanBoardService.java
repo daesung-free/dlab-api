@@ -146,6 +146,26 @@ public class LearningPlanBoardService {
         return Math.max(0, rangeDays(from, to) - excluded);
     }
 
+    /**
+     * 담임 = 예외 지정 ?? 반 담임({@code HomeroomResolver} 와 같은 해석).
+     *
+     * <p>반 담임은 집계 쿼리에 이미 실려 오므로 예외 지정된 학생만 따로 읽는다 —
+     * 드문 경우라 학생마다 쿼리가 나가지 않는다.
+     */
+    private Long homeroomIdOf(StudentEnrollment enrollment, ClassRef clazz) {
+        if (enrollment.getHomeroomOverride() != null) {
+            return enrollment.getHomeroomOverride().getId();
+        }
+        return clazz == null ? null : clazz.homeroomTeacherId();
+    }
+
+    private String homeroomNameOf(StudentEnrollment enrollment, ClassRef clazz) {
+        if (enrollment.getHomeroomOverride() != null) {
+            return enrollment.getHomeroomOverride().getName();
+        }
+        return clazz == null ? null : clazz.homeroomTeacherName();
+    }
+
     private BoardRow toRow(StudentEnrollment enrollment, ClassRef clazz,
                            PlanAggregate aggregate, long days) {
         return new BoardRow(
@@ -154,8 +174,8 @@ public class LearningPlanBoardService {
                 enrollment.getStudent().getName(),
                 clazz == null ? null : clazz.id(),
                 clazz == null ? null : clazz.name(),
-                clazz == null ? null : clazz.homeroomTeacherId(),
-                clazz == null ? null : clazz.homeroomTeacherName(),
+                homeroomIdOf(enrollment, clazz),
+                homeroomNameOf(enrollment, clazz),
                 aggregate.plannedMinutes(),
                 aggregate.doneMinutes(),
                 completionRate(aggregate),

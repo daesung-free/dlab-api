@@ -6,6 +6,7 @@ import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.attendance.repository.AttendanceTaggingLogRepository;
+import com.dlab.domain.facility.entity.AreaType;
 import com.dlab.domain.facility.entity.SeatAssignment;
 import com.dlab.domain.facility.entity.SeatPresence;
 import com.dlab.domain.facility.entity.StudyArea;
@@ -56,11 +57,12 @@ public class SeatLayoutService {
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final AttendanceTaggingLogRepository taggingLogRepository;
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.kiosk.service.SeatLeaveBoardService seatLeaveBoardService;
     private final Clock clock;
 
     /** 구역 목록. 화면이 구역을 골라야 배치도를 열 수 있다. */
     public List<AreaSummary> areas(AuthPrincipal me, Long academyId) {
-        return areas(me, academyId, false);
+        return areas(me, academyId, false, null, null);
     }
 
     /**
@@ -71,13 +73,29 @@ public class SeatLayoutService {
      * 까지 숨기면 <b>한 번 끈 구역을 다시 켤 방법이 없어진다.</b>
      */
     public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive) {
+        return areas(me, academyId, includeInactive, null, null);
+    }
+
+    /**
+     * 구역 목록 — 관·종류로 거른다.
+     *
+     * <p>둘 다 비면 전부 내린다. <b>독서실 화면과 반 좌석표 화면은 각자 자기 종류를 걸어서
+     * 부른다</b> — 안 걸면 독서실 목록에 반이 섞인다.
+     */
+    public List<AreaSummary> areas(AuthPrincipal me, Long academyId, boolean includeInactive,
+                                   Long buildingId, AreaType areaType) {
         Long resolved = requireAcademyAccess(me, academyId);
-        var areas = includeInactive
-                ? studyAreaRepository.findAllByAcademyId(resolved)
-                : studyAreaRepository.findActiveByAcademyId(resolved);
+        List<StudyArea> areas = includeInactive
+                ? studyAreaRepository.findAll(resolved, buildingId, areaType)
+                : studyAreaRepository.findActive(resolved, buildingId, areaType);
         return areas.stream()
                 .map(a -> new AreaSummary(
-                        a.getId(), a.getAreaCd(), a.getAreaNm(), a.getSortOrder(), a.isActive(),
+                        a.getId(), a.getBuilding().getId(), a.getBuilding().getName(),
+                        a.getAreaCd(), a.getKioskAreaCd(), a.getAreaNm(), a.getSortOrder(),
+                        a.isActive(),
+                        a.getAreaType(),
+                        a.getClassMaster() == null ? null : a.getClassMaster().getId(),
+                        a.getClassMaster() == null ? null : a.getClassMaster().getName(),
                         seatMasterRepository.findByStudyAreaId(a.getId()).size()))
                 .toList();
     }
@@ -107,6 +125,10 @@ public class SeatLayoutService {
 
         Map<Long, AttendanceEventType> lastEvent =
                 lastEventByEnrollment(area.getAcademy().getId());
+        // ★ 이탈은 출결 태깅에 남지 않는다 — 좌석이탈 로그를 함께 봐야 "이탈 중"이 보인다.
+        //   재실 값(presence)은 키오스크와 공유하는 코드라 건드리지 않고 별도 축으로 얹는다
+        Map<Long, java.time.Instant> openLeaves =
+                seatLeaveBoardService.openLeavesOf(area.getAcademy().getId());
 
         Map<String, SeatAssignment> assignmentBySeat = new HashMap<>();
         seatAssignmentRepository.findActiveByStudyAreaId(studyAreaId)
@@ -130,6 +152,7 @@ public class SeatLayoutService {
                     return new SeatCell(
                             seat.getId(),
                             seat.getSeatCd(),
+                            seat.getKioskSeatCd(),
                             seat.getSeatNm(),
                             seat.getXPos(),
                             seat.getYPos(),
@@ -143,6 +166,10 @@ public class SeatLayoutService {
                             clazz == null ? null : clazz.getId(),
                             clazz == null ? null : clazz.getName(),
                             presenceOf(assignment, lastEvent),
+                            assignment != null
+                                    && openLeaves.containsKey(assignment.getEnrollment().getId()),
+                            assignment == null ? null
+                                    : openLeaves.get(assignment.getEnrollment().getId()),
                             !raw);
                 })
                 .toList();
@@ -211,12 +238,27 @@ public class SeatLayoutService {
         return me.requireAcademyScope(academyId);
     }
 
-    /** @param seatCount 구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다 */
-    public record AreaSummary(Long id, String areaCd, String areaNm, short sortOrder,
-                              boolean active, int seatCount) {
+    /**
+     * @param buildingName  어느 관인가. <b>화면이 이걸 안 띄우면 같은 이름의 구역이 둘씩
+     *                      보인다</b> — 본관 A 와 별관 A 를 구분할 수가 없다
+     * @param kioskAreaCd   단말이 쓰는 코드. 본관은 {@code areaCd}와 같고 별관은 관 코드가
+     *                      앞에 붙는다. <b>대조용</b>이다 — 단말에서 구역이 안 보인다는
+     *                      문의가 오면 이 값부터 확인한다
+     * @param areaType      독서실({@code STUDY}) / 반 교실({@code CLASSROOM})
+     * @param classMasterId 반 교실이면 그 반. 독서실이면 {@code null}
+     * @param className     반 이름. 화면이 id 로 반을 다시 조회하지 않게 함께 내린다
+     * @param seatCount     구역 수용인원. 좌석 수에서 센다 — 별도 컬럼이면 어긋난다
+     */
+    public record AreaSummary(Long id, Long buildingId, String buildingName,
+                              String areaCd, String kioskAreaCd, String areaNm, short sortOrder,
+                              boolean active, AreaType areaType, Long classMasterId,
+                              String className, int seatCount) {
     }
 
     /**
+     * @param onSeatLeave 지금 자리를 비웠는지(좌석이탈). <b>{@code presence}와 별개 축</b>이다 —
+     *                    이탈해도 출결로는 여전히 재실이라 화면이 이 값으로 덮어 표시한다
+     * @param seatLeftAt  이탈 시작 시각. 이탈 중이 아니면 비어 있다
      * @param usable      사용중지 여부(배정 축). {@code presence}와 별개다
      * @param studentName {@code masked}가 참이면 가려진 값이다
      * @param className   고정반. 반 미배정이면 비어 있다
@@ -225,6 +267,13 @@ public class SeatLayoutService {
     public record SeatCell(
             Long seatId,
             String seatCd,
+            /**
+             * 단말이 아는 번호. 본관은 {@code seatCd}와 같고 별관은 관 offset 이 더해진다.
+             *
+             * <p><b>배치도에 필요하다</b> — "단말에서 이 자리가 안 보인다"는 문의를 받는
+             * 화면이 배치도인데, 이 값이 없으면 대조를 다른 화면에서 해야 한다.
+             */
+            String kioskSeatCd,
             String seatNm,
             int xPos,
             int yPos,
@@ -235,6 +284,8 @@ public class SeatLayoutService {
             Long classId,
             String className,
             SeatPresence presence,
+            boolean onSeatLeave,
+            java.time.Instant seatLeftAt,
             boolean masked) {
 
         /** 배정 축. 화면이 색을 고를 때 재실 축과 조합한다. */

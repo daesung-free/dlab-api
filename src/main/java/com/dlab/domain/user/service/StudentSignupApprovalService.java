@@ -72,14 +72,45 @@ public class StudentSignupApprovalService {
      */
     @Transactional(readOnly = true)
     public List<PendingSignup> pending(AuthPrincipal me, Long requestedAcademyId) {
+        return pending(me, requestedAcademyId, false);
+    }
+
+    /**
+     * @param includeApproved 승인된 건까지 함께 본다.
+     *                        <p>★ <b>OT 대기자를 보려면 이게 필요하다.</b> 승인하는 순간
+     *                        목록에서 사라지는데, <b>OT 완료는 그 뒤에 관리자가 눌러야 하는
+     *                        단계</b>다. 승인분이 안 보이면 누구를 OT 처리해야 하는지 알
+     *                        방법이 없어 화면이 거기서 끊긴다.
+     *                        <p>기본은 {@code false} 다 — 승인 대기 화면에 이미 처리한 건이
+     *                        섞이면 무엇을 눌러야 하는지 흐려진다.
+     */
+    @Transactional(readOnly = true)
+    public List<PendingSignup> pending(AuthPrincipal me, Long requestedAcademyId,
+                                       boolean includeApproved) {
         return enrollmentRepository
                 .findCurrentByAcademyId(me.requireAcademyScope(requestedAcademyId)).stream()
                 .map(e -> accountRepository.findByStudentId(e.getStudent().getId())
-                        .filter(a -> a.getStatus() == AccountStatus.PENDING)
+                        .filter(a -> visible(a, includeApproved))
                         .map(a -> new PendingSignup(e, a))
                         .orElse(null))
                 .filter(java.util.Objects::nonNull)
                 .toList();
+    }
+
+    /**
+     * 승인 대기 + (선택) 승인분.
+     *
+     * <p>★ <b>온보딩이 끝난 학생은 승인분에서도 뺀다.</b> 이 화면이 다루는 것은 "가입 후
+     * 아직 정리가 안 끝난 학생" 이라, 다 끝난 재원생까지 올라오면 목록이 전교생이 된다.
+     */
+    private boolean visible(Account account, boolean includeApproved) {
+        if (account.getStatus() == AccountStatus.PENDING) {
+            return true;
+        }
+        return includeApproved
+                && account.getStatus() == AccountStatus.ACTIVE
+                && account.getStudent() != null
+                && account.getStudent().getOnboardingStatus() != OnboardingStatus.ACTIVE;
     }
 
     /**

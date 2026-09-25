@@ -1,5 +1,6 @@
 package com.dlab.api.admin.student;
 
+import jakarta.validation.constraints.NotBlank;
 import com.dlab.common.validation.BirthDateRange;
 import com.dlab.domain.user.entity.EnrollmentStatus;
 import com.dlab.domain.user.entity.GradeType;
@@ -66,7 +67,18 @@ public final class StudentRequests {
             @Pattern(regexp = GENDER_PATTERN, message = "성별은 M 또는 F입니다.") String gender,
             @Size(max = 64) String schoolName,
             @Size(max = 200) String address,
-            LocalDate admissionDate) {
+            LocalDate admissionDate,
+            /** 영문명(선택) */
+            @Size(max = 100) String englishName,
+            /** 고교 졸업연도(선택) */
+            @Min(1990) @Max(2100) Short graduationYear) {
+
+        public Admit(Long academyId, Integer year, String name, String phone, GradeType grade,
+                     Short retakeCount, TrackType track, LocalDate birthDate, String gender,
+                     String schoolName, String address, LocalDate admissionDate) {
+            this(academyId, year, name, phone, grade, retakeCount, track, birthDate, gender,
+                    schoolName, address, admissionDate, null, null);
+        }
     }
 
     /**
@@ -95,7 +107,16 @@ public final class StudentRequests {
             GradeType grade,
             @Min(1) @Max(10) Short retakeCount,
             TrackType track,
-            EnrollmentStatus status) {
+            EnrollmentStatus status,
+            /** 영문명. 빈 문자열을 보내면 지운다 */
+            @Size(max = 100) String englishName,
+            @Min(1990) @Max(2100) Short graduationYear,
+            /** {@code true}면 졸업연도를 지운다 — {@code null}은 "안 바꿈"이라 따로 받는다 */
+            Boolean clearGraduationYear) {
+
+        public boolean clearsGraduationYear() {
+            return Boolean.TRUE.equals(clearGraduationYear);
+        }
     }
 
     /**
@@ -103,8 +124,19 @@ public final class StudentRequests {
      *
      * <p>사유는 필수가 아니지만 <b>제적처럼 다툼이 생길 수 있는 전이</b>에는 남겨야 한다.
      */
+    /**
+     * 상태 변경.
+     *
+     * <p><b>사유가 필수다.</b> 상태 변경 이력에 남는 <b>유일한 설명</b>이라, 비면
+     * 나중에 "왜 퇴원 처리했나" 에 답할 수 없다 — 제적은 재등록 심사에서 다툼이 되고,
+     * 퇴원은 환불 산정과 얽힌다.
+     *
+     * <p>휴원처럼 가벼운 전이에도 함께 건다. 전이마다 규칙이 다르면 화면이 그 조건을
+     * 다시 구현해야 하고, <b>한쪽만 바뀌면 어긋난다.</b>
+     */
     public record StudentChangeStatus(
             @NotNull(message = "변경할 상태는 필수입니다.") EnrollmentStatus status,
+            @NotBlank(message = "변경 사유는 필수입니다.")
             @Size(max = 200) String reason) {
     }
 

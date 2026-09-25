@@ -57,6 +57,7 @@ class TeacherHomeroomScopeTest {
     ClassMaster myClass;
     ClassMaster otherClass;
     Teacher me;
+    Teacher other;
     AuthPrincipal teacher;
     AuthPrincipal branchAdmin;
 
@@ -71,7 +72,7 @@ class TeacherHomeroomScopeTest {
 
         me = new Teacher(bundang, "김담임", null);
         em.persist(me);
-        Teacher other = new Teacher(bundang, "이담임", null);
+        other = new Teacher(bundang, "이담임", null);
         em.persist(other);
 
         myClass = new ClassMaster(bundang, (short) day.getYear(), "N수 1반", ClassType.FIXED, me);
@@ -163,5 +164,80 @@ class TeacherHomeroomScopeTest {
 
         assertThat(studentNosOf(boardService.board(branchAdmin, null, day, otherClass.getId())))
                 .containsExactly("2026-0002");
+    }
+
+    // ── 담임 예외 지정 ──────────────────────────────────────────
+
+    @Test
+    @DisplayName("★ 다른 반 학생이라도 나에게 예외 지정되면 보인다 — 승인 요청은 오는데 출결을 못 보면 안 된다")
+    void overriddenStudentIsVisibleToNewHomeroom() {
+        enroll("DL-1", "내반학생", "2026-0001", myClass);
+        StudentEnrollment moved = enroll("DL-2", "예외학생", "2026-0002", otherClass);
+        moved.overrideHomeroom(me, "학부모 요청", java.time.Instant.now(clock));
+        em.flush();
+
+        assertThat(studentNosOf(boardService.board(teacher, null, day, null)))
+                .containsExactly("2026-0001", "2026-0002");
+    }
+
+    @Test
+    @DisplayName("★ 내 반 학생이라도 다른 선생님에게 예외 지정되면 안 보인다")
+    void overriddenStudentIsHiddenFromOriginalHomeroom() {
+        enroll("DL-1", "내반학생", "2026-0001", myClass);
+        StudentEnrollment moved = enroll("DL-2", "예외학생", "2026-0002", myClass);
+        moved.overrideHomeroom(other, "학부모 요청", java.time.Instant.now(clock));
+        em.flush();
+
+        assertThat(studentNosOf(boardService.board(teacher, null, day, null)))
+                .containsExactly("2026-0001");
+    }
+
+    @Test
+    @DisplayName("남의 반 번호를 넣으면 그 반에서 나에게 예외 지정된 학생만 — 반 전체로 넓어지지 않는다")
+    void otherClassFilterShowsOnlyMyOverriddenStudents() {
+        enroll("DL-1", "내반학생", "2026-0001", myClass);
+        enroll("DL-2", "남의반학생", "2026-0002", otherClass);
+        StudentEnrollment moved = enroll("DL-3", "예외학생", "2026-0003", otherClass);
+        moved.overrideHomeroom(me, "학부모 요청", java.time.Instant.now(clock));
+        em.flush();
+
+        assertThat(studentNosOf(boardService.board(teacher, null, day, otherClass.getId())))
+                .containsExactly("2026-0003");
+    }
+
+    @Test
+    @DisplayName("맡은 반이 없어도 예외 지정된 학생은 보인다")
+    void teacherWithoutClassSeesOverriddenStudent() {
+        Teacher rookie = new Teacher(bundang, "신입담임", null);
+        em.persist(rookie);
+        Account account = Account.forTeacher(rookie, "rookie-override-test", "x", false);
+        em.persist(account);
+        StudentEnrollment moved = enroll("DL-1", "예외학생", "2026-0001", myClass);
+        moved.overrideHomeroom(rookie, "학부모 요청", java.time.Instant.now(clock));
+        em.flush();
+        AuthPrincipal rookiePrincipal = AuthPrincipal.of(account.getId(), "TEACHER",
+                bundang.getId(), List.of(Role.TEACHER), false);
+
+        assertThat(studentNosOf(boardService.board(rookiePrincipal, null, day, null)))
+                .containsExactly("2026-0001");
+    }
+
+    @Test
+    @DisplayName("★ 학부모 연락처는 담임에게 가려져 나간다 — 원본은 상위 관리자만(실행가이드 3.2)")
+    void guardianPhoneMaskedForTeacher() {
+        StudentEnrollment e = enroll("DL-P", "연락처학생", "2026-0001", myClass);
+        com.dlab.domain.user.entity.ParentGuardian mom =
+                new com.dlab.domain.user.entity.ParentGuardian("엄마", "010-5555-6666", "F");
+        em.persist(mom);
+        em.persist(new com.dlab.domain.user.entity.StudentGuardianLink(e.getStudent(), mom, (short) 1, true));
+        em.flush();
+
+        AttendanceRow forTeacher = boardService.board(teacher, null, day, null).get(0);
+        assertThat(forTeacher.guardianPhone()).isEqualTo("010-****-6666");
+        assertThat(forTeacher.masked()).isTrue();
+
+        AttendanceRow forAdmin = boardService.board(branchAdmin, null, day, null).get(0);
+        assertThat(forAdmin.guardianPhone()).isEqualTo("010-5555-6666");
+        assertThat(forAdmin.masked()).isFalse();
     }
 }

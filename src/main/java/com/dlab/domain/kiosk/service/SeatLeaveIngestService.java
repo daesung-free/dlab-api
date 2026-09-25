@@ -143,7 +143,7 @@ public class SeatLeaveIngestService {
      * 붙지는 않게 한다. 거절하지 않는 이유는 다른 미해결과 같다(영원한 재전송 방지).
      */
     private StudentEnrollment resolveStudent(Academy academy, Event event) {
-        StudentEnrollment found = lookup(event);
+        StudentEnrollment found = lookup(academy, event);
         if (found == null) {
             return null;
         }
@@ -157,7 +157,15 @@ public class SeatLeaveIngestService {
         return found;
     }
 
-    private StudentEnrollment lookup(Event event) {
+    /**
+     * ★ <b>학번은 지점 안에서만 찾는다.</b> 학번이 지점마다 따로 매겨져서 전 지점을 뒤지면
+     * 같은 학번이 여러 건 걸리고, 한 건을 기대한 조회가 예외로 끝나 <b>배치 전체가
+     * 500으로 실패</b>한다(카드번호로 보낼 때는 나지 않아 한동안 안 보였다).
+     *
+     * <p>카드번호는 전 지점에서 찾은 뒤 {@link #resolveStudent}가 지점을 대조한다 —
+     * 카드가 다른 지점 학생이면 잘못 붙는 것보다 미해결로 남기는 편이 낫기 때문이다.
+     */
+    private StudentEnrollment lookup(Academy academy, Event event) {
         if (event.rfidNo() != null && !event.rfidNo().isBlank()) {
             var found = enrollmentRepository.findCurrentByRfidNo(event.rfidNo());
             if (found.isPresent()) {
@@ -165,7 +173,9 @@ public class SeatLeaveIngestService {
             }
         }
         if (event.studentNo() != null && !event.studentNo().isBlank()) {
-            return enrollmentRepository.findCurrentByStudentNo(event.studentNo()).orElse(null);
+            return enrollmentRepository
+                    .findCurrentByStudentNo(academy.getId(), event.studentNo())
+                    .orElse(null);
         }
         return null;
     }

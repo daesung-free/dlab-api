@@ -168,6 +168,9 @@ class StudentGradeTest {
 
         StudentGradeSubmission saved = gradeService.saveExamScores(minji, List.of(
                 new ScoreInput(korean.getId(), (short) 128, (short) 90, (short) 3)));
+        // ★ 커밋 시점과 같게 반영까지 본다. 이게 없어서 재제출이 유니크 제약에 걸리는 것을
+        //   이 테스트가 잡지 못했다
+        em.flush();
 
         assertThat(saved.activeScores()).hasSize(1);
         assertThat(saved.activeScores().get(0).getStandardScore()).isEqualTo((short) 128);

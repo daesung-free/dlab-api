@@ -60,6 +60,44 @@ public class StudentEnrollment extends BaseEntity {
     @Column(name = "is_current", nullable = false)
     private boolean current = true;
 
+    /**
+     * 모의고사 수험번호 — 반 번호 + 3자리 순번(예 {@code 1001}).
+     *
+     * <p>★ <b>우리 학번({@code 2026-0001})과 다른 체계다.</b> 학번은 지점·연도 일련번호이고
+     * 이건 <b>반 기준</b>이다. 연구소 자료가 이 번호로 들어오므로 둘을 합치면 안 된다.
+     *
+     * <p>★★ <b>한 번 부여되면 반이 바뀌어도 고치지 않는다.</b> 연구소가 *"최초 부여받은
+     * 학번은 절대 변경 불가"* 라고 명시했고, 과거 회차 성적이 이미 그 번호로 들어와 있다.
+     */
+    @Column(name = "exam_student_no", length = 10)
+    private String examStudentNo;
+
+    /** 채번 당시의 반 번호. 반이 바뀌어도 그대로 둔다 — 그 번호를 만든 근거다 */
+    @Column(name = "exam_class_no")
+    private Short examClassNo;
+
+    @Column(name = "exam_seq")
+    private Short examSeq;
+
+    @Column(name = "exam_no_fixed_at")
+    private java.time.Instant examNoFixedAt;
+
+    /**
+     * 담임 예외 지정. <b>비어 있으면 반 담임</b>이다.
+     *
+     * <p>★ 직접 읽지 말고 {@code HomeroomResolver} 를 거칠 것 — "예외 ?? 반 담임" 해석을 한
+     * 곳에서만 해야 사용처마다 다른 담임이 나오지 않는다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "homeroom_override_teacher_id")
+    private Teacher homeroomOverride;
+
+    @Column(name = "homeroom_override_reason", length = 200)
+    private String homeroomOverrideReason;
+
+    @Column(name = "homeroom_override_at")
+    private java.time.Instant homeroomOverrideAt;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     private GradeType grade;
@@ -143,6 +181,58 @@ public class StudentEnrollment extends BaseEntity {
     /** 이 기수가 끝나 다음 기수로 넘어갈 때 이전 등록 건을 내린다. */
     public void expire() {
         this.current = false;
+    }
+
+    /**
+     * 현재 등록으로 되돌린다.
+     *
+     * <p><b>잘못 만든 재등록을 지웠을 때 쓴다.</b> 재등록은 직전 건을 내리는데, 새로 만든
+     * 것을 다시 지우면 <b>아무 등록도 current 가 아닌 상태</b>가 남는다 — 앱은 통째로
+     * {@code ENROLLMENT_NOT_FOUND} 를 받고 관리자 화면에도 학생이 안 보인다. 되돌릴 방법이
+     * 화면에 없어서 DB 를 직접 고쳐야 했다.
+     *
+     * <p>⚠️ <b>종료 상태는 되살리지 않는다.</b> 퇴원한 등록 건이 current 로 돌아오면
+     * 퇴원생 카드로 키오스크 태깅이 통과한다(§3).
+     */
+    /**
+     * 수험번호 채번.
+     *
+     * <p>★ <b>이미 있으면 덮어쓰지 않는다.</b> 반을 옮길 때마다 번호가 바뀌면 지난 회차
+     * 성적과 연결이 끊긴다.
+     */
+    public void assignExamNo(short classNo, short seq, java.time.Instant at) {
+        if (examStudentNo != null) {
+            return;
+        }
+        this.examClassNo = classNo;
+        this.examSeq = seq;
+        this.examStudentNo = "%d%03d".formatted(classNo, seq);
+        this.examNoFixedAt = at;
+    }
+
+    /** 담임 예외 지정. 사유는 호출부가 필수로 받는다 */
+    public void overrideHomeroom(Teacher teacher, String reason, java.time.Instant at) {
+        this.homeroomOverride = teacher;
+        this.homeroomOverrideReason = reason;
+        this.homeroomOverrideAt = at;
+    }
+
+    /** 예외 해제 — 반 담임으로 돌아간다 */
+    public void clearHomeroomOverride() {
+        this.homeroomOverride = null;
+        this.homeroomOverrideReason = null;
+        this.homeroomOverrideAt = null;
+    }
+
+    public boolean hasExamNo() {
+        return examStudentNo != null;
+    }
+
+    public void makeCurrent() {
+        if (enrollmentStatus.requiresCleanup()) {
+            return;
+        }
+        this.current = true;
     }
 
 

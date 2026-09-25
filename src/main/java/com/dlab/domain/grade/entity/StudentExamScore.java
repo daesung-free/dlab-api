@@ -47,18 +47,29 @@ public class StudentExamScore extends BaseEntity {
     @Column(name = "grade_level")
     private Short gradeLevel;
 
+    /** 원점수. 연구소 파일에서 온다 — 영어·한국사는 원점수와 등급만 있다 */
+    @Column(name = "raw_score")
+    private Short rawScore;
+
     StudentExamScore(StudentGradeSubmission submission, ExamSubject examSubject,
-                     Short standardScore, Short percentile, Short gradeLevel) {
+                     Short standardScore, Short percentile, Short gradeLevel, Short rawScore) {
         this.submission = submission;
         this.examSubject = examSubject;
         this.examMaster = examSubject.getExamMaster();
         this.standardScore = standardScore;
         this.percentile = percentile;
         this.gradeLevel = gradeLevel;
+        this.rawScore = rawScore;
     }
 
-    /** 세 칸이 모두 비었으면 입력한 것이 없다 — 저장할 이유가 없다. */
+    /**
+     * 네 칸이 모두 비었으면 입력한 것이 없다 — 저장할 이유가 없다.
+     *
+     * <p>★ 원점수도 센다. 빼면 영어처럼 <b>원점수만 있고 등급이 비는 행</b>이 빈 행으로
+     * 판정돼 지워진다.
+     */
     public boolean isBlank() {
-        return standardScore == null && percentile == null && gradeLevel == null;
+        return standardScore == null && percentile == null && gradeLevel == null
+                && rawScore == null;
     }
 }

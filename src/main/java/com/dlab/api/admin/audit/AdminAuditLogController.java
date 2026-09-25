@@ -37,6 +37,7 @@ public class AdminAuditLogController {
 
     private final AuditLogRepository auditLogRepository;
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
+    private final com.dlab.domain.user.repository.StudentEnrollmentRepository enrollmentRepository;
     private final Clock clock;
 
     /**
@@ -50,6 +51,7 @@ public class AdminAuditLogController {
      *
      * @param academyId  비우면 내 지점. 전 지점 권한자가 비우면 전 지점이다
      * @param entityType {@code 상벌점}·{@code 성적}처럼 화면에 보이는 이름 그대로다
+     * @param action     {@code CREATE}·{@code UPDATE}·{@code DELETE}. 비우면 전부다
      */
     @GetMapping
     public ApiResponse<List<AuditLogResponse>> search(
@@ -61,6 +63,7 @@ public class AdminAuditLogController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) Long actorId,
+            @RequestParam(required = false) AuditAction action,
             @PageableDefault(size = 50) Pageable pageable) {
 
         LocalDate today = LocalDate.now(clock);
@@ -68,14 +71,15 @@ public class AdminAuditLogController {
         LocalDate end = to == null ? today : to;
 
         var page = auditLogRepository.search(
-                me.resolveAcademyScope(academyId), entityType, actorId,
+                me.resolveAcademyScope(academyId), entityType, actorId, action,
                 start.atStartOfDay(clock.getZone()).toInstant(),
                 // 끝 날짜를 포함해야 한다 — 오늘 수정분이 오늘 조회에서 빠지면 안 된다
                 end.plusDays(1).atStartOfDay(clock.getZone()).toInstant(),
                 pageable);
 
         var names = actorNames(page.getContent());
-        return ApiResponse.from(page.map(a -> AuditLogResponse.of(a, names)));
+        var targets = targets(page.getContent());
+        return ApiResponse.from(page.map(a -> AuditLogResponse.of(a, names, targets)));
     }
 
     /** 한 건이 어떻게 바뀌어 왔나 — 학생 상세에서 "이 기록의 이력". */
@@ -84,8 +88,9 @@ public class AdminAuditLogController {
                                                        @PathVariable Long entityId) {
         var logs = auditLogRepository.findByEntity(entityType, entityId);
         var names = actorNames(logs);
+        var targets = targets(logs);
         return ApiResponse.success(logs.stream()
-                .map(a -> AuditLogResponse.of(a, names)).toList());
+                .map(a -> AuditLogResponse.of(a, names, targets)).toList());
     }
 
     /**
@@ -116,6 +121,25 @@ public class AdminAuditLogController {
     }
 
     /**
+     * 대상 학생(등록 건 id → 등록 건). 이름·학번을 붙이려고 <b>한 번에</b> 가져온다.
+     *
+     * <p>이름은 이력에 저장하지 않는다 — 개인정보가 이력으로 복제되기 때문이다.
+     */
+    private java.util.Map<Long, com.dlab.domain.user.entity.StudentEnrollment> targets(
+            java.util.List<AuditLog> logs) {
+        java.util.Set<Long> ids = logs.stream()
+                .map(AuditLog::getTargetEnrollmentId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return java.util.Map.of();
+        }
+        return enrollmentRepository.findWithStudentByIds(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        com.dlab.domain.user.entity.StudentEnrollment::getId, e -> e));
+    }
+
+    /**
      * @param changes 바뀐 필드만 담긴 JSON. <b>대부분 비어 있다</b> — 전 필드 스냅샷을
      *                뜨면 개인정보가 이력으로 복제되므로, 금액·점수처럼 다툼이 될 수 있는
      *                값만 명시적으로 남긴다
@@ -123,19 +147,27 @@ public class AdminAuditLogController {
      */
     public record AuditLogResponse(Long id, String entityType, Long entityId, AuditAction action,
                                    Long academyId, Long actorId, String actorName, String actorIp,
-                                   String changes, Instant occurredAt) {
+                                   String changes, Instant occurredAt,
+                                   Long targetEnrollmentId, String targetStudentName,
+                                   String targetStudentNo) {
 
         /**
          * @param names 조회 시점에 붙인 사람 이름. 없으면 저장된 값을 그대로 쓴다 —
          *              계정이 완전히 사라진 옛 기록이 빈칸이 되면 안 된다
          */
-        static AuditLogResponse of(AuditLog a, java.util.Map<Long, String> names) {
+        static AuditLogResponse of(AuditLog a, java.util.Map<Long, String> names,
+                                   java.util.Map<Long, com.dlab.domain.user.entity.StudentEnrollment> targets) {
+            var target = a.getTargetEnrollmentId() == null ? null
+                    : targets.get(a.getTargetEnrollmentId());
             String actorName = SecurityAuditorAware.SYSTEM_ACCOUNT_ID.equals(a.getActorId())
                     ? "시스템"
                     : names.getOrDefault(a.getActorId(), a.getActorName());
             return new AuditLogResponse(a.getId(), a.getEntityType(), a.getEntityId(),
                     a.getAction(), a.getAcademyId(), a.getActorId(), actorName,
-                    a.getActorIp(), a.getChanges(), a.getOccurredAt());
+                    a.getActorIp(), a.getChanges(), a.getOccurredAt(),
+                    a.getTargetEnrollmentId(),
+                    target == null ? null : target.getStudent().getName(),
+                    target == null ? null : target.getStudentNo());
         }
     }
 }

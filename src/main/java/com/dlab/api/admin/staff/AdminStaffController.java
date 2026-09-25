@@ -31,6 +31,7 @@ public class AdminStaffController {
 
     private final StaffAccountService staffAccountService;
     private final AuditLogRepository auditLogRepository;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
 
     /**
      * 계정 목록 (F-4.10-2 사용자 관리).
@@ -203,8 +204,24 @@ public class AdminStaffController {
      */
     @GetMapping("/accounts/{accountId}/history")
     public ApiResponse<List<AccountHistoryRow>> accountHistory(@PathVariable Long accountId) {
-        return ApiResponse.success(auditLogRepository.findByEntity("Account", accountId).stream()
-                .map(AccountHistoryRow::from).toList());
+        var logs = auditLogRepository.findByEntity(StaffAccountService.AUDIT_ACCOUNT, accountId);
+        // ★ 저장된 actor_name 은 이름이 아니라 계정 종류("EMPLOYEE")다 — 기록 시점에 이름을 찾으면
+        //   플러시 중 조회가 돼 깨진다. 수정 이력 화면과 같이 조회 시점에 이름을 붙인다
+        java.util.Set<Long> ids = logs.stream()
+                .map(com.dlab.domain.audit.AuditLog::getActorId)
+                .filter(java.util.Objects::nonNull)
+                .filter(id -> !id.equals(com.dlab.common.config.SecurityAuditorAware.SYSTEM_ACCOUNT_ID))
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.Map<Long, String> names = new java.util.HashMap<>();
+        if (!ids.isEmpty()) {
+            for (Object[] row : accountRepository.findActorNames(ids)) {
+                if (row[1] != null) {
+                    names.put((Long) row[0], (String) row[1]);
+                }
+            }
+        }
+        return ApiResponse.success(logs.stream()
+                .map(l -> AccountHistoryRow.from(l, names)).toList());
     }
 
     /**
@@ -215,9 +232,13 @@ public class AdminStaffController {
                                     Long actorId, String actorName,
                                     java.time.Instant occurredAt) {
 
-        static AccountHistoryRow from(com.dlab.domain.audit.AuditLog log) {
+        static AccountHistoryRow from(com.dlab.domain.audit.AuditLog log,
+                                      java.util.Map<Long, String> names) {
+            String actorName = com.dlab.common.config.SecurityAuditorAware.SYSTEM_ACCOUNT_ID
+                    .equals(log.getActorId()) ? "시스템"
+                    : names.getOrDefault(log.getActorId(), log.getActorName());
             return new AccountHistoryRow(log.getId(), log.getAction().name(), log.getChanges(),
-                    log.getActorId(), log.getActorName(), log.getOccurredAt());
+                    log.getActorId(), actorName, log.getOccurredAt());
         }
     }
 
@@ -232,6 +253,44 @@ public class AdminStaffController {
                                             @PathVariable Long accountId) {
         staffAccountService.approve(accountId, me);
         return ApiResponse.empty();
+    }
+
+    /**
+     * 잠금 해제 (로그인 5회 실패).
+     *
+     * <p><b>자동 해제가 없어 이 호출이 유일한 수단이다.</b> 없는 동안에는 직원이 잠기면
+     * DB를 직접 고치는 것 말고 방법이 없었다 — 앱 계정에만 경로가 있었다.
+     *
+     * <p>잠겨 있지 않아도 성공을 돌려준다(멱등). 화면이 잠금 표시를 보고 누르는데 그 사이
+     * 다른 관리자가 먼저 풀었다고 오류를 낼 이유가 없다.
+     */
+    @PostMapping("/accounts/{accountId}/unlock")
+    public ApiResponse<Void> unlockAccount(@CurrentAccount AuthPrincipal me,
+                                           @PathVariable Long accountId) {
+        staffAccountService.unlock(accountId, me);
+        return ApiResponse.empty();
+    }
+
+    /**
+     * 임시 비밀번호 재발급 (분실·잠금 시).
+     *
+     * <p><b>평문이 이 응답에 한 번만 실린다.</b> 저장하지 않으므로 놓치면 다시 발급해야
+     * 한다 — 되짚어 볼 수 있게 만들면 그 자체가 유출 경로가 된다. 받은 사람은 다음 로그인에서
+     * 비밀번호를 바꿔야 다른 API를 쓸 수 있다.
+     *
+     * <p>재발급하면 <b>잠금도 함께 풀리고 기존 로그인 세션이 끊긴다.</b>
+     */
+    @PostMapping("/accounts/{accountId}/temporary-password")
+    public ApiResponse<TemporaryPassword> reissueTemporaryPassword(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long accountId) {
+        return ApiResponse.success(new TemporaryPassword(
+                staffAccountService.reissueTemporaryPassword(accountId, me)));
+    }
+
+    /**
+     * @param temporaryPassword 평문 임시 비밀번호. 이 응답 이후로는 어디에도 남지 않는다
+     */
+    public record TemporaryPassword(String temporaryPassword) {
     }
 
     /**

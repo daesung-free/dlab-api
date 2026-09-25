@@ -29,12 +29,15 @@ import java.util.stream.Collectors;
  * <p>담임은 {@link Teacher}만 될 수 있다 — 행정({@link Employee})은 애초에 다른 테이블이라
  * FK가 자격을 보장한다.
  */
+@lombok.extern.slf4j.Slf4j
 @Service
 @RequiredArgsConstructor
 public class ClassService {
 
+    private final com.dlab.domain.master.repository.RoomMasterRepository roomMasterRepository;
     private final ClassMasterRepository classMasterRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.grade.service.ExamNumberService examNumberService;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final AcademyRepository academyRepository;
     private final TeacherRepository teacherRepository;
@@ -205,10 +208,54 @@ public class ClassService {
     }
 
     /**
+     * 강의실 지정·해제. {@code roomId}가 {@code null}이면 해제다.
+     *
+     * <p><b>같은 지점 강의실만</b> 붙는다 — 다른 지점 강의실 id 를 넣어도 통하면 반 목록에
+     * 남의 지점 강의실 이름이 뜬다.
+     */
+    @Transactional
+    public ClassMaster assignRoom(Long classId, Long roomId, AuthPrincipal principal) {
+        ClassMaster classMaster = loadAccessible(classId, principal);
+        if (roomId == null) {
+            classMaster.assignRoom(null);
+            return classMaster;
+        }
+        var room = roomMasterRepository.findById(roomId)
+                .filter(r -> !r.isDeleted())
+                .filter(r -> r.getAcademy().getId().equals(classMaster.getAcademy().getId()))
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "이 지점의 강의실이 아닙니다."));
+        classMaster.assignRoom(room);
+        return classMaster;
+    }
+
+    /**
+     * 모의고사 반 번호 지정.
+     *
+     * <p>★ <b>반 이름에서 뽑지 않는다.</b> "고3 1반" 과 "N수 1반" 이 둘 다 1반이 되어
+     * 수험번호가 겹친다 — 실제 자료는 지점 안에서 반 번호가 유일하다.
+     *
+     * <p><b>이미 채번된 학생의 번호는 바뀌지 않는다.</b> 여기서 바꾼 값은 <b>다음에 배정되는
+     * 학생부터</b> 적용된다 — 연구소가 최초 부여 번호는 변경 불가라고 명시했다.
+     */
+    @Transactional
+    public ClassMaster changeExamClassNo(Long classId, Short examClassNo, AuthPrincipal principal) {
+        ClassMaster classMaster = loadAccessible(classId, principal);
+        if (examClassNo != null && (examClassNo < 1 || examClassNo > 99)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "모의고사 반 번호는 1~99 입니다.");
+        }
+        classMaster.changeExamClassNo(examClassNo);
+        return classMaster;
+    }
+
+    /**
      * 학생 반 배정.
      *
      * <p>같은 유형의 기존 배정이 있으면 <b>이전 것을 비활성으로 내리고 새 행을 넣는다</b> —
      * 매년 전체 재세팅되는 구조라 이력이 남아야 한다. 덮어쓰면 "작년에 어느 반이었나"를 잃는다.
+     *
+     * <p>★ 여기서 <b>모의고사 수험번호가 채번된다</b>(최초 배정 시 한 번).
      */
     @Transactional
     public ClassMemberView assignStudent(Long classId, Long enrollmentId, AuthPrincipal principal) {
@@ -234,6 +281,17 @@ public class ClassService {
         classAssignmentRepository
                 .findByEnrollmentIdAndClassTypeAndActiveTrue(enrollmentId, classMaster.getClassType())
                 .ifPresent(previous -> {
+                    // ★ 고정반이 바뀌면 담임 예외 지정을 푼다. 반을 옮기는 순간 예외의 전제
+                    //   ("반은 그대로인데 담임만 다르게")가 사라지는데, 남겨두면 옛 담임이 조용히
+                    //   따라다니며 승인·상담을 받는다
+                    if (classMaster.getClassType() == com.dlab.domain.user.entity.ClassType.FIXED
+                            && !previous.getClassMaster().getId().equals(classMaster.getId())
+                            && enrollment.getHomeroomOverride() != null) {
+                        log.info("반 이동으로 담임 예외 지정 해제: enrollmentId={}, 해제된 담임 teacherId={}, 사유였던 것={}",
+                                enrollmentId, enrollment.getHomeroomOverride().getId(),
+                                enrollment.getHomeroomOverrideReason());
+                        enrollment.clearHomeroomOverride();
+                    }
                     previous.deactivate();
                     // ★ 반드시 여기서 flush 한다. Hibernate는 기본적으로 INSERT를 UPDATE보다
                     //   먼저 내보내는데, 그러면 이전 배정이 아직 활성인 상태로 새 행이 들어가
@@ -243,6 +301,10 @@ public class ClassService {
 
         ClassAssignment saved = classAssignmentRepository.save(new ClassAssignment(
                 classMaster.getAcademy(), enrollment, classMaster, classMaster.getClassType()));
+
+        // ★ 모의고사 수험번호는 반 최초 배정에서 정해진다. 이미 있으면 덮어쓰지 않는다 —
+        //   반을 옮길 때마다 번호가 바뀌면 지난 회차 성적과 연결이 끊긴다
+        examNumberService.assignOnClassAssigned(enrollment, classMaster);
 
         // 명단과 같은 모양으로 돌려준다 — 배정 직후 화면이 그 줄을 그대로 쓴다
         return new ClassMemberView(saved,

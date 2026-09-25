@@ -42,24 +42,76 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
      * <p><b>미배정 학생은 여기 안 나온다.</b> 반이 없으니 반별 집계에 자리가 없다 —
      * 그 수는 {@code /students?unassignedClass=true}로 따로 센다.
      *
+     * <p><b>재원 0명인 반도 0으로 나온다.</b> 배정에서 출발하면 학생이 없는 반은 줄 자체가
+     * 안 생겨 화면의 반 수가 실제와 달라진다 — 그래서 반에서 출발한다.
+     *
      * @return {@code [classId, className, capacity, 인원]}
      */
     @Query("""
-            SELECT c.id, c.name, c.capacity, COUNT(a)
-            FROM ClassAssignment a
-            JOIN a.classMaster c
-            JOIN a.enrollment e
-            WHERE (:academyId IS NULL OR a.academy.id = :academyId)
+            SELECT c.id, c.name, c.capacity, COUNT(e)
+            FROM ClassMaster c
+            LEFT JOIN ClassAssignment a
+                   ON a.classMaster = c
+                  AND a.classType = com.dlab.domain.user.entity.ClassType.FIXED
+                  AND a.active = true
+                  AND a.deleted = false
+            LEFT JOIN a.enrollment e
+                   ON e.enrollmentStatus = com.dlab.domain.user.entity.EnrollmentStatus.ENROLLED
+                  AND e.deleted = false
+            WHERE (:academyId IS NULL OR c.academy.id = :academyId)
               AND c.year = :year
-              AND a.classType = com.dlab.domain.user.entity.ClassType.FIXED
-              AND a.active = true
-              AND a.deleted = false
-              AND e.enrollmentStatus = com.dlab.domain.user.entity.EnrollmentStatus.ENROLLED
-              AND e.deleted = false
+              AND c.classType = com.dlab.domain.user.entity.ClassType.FIXED
+              AND c.deleted = false
             GROUP BY c.id, c.name, c.capacity
             ORDER BY c.name
             """)
     List<Object[]> countByClass(@Param("academyId") Long academyId, @Param("year") short year);
+
+    /**
+     * 반별 재적 상태 인원 — 학생의 <b>마지막 고정반 배정</b> 기준.
+     *
+     * <p>퇴원·제적하면 반 배정이 비활성으로 내려가(후속처리) 활성 배정으로는 셀 수 없다.
+     * 그래서 등록 건마다 마지막 고정반 배정을 "그 학생의 반" 으로 본다 — 퇴원 직전에 있던 반이다.
+     *
+     * @return {@code [classId, 재적 상태, 인원]}
+     */
+    @Query("""
+            SELECT a.classMaster.id, e.enrollmentStatus, COUNT(e)
+            FROM ClassAssignment a
+            JOIN a.enrollment e
+            WHERE (:academyId IS NULL OR a.academy.id = :academyId)
+              AND a.classMaster.year = :year
+              AND a.classType = com.dlab.domain.user.entity.ClassType.FIXED
+              AND a.deleted = false
+              AND e.deleted = false
+              AND a.id = (
+                    SELECT MAX(a2.id) FROM ClassAssignment a2
+                    WHERE a2.enrollment = e
+                      AND a2.classType = com.dlab.domain.user.entity.ClassType.FIXED
+                      AND a2.deleted = false)
+            GROUP BY a.classMaster.id, e.enrollmentStatus
+            """)
+    List<Object[]> countStatusByClass(@Param("academyId") Long academyId, @Param("year") short year);
+
+    /**
+     * 반 안의 계열 구분 — 재원생만.
+     *
+     * @return {@code [classId, track, 인원]}. 계열이 없으면 {@code track}이 {@code null}
+     */
+    @Query("""
+            SELECT a.classMaster.id, e.track, COUNT(e)
+            FROM ClassAssignment a
+            JOIN a.enrollment e
+            WHERE (:academyId IS NULL OR a.academy.id = :academyId)
+              AND a.classMaster.year = :year
+              AND a.classType = com.dlab.domain.user.entity.ClassType.FIXED
+              AND a.active = true
+              AND a.deleted = false
+              AND e.deleted = false
+              AND e.enrollmentStatus = com.dlab.domain.user.entity.EnrollmentStatus.ENROLLED
+            GROUP BY a.classMaster.id, e.track
+            """)
+    List<Object[]> countTrackByClass(@Param("academyId") Long academyId, @Param("year") short year);
 
     /**
      * 계열별 인원.
@@ -102,6 +154,25 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
             """)
     long countEnrolledAt(@Param("academyId") Long academyId, @Param("year") short year,
                          @Param("at") LocalDate at);
+
+    /**
+     * 그 달에 <b>새로 들어온</b> 인원 — 월별 추이의 '신규 등록'.
+     *
+     * <p>순증감({@code delta})으로는 이걸 알 수 없다. 10명 들어오고 10명 나간 달은
+     * 증감이 0이라 <b>아무 일도 없던 달처럼 보인다</b> — 모집 성과를 보는 화면이라
+     * 들어온 수를 따로 세야 한다.
+     */
+    @Query("""
+            SELECT COUNT(e)
+            FROM StudentEnrollment e
+            WHERE (:academyId IS NULL OR e.academy.id = :academyId)
+              AND e.year = :year
+              AND e.deleted = false
+              AND e.admissionDate IS NOT NULL
+              AND e.admissionDate >= :from AND e.admissionDate <= :to
+            """)
+    long countAdmittedBetween(@Param("academyId") Long academyId, @Param("year") short year,
+                              @Param("from") LocalDate from, @Param("to") LocalDate to);
 
     /** 출결 — 확정된 일자 상태별 건수. */
     @Query("""

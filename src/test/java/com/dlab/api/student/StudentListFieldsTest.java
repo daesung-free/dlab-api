@@ -5,6 +5,7 @@ import com.dlab.domain.facility.entity.SeatMaster;
 import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.master.entity.Scholarship;
 import com.dlab.domain.user.entity.*;
+import com.dlab.support.FacilityFixtures;
 import jakarta.persistence.EntityManager;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -84,7 +85,7 @@ class StudentListFieldsTest {
         classMaster = new ClassMaster(academy, (short) 2026, "가온반", ClassType.FIXED, homeroom);
         em.persist(classMaster);
 
-        studyArea = new StudyArea(academy, "A", "A구역", (short) 1);
+        studyArea = new StudyArea(FacilityFixtures.mainBuilding(em, academy), "A", "A", "A구역", (short) 1);
         em.persist(studyArea);
         em.flush();
     }
@@ -125,7 +126,7 @@ class StudentListFieldsTest {
     }
 
     private void assignSeat(StudentEnrollment e, String seatCd) {
-        SeatMaster seat = new SeatMaster(academy, studyArea, seatCd, seatCd + "번", 1, 1);
+        SeatMaster seat = new SeatMaster(studyArea, seatCd, seatCd, seatCd + "번", 1, 1);
         em.persist(seat);
         em.persist(new SeatAssignment(academy, seat, e));
     }
@@ -302,8 +303,33 @@ class StudentListFieldsTest {
                         .param("year", "2026").param("keyword", "생일학생"))
                 .andExpect(jsonPath("$.data[0].birthDate").value("2007-**-**"))
                 .andExpect(jsonPath("$.data[0].phone").value("010-****-4444"))
+                // ★ 성별은 마스킹 대상이 아니다. 등록에서 받는데 조회에 없어 꺼낼 길이 없었다
+                .andExpect(jsonPath("$.data[0].gender").value("M"))
                 // 화면이 마스킹 여부를 알아야 "번호가 잘못 저장됐다"는 오인 문의가 안 생긴다
                 .andExpect(jsonPath("$.data[0].masked").value(true));
+    }
+
+    @Test
+    @DisplayName("★ 학부모 연락처가 목록에 실린다 — 보호자가 둘이면 승인자 번호, 권한 없으면 가린다")
+    void guardianPhoneOnList() throws Exception {
+        StudentEnrollment e = student("보호자학생", "2026-0061", null, null, LocalDate.of(2026, 3, 2));
+        com.dlab.domain.user.entity.ParentGuardian dad =
+                new com.dlab.domain.user.entity.ParentGuardian("아빠", "010-1111-2222", "M");
+        com.dlab.domain.user.entity.ParentGuardian mom =
+                new com.dlab.domain.user.entity.ParentGuardian("엄마", "010-5555-6666", "F");
+        em.persist(dad);
+        em.persist(mom);
+        // 관계 순서는 아빠가 먼저지만 승인자는 엄마다 — 연락을 받는 사람이 승인자라 그쪽이 대표다
+        em.persist(new com.dlab.domain.user.entity.StudentGuardianLink(e.getStudent(), dad, (short) 1, false));
+        em.persist(new com.dlab.domain.user.entity.StudentGuardianLink(e.getStudent(), mom, (short) 2, true));
+        em.flush();
+
+        mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
+                        .param("year", "2026").param("keyword", "보호자학생"))
+                .andExpect(jsonPath("$.data[0].guardianPhone").value("010-5555-6666"));
+
+        mvc.perform(get("/api/v1/admin/students/{id}", e.getId()).header("Authorization", token()))
+                .andExpect(jsonPath("$.data.guardianPhone").value("010-5555-6666"));
     }
 
     // ── N+1 ──

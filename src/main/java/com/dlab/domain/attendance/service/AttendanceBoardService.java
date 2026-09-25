@@ -61,6 +61,7 @@ public class AttendanceBoardService {
     private final ClassAssignmentRepository classAssignmentRepository;
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final StudentGuardianLinkRepository guardianLinkRepository;
+    private final com.dlab.domain.user.service.StudentListEnricher studentListEnricher;
     private final PeriodMasterRepository periodMasterRepository;
     private final StudyTimeCalculator studyTimeCalculator;
     private final com.dlab.common.excel.ExcelExporter excelExporter;
@@ -150,14 +151,16 @@ public class AttendanceBoardService {
                 ? LocalTime.now(clock)
                 : LocalTime.MAX;
 
-        // ★ 담임은 맡은 반만 본다. classId는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다.
-        var classFilter = homeroomScopeService.resolveClassFilter(me, targets.get(0).getYear(), classId);
-        if (classFilter.blocksEverything()) {
+        // ★ 담임은 맡은 학생만 본다. classId는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다.
+        //   반이 아니라 학생으로 거른다 — 담임 예외 지정된 학생이 새 담임에게 보여야 한다
+        var studentFilter = homeroomScopeService.resolveStudentFilter(
+                me, targets.get(0).getYear(), classId);
+        if (studentFilter.blocksEverything()) {
             return List.of();
         }
 
         return targets.stream()
-                .filter(e -> matchesClass(classes.get(e.getId()), classFilter))
+                .filter(e -> studentFilter.matches(e.getId()))
                 .map(e -> {
                     List<AttendanceTaggingLog> logs =
                             logsByEnrollment.getOrDefault(e.getId(), List.of());
@@ -175,8 +178,11 @@ public class AttendanceBoardService {
                             screenStatus(date, logs, confirmed.get(e.getId())),
                             excused(confirmed.get(e.getId())),
                             studyMinutes(confirmed.get(e.getId()), logs, periods, until),
-                            guardianPhones.get(e.getId()),
-                            unexcusedLate(logs, confirmed.get(e.getId())));
+                            // ★ 연락처 원본은 상위 관리자만 본다(실행가이드 3.2). 이 화면은 담임도
+                            //   매일 보는데 학부모 번호가 원본으로 나가고 있었다 — 학생 목록과 같게 가린다
+                            com.dlab.common.privacy.PersonalDataPolicy.phone(me, guardianPhones.get(e.getId())),
+                            unexcusedLate(logs, confirmed.get(e.getId())),
+                            !com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me));
                 })
                 .sorted(Comparator.comparing(AttendanceRow::studentNo,
                         Comparator.nullsLast(Comparator.naturalOrder())))
@@ -288,12 +294,6 @@ public class AttendanceBoardService {
         return log.getRecordedAt().atZone(TimeConfig.KST).toLocalTime();
     }
 
-    /** 반 미배정 학생은 {@code assignment}가 없다 — 제한이 걸린 담임에게는 안 보인다. */
-    private boolean matchesClass(ClassAssignment assignment,
-                                 com.dlab.domain.user.service.HomeroomScopeService.ClassFilter filter) {
-        return filter.matches(assignment == null ? null : assignment.getClassMaster().getId());
-    }
-
     private Map<Long, List<AttendanceTaggingLog>> logsOf(Long academyId, LocalDate date) {
         Map<Long, List<AttendanceTaggingLog>> result = new HashMap<>();
         taggingLogRepository.findByAcademyIdAndAttendanceDate(academyId, date).stream()
@@ -328,15 +328,9 @@ public class AttendanceBoardService {
     }
 
     /** 화면 컬럼이 "학부모 연락처"다. 승인자 1인 기준으로 첫 번째만 내린다. */
+    /** 학부모 대표 연락처. 학생 목록과 <b>같은 규칙</b>(승인자 → 관계 순서)으로 고른다. */
     private Map<Long, String> guardianPhonesOf(List<StudentEnrollment> targets) {
-        Map<Long, String> result = new HashMap<>();
-        targets.forEach(e -> guardianLinkRepository
-                .findByStudentId(e.getStudent().getId()).stream()
-                .map(link -> link.getGuardian().getPhone())
-                .filter(p -> p != null && !p.isBlank())
-                .findFirst()
-                .ifPresent(p -> result.put(e.getId(), p)));
-        return result;
+        return studentListEnricher.guardianPhones(targets);
     }
 
     /** 화면(`Attendance.tsx`)이 쓰는 상태값. 우리 {@link DailyStatus}와 축이 다르다. */
@@ -373,8 +367,11 @@ public class AttendanceBoardService {
             ScreenStatus status,
             boolean excused,
             int studyMinutes,
+            /** 학부모 연락처. 상위 관리자가 아니면 가려져 있다({@code masked}) */
             String guardianPhone,
-            boolean unexcusedLate
+            boolean unexcusedLate,
+            /** 연락처가 가려졌는지 — 화면이 "번호가 잘못 저장됐다"로 오인하지 않게 */
+            boolean masked
     ) {
 
         /** 화면 표기 {@code "N시간 MM분"}. */
@@ -393,8 +390,18 @@ public class AttendanceBoardService {
      */
     public byte[] export(AuthPrincipal me, Long academyId, LocalDate date, Long classId,
                          boolean unmask) {
+        return export(me, board(me, academyId, date, classId), unmask);
+    }
+
+    /**
+     * 이미 걸러 놓은 목록을 그대로 내려받는다.
+     *
+     * <p><b>화면이 본 것과 파일이 같아야 한다.</b> 내보내기가 조회 조건을 못 받으면
+     * 화면에서 상태·검색어로 좁혀 놓고 받은 파일에 전체가 담겨 <b>엉뚱하게 넓은 파일</b>이
+     * 나간다 — 개인정보가 들어 있는 파일이라 넓은 쪽이 더 위험하다.
+     */
+    public byte[] export(AuthPrincipal me, List<AttendanceRow> rows, boolean unmask) {
         boolean raw = unmask && com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me);
-        List<AttendanceRow> rows = board(me, academyId, date, classId);
 
         return excelExporter.export("출결현황", EXPORT_MAPPING, rows, r -> java.util.Arrays.asList(
                 r.studentNo(),
@@ -406,7 +413,9 @@ public class AttendanceBoardService {
                 STATUS_LABELS.get(r.status()),
                 r.excused() ? "사유 승인" : null,
                 r.studyTimeLabel(),
-                raw ? r.guardianPhone() : com.dlab.common.privacy.Masking.phone(r.guardianPhone()),
+                // 목록에서 이미 가려져 왔으면 그대로 둔다 — 가린 값을 다시 가리면 모양이 깨진다
+                raw || com.dlab.common.privacy.Masking.isMasked(r.guardianPhone()) ? r.guardianPhone()
+                        : com.dlab.common.privacy.Masking.phone(r.guardianPhone()),
                 r.unexcusedLate() ? "무단지각" : null));
     }
 }

@@ -24,19 +24,20 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminNotificationTemplateController {
 
     private final NotificationTemplateService templateService;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
 
     /** 전체 목록 — 이벤트 순으로 나와 A-C3 매핑표처럼 읽힌다. */
     @GetMapping
     public ApiResponse<List<NotificationTemplateResponse>> list() {
         return ApiResponse.success(templateService.findAll().stream()
-                .map(NotificationTemplateResponse::from).toList());
+                .map(this::view).toList());
     }
 
     /** 심사 진행 중인 것만. 카카오 심사(E-5)는 리드타임이 길어 따로 본다. */
     @GetMapping("/in-review")
     public ApiResponse<List<NotificationTemplateResponse>> inReview() {
         return ApiResponse.success(templateService.findInReview().stream()
-                .map(NotificationTemplateResponse::from).toList());
+                .map(this::view).toList());
     }
 
     /**
@@ -48,7 +49,7 @@ public class AdminNotificationTemplateController {
     @PostMapping
     public ApiResponse<NotificationTemplateResponse> create(
             @Valid @RequestBody NotificationTemplateRequests.NotificationTemplateCreate request) {
-        return ApiResponse.success(NotificationTemplateResponse.from(templateService.create(
+        return ApiResponse.success(view(templateService.create(
                 request.event(), request.channel(), request.recipientType(),
                 request.requiredVariables())));
     }
@@ -63,7 +64,7 @@ public class AdminNotificationTemplateController {
     public ApiResponse<NotificationTemplateResponse> updateContent(
             @PathVariable Long id,
             @Valid @RequestBody NotificationTemplateRequests.UpdateContent request) {
-        return ApiResponse.success(NotificationTemplateResponse.from(
+        return ApiResponse.success(view(
                 templateService.updateContent(id, request.titleTemplate(), request.bodyTemplate(),
                         request.requiredVariables(),
                         request.contentConfirmed() != null && request.contentConfirmed())));
@@ -74,7 +75,7 @@ public class AdminNotificationTemplateController {
     public ApiResponse<NotificationTemplateResponse> updateMapping(
             @PathVariable Long id,
             @Valid @RequestBody NotificationTemplateRequests.UpdateMapping request) {
-        return ApiResponse.success(NotificationTemplateResponse.from(
+        return ApiResponse.success(view(
                 templateService.updateMapping(id, request.channel(), request.recipientType())));
     }
 
@@ -88,7 +89,7 @@ public class AdminNotificationTemplateController {
     public ApiResponse<NotificationTemplateResponse> changeActive(
             @PathVariable Long id,
             @Valid @RequestBody NotificationTemplateRequests.ChangeActive request) {
-        return ApiResponse.success(NotificationTemplateResponse.from(
+        return ApiResponse.success(view(
                 templateService.changeActive(id, request.active())));
     }
 
@@ -97,7 +98,7 @@ public class AdminNotificationTemplateController {
     public ApiResponse<NotificationTemplateResponse> submitReview(
             @PathVariable Long id,
             @Valid @RequestBody NotificationTemplateRequests.SubmitReview request) {
-        return ApiResponse.success(NotificationTemplateResponse.from(
+        return ApiResponse.success(view(
                 templateService.submitForReview(id, request.kakaoTemplateCode())));
     }
 
@@ -106,7 +107,15 @@ public class AdminNotificationTemplateController {
     public ApiResponse<NotificationTemplateResponse> applyReviewResult(
             @PathVariable Long id,
             @Valid @RequestBody NotificationTemplateRequests.ReviewResult request) {
-        return ApiResponse.success(NotificationTemplateResponse.from(
+        return ApiResponse.success(view(
                 templateService.applyReviewResult(id, request.approved(), request.note())));
+    }
+
+    /** 수정자 이름을 붙인다. 템플릿은 수십 건이라 건마다 찾아도 된다. */
+    private NotificationTemplateResponse view(com.dlab.domain.notification.entity.NotificationTemplate t) {
+        String name = t.getUpdatedBy() == null || t.getUpdatedBy() == 0 ? null
+                : accountRepository.findDisplayNames(List.of(t.getUpdatedBy())).stream()
+                        .map(r -> (String) r[1]).findFirst().orElse(null);
+        return NotificationTemplateResponse.from(t, name);
     }
 }

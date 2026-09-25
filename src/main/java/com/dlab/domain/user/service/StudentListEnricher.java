@@ -39,6 +39,7 @@ public class StudentListEnricher {
     private final ClassAssignmentRepository classAssignmentRepository;
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final ScholarshipRepository scholarshipRepository;
+    private final com.dlab.domain.user.repository.StudentGuardianLinkRepository guardianLinkRepository;
 
     /**
      * 등록 건 목록에 붙일 표시값을 <b>한 번에</b> 모은다.
@@ -53,13 +54,17 @@ public class StudentListEnricher {
         List<Long> ids = enrollments.stream().map(StudentEnrollment::getId).toList();
 
         Map<Long, String> classNames = new HashMap<>();
-        Map<Long, String> homeroomTeachers = new HashMap<>();
+        Map<Long, ClassAssignment> fixedAssignments = new HashMap<>();
         for (ClassAssignment a : classAssignmentRepository.findActiveFixedByEnrollmentIds(ids)) {
-            Long enrollmentId = a.getEnrollment().getId();
-            classNames.put(enrollmentId, a.getClassMaster().getName());
-            Teacher homeroom = a.getHomeroomTeacher();
+            classNames.put(a.getEnrollment().getId(), a.getClassMaster().getName());
+            fixedAssignments.put(a.getEnrollment().getId(), a);
+        }
+        // ★ 담임은 "그 학생의 담임"(예외 지정 ?? 반 담임)이다 — 반 배정이 없어도 예외 지정은 있을 수 있다
+        Map<Long, String> homeroomTeachers = new HashMap<>();
+        for (StudentEnrollment e : enrollments) {
+            Teacher homeroom = HomeroomResolver.of(e, fixedAssignments.get(e.getId()));
             if (homeroom != null) {
-                homeroomTeachers.put(enrollmentId, homeroom.getName());
+                homeroomTeachers.put(e.getId(), homeroom.getName());
             }
         }
 
@@ -73,7 +78,37 @@ public class StudentListEnricher {
                 .computeIfAbsent(s.getEnrollment().getId(), k -> new ArrayList<>())
                 .add(s.getScholarshipType()));
 
-        return new Extras(classNames, homeroomTeachers, seats, scholarships);
+        return new Extras(classNames, homeroomTeachers, seats, scholarships,
+                guardianPhones(enrollments));
+    }
+
+    /**
+     * 학부모 대표 연락처 — 등록 건 ID → 번호. <b>출결 현황과 같은 값</b>이어야 한다.
+     *
+     * <p>보호자가 여럿이면(부·모) <b>승인자 → 관계 순서</b>로 번호가 있는 첫 사람이다.
+     * 승인자가 곧 연락을 받는 사람이라 먼저 둔다. 번호가 없으면 키가 없다.
+     */
+    public Map<Long, String> guardianPhones(List<StudentEnrollment> enrollments) {
+        if (enrollments == null || enrollments.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, String> byStudent = new HashMap<>();
+        guardianLinkRepository.findByStudentIds(enrollments.stream()
+                        .map(e -> e.getStudent().getId()).distinct().toList())
+                .forEach(link -> {
+                    String phone = link.getGuardian().getPhone();
+                    if (phone != null && !phone.isBlank()) {
+                        byStudent.putIfAbsent(link.getStudent().getId(), phone);
+                    }
+                });
+        Map<Long, String> result = new HashMap<>();
+        enrollments.forEach(e -> {
+            String phone = byStudent.get(e.getStudent().getId());
+            if (phone != null) {
+                result.put(e.getId(), phone);
+            }
+        });
+        return result;
     }
 
     /** 단건(상세·접수·수정 응답)용. 목록과 같은 필드를 채우기 위한 편의 메서드다. */
@@ -91,11 +126,17 @@ public class StudentListEnricher {
             Map<Long, String> classNames,
             Map<Long, String> homeroomTeachers,
             Map<Long, String> seatCodes,
-            Map<Long, List<String>> scholarshipTypes
+            Map<Long, List<String>> scholarshipTypes,
+            Map<Long, String> guardianPhones
     ) {
 
         public static Extras empty() {
-            return new Extras(Map.of(), Map.of(), Map.of(), Map.of());
+            return new Extras(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+        }
+
+        /** 학부모 대표 연락처(원본). 마스킹은 표현 계층이 한다. */
+        public String guardianPhone(Long enrollmentId) {
+            return guardianPhones.get(enrollmentId);
         }
 
         public String className(Long enrollmentId) {

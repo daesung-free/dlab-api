@@ -15,12 +15,14 @@ import lombok.extern.slf4j.Slf4j;
  * <p><b>서비스마다 부르지 않는다.</b> 수동 호출로 두면 새 경로가 생길 때마다 빠뜨리고,
  * 감사 로그는 <b>나중에 붙여도 그 이전 기간을 복구할 수 없다</b>(CLAUDE.md §7).
  *
- * <h2>왜 "무엇이 바뀌었는지"까지는 안 남기나</h2>
- * JPA 라이프사이클 콜백은 <b>변경 전 값을 주지 않는다</b>. 전후 비교를 하려면
- * Hibernate 내부 이벤트(스냅샷)를 붙여야 하는데, 그건 세션 상태에 얹히는 작업이라
- * 잘못 건드리면 <b>저장 자체가 흔들린다</b>. 그래서 1차는 <b>"누가 언제 무엇을 건드렸나"</b>까지
- * 남기고, 전후값은 {@link AuditTrail}로 <b>필요한 곳에서 명시적으로</b> 기록한다.
- * (금액·점수처럼 다툼이 되는 값만 남기면 되고, 전 필드 스냅샷은 개인정보를 복제한다.)
+ * <h2>"무엇이 바뀌었는지"는 어디서 오나</h2>
+ * JPA 라이프사이클 콜백은 <b>변경 전 값을 주지 않는다</b>. 그래서 전후값은
+ * {@link AuditChangeInterceptor}가 플러시 시점에 모아 두고 여기서 꺼내 붙인다.
+ * <b>비밀값은 {@link AuditMasked}로 가려지고 연관은 id만</b> 남는다 — 전 필드를 그대로
+ * 뜨면 개인정보가 이력 테이블로 복제된다.
+ *
+ * <p>금액·점수처럼 서비스가 직접 의미를 붙여야 하는 값은 여전히
+ * {@link AuditRecorder#recordChanges}로 명시 기록한다.
  *
  * <h2>기록이 실패해도 원래 작업은 살린다</h2>
  * 감사 로그를 못 남겼다고 벌점 부여가 롤백되면 <b>운영이 멈춘다</b>. 예외는 삼키고
@@ -65,12 +67,28 @@ public class AuditEntityListener {
                     AuditContext.actorId(),
                     AuditContext.actorName(),
                     AuditContext.actorIp(),
-                    null,
-                    Instant.now()));
+                    // 변경 전→후. 인터셉터가 이번 플러시에서 모아 둔 것을 꺼내 쓴다
+                    AuditRecorder.serializeChanges(AuditChangeInterceptor.take(entity)),
+                    Instant.now(),
+                    targetEnrollmentOf(entity)));
         } catch (Exception e) {
             // 감사 로그를 못 남겼다고 원래 작업을 되돌리면 운영이 멈춘다
             log.error("감사 로그 기록 실패: {} {}", entity.getClass().getSimpleName(), action, e);
         }
+    }
+
+    /**
+     * 대상 학생(등록 건). 등록 건 자신이거나 {@code enrollment} 연관을 가진 엔티티만.
+     *
+     * <p>★ 연관은 필드로 읽지 않고 {@code getId()}를 부른다 — 지연 로딩 프록시는 필드가 비어 있어
+     * 필드로 읽으면 {@code null}이 나온다. 프록시의 {@code getId()}는 초기화 없이 id 를 준다.
+     */
+    private Long targetEnrollmentOf(Object entity) {
+        if (entity instanceof com.dlab.domain.user.entity.StudentEnrollment self) {
+            return self.getId();
+        }
+        return read(entity, "enrollment") instanceof com.dlab.domain.user.entity.StudentEnrollment e
+                ? e.getId() : null;
     }
 
     private Long idOf(Object entity) {
@@ -90,7 +108,17 @@ public class AuditEntityListener {
             return id;
         }
         Object academy = read(entity, "academy");
-        return academy == null ? null : (Long) read(academy, "id");
+        if (academy != null) {
+            return (Long) read(academy, "id");
+        }
+        // ★ 학생에 붙는 기록(성적·사유신청 등)은 지점을 직접 안 갖고 등록 건이 갖는다.
+        //   여기서 못 뽑으면 그 행은 지점이 빈 채로 남아 지점별 조회에서 성격이 흐려진다.
+        //   연관은 프록시라 getId()로만 읽는다 — 필드로 읽으면 비어 있다
+        if (read(entity, "enrollment")
+                instanceof com.dlab.domain.user.entity.StudentEnrollment e) {
+            return e.getAcademy() == null ? null : e.getAcademy().getId();
+        }
+        return null;
     }
 
     private Object read(Object target, String fieldName) {

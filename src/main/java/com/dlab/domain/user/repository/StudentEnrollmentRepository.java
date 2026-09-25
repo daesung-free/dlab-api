@@ -3,12 +3,26 @@ package com.dlab.domain.user.repository;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
 public interface StudentEnrollmentRepository extends JpaRepository<StudentEnrollment, Long> {
+
+    /**
+     * 이 선생님에게 담임 예외로 지정된 학생(등록 건). 담임 조회 범위가 쓴다.
+     *
+     * <p>반으로만 범위를 잡으면 예외 학생이 새 담임에게 안 보이고 원래 담임에게 계속 보인다.
+     */
+    @Query("""
+            SELECT e.id FROM StudentEnrollment e
+            WHERE e.homeroomOverride.id = :teacherId
+              AND e.year = :year
+              AND e.deleted = false
+            """)
+    List<Long> findIdsByHomeroomOverride(Long teacherId, short year);
 
     /**
      * 그 해 그 지점의 등록 건. 엑셀 일괄 업로드가 "이미 있는 학생인가"를 판정할 때 쓴다.
@@ -66,6 +80,22 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
             WHERE e.studentNo = :studentNo AND e.current = true AND e.deleted = false
             """)
     Optional<StudentEnrollment> findCurrentByStudentNo(String studentNo);
+
+    /**
+     * 지점 안에서 학번으로 현재 등록 건.
+     *
+     * <p>★ <b>학번은 지점마다 따로 매겨진다</b> — 전 지점에서 찾으면 같은 학번이 여러 건
+     * 걸려 조회 자체가 예외로 끝난다. 실제로 키오스크 좌석이탈 수신이 학번으로 들어올 때
+     * 배치 전체가 500으로 실패했다. 학번으로 찾는 곳은 <b>반드시 지점을 함께</b> 건다.
+     */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            WHERE e.academy.id = :academyId AND e.studentNo = :studentNo
+              AND e.current = true AND e.deleted = false
+            """)
+    Optional<StudentEnrollment> findCurrentByStudentNo(@Param("academyId") Long academyId,
+                                                       @Param("studentNo") String studentNo);
 
     /**
      * 해당 지점·연도의 학번 최대 일련번호. 채번의 다음 값 계산에 쓴다.
@@ -187,4 +217,28 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
             ORDER BY e.studentNo ASC
             """)
     List<StudentEnrollment> findCurrentStaff(Long academyId);
+
+    /**
+     * 그 반에서 마지막으로 쓴 모의고사 순번. 없으면 {@code 0} 이다.
+     *
+     * <p>반이 바뀌어도 번호는 고정이라 <b>지금 그 반에 있는 학생</b>이 아니라
+     * <b>그 반 번호로 채번된 적이 있는 전부</b>를 센다 — 그러지 않으면 반을 옮긴 학생의
+     * 번호가 재사용되어 같은 번호가 둘이 된다.
+     */
+    @Query("""
+            SELECT COALESCE(MAX(e.examSeq), 0) FROM StudentEnrollment e
+            WHERE e.academy.id = :academyId
+              AND e.year = :year
+              AND e.examClassNo = :examClassNo
+              AND e.deleted = false
+            """)
+    short findMaxExamSeq(Long academyId, short year, short examClassNo);
+
+    /** 여러 등록 건을 학생과 함께 한 번에. 목록 화면이 이름·학번을 붙일 때 쓴다. */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            WHERE e.id IN :ids
+            """)
+    List<StudentEnrollment> findWithStudentByIds(java.util.Collection<Long> ids);
 }
