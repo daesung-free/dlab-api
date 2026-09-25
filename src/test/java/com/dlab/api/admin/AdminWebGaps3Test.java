@@ -40,6 +40,7 @@ class AdminWebGaps3Test {
     @Autowired StatisticsService statisticsService;
     @Autowired ReceiptStatusService receiptStatusService;
     @Autowired ApprovalService approvalService;
+    @Autowired com.dlab.domain.payment.service.BillingService billingService;
     @Autowired EntityManager em;
     @Autowired Clock clock;
 
@@ -153,6 +154,35 @@ class AdminWebGaps3Test {
     private Billing billing(StudentEnrollment enrollment, BillingType type, String name) {
         return new Billing(enrollment, name, type, 100_000, 0,
                 LocalDate.now(clock).plusDays(7));
+    }
+
+    // ── 청구 중복 ───────────────────────────────────────────
+
+    @Test
+    @DisplayName("★ 같은 이름의 특강비를 두 번 청구하면 막는다 — 미납이 두 배로 잡힌다")
+    void blocksDuplicateLectureBilling() {
+        StudentEnrollment minji = enroll("김민지", "0007", TrackType.HUMANITIES, LocalDate.now(clock));
+
+        billingService.create(admin, minji.getId(), "여름 특강", BillingType.LECTURE,
+                200_000, 0, LocalDate.now(clock).plusDays(7));
+
+        assertThatThrownBy(() -> billingService.create(admin, minji.getId(), "여름 특강",
+                BillingType.LECTURE, 200_000, 0, LocalDate.now(clock).plusDays(7)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("여름 특강");
+    }
+
+    @Test
+    @DisplayName("정말 두 번 받는 경우는 중복 허용으로 통과한다")
+    void allowsDuplicateWhenExplicit() {
+        StudentEnrollment minji = enroll("김민지", "0008", TrackType.HUMANITIES, LocalDate.now(clock));
+
+        billingService.create(admin, minji.getId(), "재수강", BillingType.LECTURE,
+                200_000, 0, LocalDate.now(clock).plusDays(7));
+        var second = billingService.create(admin, minji.getId(), "재수강", BillingType.LECTURE,
+                200_000, 0, LocalDate.now(clock).plusDays(7), true);
+
+        assertThat(second.getId()).isNotNull();
     }
 
     // ── 오류 문구 ───────────────────────────────────────────
