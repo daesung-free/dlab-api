@@ -111,6 +111,33 @@ class KioskSeatLeaveIngestTest {
     // ── 적재 ─────────────────────────────────────────────────
 
     @Test
+    @DisplayName("★ 학번은 지점 안에서만 찾는다 — 다른 지점에 같은 학번이 있어도 배치가 실패하지 않는다")
+    void studentNoIsScopedToAcademy() throws Exception {
+        Academy ilsan = new Academy("32", "일산", LocalTime.of(9, 0));
+        em.persist(ilsan);
+        Student twin = new Student("DL-2026-0420", "이서연", "010-3333-4444");
+        em.persist(twin);
+        // 같은 학번이 다른 지점에 있다 — 전 지점에서 찾으면 두 건이 걸려 배치 전체가 500이었다
+        em.persist(new StudentEnrollment(twin, ilsan, (short) 2026,
+                minji.getStudentNo(), "ZZZ999", GradeType.HIGH3));
+        em.flush();
+
+        String byStudentNo = """
+                {"sourceRowId":77,"studentNo":"%s","areaCd":"A","seatCd":"A-01",
+                 "eventType":"LEAVE","occurredAt":"%s"}
+                """.formatted(minji.getStudentNo(), now);
+
+        send(byStudentNo)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].status").value("ACCEPTED"));
+
+        SeatLeaveLog saved = logRepository.findAll().stream()
+                .filter(l -> l.getSourceRowId() == 77L).findFirst().orElseThrow();
+        // 토큰 지점(분당) 학생에 붙어야 한다
+        assertThat(saved.getEnrollment().getId()).isEqualTo(minji.getId());
+    }
+
+    @Test
     @DisplayName("★ 응답은 DSA 형식이 아니라 ApiResponse다 — 신규라 흉내 낼 원본이 없다")
     void usesApiResponseFormat() throws Exception {
         send(event(1, "ABC001", "LEAVE"))

@@ -94,6 +94,37 @@ public class SeatLeaveBoardService {
                 .toList();
     }
 
+    /**
+     * 지금 이탈 중인 학생 → 이탈 시작 시각. <b>좌석 배치도가 쓴다.</b>
+     *
+     * <p>권한 검사를 하지 않는다 — 부르는 쪽(배치도)이 이미 지점 접근을 확인했고,
+     * 학생 정보가 아니라 좌석 상태만 파생하는 용도다.
+     *
+     * <p>어제치부터 읽는다. 자정을 넘긴 이탈은 키오스크가 00:30에 마감하므로
+     * 그 전에 조회하면 아직 열려 있다.
+     */
+    public Map<Long, Instant> openLeavesOf(Long academyId) {
+        LocalDate today = LocalDate.now(clock.withZone(KST));
+        List<SeatLeaveLog> logs = logRepository.findByAcademyBetween(academyId,
+                today.minusDays(1).atStartOfDay(KST).toInstant(),
+                today.plusDays(1).atStartOfDay(KST).toInstant());
+
+        Map<Long, Instant> open = new LinkedHashMap<>();
+        for (SeatLeaveLog log : logs) {
+            if (log.getEnrollment() == null) {
+                continue;
+            }
+            Long id = log.getEnrollment().getId();
+            if (log.getEventType() == SeatLeaveEventType.LEAVE) {
+                open.put(id, log.getOccurredAt());
+            } else {
+                // 복귀든 자동 마감이든 그 이탈은 닫혔다 — 자리에 대한 표시는 사라진다
+                open.remove(id);
+            }
+        }
+        return open;
+    }
+
     /** 기간 이탈 이력. 최근 이탈이 위로 온다. */
     public List<LeaveRow> history(AuthPrincipal me, Long academyId,
                                   LocalDate from, LocalDate to, Long classId) {
