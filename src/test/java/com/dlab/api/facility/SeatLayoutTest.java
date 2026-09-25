@@ -106,7 +106,9 @@ class SeatLayoutTest {
         StudentEnrollment e = assign(seat, "김민지", "0009");
         tag(e, AttendanceEventType.CHECK_IN, 9);
 
-        java.time.Instant leftAt = java.time.Instant.now(clock).minusSeconds(600);
+        // ★ 밀리초로 자른다 — DB 가 나노초를 보존하지 않아 그대로 비교하면 환경에 따라 어긋난다
+        java.time.Instant leftAt = java.time.Instant.now(clock).minusSeconds(600)
+                .truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
         em.persist(new com.dlab.domain.kiosk.entity.SeatLeaveLog(bundang, (short) 2026, 1L, e,
                 null, "0009", "A", "A-09",
                 com.dlab.domain.kiosk.entity.SeatLeaveEventType.LEAVE, leftAt));
@@ -126,7 +128,8 @@ class SeatLayoutTest {
         StudentEnrollment e = assign(seat, "박서준", "0010");
         tag(e, AttendanceEventType.CHECK_IN, 9);
 
-        java.time.Instant leftAt = java.time.Instant.now(clock).minusSeconds(600);
+        java.time.Instant leftAt = java.time.Instant.now(clock).minusSeconds(600)
+                .truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
         em.persist(new com.dlab.domain.kiosk.entity.SeatLeaveLog(bundang, (short) 2026, 2L, e,
                 null, "0010", "A", "A-10",
                 com.dlab.domain.kiosk.entity.SeatLeaveEventType.LEAVE, leftAt));
