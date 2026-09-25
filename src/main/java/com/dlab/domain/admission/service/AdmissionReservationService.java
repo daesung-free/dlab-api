@@ -2,7 +2,8 @@ package com.dlab.domain.admission.service;
 
 import com.dlab.api.kiosk.DsaApiException;
 import com.dlab.api.kiosk.DsaCode;
-import com.dlab.common.storage.FileStorage;
+import com.dlab.domain.file.entity.FileVisibility;
+import com.dlab.domain.file.service.FileStorage;
 import com.dlab.domain.admission.entity.AdmissionFile;
 import com.dlab.domain.admission.entity.AdmissionReservation;
 import com.dlab.domain.admission.entity.AdmissionScore;
@@ -198,9 +199,12 @@ public class AdmissionReservationService {
         }
 
         String key = "admission/%s/%d".formatted(rsvCd, System.nanoTime());
-        String stored = fileStorage.put(key, bytes, contentType);
+        // ★ 비공개다 — 성적표에 성명·생년월일이 그대로 있다. 공개 버킷에 두면 주소만 알면 열린다.
+        //   저장소는 S3 다. 컨테이너 디스크에 두면 다음 배포에서 컨테이너가 교체될 때 사라진다
+        fileStorage.put(FileVisibility.PRIVATE, key,
+                new java.io.ByteArrayInputStream(bytes), bytes.length, contentType);
 
-        fileRepository.save(new AdmissionFile(reservation, contentType, bytes.length, stored));
+        fileRepository.save(new AdmissionFile(reservation, contentType, bytes.length, key));
     }
 
     // ─────────────────────────────────────────────────────────
