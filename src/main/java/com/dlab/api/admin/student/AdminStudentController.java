@@ -362,10 +362,20 @@ public class AdminStudentController {
 
     // ── 검색조건 저장 ──
 
-    /** 본인이 저장한 조건만 나온다 — 개인 설정이다. */
+    /**
+     * 본인이 저장한 조건만 나온다 — 개인 설정이다.
+     *
+     * <p><b>학생 검색 전용이 아니다.</b> 조건 저장은 출결·상벌점·수납현황 등 <b>공통 검색창을
+     * 쓰는 화면 전체</b>가 쓴다(실행가이드 P1-01). 여기서 화면을 못 고르면 나머지 화면은
+     * 브라우저에만 저장하게 되어 <b>다른 PC에서는 안 보인다</b>.
+     *
+     * @param searchType 어느 화면의 조건인가. 비우면 학생 검색이다(기존 호출 호환)
+     */
     @GetMapping("/saved-searches")
-    public ApiResponse<List<SavedSearchResponse>> savedSearches(@CurrentAccount AuthPrincipal me) {
-        return ApiResponse.success(savedSearchService.list(SearchType.STUDENT, me).stream()
+    public ApiResponse<List<SavedSearchResponse>> savedSearches(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) SearchType searchType) {
+        return ApiResponse.success(savedSearchService.list(typeOr(searchType), me).stream()
                 .map(SavedSearchResponse::from).toList());
     }
 
@@ -373,9 +383,16 @@ public class AdminStudentController {
     @PostMapping("/saved-searches")
     public ApiResponse<SavedSearchResponse> saveSearch(
             @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) SearchType searchType,
             @Valid @RequestBody StudentRequests.SaveSearch request) {
+        // 같은 이름 덮어쓰기는 화면 단위로 논다 — 출결의 "내 반"과 학생 검색의 "내 반"은 다른 조건이다
         return ApiResponse.success(SavedSearchResponse.from(savedSearchService.save(
-                SearchType.STUDENT, request.name(), request.conditions(), me)));
+                typeOr(searchType), request.name(), request.conditions(), me)));
+    }
+
+    /** 기존 호출이 화면을 안 보내므로 학생 검색으로 본다. */
+    private static SearchType typeOr(SearchType searchType) {
+        return searchType == null ? SearchType.STUDENT : searchType;
     }
 
     /** 저장한 검색 삭제. */

@@ -119,10 +119,25 @@ public class StatisticsService {
         return repository.countByTrack(scope, year).stream()
                 .map(r -> new GroupRow(
                         r[0] == null ? "UNASSIGNED" : String.valueOf(r[0]),
-                        // 계열이 안 정해진 학생을 빼면 합계가 전체 인원과 안 맞는다
-                        r[0] == null ? "미지정" : String.valueOf(r[0]),
+                        // ★ label 은 화면에 그대로 찍히는 값이다. 반·월 축은 한국어인데 계열만
+                        //   HUMANITIES 로 나가 화면이 따로 번역하고 있었다
+                        trackLabel(r[0]),
                         ((Number) r[1]).longValue(), null, null, null))
                 .toList();
+    }
+
+    /** 계열 이름. 안 정해진 학생을 빼면 합계가 전체 인원과 안 맞으므로 '미지정'으로 센다. */
+    private static String trackLabel(Object track) {
+        if (track == null) {
+            return "미지정";
+        }
+        return switch (String.valueOf(track)) {
+            case "HUMANITIES" -> "인문";
+            case "SCIENCE" -> "자연";
+            case "ART" -> "예체능";
+            case "COMMON" -> "공통";
+            default -> String.valueOf(track);
+        };
     }
 
     /**
@@ -144,8 +159,12 @@ public class StatisticsService {
             LocalDate at = ym.equals(java.time.YearMonth.from(today)) ? today : ym.atEndOfMonth();
             long count = repository.countEnrolledAt(scope, year, at);
 
+            long admitted = repository.countAdmittedBetween(
+                    scope, year, ym.atDay(1), at);
+
             rows.add(new GroupRow("%d-%02d".formatted(year, month), "%d월".formatted(month),
-                    count, null, null, previous == null ? null : count - previous));
+                    count, null, null, previous == null ? null : count - previous,
+                    admitted));
             previous = count;
         }
         return rows;
@@ -159,15 +178,30 @@ public class StatisticsService {
      * @param onLeave  반별에만 있다 — 그 반 휴원 인원. {@code count}(재원)에는 안 들어간다
      * @param withdrawn 반별에만 있다 — 그 반에서 나간 인원(퇴원 + 제적). 나가기 직전 반으로 센다
      * @param tracks   반별에만 있다 — 재원생의 계열별 인원. 계열이 없으면 {@code UNASSIGNED}
+     * @param admitted 월별에만 있다 — 그 달 신규 등록 인원. <b>{@code delta}로는 알 수 없다</b>:
+     *                 10명 들어오고 10명 나간 달은 증감이 0이라 아무 일도 없던 달로 보인다
      */
     public record GroupRow(String key, String label, long count,
                            Long capacity, Long fillRate, Long delta,
-                           Long onLeave, Long withdrawn, java.util.Map<String, Long> tracks) {
+                           Long onLeave, Long withdrawn, java.util.Map<String, Long> tracks,
+                           Long admitted) {
+
+        public GroupRow(String key, String label, long count,
+                        Long capacity, Long fillRate, Long delta,
+                        Long onLeave, Long withdrawn, java.util.Map<String, Long> tracks) {
+            this(key, label, count, capacity, fillRate, delta, onLeave, withdrawn, tracks, null);
+        }
 
         /** 반별이 아닌 축 — 휴원·퇴원·계열 칸이 없다. */
         public GroupRow(String key, String label, long count, Long capacity, Long fillRate,
                         Long delta) {
-            this(key, label, count, capacity, fillRate, delta, null, null, null);
+            this(key, label, count, capacity, fillRate, delta, null, null, null, null);
+        }
+
+        /** 월별 축 — 신규 등록이 붙는다. */
+        public GroupRow(String key, String label, long count, Long capacity, Long fillRate,
+                        Long delta, Long admitted) {
+            this(key, label, count, capacity, fillRate, delta, null, null, null, admitted);
         }
     }
 

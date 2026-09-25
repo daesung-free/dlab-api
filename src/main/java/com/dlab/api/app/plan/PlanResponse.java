@@ -88,6 +88,11 @@ public final class PlanResponse {
         }
     }
 
+    /**
+     * ★ 스키마 이름을 고정한다. 그냥 두면 학습계획·실적 등 여러 {@code Statistics}가 한 이름으로
+     * 합쳐져, 스펙에서 {@code ApiResponseStatistics}가 무엇의 통계인지 알 수 없다.
+     */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "LearningPlanStatistics")
     public record Statistics(
             LocalDate from,
             LocalDate to,

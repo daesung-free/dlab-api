@@ -88,17 +88,23 @@ public class AdminAttendanceController {
                 ? boardService.board(me, academyId, from, to, classId)
                 : boardService.board(me, academyId, date == null ? LocalDate.now() : date, classId);
 
-        List<AttendanceRow> filtered = rows.stream()
-                .filter(r -> statuses == null || statuses.isEmpty() || statuses.contains(r.status()))
-                .filter(r -> excused == null || r.excused() == excused)
-                .filter(r -> matchesKeyword(r, keyword))
-                .toList();
+        List<AttendanceRow> filtered = filter(rows, statuses, excused, keyword);
 
         boolean raw = PersonalDataPolicy.canViewRaw(me);
         return ApiResponse.success(new AttendanceBoardResponse(
                 filtered.stream().map(r -> AttendanceRowResponse.of(r, raw)).toList(),
                 summary(filtered),
                 !raw));
+    }
+
+    /** 조회와 내보내기가 <b>같은 필터</b>를 쓰도록 한 곳에 모아 둔다. */
+    private List<AttendanceRow> filter(List<AttendanceRow> rows, List<ScreenStatus> statuses,
+                                       Boolean excused, String keyword) {
+        return rows.stream()
+                .filter(r -> statuses == null || statuses.isEmpty() || statuses.contains(r.status()))
+                .filter(r -> excused == null || r.excused() == excused)
+                .filter(r -> matchesKeyword(r, keyword))
+                .toList();
     }
 
     /** 이름·학번·좌석 통합 검색. 화면 검색창이 셋을 한 칸에서 받는다. */
@@ -202,11 +208,21 @@ public class AdminAttendanceController {
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long classId,
+            @RequestParam(required = false) List<ScreenStatus> statuses,
+            @RequestParam(required = false) Boolean excused,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "false") boolean unmask) {
 
-        byte[] body = boardService.export(
-                me, academyId, date == null ? LocalDate.now() : date, classId, unmask);
+        // ★ 조회와 같은 조건으로 뽑는다 — 조건을 못 받으면 화면에서 좁혀 놓고 받은 파일에
+        //   전체가 담긴다. 조회 코드를 그대로 쓰므로 둘이 어긋날 수 없다
+        byte[] body = boardService.export(me, filter(
+                (from != null && to != null)
+                        ? boardService.board(me, academyId, from, to, classId)
+                        : boardService.board(me, academyId, date == null ? LocalDate.now() : date, classId),
+                statuses, excused, keyword), unmask);
 
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)

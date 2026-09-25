@@ -61,6 +61,15 @@ public class ApprovalService {
      * 승인 요청 생성. 담당선생님은 반 배정에서 자동으로 도출된다
      * — 그래서 학생별 승인자 사전지정 화면이 필요 없다.
      */
+    /** 화면에 보일 이름. enum 이름이 그대로 나가면 "ABSENCE_REASON이 뭐냐"는 문의가 온다. */
+    private static String label(RequestType requestType) {
+        return switch (requestType) {
+            case FIREWALL_UNLOCK -> "와이파이 해제";
+            case ABSENCE_REASON -> "사유 신청";
+            case REGULAR_SCHEDULE -> "정기 일정";
+        };
+    }
+
     @Transactional
     public ApprovalRequest create(StudentEnrollment enrollment, RequestType requestType) {
         Academy academy = enrollment.getAcademy();
@@ -68,8 +77,10 @@ public class ApprovalService {
 
         ApprovalItem item = approvalItemRepository
                 .findByAcademyIdAndYearAndRequestTypeAndDeletedFalse(academy.getId(), year, requestType)
+                // 화면에 그대로 뜨는 문구라 내부 코드(FIREWALL_UNLOCK 등) 대신 사람 말로 쓴다
                 .orElseThrow(() -> new BusinessException(ErrorCode.APPROVAL_ITEM_NOT_FOUND,
-                        "승인 정책이 없습니다: " + requestType));
+                        "%s 승인 정책이 등록되지 않았습니다. 기초관리에서 먼저 등록해 주세요."
+                                .formatted(label(requestType))));
 
         approvalRequestRepository
                 .findByEnrollmentIdAndApprovalItemIdAndStatus(enrollment.getId(), item.getId(), ApprovalStatus.PENDING)
