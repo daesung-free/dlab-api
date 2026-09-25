@@ -72,8 +72,25 @@ public class BillingService {
     public Billing create(AuthPrincipal me, Long enrollmentId, String name,
                           BillingType type, int suppliedAmount, int discountAmount,
                           LocalDate dueDate) {
+        return create(me, enrollmentId, name, type, suppliedAmount, discountAmount, dueDate, false);
+    }
+
+    /**
+     * @param allowDuplicate 같은 이름으로 또 청구한다. <b>기본은 막는다</b> — 데스크가 저장을
+     *                       두 번 누르면 같은 특강이 두 건 잡혀 미납이 두 배가 되고 그대로
+     *                       독촉이 나간다. 재수강처럼 <b>정말 두 번 받는 경우</b>에만 켠다
+     */
+    @Transactional
+    public Billing create(AuthPrincipal me, Long enrollmentId, String name,
+                          BillingType type, int suppliedAmount, int discountAmount,
+                          LocalDate dueDate, boolean allowDuplicate) {
 
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
+        if (!allowDuplicate && billingRepository.existsSameNamed(enrollmentId, type, name)) {
+            throw new BusinessException(ErrorCode.BILLING_ALREADY_ISSUED,
+                    "'%s' 청구가 이미 있습니다. 다시 청구하려면 중복 허용을 체크하세요."
+                            .formatted(name));
+        }
         if (suppliedAmount < 0 || discountAmount < 0) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "금액은 0 이상이어야 합니다.");
         }

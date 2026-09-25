@@ -42,6 +42,28 @@ public interface BillingRepository extends JpaRepository<Billing, Long> {
     boolean existsTuitionFor(@Param("enrollmentId") Long enrollmentId,
                              @Param("year") Short year, @Param("month") Short month);
 
+    /**
+     * 같은 학생에게 <b>같은 이름</b>으로 이미 나간 청구가 있나 — 특강비 등 일반 청구의
+     * 중복 발행을 막는다.
+     *
+     * <p>교습비는 이용월로 막지만({@link #existsTuitionFor}) 특강비는 이용월이 없다.
+     * 데스크가 저장을 두 번 누르면 <b>같은 특강이 두 건 잡혀 미납이 두 배</b>가 되고
+     * 그대로 독촉이 나간다.
+     *
+     * <p>취소된 건은 세지 않는다 — 잘못 발행해 취소한 뒤 다시 내야 하기 때문이다.
+     */
+    @Query("""
+            SELECT COUNT(b) > 0 FROM Billing b
+            WHERE b.enrollment.id = :enrollmentId
+              AND b.billingType = :type
+              AND b.name = :name
+              AND b.status <> com.dlab.domain.payment.entity.BillingStatus.CANCELLED
+              AND b.deleted = false
+            """)
+    boolean existsSameNamed(@Param("enrollmentId") Long enrollmentId,
+                            @Param("type") com.dlab.domain.payment.entity.BillingType type,
+                            @Param("name") String name);
+
     /** 지점·연도 청구 전체. 수납현황·미납자 추출이 쓴다. */
     @Query("""
             SELECT b FROM Billing b
