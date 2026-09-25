@@ -19,6 +19,11 @@ import java.time.LocalDate;
  */
 @Getter
 @Entity
+@com.dlab.domain.audit.Audited("학생")
+// ★ @Audited 만으로는 안 남는다 — 리스너를 함께 붙여야 콜백이 온다.
+//   이게 빠져 있어서 학생 이름·연락처·영문명 수정이 감사 로그에 아예 없었다
+//   (등록 건은 붙어 있어 재원 상태 변경만 남고 있었다)
+@jakarta.persistence.EntityListeners(com.dlab.domain.audit.AuditEntityListener.class)
 @Table(name = "student")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Student extends BaseEntity {
@@ -39,10 +44,13 @@ public class Student extends BaseEntity {
     @Column(nullable = false, length = 20)
     private String name;
 
+    /** ★ 값은 감사 로그에 남기지 않는다 — 바뀐 사실만 남는다. */
+    @com.dlab.domain.audit.AuditMasked
     @Column(length = 20)
     private String phone;
 
     /** 암호화 여부 미정 — 동명이인 구분 조회조건으로 쓰이면 인덱스를 못 탄다. */
+    @com.dlab.domain.audit.AuditMasked
     @Column(name = "birth_date")
     private LocalDate birthDate;
 
@@ -53,6 +61,7 @@ public class Student extends BaseEntity {
     private String schoolName;
 
     /** ★ 민감 필드. 전화·생년월일과 같은 등급으로 다룬다(마스킹·상위 관리자 전용). */
+    @com.dlab.domain.audit.AuditMasked
     @Column(length = 200)
     private String address;
 
