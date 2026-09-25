@@ -144,7 +144,7 @@ class AdminWebBugsTest {
         Account actor = Account.forEmployee(hq, "hq-bug", "x", false);
         em.persist(actor);
         em.flush();
-        auditLogRepository.save(new AuditLog("Account", 999L, AuditAction.UPDATE, bundang.getId(),
+        auditLogRepository.save(new AuditLog(com.dlab.domain.user.service.StaffAccountService.AUDIT_ACCOUNT, 999L, AuditAction.UPDATE, bundang.getId(),
                 actor.getId(), "EMPLOYEE", null, null, Instant.now()));
 
         var rows = staffController.accountHistory(999L).data();
