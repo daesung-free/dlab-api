@@ -93,6 +93,33 @@ class AuditChangeCaptureTest {
     }
 
     @Test
+    @DisplayName("★ 학생(사람) 정보 수정도 남는다 — 이름·영문명을 누가 바꿨나")
+    void recordsStudentPersonChange() {
+        minji.getStudent().updateExtra("TEST ONE", null, false);
+        em.flush();
+
+        var logs = logsOf("학생", minji.getStudent().getId());
+        assertThat(logs)
+                .as("학생 정보 수정은 등록 건이 아니라 사람 행이 바뀐다 — 감사 로그가 아예 없었다")
+                .isNotEmpty();
+        assertThat(logs.get(0).getChanges()).contains("englishName").contains("TEST ONE");
+    }
+
+    @Test
+    @DisplayName("★ 연락처·생년월일·주소는 바뀐 사실만 남고 값은 남지 않는다")
+    void masksSensitiveStudentFields() {
+        minji.getStudent().updateProfile(null, "010-9999-8888", null, null, null, null);
+        em.flush();
+
+        String changes = logsOf("학생", minji.getStudent().getId()).stream()
+                .map(AuditLog::getChanges).filter(java.util.Objects::nonNull).findFirst().orElseThrow();
+
+        assertThat(changes).contains("phone").contains("***");
+        assertThat(changes).doesNotContain("010-9999-8888");
+        assertThat(changes).doesNotContain("010-1111-2222");
+    }
+
+    @Test
     @DisplayName("★ 학생에 붙는 기록은 지점이 없어도 등록 건에서 지점을 찾아 남긴다")
     void resolvesAcademyFromEnrollment() {
         PenaltyItem item = new PenaltyItem(bundang, year, "지각", 5, PenaltyCategory.DEMERIT);
