@@ -51,6 +51,7 @@ public class AdminAuditLogController {
      *
      * @param academyId  비우면 내 지점. 전 지점 권한자가 비우면 전 지점이다
      * @param entityType {@code 상벌점}·{@code 성적}처럼 화면에 보이는 이름 그대로다
+     * @param action     {@code CREATE}·{@code UPDATE}·{@code DELETE}. 비우면 전부다
      */
     @GetMapping
     public ApiResponse<List<AuditLogResponse>> search(
@@ -62,6 +63,7 @@ public class AdminAuditLogController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) String entityType,
             @RequestParam(required = false) Long actorId,
+            @RequestParam(required = false) AuditAction action,
             @PageableDefault(size = 50) Pageable pageable) {
 
         LocalDate today = LocalDate.now(clock);
@@ -69,7 +71,7 @@ public class AdminAuditLogController {
         LocalDate end = to == null ? today : to;
 
         var page = auditLogRepository.search(
-                me.resolveAcademyScope(academyId), entityType, actorId,
+                me.resolveAcademyScope(academyId), entityType, actorId, action,
                 start.atStartOfDay(clock.getZone()).toInstant(),
                 // 끝 날짜를 포함해야 한다 — 오늘 수정분이 오늘 조회에서 빠지면 안 된다
                 end.plusDays(1).atStartOfDay(clock.getZone()).toInstant(),

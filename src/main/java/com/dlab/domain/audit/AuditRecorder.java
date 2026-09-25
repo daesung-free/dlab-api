@@ -55,6 +55,11 @@ public class AuditRecorder {
                 serialize(changes), Instant.now()));
     }
 
+    /** 리스너가 인터셉터에서 모은 변경을 같은 형식으로 쓰도록 열어 둔다. */
+    static String serializeChanges(List<AuditEntityListener.Change> changes) {
+        return serialize(changes);
+    }
+
     /** JSON 한 줄. 라이브러리를 태우지 않는 이유는 값이 단순해서다. */
     private static String serialize(List<AuditEntityListener.Change> changes) {
         if (changes == null || changes.isEmpty()) {

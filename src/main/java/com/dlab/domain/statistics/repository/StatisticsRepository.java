@@ -155,6 +155,25 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
     long countEnrolledAt(@Param("academyId") Long academyId, @Param("year") short year,
                          @Param("at") LocalDate at);
 
+    /**
+     * 그 달에 <b>새로 들어온</b> 인원 — 월별 추이의 '신규 등록'.
+     *
+     * <p>순증감({@code delta})으로는 이걸 알 수 없다. 10명 들어오고 10명 나간 달은
+     * 증감이 0이라 <b>아무 일도 없던 달처럼 보인다</b> — 모집 성과를 보는 화면이라
+     * 들어온 수를 따로 세야 한다.
+     */
+    @Query("""
+            SELECT COUNT(e)
+            FROM StudentEnrollment e
+            WHERE (:academyId IS NULL OR e.academy.id = :academyId)
+              AND e.year = :year
+              AND e.deleted = false
+              AND e.admissionDate IS NOT NULL
+              AND e.admissionDate >= :from AND e.admissionDate <= :to
+            """)
+    long countAdmittedBetween(@Param("academyId") Long academyId, @Param("year") short year,
+                              @Param("from") LocalDate from, @Param("to") LocalDate to);
+
     /** 출결 — 확정된 일자 상태별 건수. */
     @Query("""
             SELECT d.finalStatus, COUNT(d)

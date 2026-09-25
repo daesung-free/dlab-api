@@ -34,8 +34,15 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class StaffAccountService {
 
-    /** 감사 로그의 대상 이름. 화면이 이 값으로 계정 이력을 걸러 본다. */
-    private static final String AUDIT_ACCOUNT = "Account";
+    /**
+     * 감사 로그의 대상 이름. 화면이 이 값으로 계정 이력을 걸러 본다.
+     *
+     * <p>★ <b>한국어다.</b> 다른 도메인(상벌점·성적·청구…)이 전부 한국어인데 여기만
+     * {@code "Account"}였다 — 화면 업무영역 목록에 한국어만 뜨니 <b>계정 이력은 검색해도
+     * 늘 0건</b>이었다. 값을 바꾸면서 이미 쌓인 행도 마이그레이션으로 함께 고친다
+     * ({@code V20260925_1000}).
+     */
+    public static final String AUDIT_ACCOUNT = "직원 계정";
 
     private final TeacherRepository teacherRepository;
     private final EmployeeRepository employeeRepository;

@@ -28,5 +28,15 @@ public class WebMvcConfig implements WebMvcConfigurer {
         // 계정별 메뉴 노출. 관리자 웹만 대상이다 — 앱에는 메뉴 설정 개념이 없다
         registry.addInterceptor(menuAccessInterceptor)
                 .addPathPatterns("/api/v1/admin/**");
+        // 감사 로그 변경 내역은 스레드에 담겨 오간다. 스레드 풀이라 요청이 끝날 때 비우지 않으면
+        // 저장이 롤백된 경우 그 찌꺼기를 다음 요청이 물려받는다
+        registry.addInterceptor(new org.springframework.web.servlet.HandlerInterceptor() {
+            @Override
+            public void afterCompletion(@NonNull jakarta.servlet.http.HttpServletRequest request,
+                                        @NonNull jakarta.servlet.http.HttpServletResponse response,
+                                        @NonNull Object handler, Exception ex) {
+                com.dlab.domain.audit.AuditChangeInterceptor.clear();
+            }
+        });
     }
 }

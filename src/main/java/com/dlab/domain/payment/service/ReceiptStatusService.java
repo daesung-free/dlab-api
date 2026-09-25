@@ -54,6 +54,23 @@ public class ReceiptStatusService {
     @Transactional(readOnly = true)
     public List<Row> find(AuthPrincipal me, Long academyId, short year,
                           LocalDate from, LocalDate to, BillingType type, boolean unpaidOnly) {
+        return find(me, academyId, year, from, to,
+                type == null ? null : List.of(type), unpaidOnly, null, null);
+    }
+
+    /**
+     * 화면 조건 전부로 조회.
+     *
+     * @param types   청구 항목 여럿. 화면이 체크박스로 여러 개를 고른다 — 하나만 받으면
+     *                교습비·급식비를 같이 보려는 화면이 두 번 호출해 합계가 어긋난다
+     * @param keyword 이름·학번·전표번호 통합 검색
+     * @param method  결제수단. <b>취소된 거래는 세지 않는다</b> — 취소분까지 보면
+     *                "카드로 낸 사람" 목록에 환불된 건이 섞인다
+     */
+    public List<Row> find(AuthPrincipal me, Long academyId, short year,
+                          LocalDate from, LocalDate to, List<BillingType> types,
+                          boolean unpaidOnly, String keyword,
+                          com.dlab.domain.payment.entity.PaymentMethod method) {
 
         Long scope = requireScope(me, academyId);
         // ★ null을 그대로 넘기지 않는다. PostgreSQL이 ":param IS NULL"만 보고는
@@ -76,8 +93,12 @@ public class ReceiptStatusService {
                     return Row.of(b, ((Number) r[1]).intValue(),
                             paymentsByBilling.getOrDefault(b.getId(), List.of()));
                 })
-                .filter(row -> type == null || row.billing().getBillingType() == type)
+                .filter(row -> types == null || types.isEmpty()
+                        || types.contains(row.billing().getBillingType()))
                 .filter(row -> !unpaidOnly || row.unpaid() > 0)
+                .filter(row -> matches(row, keyword))
+                .filter(row -> method == null || row.payments().stream()
+                        .anyMatch(t -> t.getMethod() == method))
                 .toList();
     }
 
@@ -88,10 +109,36 @@ public class ReceiptStatusService {
      * 데스크가 어느 쪽을 믿어야 할지 알 수 없다.
      */
     @Transactional(readOnly = true)
+    private static boolean matches(Row row, String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return true;
+        }
+        String kw = keyword.trim();
+        var enrollment = row.billing().getEnrollment();
+        return contains(enrollment.getStudentNo(), kw)
+                || contains(enrollment.getStudent().getName(), kw)
+                || contains(row.billing().getName(), kw)
+                // 전표번호로 찾는 문의가 실제로 온다 — 학부모가 영수증 번호를 들고 전화한다
+                || row.payments().stream().anyMatch(t -> contains(t.getPgTid(), kw));
+    }
+
+    private static boolean contains(String value, String keyword) {
+        return value != null && value.contains(keyword);
+    }
+
     public Summary summarize(AuthPrincipal me, Long academyId, short year,
                              LocalDate from, LocalDate to, BillingType type) {
+        return summarize(me, academyId, year, from, to,
+                type == null ? null : List.of(type), null, null);
+    }
 
-        List<Row> rows = find(me, academyId, year, from, to, type, false);
+    /** 합계. <b>목록과 같은 조건을 쓴다</b> — 다르면 데스크가 어느 쪽을 믿을지 알 수 없다. */
+    public Summary summarize(AuthPrincipal me, Long academyId, short year,
+                             LocalDate from, LocalDate to, List<BillingType> types,
+                             String keyword,
+                             com.dlab.domain.payment.entity.PaymentMethod method) {
+
+        List<Row> rows = find(me, academyId, year, from, to, types, false, keyword, method);
 
         Map<BillingType, Integer> unpaidByType = rows.stream()
                 .filter(r -> r.unpaid() > 0)
@@ -117,8 +164,20 @@ public class ReceiptStatusService {
     @Transactional(readOnly = true)
     public byte[] export(AuthPrincipal me, Long academyId, short year,
                          LocalDate from, LocalDate to, BillingType type, boolean unpaidOnly) {
+        return export(me, academyId, year, from, to,
+                type == null ? null : List.of(type), unpaidOnly, null, null);
+    }
 
-        List<Row> rows = find(me, academyId, year, from, to, type, unpaidOnly);
+    /**
+     * 화면 조건 그대로 내려받는다 — 조건을 못 받으면 화면에서 좁혀 놓고 받은 파일에
+     * 전체가 담긴다.
+     */
+    public byte[] export(AuthPrincipal me, Long academyId, short year,
+                         LocalDate from, LocalDate to, List<BillingType> types,
+                         boolean unpaidOnly, String keyword,
+                         com.dlab.domain.payment.entity.PaymentMethod method) {
+
+        List<Row> rows = find(me, academyId, year, from, to, types, unpaidOnly, keyword, method);
         List<String> headers = List.of("학번", "이름", "연락처", "청구항목", "유형",
                 "이용월", "청구액", "수납액", "미납액", "납부기한", "상태");
 

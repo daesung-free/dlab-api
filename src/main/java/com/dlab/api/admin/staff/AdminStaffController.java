@@ -204,7 +204,7 @@ public class AdminStaffController {
      */
     @GetMapping("/accounts/{accountId}/history")
     public ApiResponse<List<AccountHistoryRow>> accountHistory(@PathVariable Long accountId) {
-        var logs = auditLogRepository.findByEntity("Account", accountId);
+        var logs = auditLogRepository.findByEntity(StaffAccountService.AUDIT_ACCOUNT, accountId);
         // ★ 저장된 actor_name 은 이름이 아니라 계정 종류("EMPLOYEE")다 — 기록 시점에 이름을 찾으면
         //   플러시 중 조회가 돼 깨진다. 수정 이력 화면과 같이 조회 시점에 이름을 붙인다
         java.util.Set<Long> ids = logs.stream()

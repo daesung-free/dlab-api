@@ -390,8 +390,18 @@ public class AttendanceBoardService {
      */
     public byte[] export(AuthPrincipal me, Long academyId, LocalDate date, Long classId,
                          boolean unmask) {
+        return export(me, board(me, academyId, date, classId), unmask);
+    }
+
+    /**
+     * 이미 걸러 놓은 목록을 그대로 내려받는다.
+     *
+     * <p><b>화면이 본 것과 파일이 같아야 한다.</b> 내보내기가 조회 조건을 못 받으면
+     * 화면에서 상태·검색어로 좁혀 놓고 받은 파일에 전체가 담겨 <b>엉뚱하게 넓은 파일</b>이
+     * 나간다 — 개인정보가 들어 있는 파일이라 넓은 쪽이 더 위험하다.
+     */
+    public byte[] export(AuthPrincipal me, List<AttendanceRow> rows, boolean unmask) {
         boolean raw = unmask && com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me);
-        List<AttendanceRow> rows = board(me, academyId, date, classId);
 
         return excelExporter.export("출결현황", EXPORT_MAPPING, rows, r -> java.util.Arrays.asList(
                 r.studentNo(),

@@ -267,7 +267,12 @@ public class DailyRoutineService {
      * </ul>
      */
     private void verifyConsistent(DailyRoutineResult current, ResultInput input) {
-        String who = "학생(등록 건 %d)".formatted(input.enrollmentId());
+        // ★ 등록 건 번호는 화면이 읽을 수 없는 값이다 — 사람 이름으로 말한다.
+        //   현재 행에 학생이 붙어 있으므로 추가 조회가 없다
+        String who = current != null && current.getEnrollment() != null
+                ? "%s(%s)".formatted(current.getEnrollment().getStudent().getName(),
+                        current.getEnrollment().getStudentNo())
+                : "학생(등록 건 %d)".formatted(input.enrollmentId());
         boolean hasScore = input.selfScore() != null || input.reviewedScore() != null;
         switch (input.status()) {
             case PLANNED, DISTRIBUTED, NOT_SUBMITTED, ABSENT -> {
