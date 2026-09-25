@@ -3,6 +3,7 @@ package com.dlab.domain.user.repository;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -79,6 +80,22 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
             WHERE e.studentNo = :studentNo AND e.current = true AND e.deleted = false
             """)
     Optional<StudentEnrollment> findCurrentByStudentNo(String studentNo);
+
+    /**
+     * 지점 안에서 학번으로 현재 등록 건.
+     *
+     * <p>★ <b>학번은 지점마다 따로 매겨진다</b> — 전 지점에서 찾으면 같은 학번이 여러 건
+     * 걸려 조회 자체가 예외로 끝난다. 실제로 키오스크 좌석이탈 수신이 학번으로 들어올 때
+     * 배치 전체가 500으로 실패했다. 학번으로 찾는 곳은 <b>반드시 지점을 함께</b> 건다.
+     */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student
+            WHERE e.academy.id = :academyId AND e.studentNo = :studentNo
+              AND e.current = true AND e.deleted = false
+            """)
+    Optional<StudentEnrollment> findCurrentByStudentNo(@Param("academyId") Long academyId,
+                                                       @Param("studentNo") String studentNo);
 
     /**
      * 해당 지점·연도의 학번 최대 일련번호. 채번의 다음 값 계산에 쓴다.

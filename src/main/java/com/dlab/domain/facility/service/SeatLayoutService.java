@@ -57,6 +57,7 @@ public class SeatLayoutService {
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final AttendanceTaggingLogRepository taggingLogRepository;
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.kiosk.service.SeatLeaveBoardService seatLeaveBoardService;
     private final Clock clock;
 
     /** 구역 목록. 화면이 구역을 골라야 배치도를 열 수 있다. */
@@ -124,6 +125,10 @@ public class SeatLayoutService {
 
         Map<Long, AttendanceEventType> lastEvent =
                 lastEventByEnrollment(area.getAcademy().getId());
+        // ★ 이탈은 출결 태깅에 남지 않는다 — 좌석이탈 로그를 함께 봐야 "이탈 중"이 보인다.
+        //   재실 값(presence)은 키오스크와 공유하는 코드라 건드리지 않고 별도 축으로 얹는다
+        Map<Long, java.time.Instant> openLeaves =
+                seatLeaveBoardService.openLeavesOf(area.getAcademy().getId());
 
         Map<String, SeatAssignment> assignmentBySeat = new HashMap<>();
         seatAssignmentRepository.findActiveByStudyAreaId(studyAreaId)
@@ -161,6 +166,10 @@ public class SeatLayoutService {
                             clazz == null ? null : clazz.getId(),
                             clazz == null ? null : clazz.getName(),
                             presenceOf(assignment, lastEvent),
+                            assignment != null
+                                    && openLeaves.containsKey(assignment.getEnrollment().getId()),
+                            assignment == null ? null
+                                    : openLeaves.get(assignment.getEnrollment().getId()),
                             !raw);
                 })
                 .toList();
@@ -247,6 +256,9 @@ public class SeatLayoutService {
     }
 
     /**
+     * @param onSeatLeave 지금 자리를 비웠는지(좌석이탈). <b>{@code presence}와 별개 축</b>이다 —
+     *                    이탈해도 출결로는 여전히 재실이라 화면이 이 값으로 덮어 표시한다
+     * @param seatLeftAt  이탈 시작 시각. 이탈 중이 아니면 비어 있다
      * @param usable      사용중지 여부(배정 축). {@code presence}와 별개다
      * @param studentName {@code masked}가 참이면 가려진 값이다
      * @param className   고정반. 반 미배정이면 비어 있다
@@ -272,6 +284,8 @@ public class SeatLayoutService {
             Long classId,
             String className,
             SeatPresence presence,
+            boolean onSeatLeave,
+            java.time.Instant seatLeftAt,
             boolean masked) {
 
         /** 배정 축. 화면이 색을 고를 때 재실 축과 조합한다. */

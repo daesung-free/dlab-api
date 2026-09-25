@@ -100,6 +100,48 @@ class SeatLayoutTest {
     }
 
     @Test
+    @DisplayName("★ 이탈 중이면 재실은 그대로 두고 이탈 축으로 따로 알린다")
+    void seatLeaveIsSeparateAxis() {
+        SeatMaster seat = seat("A-09", 1, 1);
+        StudentEnrollment e = assign(seat, "김민지", "0009");
+        tag(e, AttendanceEventType.CHECK_IN, 9);
+
+        // ★ 밀리초로 자른다 — DB 가 나노초를 보존하지 않아 그대로 비교하면 환경에 따라 어긋난다
+        java.time.Instant leftAt = java.time.Instant.now(clock).minusSeconds(600)
+                .truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        em.persist(new com.dlab.domain.kiosk.entity.SeatLeaveLog(bundang, (short) 2026, 1L, e,
+                null, "0009", "A", "A-09",
+                com.dlab.domain.kiosk.entity.SeatLeaveEventType.LEAVE, leftAt));
+        em.flush();
+
+        SeatCell cell = cellOf("A-09");
+        // 출결로는 여전히 재실이다 — 키오스크와 공유하는 값이라 바꾸지 않는다
+        assertThat(cell.presence()).isEqualTo(SeatPresence.PRESENT);
+        assertThat(cell.onSeatLeave()).isTrue();
+        assertThat(cell.seatLeftAt()).isEqualTo(leftAt);
+    }
+
+    @Test
+    @DisplayName("복귀하면 이탈 표시가 사라진다")
+    void returnClearsSeatLeave() {
+        SeatMaster seat = seat("A-10", 2, 1);
+        StudentEnrollment e = assign(seat, "박서준", "0010");
+        tag(e, AttendanceEventType.CHECK_IN, 9);
+
+        java.time.Instant leftAt = java.time.Instant.now(clock).minusSeconds(600)
+                .truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        em.persist(new com.dlab.domain.kiosk.entity.SeatLeaveLog(bundang, (short) 2026, 2L, e,
+                null, "0010", "A", "A-10",
+                com.dlab.domain.kiosk.entity.SeatLeaveEventType.LEAVE, leftAt));
+        em.persist(new com.dlab.domain.kiosk.entity.SeatLeaveLog(bundang, (short) 2026, 3L, e,
+                null, "0010", "A", "A-10",
+                com.dlab.domain.kiosk.entity.SeatLeaveEventType.RETURN, leftAt.plusSeconds(300)));
+        em.flush();
+
+        assertThat(cellOf("A-10").onSeatLeave()).isFalse();
+    }
+
+    @Test
     @DisplayName("좌표가 그대로 나온다 — 도면을 그리는 값이다")
     void coordinatesAreReturned() {
         seat("A-01", 3, 5);

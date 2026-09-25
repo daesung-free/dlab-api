@@ -1,5 +1,7 @@
 package com.dlab.api.admin.attendance;
 
+import com.dlab.common.privacy.Masking;
+import com.dlab.common.privacy.PersonalDataPolicy;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
@@ -7,6 +9,7 @@ import com.dlab.domain.kiosk.service.SeatLeaveBoardService;
 import com.dlab.domain.kiosk.service.SeatLeaveBoardService.LeaveRow;
 import com.dlab.domain.kiosk.service.SeatLeaveBoardService.Status;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -60,16 +63,25 @@ public class AdminSeatLeaveController {
                 .filter(r -> statuses == null || statuses.isEmpty() || statuses.contains(r.status()))
                 .filter(r -> matchesKeyword(r, keyword))
                 .toList();
-        return ApiResponse.success(new SeatLeaveBoardResponse(filtered, summary(filtered)));
+
+        // ★ 검색은 원본으로 하고 마스킹은 마지막에 한다 — 먼저 가리면 이름 검색이 안 된다
+        boolean raw = PersonalDataPolicy.canViewRaw(me);
+        return ApiResponse.success(new SeatLeaveBoardResponse(
+                filtered.stream().map(r -> LeaveRowResponse.of(r, raw)).toList(),
+                summary(filtered),
+                !raw));
     }
 
     /** 지금 이탈 중인 학생. 오래 나가 있는 학생이 위로 온다. */
     @GetMapping("/current")
-    public ApiResponse<List<LeaveRow>> current(
+    public ApiResponse<List<LeaveRowResponse>> current(
             @CurrentAccount AuthPrincipal me,
             @RequestParam(required = false) Long academyId,
             @RequestParam(required = false) Long classId) {
-        return ApiResponse.success(boardService.current(me, academyId, classId));
+        boolean raw = PersonalDataPolicy.canViewRaw(me);
+        return ApiResponse.success(boardService.current(me, academyId, classId).stream()
+                .map(r -> LeaveRowResponse.of(r, raw))
+                .toList());
     }
 
     private boolean matchesKeyword(LeaveRow r, String keyword) {
@@ -94,6 +106,27 @@ public class AdminSeatLeaveController {
         return counts;
     }
 
-    public record SeatLeaveBoardResponse(List<LeaveRow> rows, Map<String, Long> summary) {
+    /**
+     * @param masked 이름이 가려졌는지. 화면이 모르면 또 가려 이름이 통째로 사라진다
+     */
+    public record SeatLeaveBoardResponse(List<LeaveRowResponse> rows, Map<String, Long> summary,
+                                         boolean masked) {
+    }
+
+    /**
+     * @param name   상위 관리자가 아니면 가려진 값이다. 학생을 못 찾은 건은 비어 있다
+     * @param masked 이 행의 이름이 가려졌는지
+     */
+    public record LeaveRowResponse(Long leaveLogId, Long enrollmentId, String studentNo,
+                                   String name, String className, String areaCd, String seatCd,
+                                   Instant leftAt, Instant closedAt, Status status, Long minutes,
+                                   boolean resolved, boolean masked) {
+
+        static LeaveRowResponse of(LeaveRow r, boolean raw) {
+            return new LeaveRowResponse(r.leaveLogId(), r.enrollmentId(), r.studentNo(),
+                    raw ? r.name() : Masking.name(r.name()),
+                    r.className(), r.areaCd(), r.seatCd(), r.leftAt(), r.closedAt(),
+                    r.status(), r.minutes(), r.resolved(), !raw);
+        }
     }
 }
