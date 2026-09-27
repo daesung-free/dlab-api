@@ -43,6 +43,9 @@ class PermissionMatrixTest {
 
     @Autowired StudentService studentService;
     @Autowired HomeroomScopeService homeroomScopeService;
+    @Autowired com.dlab.domain.menu.service.MenuAccessService menuAccessService;
+    @Autowired com.dlab.domain.menu.repository.MenuRepository menuRepository;
+    @Autowired com.dlab.domain.user.repository.AccountRepository accountRepository;
     @Autowired EntityManager em;
     @Autowired Clock clock;
 
@@ -99,6 +102,51 @@ class PermissionMatrixTest {
         var base = com.dlab.domain.user.repository.StudentSearchCondition.none();
         var filter = homeroomScopeService.resolveStudentFilter(who, year, null);
         return filter.restricted() ? base.restrictedTo(filter.enrollmentIds()) : base;
+    }
+
+    // ── 역할 기본 메뉴 ─────────────────────────────────────
+
+    @Test
+    @DisplayName("★ 담임 사이드바에서 급식·수납이 빠진다 — 눌러 봐야 안 되는 메뉴였다")
+    void teacherMenusExcludeDeskWork() {
+        var codes = menuAccessService.visibleMenus(teacher).stream()
+                .map(com.dlab.domain.menu.entity.Menu::getCode).toList();
+
+        assertThat(codes).contains("student", "attendance", "class", "penalty", "consult");
+        assertThat(codes).doesNotContain("billing", "meal", "staff", "branch-config");
+    }
+
+    @Test
+    @DisplayName("조회 전용은 보기만 하는 메뉴가 남는다 — 급식은 조회로 열려 있어 보인다")
+    void readonlyMenus() {
+        Account account = Account.forEmployee(new Employee(academy, "조회쌤"), "pm-viewer", "x", false);
+        em.persist(account.getEmployee());
+        em.persist(account);
+        em.flush();
+        AuthPrincipal viewer = AuthPrincipal.of(account.getId(), "EMPLOYEE", academy.getId(),
+                List.of(Role.READONLY), false);
+
+        var codes = menuAccessService.visibleMenus(viewer).stream()
+                .map(com.dlab.domain.menu.entity.Menu::getCode).toList();
+
+        assertThat(codes).contains("student", "attendance", "billing", "meal", "grade");
+        // 담임 업무·설정은 조회 전용에 없다
+        assertThat(codes).doesNotContain("class", "penalty", "consult", "master", "staff");
+    }
+
+    @Test
+    @DisplayName("★ 계정별 설정이 역할 기본값을 덮는다 — 0914 확정(계정 단위)이 깨지지 않는다")
+    void accountSettingWins() {
+        var menu = menuRepository.findByCodes(List.of("billing")).get(0);
+        em.persist(new com.dlab.domain.menu.entity.AccountMenu(
+                accountRepository.findById(teacher.accountId()).orElseThrow(), menu));
+        em.flush();
+
+        var codes = menuAccessService.visibleMenus(teacher).stream()
+                .map(com.dlab.domain.menu.entity.Menu::getCode).toList();
+
+        // 역할 기본값에는 없던 메뉴인데, 계정에 지정했으므로 그것만 보인다
+        assertThat(codes).containsExactly("billing");
     }
 
     @Test
