@@ -497,8 +497,10 @@ public class AdminMasterController {
      *
      * <p>위 목록과 축이 다르다. 지점 행이 공통본을 덮고 중지된 것은 빠진다.
      */
+    // ★ 장학 '종류' 목록이라 학생 개인정보가 아니다. 학생 화면이 이름을 표시하는 데 쓰므로
+    //   담임·행정·조회 전용에도 열어 준다 — 막으면 그 화면에서 장학이 코드로만 보인다
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
     @GetMapping("/scholarship-masters/selectable")
-    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     public ApiResponse<List<MasterResponses.ScholarshipMasterItem>> selectableScholarships(
             @CurrentAccount AuthPrincipal me,
             @RequestParam short year,

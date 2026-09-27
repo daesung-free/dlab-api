@@ -111,6 +111,8 @@ public class AdminConsultController {
      *
      * <p>일지만 주면 미상담자가 목록에서 사라져 "누구를 아직 안 만났나"를 알 수 없다.
      */
+    // ★ 진행 상태 코드표다 — 학생 정보가 없어 조회 전용에도 열어 준다
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
     @GetMapping("/status")
     public ApiResponse<List<ConsultService.ConsultStatusRow>> status(
             @CurrentAccount AuthPrincipal me,

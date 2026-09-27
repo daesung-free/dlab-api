@@ -64,7 +64,15 @@ public record StudentSearchCondition(
         Boolean hasScholarship,
         String scholarshipType,
         /** N수 차수 — 1=재수, 2=삼수. {@code grade=N_SU} 안에서만 의미가 있다 */
-        Short retakeCount
+        Short retakeCount,
+        /**
+         * 담임 범위. <b>화면이 고르는 필터가 아니라 서버가 거는 제한</b>이다 —
+         * {@code null}이면 제한 없음, 빈 목록이면 볼 수 있는 학생이 없다는 뜻이다.
+         *
+         * <p>{@code classId}와 다르다. 그건 사용자가 고르는 값이라 빼고 부르면 전체가 나오는데,
+         * 이건 토큰에서 나오므로 클라이언트가 지울 수 없다.
+         */
+        java.util.Set<Long> allowedEnrollmentIds
 ) {
 
     public StudentSearchCondition {
@@ -84,6 +92,13 @@ public record StudentSearchCondition(
     /** 조건 없음. 전체 조회·테스트용. */
     public static StudentSearchCondition none() {
         return new StudentSearchCondition(null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null);
+    }
+
+    /** 담임 범위를 덧붙인다 — 검색 조건은 화면이 만들고, 범위는 서버가 얹는다. */
+    public StudentSearchCondition restrictedTo(java.util.Set<Long> enrollmentIds) {
+        return new StudentSearchCondition(keyword, grade, track, status, classId, teacherId,
+                schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
+                unassignedLocker, hasScholarship, scholarshipType, retakeCount, enrollmentIds);
     }
 }

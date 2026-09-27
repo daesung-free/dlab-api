@@ -43,7 +43,19 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/v1/admin/students")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+/*
+ * ★ 담임·조회 전용도 <b>읽기는</b> 열려 있다 (권한 매트릭스 초안, docs/permission-matrix.md).
+ *
+ * <p>예전에는 이 셋만 허용해서 <b>담임이 학생 검색을 아예 못 했고 조회 전용은 명단조차 못 봤다</b> —
+ * 두 권한으로는 화면이 통째로 비어 고장으로 보였다.
+ *
+ * <p><b>읽기와 쓰기를 나눈다.</b> 담임은 맡은 학생만 보이고(서버가 거는 범위라 화면이 지울 수 없다),
+ * 조회 전용은 지점 전체를 보되 아무것도 못 고친다. 쓰기 메서드에는 각각 권한을 따로 달았다.
+ *
+ * <p>매트릭스가 담임에게 "담당분만 수정"까지 주지만 <b>확정 전에는 열지 않는다</b> —
+ * 잘못 열면 되돌리기 어려운 변경(삭제·상태 변경)이 생긴다. 확정되면 그때 넓힌다.
+ */
+@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
 public class AdminStudentController {
 
     private final StudentService studentService;
@@ -53,6 +65,7 @@ public class AdminStudentController {
     private final SavedSearchService savedSearchService;
     private final StudentStatusService studentStatusService;
     private final StudentListEnricher studentListEnricher;
+    private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
 
     /**
      * 학생 검색. 조건이 12개라 {@code SearchPredicates}로 조합한다 — 값이 없으면 그 조건이 빠진다.
@@ -124,9 +137,10 @@ public class AdminStudentController {
 
         Page<StudentEnrollment> page = studentService.search(
                 SearchScope.of(me, year, academyId),
-                condition(keyword, grade, track, status, classId, teacherId, schoolName,
+                scoped(condition(keyword, grade, track, status, classId, teacherId, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
                         unassignedLocker, hasScholarship, scholarshipType, retakeCount),
+                        me, year),
                 pageable);
 
         var extras = studentListEnricher.of(page.getContent());
@@ -142,14 +156,38 @@ public class AdminStudentController {
                                              Short retakeCount) {
         return new StudentSearchCondition(keyword, grade, track, status, classId, teacherId,
                 schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
-                unassignedLocker, hasScholarship, scholarshipType, retakeCount);
+                unassignedLocker, hasScholarship, scholarshipType, retakeCount, null);
     }
 
-    /** 학생 상세. 목록과 <b>같은 필드</b>를 내린다 — 화면이 목록에서 상세로 넘어갈 때 값이 사라지면 안 된다. */
+    /**
+     * 담임 범위를 조건에 얹는다.
+     *
+     * <p><b>페이징 뒤에 걸러내지 않는다</b> — 그러면 전체 건수가 어긋나 화면이 빈 페이지를 그린다.
+     */
+    private StudentSearchCondition scoped(StudentSearchCondition condition,
+                                          AuthPrincipal me, Integer year) {
+        short target = year != null ? year.shortValue()
+                : (short) java.time.LocalDate.now().getYear();
+        var filter = homeroomScopeService.resolveStudentFilter(me, target, null);
+        return filter.restricted() ? condition.restrictedTo(filter.enrollmentIds()) : condition;
+    }
+
+    /**
+     * 학생 상세. 목록과 <b>같은 필드</b>를 내린다 — 화면이 목록에서 상세로 넘어갈 때 값이 사라지면 안 된다.
+     *
+     * <p>담임은 <b>맡은 학생만</b> 열 수 있다. 남의 반 학생은 "없다"로 답한다 — 403 으로 막으면
+     * 그 학생이 존재한다는 사실이 새어나간다.
+     */
     @GetMapping("/{enrollmentId}")
     public ApiResponse<StudentResponse> get(@CurrentAccount AuthPrincipal me,
                                             @PathVariable Long enrollmentId) {
-        return ApiResponse.success(single(studentService.get(enrollmentId, me), me));
+        StudentEnrollment enrollment = studentService.get(enrollmentId, me);
+        var filter = homeroomScopeService.resolveStudentFilter(me, enrollment.getYear(), null);
+        if (!filter.matches(enrollmentId)) {
+            throw new com.dlab.common.exception.BusinessException(
+                    com.dlab.common.exception.ErrorCode.STUDENT_NOT_FOUND);
+        }
+        return ApiResponse.success(single(enrollment, me));
     }
 
     /** 단건 응답. 반·좌석·장학을 목록과 같은 경로로 붙인다. */
@@ -178,6 +216,7 @@ public class AdminStudentController {
      * 등록과 수정으로 나누면 뒤가 실패했을 때 학생만 남고, 화면은 "저장 실패"로만 알려
      * 담당자가 다시 등록해 중복이 생긴다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PostMapping
     public ApiResponse<StudentResponse> admit(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody StudentRequests.Admit request) {
@@ -204,6 +243,7 @@ public class AdminStudentController {
      *
      * <p>반을 옮기면 자동으로 풀린다. 최고관리자·지점관리자만, 사유 필수.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PutMapping("/{enrollmentId}/homeroom-override")
     public ApiResponse<HomeroomOverrideView> overrideHomeroom(
             @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId,
@@ -213,6 +253,7 @@ public class AdminStudentController {
     }
 
     /** 담임 예외 해제 — 반 담임으로 돌아간다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @DeleteMapping("/{enrollmentId}/homeroom-override")
     public ApiResponse<HomeroomOverrideView> clearHomeroomOverride(
             @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId) {
@@ -237,6 +278,7 @@ public class AdminStudentController {
     }
 
     /** 학생 정보 수정. 보내지 않은 필드는 그대로 둔다 — 부분 수정이라 {@code PATCH}다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PatchMapping("/{enrollmentId}")
     public ApiResponse<StudentResponse> update(@CurrentAccount AuthPrincipal me,
                                                @PathVariable Long enrollmentId,
@@ -262,6 +304,7 @@ public class AdminStudentController {
      * <p><b>출결·상벌점 이력이 있으면 409</b>다. 실제로 다닌 학생을 지우면 그 기록이
      * 주인을 잃고 출결률 분모가 조용히 바뀐다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @DeleteMapping("/{enrollmentId}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me,
                                     @PathVariable Long enrollmentId) {
@@ -281,6 +324,7 @@ public class AdminStudentController {
      * <p><b>{@code followUps}를 함께 내린다.</b> 처리한 사람이 그 자리에서 봐야
      * "미납이 남았다"를 안다 — 로그로만 남기면 화면을 닫는 순간 아무도 모른다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PostMapping("/{enrollmentId}/status")
     public ApiResponse<StatusChangeResponse> changeStatus(
             @CurrentAccount AuthPrincipal me, @PathVariable Long enrollmentId,
@@ -347,10 +391,12 @@ public class AdminStudentController {
             @RequestParam(required = false) String scholarshipType,
             @RequestParam(required = false) Short retakeCount) {
 
+        // 목록과 같은 범위를 건다 — 담임이 내려받은 파일에 남의 반 학생이 들어가면 회수가 안 된다
         byte[] file = studentExportService.export(SearchScope.of(me, year, academyId),
-                condition(keyword, grade, track, status, classId, teacherId, schoolName,
+                scoped(condition(keyword, grade, track, status, classId, teacherId, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
-                        unassignedLocker, hasScholarship, scholarshipType, retakeCount));
+                        unassignedLocker, hasScholarship, scholarshipType, retakeCount),
+                        me, year));
 
         String filename = URLEncoder.encode("학생명단.xlsx", StandardCharsets.UTF_8);
         return ResponseEntity.ok()
@@ -411,6 +457,7 @@ public class AdminStudentController {
      * <p>결과를 서버에 들고 있지 않으므로 반영할 때 <b>같은 파일을 다시 올려야 한다.</b>
      * 세션에 보관하면 다중 인스턴스에서 어느 서버가 받을지 모른다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PostMapping("/import/preview")
     public ApiResponse<ImportResponse> previewImport(@CurrentAccount AuthPrincipal me,
                                                      @RequestParam Long academyId,
@@ -422,6 +469,7 @@ public class AdminStudentController {
     }
 
     /** 반영 — <b>오류행이 있어도 정상행은 넣는다.</b> 100건 중 3건 틀렸다고 전부 되돌리면 실무가 안 돈다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PostMapping("/import")
     public ApiResponse<ImportResponse> importStudents(@CurrentAccount AuthPrincipal me,
                                                       @RequestParam Long academyId,
@@ -433,6 +481,7 @@ public class AdminStudentController {
     }
 
     /** 재등록 — 같은 사람에 등록 건만 추가한다(상담 이력이 이어져야 하므로). */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PostMapping("/{studentId}/re-enroll")
     public ApiResponse<StudentResponse> reEnroll(@CurrentAccount AuthPrincipal me,
                                                  @PathVariable Long studentId,
