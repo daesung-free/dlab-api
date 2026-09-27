@@ -53,6 +53,12 @@ public final class LectureRequests {
             Integer capacity,
             Integer fee,
             @Size(max = 1000) String description,
+            /** 수업 기간 */
+            LocalDate startDate,
+            LocalDate endDate,
+            /** 접수 기간. {@code status=OPEN} 이면 이것 없이 접수가 열리지 않게 함께 보낸다 */
+            Instant applyFrom,
+            Instant applyTo,
             @Valid List<SessionInput> sessions,
             LectureStatus status,
             Boolean visible) {
