@@ -44,8 +44,7 @@ import org.springframework.web.context.WebApplicationContext;
 @Transactional
 @TestPropertySource(properties = {
         "homepage.integration.client-id=dsisa1",
-        "homepage.integration.secret=test-secret",
-        "storage.local.root=build/test-storage"
+        "homepage.integration.secret=test-secret"
 })
 class HomepageAdmissionTest {
 
@@ -58,6 +57,10 @@ class HomepageAdmissionTest {
 
     @MockitoBean
     com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
+
+    /** 첨부는 S3 로 나간다 — 테스트에서 실제로 올리지 않는다. 저장 키만 검증한다. */
+    @MockitoBean
+    com.dlab.domain.file.service.FileStorage fileStorage;
 
     MockMvc mvc;
     Academy bundang;
