@@ -35,7 +35,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/v1/admin/statistics")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF','READONLY')")
+// ★ 담임을 넣는다. 예전에는 빠져 있어 로그인 직후 대시보드에 「권한이 없습니다」가 떴다 —
+// 담임에게는 서비스가 맡은 학생 범위로 좁혀서 준다(남의 반 학생이 순공 랭킹에 뜨지 않는다)
+@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
 public class AdminStatisticsController {
 
     private final StatisticsService statisticsService;
