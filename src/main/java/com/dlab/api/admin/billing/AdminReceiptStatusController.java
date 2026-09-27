@@ -40,7 +40,9 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/admin/receipt-status")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+// ★ 조회 전용을 넣는다 (권한 매트릭스 초안 — 수납 현황 '조회만').
+//   이 컨트롤러에는 쓰기가 없다. 담임은 매트릭스상 '없음'이라 넣지 않는다
+@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF','READONLY')")
 public class AdminReceiptStatusController {
 
     private final ReceiptStatusService receiptStatusService;

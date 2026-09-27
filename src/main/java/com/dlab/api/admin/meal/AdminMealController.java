@@ -47,7 +47,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/v1/admin/meals")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
+/*
+ * ★ <b>조회</b>는 조회 전용에도 열려 있다 — 「보기만」이 그 권한의 뜻이다.
+ *   신청 현황·마감일·정책을 못 보면 조회 전용으로 급식 화면이 통째로 빈다.
+ *
+ * <p><b>쓰기(마감 등록·정책 변경·신청기간 설정·관리자 취소)는 종전대로</b>다.
+ *   특히 취소는 환불로 이어져 되돌리기 어렵다.
+ */
+@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF','READONLY')")
 public class AdminMealController {
 
     private final MealAdminService mealAdminService;
@@ -82,6 +89,7 @@ public class AdminMealController {
      * <p><b>이미 신청된 건이 함께 취소된다.</b> 응답의 {@code canceledCount}가
      * 환불 대상 건수다 — 화면이 이 값을 띄워 관리자가 알고 저장하게 한다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PostMapping("/closures")
     public ApiResponse<ClosureResponse> addClosure(@CurrentAccount AuthPrincipal me,
                                                    @Valid @RequestBody ClosureRequest request) {
@@ -91,6 +99,7 @@ public class AdminMealController {
     }
 
     /** 중단일 해제. <b>취소된 신청은 되살리지 않는다</b> — 학생이 다시 신청한다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @DeleteMapping("/closures/{closureId}")
     public ApiResponse<Void> removeClosure(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long closureId) {
@@ -116,6 +125,7 @@ public class AdminMealController {
     }
 
     /** 신청 마감 규칙 — 이용일 D-n. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PutMapping("/policy")
     public ApiResponse<Short> saveDeadline(@CurrentAccount AuthPrincipal me,
                                            @Valid @RequestBody DeadlineRequest request) {
@@ -139,6 +149,7 @@ public class AdminMealController {
      * <p>대상월마다 다르다(5/18~27에 6월분을 받는다). <b>기간 밖에는 신청 화면이
      * 열리지 않고, 미등록도 닫힘</b>으로 본다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PutMapping("/order-windows")
     public ApiResponse<WindowResponse> saveWindow(@CurrentAccount AuthPrincipal me,
                                                   @Valid @RequestBody WindowRequest request) {
@@ -171,6 +182,7 @@ public class AdminMealController {
     }
 
     /** 관리자 취소 — <b>기간 제한 없이 즉시</b>. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @DeleteMapping("/orders/items/{itemId}")
     public ApiResponse<Void> cancelItem(@CurrentAccount AuthPrincipal me,
                                         @PathVariable Long itemId) {

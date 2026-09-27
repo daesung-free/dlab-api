@@ -143,6 +143,20 @@ public class StudentSearchRepository {
      * 본문과 count가 <b>같은 조건</b>을 써야 한다 — 두 벌로 두면 조건이 늘 때 한쪽만 고쳐지고
      * 목록은 3건인데 총계가 5건인 상태가 조용히 생긴다.
      */
+    /**
+     * 담임이 볼 수 있는 학생으로 좁힌다.
+     *
+     * <p>{@code null}이면 제한 없음이고, <b>빈 목록이면 아무도 못 본다</b> —
+     * 그 둘을 같게 다루면 맡은 반이 없는 담임에게 지점 전체가 열린다.
+     */
+    private BooleanExpression allowedOnly(java.util.Set<Long> allowed) {
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        if (allowed == null) {
+            return null;
+        }
+        return allowed.isEmpty() ? e.id.isNull() : e.id.in(allowed);
+    }
+
     private BooleanExpression[] conditions(SearchScope scope, StudentSearchCondition c) {
         QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
         StudentSearchCondition cond = c == null ? StudentSearchCondition.none() : c;
@@ -166,7 +180,10 @@ public class StudentSearchRepository {
                 seatAssigned(cond.unassignedSeat()),
                 lockerAssigned(cond.unassignedLocker()),
                 SearchPredicates.eq(e.retakeCount, cond.retakeCount()),
-                hasScholarship(cond.hasScholarship(), cond.scholarshipType())
+                hasScholarship(cond.hasScholarship(), cond.scholarshipType()),
+                // ★ 담임 범위. 화면이 지울 수 없는 제한이라 여기서 건다 —
+                //   페이징 뒤에 걸러내면 전체 건수가 어긋난다
+                allowedOnly(cond.allowedEnrollmentIds())
         };
     }
 
