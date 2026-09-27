@@ -332,6 +332,48 @@ class StudentListFieldsTest {
                 .andExpect(jsonPath("$.data.guardianPhone").value("010-5555-6666"));
     }
 
+    @Test
+    @DisplayName("★ 앱 계정과 잠금 여부가 목록·상세에 실린다 — 잠긴 학생을 풀 수 있어야 한다")
+    void appAccountOnList() throws Exception {
+        StudentEnrollment e = student("잠긴학생", "2026-0062", null, null, LocalDate.of(2026, 3, 2));
+        Account studentAccount = Account.forStudent(e.getStudent(), "SLSTU062",
+                passwordEncoder.encode(PASSWORD));
+        studentAccount.lock(java.time.Instant.now());
+        em.persist(studentAccount);
+
+        com.dlab.domain.user.entity.ParentGuardian mom =
+                new com.dlab.domain.user.entity.ParentGuardian("엄마", "010-7777-8888", "F");
+        em.persist(mom);
+        em.persist(new com.dlab.domain.user.entity.StudentGuardianLink(
+                e.getStudent(), mom, (short) 2, true));
+        em.persist(Account.forGuardian(mom, "SLPAR062", passwordEncoder.encode(PASSWORD)));
+        em.flush();
+
+        mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
+                        .param("year", "2026").param("keyword", "잠긴학생"))
+                // ★ 이 값이 없어서 잠금 해제 API 를 부를 수가 없었다
+                .andExpect(jsonPath("$.data[0].appAccount.accountId").value(studentAccount.getId()))
+                .andExpect(jsonPath("$.data[0].appAccount.locked").value(true))
+                .andExpect(jsonPath("$.data[0].appAccount.lockedAt").exists());
+
+        mvc.perform(get("/api/v1/admin/students/{id}", e.getId()).header("Authorization", token()))
+                .andExpect(jsonPath("$.data.appAccount.loginId").value("SLSTU062"))
+                // 학부모도 같은 이유로 잠긴다
+                .andExpect(jsonPath("$.data.guardianAccounts[0].loginId").value("SLPAR062"))
+                .andExpect(jsonPath("$.data.guardianAccounts[0].locked").value(false));
+    }
+
+    @Test
+    @DisplayName("앱에 가입하지 않은 학생은 계정 칸이 비어 있다 — 없는 것과 잠긴 것은 다르다")
+    void studentWithoutAppAccount() throws Exception {
+        student("미가입학생", "2026-0063", null, null, LocalDate.of(2026, 3, 2));
+
+        mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
+                        .param("year", "2026").param("keyword", "미가입학생"))
+                .andExpect(jsonPath("$.data[0].appAccount").doesNotExist())
+                .andExpect(jsonPath("$.data[0].guardianAccounts").isEmpty());
+    }
+
     // ── N+1 ──
 
     @Test

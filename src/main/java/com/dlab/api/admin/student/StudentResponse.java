@@ -82,6 +82,16 @@ public record StudentResponse(
         List<String> scholarshipTypes,
         boolean homeroomOverridden,
         AdminStudentController.HomeroomOverrideView homeroomOverride,
+        /**
+         * 학생 앱 계정. 아직 가입하지 않았으면 비어 있다.
+         *
+         * <p><b>잠금 해제에 필요하다</b> — {@code POST /admin/app-accounts/{accountId}/unlock}
+         * 가 있는데 화면이 {@code accountId} 를 알 방법이 없어, 비밀번호를 5회 틀린 학생을
+         * 풀어 줄 수가 없었다(가입 대기 목록에만 나와서 앱을 쓰던 학생은 찾히지 않았다).
+         */
+        StudentListEnricher.AccountView appAccount,
+        /** 연결된 학부모 계정. 학부모도 같은 이유로 잠긴다. 없으면 빈 목록이다 */
+        List<StudentListEnricher.AccountView> guardianAccounts,
         boolean masked
 ) {
 
@@ -121,6 +131,8 @@ public record StudentResponse(
                 // 지정된 학생만 선생님 이름을 읽는다 — 드문 경우라 목록에서 학생마다 쿼리가 나가지 않는다
                 e.getHomeroomOverride() == null ? null
                         : AdminStudentController.HomeroomOverrideView.from(e),
+                extras.studentAccount(id),
+                extras.guardianAccountsOf(id),
                 masked);
     }
 }
