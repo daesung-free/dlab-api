@@ -5,6 +5,7 @@ import com.dlab.domain.user.entity.Account;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
@@ -171,4 +172,23 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
             ORDER BY r.reminderSentAt ASC
             """)
     List<ApprovalRequest> findHandoverCandidates(Instant now);
+
+    /**
+     * 대기 중인 승인 건수 — 대시보드 카드.
+     *
+     * <p>목록을 받아 세지 않는다. 화면이 숫자 하나만 쓰는데 전 건을 실어 오면
+     * 대기가 쌓일수록 첫 화면이 느려진다.
+     *
+     * @param enrollmentIds 담임 범위. 범위가 없으면 {@code unscoped = true} 로 부른다
+     */
+    @Query("""
+            SELECT COUNT(r) FROM ApprovalRequest r
+            WHERE r.status = com.dlab.domain.approval.entity.ApprovalStatus.PENDING
+              AND r.deleted = false
+              AND r.enrollment.academy.id = :academyId
+              AND (:unscoped = TRUE OR r.enrollment.id IN :enrollmentIds)
+            """)
+    long countPending(@Param("academyId") Long academyId,
+                      @Param("unscoped") boolean unscoped,
+                      @Param("enrollmentIds") java.util.Collection<Long> enrollmentIds);
 }

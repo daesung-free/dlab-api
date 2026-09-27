@@ -41,7 +41,16 @@ public class StatisticsService {
     /** 순공 랭킹 기본 인원. 대시보드가 상위 몇 명만 보여준다. */
     private static final int RANKING_SIZE = 10;
 
+    /** 담임이 아니면 학생 범위를 걸지 않는다는 표시. 쿼리에 그대로 넘어간다. */
+    private static final boolean UNSCOPED = true;
+
+    /** 범위를 걸 때 빈 목록을 넘기면 JPQL {@code IN ()} 이 깨진다 — 있을 수 없는 id 를 넣는다. */
+    private static final List<Long> NONE = List.of(-1L);
+
     private final StatisticsRepository repository;
+    private final com.dlab.domain.approval.repository.ApprovalRequestRepository approvalRepository;
+    private final com.dlab.domain.user.repository.StudentEnrollmentRepository enrollmentRepository;
+    private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
     private final java.time.Clock clock;
 
     /**
@@ -210,23 +219,79 @@ public class StatisticsService {
         CLASS, TRACK, MONTH
     }
 
+    /**
+     * 대시보드 한 번에.
+     *
+     * <h2>★ 담임은 맡은 학생 기준이다</h2>
+     * 예전에는 담임에게 이 API 자체가 403 이었다 — 로그인 직후 첫 화면에 「권한이 없습니다」가
+     * 떠서 고장으로 보였다. 그렇다고 지점 전체를 주면 <b>순공 랭킹에 남의 반 학생 이름</b>이
+     * 그대로 나간다(출결 현황에서 담임 범위를 건 것과 같은 이유).
+     *
+     * <p><b>급식·수납은 담임에게 비워서 준다</b>({@code null}). 학생 단위로 좁힐 수는 있으나
+     * 담임 업무가 아니고, 반쪽짜리 매출 합계는 오히려 오독을 부른다. 화면은 {@code null} 이면
+     * 그 카드를 감춘다.
+     */
     public Overview overview(AuthPrincipal me, Long academyId, short year,
                              LocalDate from, LocalDate to) {
         Long scope = resolveScope(me, academyId);
+        var filter = homeroomScopeService.resolveStudentFilter(me, year, null);
+        if (!filter.restricted()) {
+            return new Overview(
+                    students(scope, year),
+                    attendance(scope, from, to),
+                    studyTime(scope, from, to),
+                    penalty(scope, from, to),
+                    meals(scope, from, to),
+                    revenue(scope, year),
+                    todo(scope, null));
+        }
+
+        List<Long> ids = filter.enrollmentIds().isEmpty()
+                ? NONE : List.copyOf(filter.enrollmentIds());
         return new Overview(
-                students(scope, year),
-                attendance(scope, from, to),
-                studyTime(scope, from, to),
-                penalty(scope, from, to),
-                meals(scope, from, to),
-                revenue(scope, year));
+                students(scope, year, ids),
+                attendance(scope, from, to, ids),
+                studyTime(scope, from, to, ids),
+                penalty(scope, from, to, ids),
+                null,
+                null,
+                todo(scope, ids));
+    }
+
+    /**
+     * 대시보드 카드 2개.
+     *
+     * <p>예전에는 화면에 <b>9건·7명이 상수로</b> 박혀 있었다 — 재원생이 1명인 지점에서도
+     * 같은 숫자가 떠서 첫 화면부터 값이 가짜로 보였다.
+     */
+    private TodoStat todo(Long academyId, List<Long> enrollmentIds) {
+        if (academyId == null) {
+            // 전 지점 합계 화면이다. 처리 대상은 지점에서 다루는 값이라 세지 않는다
+            return new TodoStat(0, 0);
+        }
+        boolean unscoped = enrollmentIds == null;
+        List<Long> ids = unscoped ? NONE : enrollmentIds;
+
+        long pending = approvalRepository.countPending(academyId, unscoped, ids);
+        long absent = enrollmentRepository
+                .findUnexcusedAbsentees(academyId, LocalDate.now(clock))
+                .stream()
+                .filter(e -> unscoped || ids.contains(e.getId()))
+                .count();
+        return new TodoStat(pending, absent);
     }
 
     // ── 재원생 ────────────────────────────────────────────────
 
     public StudentStat students(Long academyId, short year) {
+        return students(academyId, year, null);
+    }
+
+    /** @param enrollmentIds 담임 범위. {@code null}이면 지점 전체다 */
+    public StudentStat students(Long academyId, short year, List<Long> enrollmentIds) {
         Map<EnrollmentStatus, Long> byStatus = new EnumMap<>(EnrollmentStatus.class);
-        repository.countByEnrollmentStatus(academyId, year)
+        repository.countByEnrollmentStatus(academyId, year,
+                        enrollmentIds == null, enrollmentIds == null ? NONE : enrollmentIds)
                 .forEach(r -> byStatus.put((EnrollmentStatus) r[0], (Long) r[1]));
 
         long enrolled = byStatus.getOrDefault(EnrollmentStatus.ENROLLED, 0L);
@@ -244,8 +309,14 @@ public class StatisticsService {
      * 앱 홈과 같은 규칙이다.
      */
     public AttendanceStat attendance(Long academyId, LocalDate from, LocalDate to) {
+        return attendance(academyId, from, to, null);
+    }
+
+    public AttendanceStat attendance(Long academyId, LocalDate from, LocalDate to,
+                                     List<Long> enrollmentIds) {
         Map<DailyStatus, Long> byStatus = new EnumMap<>(DailyStatus.class);
-        repository.countByDailyStatus(academyId, from, to)
+        repository.countByDailyStatus(academyId, from, to,
+                        enrollmentIds == null, enrollmentIds == null ? NONE : enrollmentIds)
                 .forEach(r -> byStatus.put((DailyStatus) r[0], (Long) r[1]));
 
         long confirmed = byStatus.values().stream().mapToLong(Long::longValue).sum();
@@ -260,13 +331,21 @@ public class StatisticsService {
     // ── 순공시간 ──────────────────────────────────────────────
 
     public StudyTimeStat studyTime(Long academyId, LocalDate from, LocalDate to) {
-        Object[] row = repository.studyTimeTotals(academyId, from, to).get(0);
+        return studyTime(academyId, from, to, null);
+    }
+
+    public StudyTimeStat studyTime(Long academyId, LocalDate from, LocalDate to,
+                                   List<Long> enrollmentIds) {
+        boolean unscoped = enrollmentIds == null;
+        List<Long> ids = unscoped ? NONE : enrollmentIds;
+        Object[] row = repository.studyTimeTotals(academyId, from, to, unscoped, ids).get(0);
         long totalMinutes = ((Number) row[0]).longValue();
         double avgMinutes = ((Number) row[1]).doubleValue();
         long countedDays = ((Number) row[2]).longValue();
 
         List<RankingRow> ranking = repository
-                .studyTimeRanking(academyId, from, to, PageRequest.of(0, RANKING_SIZE))
+                .studyTimeRanking(academyId, from, to, unscoped, ids,
+                        PageRequest.of(0, RANKING_SIZE))
                 .stream()
                 .map(r -> new RankingRow((String) r[0], (String) r[1],
                         ((Number) r[2]).longValue()))
@@ -285,7 +364,11 @@ public class StatisticsService {
     public List<RankingRow> studyTimeRanking(AuthPrincipal me, Long academyId,
                                              LocalDate from, LocalDate to, int size) {
         Long scope = resolveScope(me, academyId);
-        return repository.studyTimeRanking(scope, from, to, PageRequest.of(0, size))
+        var filter = homeroomScopeService.resolveStudentFilter(me, (short) from.getYear(), null);
+        boolean unscoped = !filter.restricted();
+        List<Long> ids = unscoped || filter.enrollmentIds().isEmpty()
+                ? NONE : List.copyOf(filter.enrollmentIds());
+        return repository.studyTimeRanking(scope, from, to, unscoped, ids, PageRequest.of(0, size))
                 .stream()
                 .map(r -> new RankingRow((String) r[0], (String) r[1],
                         ((Number) r[2]).longValue()))
@@ -296,9 +379,15 @@ public class StatisticsService {
 
     /** 벌점은 음수로 저장돼 있다 — 부호로 상점·벌점을 가른다. */
     public PenaltyStat penalty(Long academyId, LocalDate from, LocalDate to) {
+        return penalty(academyId, from, to, null);
+    }
+
+    public PenaltyStat penalty(Long academyId, LocalDate from, LocalDate to,
+                               List<Long> enrollmentIds) {
         Object[] row = repository.penaltyTotals(academyId,
                 from.atStartOfDay(TimeConfig.KST).toInstant(),
-                to.plusDays(1).atStartOfDay(TimeConfig.KST).toInstant()).get(0);
+                to.plusDays(1).atStartOfDay(TimeConfig.KST).toInstant(),
+                enrollmentIds == null, enrollmentIds == null ? NONE : enrollmentIds).get(0);
 
         return new PenaltyStat(((Number) row[0]).longValue(),
                 ((Number) row[1]).longValue(),
@@ -349,9 +438,27 @@ public class StatisticsService {
 
     // ── 응답 ──────────────────────────────────────────────────
 
+    /**
+     * @param meals   담임에게는 비어 있다 — 담임 업무가 아니다
+     * @param revenue 담임에게는 비어 있다
+     * @param todo    오늘 처리할 것. 화면 상단 카드 2개가 쓴다
+     */
     public record Overview(StudentStat students, AttendanceStat attendance,
                            StudyTimeStat studyTime, PenaltyStat penalty,
-                           MealStat meals, RevenueStat revenue) {
+                           MealStat meals, RevenueStat revenue, TodoStat todo) {
+    }
+
+    /**
+     * 오늘 처리할 것.
+     *
+     * <p>둘 다 <b>지금 이 순간의 값</b>이라 기간(from·to)과 무관하다 — 기간을 바꿔도
+     * 이 숫자는 그대로다. 화면이 기간 필터 옆에 두면 오해를 부른다.
+     *
+     * @param pendingApprovals    승인 대기 중인 신청(사유·정기일정·방화벽 전부)
+     * @param unexcusedAbsentToday 오늘 사유 없이 등원 기록이 없는 학생 수.
+     *                             <b>확정 전 값</b>이라 등원하면 줄어든다
+     */
+    public record TodoStat(long pendingApprovals, long unexcusedAbsentToday) {
     }
 
     /** @param enrolled 재원생. {@code total}은 휴원·퇴원까지 포함한 등록 건 전체다 */

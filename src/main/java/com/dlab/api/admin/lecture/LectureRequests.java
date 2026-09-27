@@ -4,11 +4,13 @@ import com.dlab.common.web.Patch;
 import com.dlab.domain.lecture.entity.LectureAttendanceStatus;
 import com.dlab.domain.lecture.entity.LectureStatus;
 import com.dlab.domain.lecture.entity.LectureType;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 
 /** 특강 요청 DTO. */
 public final class LectureRequests {
@@ -29,6 +31,49 @@ public final class LectureRequests {
              * 두 번째가 실패하면 유형 없는 특강이 남는다.
              */
             Long categoryId) {
+    }
+
+    /**
+     * 한 번에 개설 — 특강 + 회차 + 상태 + 노출.
+     *
+     * <p>개설 화면이 저장 한 번에 요청 5개를 보내던 것을 한 번으로 줄인다. 중간에 실패하면
+     * <b>아무것도 만들어지지 않는다</b> — 반쪽짜리 특강이 남지 않는다.
+     *
+     * @param sessions 회차 목록. 비우면 회차 없이 만든다
+     * @param status   {@code OPEN} 이면 담당 강사가 있어야 한다. 비우면 준비 중이다
+     * @param visible  앱 노출 여부. 상태와 별개 축이다
+     */
+    public record LectureCreateFull(
+            @NotNull(message = "지점은 필수입니다.") Long academyId,
+            @NotNull(message = "연도는 필수입니다.") Integer year,
+            LectureType lectureType,
+            @NotBlank(message = "특강명은 필수입니다.") @Size(max = 100) String name,
+            Long categoryId,
+            Long teacherId,
+            Integer capacity,
+            Integer fee,
+            @Size(max = 1000) String description,
+            /** 수업 기간 */
+            LocalDate startDate,
+            LocalDate endDate,
+            /** 접수 기간. {@code status=OPEN} 이면 이것 없이 접수가 열리지 않게 함께 보낸다 */
+            Instant applyFrom,
+            Instant applyTo,
+            @Valid List<SessionInput> sessions,
+            LectureStatus status,
+            Boolean visible) {
+
+        public boolean visibleOrFalse() {
+            return Boolean.TRUE.equals(visible);
+        }
+    }
+
+    /** 한 번에 개설할 때 넘기는 회차 하나. */
+    public record SessionInput(
+            @NotNull(message = "회차 날짜는 필수입니다.") LocalDate date,
+            LocalTime startTime,
+            LocalTime endTime,
+            @Size(max = 50) String room) {
     }
 
     /** {@code null}은 "변경하지 않음"이다. */

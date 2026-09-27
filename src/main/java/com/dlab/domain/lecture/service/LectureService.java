@@ -76,6 +76,78 @@ public class LectureService {
     }
 
     /**
+     * 한 번에 개설 — 특강 + 회차 + 상태 + 노출.
+     *
+     * <h2>왜 필요한가</h2>
+     * 개설 화면이 <b>요청 5개를 연달아</b> 보낸다(특강 → 회차 5건 → 상태 → 노출).
+     * 중간에 하나가 실패하면 <b>반쪽짜리 특강이 남는데</b>, 화면은 이미 다음 요청을 보낸
+     * 뒤라 어디까지 만들어졌는지 모른다. 실제로 담당 「미지정」·회차 0개인 특강이
+     * 운영 지점에 남아 있었다.
+     *
+     * <p><b>한 트랜잭션이다</b> — 실패하면 아무것도 만들어지지 않는다. 회차가 하나라도
+     * 잘못됐으면 특강 자체가 생기지 않으므로, 화면은 고쳐서 다시 보내면 된다.
+     *
+     * <p>기존 단건 API 는 그대로 둔다 — 이미 만든 특강에 회차를 더하거나 상태만 바꾸는
+     * 일이 따로 있다.
+     *
+     * @param startDate 수업 기간 시작. {@code endDate}와 함께 화면이 받는 값이다
+     * @param applyFrom 접수 시작. <b>{@code status=OPEN}으로 한 번에 열 때 특히 중요하다</b> —
+     *                  접수 기간 없이 열리면 그 사이 신청이 들어와 되돌리기 어렵다
+     * @param sessions 회차. 비우면 회차 없이 만든다(준비 중으로 두는 경우)
+     * @param status   비우면 준비 중({@code DRAFT})이다. {@code OPEN} 이면 담당 강사를 확인한다
+     * @param visible  앱 노출. 상태와 별개 축이다
+     */
+    @Transactional
+    public Lecture createFully(Long academyId, short year, LectureType type, String name,
+                               Long categoryId, Long teacherId, Integer capacity, Integer fee,
+                               String description, LocalDate startDate, LocalDate endDate,
+                               Instant applyFrom, Instant applyTo, List<SessionInput> sessions,
+                               LectureStatus status, boolean visible, AuthPrincipal principal) {
+
+        Lecture lecture = create(academyId, year, type, name, categoryId, principal);
+
+        // ★ 기간까지 여기서 채운다. 빠뜨리면 화면이 뒤에 수정을 한 번 더 불러야 하고,
+        //   그 두 번째가 실패하면 기간 없는 특강이 남는다 — 한 번에 만드는 의미가 없어진다.
+        //   특히 접수 기간 없이 OPEN 이 되면 그 사이 신청이 들어와 되돌리기 어렵다
+        boolean hasAny = teacherId != null || capacity != null || fee != null
+                || description != null || startDate != null || endDate != null
+                || applyFrom != null || applyTo != null;
+        if (hasAny) {
+            update(lecture.getId(), null, null,
+                    description == null ? null : Patch.of(description),
+                    capacity == null ? null : Patch.of(capacity),
+                    applyFrom == null ? null : Patch.of(applyFrom),
+                    applyTo == null ? null : Patch.of(applyTo),
+                    startDate == null ? null : Patch.of(startDate),
+                    endDate == null ? null : Patch.of(endDate),
+                    fee == null ? null : Patch.of(fee),
+                    teacherId == null ? null : Patch.of(teacherId),
+                    null, principal);
+        }
+
+        if (sessions != null) {
+            for (SessionInput session : sessions) {
+                addSession(lecture.getId(), session.date(), session.startTime(),
+                        session.endTime(), session.room(), principal);
+            }
+        }
+
+        // 상태를 마지막에 바꾼다 — OPEN 검증이 강사·회차를 다 채운 뒤에 돌아야 한다
+        if (status != null && status != LectureStatus.DRAFT) {
+            changeStatus(lecture.getId(), status, principal);
+        }
+        if (visible) {
+            changeVisible(lecture.getId(), true, principal);
+        }
+        return lecture;
+    }
+
+    /** 한 번에 개설할 때 넘기는 회차 하나. */
+    public record SessionInput(LocalDate date, LocalTime startTime, LocalTime endTime,
+                               String room) {
+    }
+
+    /**
      * 유형 조회 + 그 지점에서 쓸 수 있는지 확인.
      *
      * <p>확인하지 않으면 <b>id 만 바꿔 보내 다른 지점 유형을 붙일 수 있다</b>
@@ -154,10 +226,22 @@ public class LectureService {
      *
      * <p>{@code OPEN}으로 열 때 <b>노출도 함께 켜지지는 않는다</b> — 노출은 별개 축이라
      * 관리자가 명시적으로 켠다(준비 중인 특강을 미리 만들어두는 흐름이 있다).
+     *
+     * <h2>★ 접수를 열 때 담당 강사를 확인한다</h2>
+     * 화면은 담당 강사를 <b>필수</b>로 표시하는데 서버가 막지 않아, 실제로 담당이
+     * 「미지정」인 특강이 학생에게 열린 채로 만들어졌다(대구 3건 중 2건).
+     *
+     * <p><b>생성 시점이 아니라 여기서 막는다.</b> 특강은 만든 뒤에 강사·회차·정원을
+     * 채워 가는 흐름이라, 만들 때 강제하면 준비 중인 특강을 저장할 수 없다.
+     * 학생에게 보이기 시작하는 순간이 {@code OPEN} 이므로 그때 확인하는 것이 맞다.
      */
     @Transactional
     public Lecture changeStatus(Long lectureId, LectureStatus status, AuthPrincipal principal) {
         Lecture lecture = require(lectureId, principal);
+        if (status == LectureStatus.OPEN && lecture.getTeacher() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "담당 강사를 지정해야 접수를 시작할 수 있습니다.");
+        }
         lecture.changeStatus(status);
         return lecture;
     }
