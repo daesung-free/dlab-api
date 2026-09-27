@@ -53,6 +53,32 @@ public class AdminLectureController {
                 request.lectureType(), request.name(), request.categoryId(), me)));
     }
 
+    /**
+     * 한 번에 개설 — 특강 + 회차 + 상태 + 노출.
+     *
+     * <p>개설 화면이 저장 한 번에 요청 5개를 보내던 것을 한 번으로 줄인다. 중간에 실패하면
+     * <b>아무것도 만들어지지 않는다</b> — 담당 「미지정」·회차 0개인 반쪽 특강이 남지 않는다.
+     *
+     * <p>단건 API({@code POST /lectures}, {@code POST /{id}/sessions} …)는 그대로 둔다 —
+     * 이미 만든 특강에 회차를 더하거나 상태만 바꾸는 일이 따로 있다.
+     */
+    @PostMapping("/full")
+    public ApiResponse<LectureResponse.LectureDetail> createFully(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody LectureRequests.LectureCreateFull request) {
+
+        var sessions = request.sessions() == null ? null : request.sessions().stream()
+                .map(s -> new LectureService.SessionInput(
+                        s.date(), s.startTime(), s.endTime(), s.room()))
+                .toList();
+
+        return ApiResponse.success(LectureResponse.LectureDetail.from(lectureService.createFully(
+                request.academyId(), request.year().shortValue(), request.lectureType(),
+                request.name(), request.categoryId(), request.teacherId(), request.capacity(),
+                request.fee(), request.description(), sessions,
+                request.status(), request.visibleOrFalse(), me)));
+    }
+
     /** 특강 수정. 비운 항목은 변경하지 않는다. */
     @PatchMapping("/{lectureId}")
     public ApiResponse<LectureResponse.LectureDetail> update(
