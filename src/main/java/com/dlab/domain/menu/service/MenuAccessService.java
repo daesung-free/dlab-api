@@ -11,6 +11,7 @@ import com.dlab.domain.menu.repository.MenuRepository;
 import com.dlab.domain.user.entity.Account;
 import com.dlab.domain.user.repository.AccountRepository;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +43,7 @@ public class MenuAccessService {
     private final AccountMenuRepository accountMenuRepository;
     private final com.dlab.domain.menu.repository.FavoriteMenuRepository favoriteMenuRepository;
     private final AccountRepository accountRepository;
+    private final com.dlab.domain.user.repository.AccountRoleRepository accountRoleRepository;
 
     @Transactional(readOnly = true)
     public List<Menu> catalog() {
@@ -64,13 +66,56 @@ public class MenuAccessService {
     /**
      * 이 계정에 보여줄 메뉴.
      *
-     * <p>제한이 없으면 카탈로그 전체를 돌려준다 — 화면이 "설정 없음" 을 따로 처리하지
-     * 않아도 되게 한다.
+     * <p>계정별 설정이 있으면 그것이고, 없으면 <b>역할 기본값</b>이다
+     * ({@link RoleMenuDefaults}).
+     *
+     * <h2>왜 역할 기본값이 필요한가</h2>
+     * 예전에는 설정이 없는 계정에 카탈로그 전체를 내렸다. 그래서 담임 사이드바에
+     * 급식·수납처럼 <b>애초에 열려 있지 않은 메뉴가 그대로 보였고</b>, 눌러 봐야 안 된다는
+     * 것을 알게 됐다.
+     *
+     * <p><b>계정별 설정이 이긴다.</b> "계정 하나하나에 최고관리자가 고른다"는 0914 확정을
+     * 깨지 않는다 — 기본값은 아무도 고르지 않았을 때만 쓰인다.
+     */
+    @Transactional(readOnly = true)
+    public List<Menu> visibleMenus(AuthPrincipal me) {
+        List<Menu> allowed = allowedMenus(me.accountId());
+        if (!allowed.isEmpty()) {
+            return allowed;
+        }
+        return catalog().stream()
+                .filter(menu -> RoleMenuDefaults.visibleTo(menu.getCode(), me.roles()))
+                .toList();
+    }
+
+    /**
+     * 역할을 모르는 경로용(내부 호출). <b>역할 기본값이 걸리지 않는다</b> —
+     * 화면에 내려보내는 목록에는 {@link #visibleMenus(AuthPrincipal)}를 쓸 것.
      */
     @Transactional(readOnly = true)
     public List<Menu> visibleMenus(Long accountId) {
         List<Menu> allowed = allowedMenus(accountId);
         return allowed.isEmpty() ? catalog() : allowed;
+    }
+
+    /**
+     * 그 계정의 <b>역할 기본 메뉴</b> — 사용자 관리 화면이 체크박스 초기 상태로 쓴다.
+     *
+     * <p>계정별 설정이 없을 때 실제로 내려가는 목록과 같다. 화면이 이걸로 미리 체크해 두면,
+     * 저장 버튼을 눌렀다는 이유만으로 보이던 메뉴가 사라지지 않는다 —
+     * 빈 체크 상태에서 저장하면 <b>제한 해제</b>가 되어 전체가 다시 열린다.
+     */
+    @Transactional(readOnly = true)
+    public List<Menu> roleDefaults(Long accountId) {
+        Set<Role> roles = accountRoleRepository.findRoleNamesByAccountId(accountId).stream()
+                .map(Role::valueOf)
+                .collect(java.util.stream.Collectors.toSet());
+        if (roles.isEmpty()) {
+            return catalog();
+        }
+        return catalog().stream()
+                .filter(menu -> RoleMenuDefaults.visibleTo(menu.getCode(), roles))
+                .toList();
     }
 
     /**
@@ -119,7 +164,8 @@ public class MenuAccessService {
      * 대시보드에 남는다 — 편의 설정이 권한을 넓히지도, 깨진 링크를 만들지도 않아야 한다.
      */
     @Transactional
-    public List<Menu> replaceFavorites(Long accountId, List<String> menuCodes) {
+    public List<Menu> replaceFavorites(AuthPrincipal me, List<String> menuCodes) {
+        Long accountId = me.accountId();
         favoriteMenuRepository.deleteByAccountId(accountId);
         favoriteMenuRepository.flush();
 
@@ -133,7 +179,9 @@ public class MenuAccessService {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        List<Menu> visible = visibleMenus(accountId);
+        // 역할 기본값까지 반영된 목록으로 거른다 — 담을 수 없는 메뉴를 담으면
+        // 눌렀을 때 403 이 나는 칸이 대시보드에 남는다
+        List<Menu> visible = visibleMenus(me);
         List<Menu> picked = new java.util.ArrayList<>();
         short order = 0;
         for (String code : menuCodes.stream().distinct().toList()) {

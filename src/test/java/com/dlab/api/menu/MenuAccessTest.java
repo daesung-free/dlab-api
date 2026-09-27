@@ -54,6 +54,8 @@ class MenuAccessTest {
 
     MockMvc mvc;
     Account viewer;
+    /** 자주 쓰는 메뉴는 본인 계정으로 바꾸므로 역할까지 있는 주체가 필요하다. */
+    AuthPrincipal viewerPrincipal;
     AuthPrincipal superAdmin;
 
     @BeforeEach
@@ -68,6 +70,8 @@ class MenuAccessTest {
         em.persist(viewer);
         em.flush();
         grantRole(viewer.getId(), "STAFF");
+        viewerPrincipal = AuthPrincipal.of(viewer.getId(), "EMPLOYEE", null,
+                java.util.List.of(com.dlab.common.security.Role.STAFF), false);
 
         superAdmin = new AuthPrincipal(1L, "admin", bundang.getId(),
                 Set.of(Role.SUPER_ADMIN), true, false);
@@ -146,13 +150,14 @@ class MenuAccessTest {
     @Test
     @DisplayName("자주 쓰는 메뉴는 보낸 순서 그대로다 — 사용자가 정한 배치다")
     void favoritesKeepOrder() {
-        menuAccessService.replaceFavorites(viewer.getId(),
-                List.of("penalty", "attendance", "student"));
+        // 행정에게 기본으로 보이는 메뉴로 고른다 — 상벌점은 담임 업무라 기본값에서 빠진다
+        menuAccessService.replaceFavorites(viewerPrincipal,
+                List.of("billing", "attendance", "student"));
         em.flush();
 
         assertThat(menuAccessService.favorites(viewer.getId()))
                 .extracting(com.dlab.domain.menu.entity.Menu::getCode)
-                .containsExactly("penalty", "attendance", "student");
+                .containsExactly("billing", "attendance", "student");
     }
 
     @Test
@@ -162,7 +167,7 @@ class MenuAccessTest {
         em.flush();
 
         assertThatThrownBy(() -> menuAccessService.replaceFavorites(
-                viewer.getId(), List.of("student")))
+                viewerPrincipal, List.of("student")))
                 .hasMessageContaining("담을 수 없는");
     }
 
@@ -170,7 +175,7 @@ class MenuAccessTest {
     @DisplayName("자주 쓰는 메뉴를 담아도 권한은 그대로다 — 편의 설정이 권한을 넓히지 않는다")
     void favoriteDoesNotGrantAccess() {
         menuAccessService.replace(superAdmin, viewer.getId(), List.of("attendance", "penalty"));
-        menuAccessService.replaceFavorites(viewer.getId(), List.of("penalty"));
+        menuAccessService.replaceFavorites(viewerPrincipal, List.of("penalty"));
         em.flush();
 
         assertThat(menuAccessService.allows(viewer.getId(), "/api/v1/admin/students")).isFalse();

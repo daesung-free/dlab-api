@@ -26,7 +26,15 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 @RestController
 @RequestMapping("/api/v1/admin/classes")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
+/*
+ * ★ 반 <b>조회</b>는 담임·조회 전용에도 열려 있다 (권한 매트릭스 초안).
+ *   학생 목록의 반 필터가 이 목록을 쓰는데 막혀 있어, 두 권한은 학생 화면에서 반을 고를 수 없었다.
+ *   반 이름·정원은 개인정보가 아니다.
+ *
+ * <p><b>쓰기(등록·수정·삭제·배정)는 종전대로</b> 최고관리자·지점관리자만이다 —
+ *   배정을 잘못 건드리면 승인·상담 담당이 통째로 바뀐다.
+ */
+@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
 public class AdminClassController {
 
     private final ClassService classService;
@@ -57,6 +65,7 @@ public class AdminClassController {
     }
 
     /** 반 생성. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @PostMapping
     public ApiResponse<ClassResponse> create(@CurrentAccount AuthPrincipal me,
                                              @Valid @RequestBody ClassRequests.ClassCreate request) {
@@ -66,6 +75,7 @@ public class AdminClassController {
     }
 
     /** 반 기본정보 수정(이름·정원). 담임은 아래 {@code /homeroom}이 담당한다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @PutMapping("/{classId}")
     public ApiResponse<ClassResponse> update(@CurrentAccount AuthPrincipal me,
                                              @PathVariable Long classId,
@@ -83,6 +93,7 @@ public class AdminClassController {
      * <p><b>이미 채번된 학생의 번호는 바뀌지 않는다.</b> 바꾼 값은 다음에 배정되는 학생부터
      * 적용된다 — 연구소가 *"최초 부여받은 학번은 절대 변경 불가"* 라고 명시했다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @PutMapping("/{classId}/exam-class-no")
     public ApiResponse<ClassResponse> changeExamClassNo(
             @CurrentAccount AuthPrincipal me, @PathVariable Long classId,
@@ -96,6 +107,7 @@ public class AdminClassController {
     }
 
     /** 강의실 지정·해제. {@code roomId}를 비우면 해제다. 같은 지점 강의실만 붙는다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @PutMapping("/{classId}/room")
     public ApiResponse<ClassResponse> assignRoom(@CurrentAccount AuthPrincipal me,
                                                  @PathVariable Long classId,
@@ -109,6 +121,7 @@ public class AdminClassController {
     }
 
     /** 담임 지정·변경. 이미 처리된 승인 건은 스냅샷이라 영향받지 않는다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @PutMapping("/{classId}/homeroom")
     public ApiResponse<ClassResponse> assignHomeroom(@CurrentAccount AuthPrincipal me,
                                                      @PathVariable Long classId,
@@ -123,6 +136,7 @@ public class AdminClassController {
      * <p><b>배정된 학생이 있으면 409다</b> — 해제가 먼저다. 그냥 지우면 그 학생들이
      * 없는 반을 가리킨 채 남는다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @DeleteMapping("/{classId}")
     public ApiResponse<Void> delete(@CurrentAccount AuthPrincipal me, @PathVariable Long classId) {
         classService.delete(classId, me);
@@ -130,6 +144,7 @@ public class AdminClassController {
     }
 
     /** 학생 배정. 기존 배정은 비활성으로 내려가고 이력이 남는다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @PostMapping("/{classId}/students")
     public ApiResponse<ClassResponse.Member> assignStudent(@CurrentAccount AuthPrincipal me,
                                                            @PathVariable Long classId,
@@ -148,6 +163,7 @@ public class AdminClassController {
      * <p><b>정원을 넘겨도 배정된다</b> — 정원 초과가 필요한 운영이 실제로 있다.
      * 대신 응답의 {@code overCapacity}로 알린다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @PostMapping("/{classId}/students/bulk")
     public ApiResponse<ClassResponse.BulkAssign> assignStudents(
             @CurrentAccount AuthPrincipal me,
@@ -163,6 +179,7 @@ public class AdminClassController {
      * <p>행을 지우지 않고 비활성으로 내린다 — 배정은 이력이다.
      * 반을 경로에 함께 받는 이유는 학생 하나에 고정반·이동수업반이 동시에 있을 수 있어서다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
     @DeleteMapping("/{classId}/students/{enrollmentId}")
     public ApiResponse<Void> releaseStudent(@CurrentAccount AuthPrincipal me,
                                             @PathVariable Long classId,

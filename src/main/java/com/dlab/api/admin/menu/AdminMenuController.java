@@ -40,12 +40,13 @@ public class AdminMenuController {
     /**
      * 내가 볼 메뉴. 로그인 후 화면이 이걸로 좌측 메뉴를 그린다.
      *
-     * <p>설정이 없는 계정에는 <b>전체</b>가 내려온다 — 화면이 "설정 없음" 을 따로 다루지
-     * 않아도 되게 한다.
+     * <p>설정이 없는 계정에는 <b>역할 기본값</b>이 내려온다. 예전에는 전체가 내려가서
+     * 담임 사이드바에 급식·수납처럼 열려 있지 않은 메뉴가 그대로 보였다 —
+     * 눌러 봐야 안 된다는 것을 알게 됐다.
      */
     @GetMapping("/menus/mine")
     public ApiResponse<List<MenuView>> mine(@CurrentAccount AuthPrincipal me) {
-        return ApiResponse.success(menuAccessService.visibleMenus(me.accountId())
+        return ApiResponse.success(menuAccessService.visibleMenus(me)
                 .stream().map(MenuView::from).toList());
     }
 
@@ -70,17 +71,24 @@ public class AdminMenuController {
     public ApiResponse<List<MenuView>> replaceFavorites(@CurrentAccount AuthPrincipal me,
                                                         @RequestBody MenuCodes request) {
         return ApiResponse.success(
-                menuAccessService.replaceFavorites(me.accountId(), request.menuCodes())
+                menuAccessService.replaceFavorites(me, request.menuCodes())
                         .stream().map(MenuView::from).toList());
     }
 
-    /** 이 계정에 지정된 메뉴. {@code restricted=false} 면 제한이 걸려 있지 않은 것이다. */
+    /**
+     * 이 계정에 지정된 메뉴. {@code restricted=false} 면 계정별 설정이 <b>없는</b> 것이다.
+     *
+     * <p>설정이 없는 계정에는 <b>역할 기본값</b>이 내려간다({@code defaults}) — 화면은 그걸로
+     * 체크박스 초기 상태를 그린다. 빈 상태로 그리면 저장을 누르는 순간 제한 해제가 되어
+     * <b>감춰 뒀던 메뉴가 전부 다시 열린다.</b>
+     */
     @GetMapping("/staff/accounts/{accountId}/menus")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ApiResponse<AccountMenuView> ofAccount(@PathVariable Long accountId) {
         List<Menu> allowed = menuAccessService.allowedMenus(accountId);
         return ApiResponse.success(new AccountMenuView(accountId, !allowed.isEmpty(),
-                allowed.stream().map(MenuView::from).toList()));
+                allowed.stream().map(MenuView::from).toList(),
+                menuAccessService.roleDefaults(accountId).stream().map(MenuView::from).toList()));
     }
 
     /**
@@ -96,7 +104,8 @@ public class AdminMenuController {
                                                 @RequestBody MenuCodes request) {
         List<Menu> allowed = menuAccessService.replace(me, accountId, request.menuCodes());
         return ApiResponse.success(new AccountMenuView(accountId, !allowed.isEmpty(),
-                allowed.stream().map(MenuView::from).toList()));
+                allowed.stream().map(MenuView::from).toList(),
+                menuAccessService.roleDefaults(accountId).stream().map(MenuView::from).toList()));
     }
 
     /** @param menuCodes 허용할 메뉴 코드. 비우면 제한 해제다 */
@@ -117,6 +126,12 @@ public class AdminMenuController {
     }
 
     /** @param restricted 제한이 걸려 있는가. {@code false} 면 역할 권한 그대로다 */
-    public record AccountMenuView(Long accountId, boolean restricted, List<MenuView> menus) {
+    /**
+     * @param restricted 계정별 설정이 있는가. {@code false} 면 {@code defaults} 가 실제로 내려간다
+     * @param menus      계정별로 지정된 메뉴. 설정이 없으면 빈 목록이다
+     * @param defaults   그 계정의 역할 기본 메뉴. <b>계정별 설정이 있으면 그쪽이 이긴다</b>
+     */
+    public record AccountMenuView(Long accountId, boolean restricted, List<MenuView> menus,
+                                  List<MenuView> defaults) {
     }
 }
