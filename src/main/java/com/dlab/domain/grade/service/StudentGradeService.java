@@ -48,10 +48,20 @@ public class StudentGradeService {
                 .orElseGet(() -> submissionRepository.save(new StudentGradeSubmission(enrollment)));
     }
 
+    /**
+     * 관리자가 보는 학생 성적. <b>낸 적이 없으면 빈 제출을 돌려준다.</b>
+     *
+     * <p>★ 예전에는 404({@code GRADE_SUBMISSION_NOT_FOUND})였다. 그런데 <b>성적이 없는 것은
+     * 정상 상태</b>다 — 방금 등록한 학생은 전부 그렇다. 404 를 받으면 화면이 "자료 없음"과
+     * "고장"을 구분하지 못해, 신규 학생의 성적 화면이 통째로 오류로 보인다.
+     *
+     * <p><b>저장하지 않는다</b>(앱의 {@link #mine} 과 다른 점이다). 관리자가 열어 봤다는
+     * 이유만으로 빈 제출 행이 생기면, "아직 안 낸 학생" 집계가 어긋난다.
+     */
     @Transactional(readOnly = true)
     public StudentGradeSubmission of(StudentEnrollment enrollment) {
         return submissionRepository.findByEnrollmentId(enrollment.getId())
-                .orElseThrow(() -> new BusinessException(ErrorCode.GRADE_SUBMISSION_NOT_FOUND));
+                .orElseGet(() -> new StudentGradeSubmission(enrollment));
     }
 
     /**

@@ -47,6 +47,7 @@ class LectureFlowTest {
 
     MockMvc mvc;
     Long academyId;
+    Long teacherId;
     String studentA = "010-1000-0001";
     String studentB = "010-1000-0002";
     String studentC = "010-1000-0003";
@@ -69,6 +70,12 @@ class LectureFlowTest {
                         SELECT :accountId, id FROM role WHERE name = 'BRANCH_ADMIN'
                         """)
                 .setParameter("accountId", adminAccount.getId()).executeUpdate();
+
+        // ★ 접수를 열려면 담당 강사가 있어야 한다 — 담당 「미지정」 특강이 학생에게 열리던 것을 막았다
+        com.dlab.domain.user.entity.Teacher teacher =
+                new com.dlab.domain.user.entity.Teacher(academy, "특강강사", null);
+        em.persist(teacher);
+        teacherId = teacher.getId();
 
         createStudent(academy, "LCSTU001", "학생A", studentA);
         createStudent(academy, "LCSTU002", "학생B", studentB);
@@ -277,6 +284,13 @@ class LectureFlowTest {
                     .content("""
                             {"capacity":%d}""".formatted(capacity))).andExpect(status().isOk());
         }
+        // 담당 강사를 먼저 붙인다 — 없으면 OPEN 이 거부된다
+        mvc.perform(patch("/api/v1/admin/lectures/{id}", id)
+                .header("Authorization", token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"teacherId":%d}""".formatted(teacherId))).andExpect(status().isOk());
+
         mvc.perform(put("/api/v1/admin/lectures/{id}/status", id)
                 .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -323,6 +337,11 @@ class LectureFlowTest {
                 .andReturn().getResponse().getContentAsString();
         long id = objectMapper.readTree(body).path("data").path("id").asLong();
 
+        mvc.perform(patch("/api/v1/admin/lectures/{id}", id)
+                .header("Authorization", token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"teacherId":%d}""".formatted(teacherId))).andExpect(status().isOk());
         mvc.perform(put("/api/v1/admin/lectures/{id}/status", id)
                 .header("Authorization", token)
                 .contentType(MediaType.APPLICATION_JSON)

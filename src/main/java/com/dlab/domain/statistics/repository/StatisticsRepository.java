@@ -2,6 +2,7 @@ package com.dlab.domain.statistics.repository;
 
 import com.dlab.domain.attendance.entity.AttendanceDailyStatus;
 import java.time.Instant;
+import java.util.Collection;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -28,10 +29,13 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
               AND e.year = :year
               AND e.current = true
               AND e.deleted = false
+              AND (:unscoped = TRUE OR e.id IN :enrollmentIds)
             GROUP BY e.enrollmentStatus
             """)
     List<Object[]> countByEnrollmentStatus(@Param("academyId") Long academyId,
-                                           @Param("year") short year);
+                                           @Param("year") short year,
+                                           @Param("unscoped") boolean unscoped,
+                                           @Param("enrollmentIds") Collection<Long> enrollmentIds);
 
     /**
      * 반별 인원·정원 (F-C-2 학원생 현황).
@@ -181,11 +185,14 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
             WHERE (:academyId IS NULL OR d.academy.id = :academyId)
               AND d.attendanceDate >= :from AND d.attendanceDate <= :to
               AND d.deleted = false
+              AND (:unscoped = TRUE OR d.enrollment.id IN :enrollmentIds)
             GROUP BY d.finalStatus
             """)
     List<Object[]> countByDailyStatus(@Param("academyId") Long academyId,
                                       @Param("from") LocalDate from,
-                                      @Param("to") LocalDate to);
+                                      @Param("to") LocalDate to,
+                                      @Param("unscoped") boolean unscoped,
+                                      @Param("enrollmentIds") Collection<Long> enrollmentIds);
 
     /**
      * 순공시간 합계·평균.
@@ -200,10 +207,13 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
             WHERE (:academyId IS NULL OR d.academy.id = :academyId)
               AND d.attendanceDate >= :from AND d.attendanceDate <= :to
               AND d.deleted = false
+              AND (:unscoped = TRUE OR d.enrollment.id IN :enrollmentIds)
             """)
     List<Object[]> studyTimeTotals(@Param("academyId") Long academyId,
                                    @Param("from") LocalDate from,
-                                   @Param("to") LocalDate to);
+                                   @Param("to") LocalDate to,
+                                   @Param("unscoped") boolean unscoped,
+                                   @Param("enrollmentIds") Collection<Long> enrollmentIds);
 
     /**
      * 순공시간 상위 학생. 대시보드가 랭킹으로 쓴다.
@@ -219,6 +229,7 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
             WHERE (:academyId IS NULL OR d.academy.id = :academyId)
               AND d.attendanceDate >= :from AND d.attendanceDate <= :to
               AND d.deleted = false
+              AND (:unscoped = TRUE OR e.id IN :enrollmentIds)
             GROUP BY e.studentNo, s.name
             HAVING SUM(d.studyMinutes) IS NOT NULL
             ORDER BY SUM(d.studyMinutes) DESC
@@ -226,6 +237,8 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
     List<Object[]> studyTimeRanking(@Param("academyId") Long academyId,
                                     @Param("from") LocalDate from,
                                     @Param("to") LocalDate to,
+                                    @Param("unscoped") boolean unscoped,
+                                    @Param("enrollmentIds") Collection<Long> enrollmentIds,
                                     org.springframework.data.domain.Pageable pageable);
 
     /** 상벌점 — 상점·벌점 합계. 벌점은 음수로 저장돼 있어 부호로 가른다. */
@@ -237,10 +250,13 @@ public interface StatisticsRepository extends JpaRepository<AttendanceDailyStatu
             WHERE (:academyId IS NULL OR p.academy.id = :academyId)
               AND p.occurredAt >= :from AND p.occurredAt < :to
               AND p.deleted = false
+              AND (:unscoped = TRUE OR p.enrollment.id IN :enrollmentIds)
             """)
     List<Object[]> penaltyTotals(@Param("academyId") Long academyId,
                                  @Param("from") Instant from,
-                                 @Param("to") Instant to);
+                                 @Param("to") Instant to,
+                                 @Param("unscoped") boolean unscoped,
+                                 @Param("enrollmentIds") Collection<Long> enrollmentIds);
 
     /** 급식 신청 — 끼니별 건수. 취소분은 뺀다. */
     @Query("""

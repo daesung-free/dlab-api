@@ -154,10 +154,22 @@ public class LectureService {
      *
      * <p>{@code OPEN}으로 열 때 <b>노출도 함께 켜지지는 않는다</b> — 노출은 별개 축이라
      * 관리자가 명시적으로 켠다(준비 중인 특강을 미리 만들어두는 흐름이 있다).
+     *
+     * <h2>★ 접수를 열 때 담당 강사를 확인한다</h2>
+     * 화면은 담당 강사를 <b>필수</b>로 표시하는데 서버가 막지 않아, 실제로 담당이
+     * 「미지정」인 특강이 학생에게 열린 채로 만들어졌다(대구 3건 중 2건).
+     *
+     * <p><b>생성 시점이 아니라 여기서 막는다.</b> 특강은 만든 뒤에 강사·회차·정원을
+     * 채워 가는 흐름이라, 만들 때 강제하면 준비 중인 특강을 저장할 수 없다.
+     * 학생에게 보이기 시작하는 순간이 {@code OPEN} 이므로 그때 확인하는 것이 맞다.
      */
     @Transactional
     public Lecture changeStatus(Long lectureId, LectureStatus status, AuthPrincipal principal) {
         Lecture lecture = require(lectureId, principal);
+        if (status == LectureStatus.OPEN && lecture.getTeacher() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "담당 강사를 지정해야 접수를 시작할 수 있습니다.");
+        }
         lecture.changeStatus(status);
         return lecture;
     }
