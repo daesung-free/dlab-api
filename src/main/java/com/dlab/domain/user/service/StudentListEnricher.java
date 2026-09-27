@@ -40,6 +40,7 @@ public class StudentListEnricher {
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final ScholarshipRepository scholarshipRepository;
     private final com.dlab.domain.user.repository.StudentGuardianLinkRepository guardianLinkRepository;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
 
     /**
      * 등록 건 목록에 붙일 표시값을 <b>한 번에</b> 모은다.
@@ -79,7 +80,8 @@ public class StudentListEnricher {
                 .add(s.getScholarshipType()));
 
         return new Extras(classNames, homeroomTeachers, seats, scholarships,
-                guardianPhones(enrollments));
+                guardianPhones(enrollments),
+                studentAccounts(enrollments), guardianAccounts(enrollments));
     }
 
     /**
@@ -111,6 +113,75 @@ public class StudentListEnricher {
         return result;
     }
 
+    /**
+     * 앱 계정 — 등록 건 ID → 계정.
+     *
+     * <h2>왜 목록에 싣나</h2>
+     * 학생이 비밀번호를 5회 틀리면 계정이 잠기는데, <b>풀어 줄 방법이 없었다</b>.
+     * 잠금 해제 API({@code POST /admin/app-accounts/{id}/unlock})는 있으나 화면이
+     * {@code accountId} 를 알 수 없었고, 그 값이 나오는 곳은 <b>가입 대기 목록뿐</b>이라
+     * 정작 앱을 쓰던 학생은 찾을 수가 없었다.
+     *
+     * <p>학생마다 조회하지 않는다 — 다른 표시값과 같이 <b>한 번에</b> 모은다.
+     */
+    private Map<Long, AccountView> studentAccounts(List<StudentEnrollment> enrollments) {
+        Map<Long, AccountView> byStudent = new HashMap<>();
+        accountRepository.findStudentAccountsOf(enrollments.stream()
+                        .map(e -> e.getStudent().getId()).distinct().toList())
+                .forEach(a -> byStudent.put(a.getStudent().getId(), AccountView.from(a)));
+
+        Map<Long, AccountView> result = new HashMap<>();
+        enrollments.forEach(e -> {
+            AccountView view = byStudent.get(e.getStudent().getId());
+            if (view != null) {
+                result.put(e.getId(), view);
+            }
+        });
+        return result;
+    }
+
+    /**
+     * 학부모 계정 — 등록 건 ID → 계정 목록.
+     *
+     * <p>학부모도 같은 이유로 잠긴다. 한 학부모가 형제 둘에 연결돼 있으면 양쪽에 나온다.
+     */
+    private Map<Long, List<AccountView>> guardianAccounts(List<StudentEnrollment> enrollments) {
+        Map<Long, List<AccountView>> byStudent = new HashMap<>();
+        for (Object[] row : accountRepository.findParentAccountsOf(enrollments.stream()
+                .map(e -> e.getStudent().getId()).distinct().toList())) {
+            byStudent.computeIfAbsent((Long) row[1], k -> new ArrayList<>())
+                    .add(AccountView.from((com.dlab.domain.user.entity.Account) row[0]));
+        }
+
+        Map<Long, List<AccountView>> result = new HashMap<>();
+        enrollments.forEach(e -> {
+            List<AccountView> views = byStudent.get(e.getStudent().getId());
+            if (views != null) {
+                result.put(e.getId(), views);
+            }
+        });
+        return result;
+    }
+
+    /**
+     * 앱 계정 상태.
+     *
+     * @param locked   지금 잠겨 있는가. <b>{@code status} 와 별개다</b> —
+     *                 관리자 정지(SUSPENDED)와 로그인 실패 잠금은 다른 사건이다
+     * @param lockedAt 잠긴 시각. 잠기지 않았으면 비어 있다
+     * @param mustChangePassword 임시 비밀번호 상태. 바꾸기 전에는 앱이 다른 화면으로 못 간다
+     */
+    public record AccountView(Long accountId, String loginId,
+                              com.dlab.domain.user.entity.AccountStatus status,
+                              boolean locked, java.time.Instant lockedAt,
+                              boolean mustChangePassword) {
+
+        static AccountView from(com.dlab.domain.user.entity.Account a) {
+            return new AccountView(a.getId(), a.getLoginId(), a.getStatus(),
+                    a.getLockedAt() != null, a.getLockedAt(), a.isMustChangePassword());
+        }
+    }
+
     /** 단건(상세·접수·수정 응답)용. 목록과 같은 필드를 채우기 위한 편의 메서드다. */
     public Extras of(StudentEnrollment enrollment) {
         return of(List.of(enrollment));
@@ -127,11 +198,24 @@ public class StudentListEnricher {
             Map<Long, String> homeroomTeachers,
             Map<Long, String> seatCodes,
             Map<Long, List<String>> scholarshipTypes,
-            Map<Long, String> guardianPhones
+            Map<Long, String> guardianPhones,
+            Map<Long, AccountView> studentAccounts,
+            Map<Long, List<AccountView>> guardianAccounts
     ) {
 
         public static Extras empty() {
-            return new Extras(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+            return new Extras(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
+                    Map.of(), Map.of());
+        }
+
+        /** 학생 앱 계정. 아직 가입하지 않았으면 비어 있다. */
+        public AccountView studentAccount(Long enrollmentId) {
+            return studentAccounts.get(enrollmentId);
+        }
+
+        /** 연결된 학부모 계정. 없으면 빈 목록이다 — {@code null}이면 화면이 매번 방어해야 한다. */
+        public List<AccountView> guardianAccountsOf(Long enrollmentId) {
+            return guardianAccounts.getOrDefault(enrollmentId, List.of());
         }
 
         /** 학부모 대표 연락처(원본). 마스킹은 표현 계층이 한다. */
