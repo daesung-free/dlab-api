@@ -176,6 +176,47 @@ class RealTest0927Test {
                 .hasMessageContaining("담당 강사");
     }
 
+    // ── 한 번에 개설 ────────────────────────────────────────
+
+    @Test
+    @DisplayName("★ 특강·회차·상태·노출이 한 번에 만들어진다 — 요청 5개가 1개로 줄었다")
+    void createsLectureInOneShot() {
+        var lecture = lectureService.createFully(daegu.getId(), year, LectureType.LECTURE,
+                "테스트_수학 특강", null, me.getId(), 20, 200_000, "안내 문구",
+                List.of(new LectureService.SessionInput(
+                                LocalDate.now(clock).plusDays(1), LocalTime.of(19, 0),
+                                LocalTime.of(21, 0), "201호"),
+                        new LectureService.SessionInput(
+                                LocalDate.now(clock).plusDays(8), LocalTime.of(19, 0),
+                                LocalTime.of(21, 0), "201호")),
+                LectureStatus.OPEN, true, admin);
+        em.flush();
+
+        assertThat(lecture.getStatus()).isEqualTo(LectureStatus.OPEN);
+        assertThat(lecture.getTeacher().getId()).isEqualTo(me.getId());
+        assertThat(lecture.getCapacity()).isEqualTo(20);
+        assertThat(lectureService.sessions(lecture.getId(), admin)).hasSize(2);
+    }
+
+    /**
+     * ★ 마지막 단계에서 막히는 것까지만 확인한다.
+     *
+     * <p><b>되돌려지는 것은 여기서 단정할 수 없다</b> — 이 테스트가 트랜잭션 안에서 돌아
+     * 서비스가 같은 트랜잭션에 합류하고, 커밋이 없으니 롤백 여부가 드러나지 않는다.
+     * 실제 요청에서는 예외가 트랜잭션 경계를 넘어가 전부 되돌려진다(한 트랜잭션이다).
+     */
+    @Test
+    @DisplayName("★ 강사 없이 OPEN 으로 개설하면 마지막 단계에서 막힌다")
+    void failsAtTheLastStepWithoutTeacher() {
+        assertThatThrownBy(() -> lectureService.createFully(daegu.getId(), year,
+                LectureType.LECTURE, "실패할 특강", null, null, null, null, null,
+                List.of(new LectureService.SessionInput(
+                        LocalDate.now(clock).plusDays(1), null, null, null)),
+                LectureStatus.OPEN, true, admin))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("담당 강사");
+    }
+
     @Test
     @DisplayName("준비 중(DRAFT)으로 두는 것은 막지 않는다 — 만든 뒤 채워 가는 흐름이다")
     void draftIsAllowedWithoutTeacher() {

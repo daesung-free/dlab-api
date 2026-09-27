@@ -76,6 +76,65 @@ public class LectureService {
     }
 
     /**
+     * 한 번에 개설 — 특강 + 회차 + 상태 + 노출.
+     *
+     * <h2>왜 필요한가</h2>
+     * 개설 화면이 <b>요청 5개를 연달아</b> 보낸다(특강 → 회차 5건 → 상태 → 노출).
+     * 중간에 하나가 실패하면 <b>반쪽짜리 특강이 남는데</b>, 화면은 이미 다음 요청을 보낸
+     * 뒤라 어디까지 만들어졌는지 모른다. 실제로 담당 「미지정」·회차 0개인 특강이
+     * 운영 지점에 남아 있었다.
+     *
+     * <p><b>한 트랜잭션이다</b> — 실패하면 아무것도 만들어지지 않는다. 회차가 하나라도
+     * 잘못됐으면 특강 자체가 생기지 않으므로, 화면은 고쳐서 다시 보내면 된다.
+     *
+     * <p>기존 단건 API 는 그대로 둔다 — 이미 만든 특강에 회차를 더하거나 상태만 바꾸는
+     * 일이 따로 있다.
+     *
+     * @param sessions 회차. 비우면 회차 없이 만든다(준비 중으로 두는 경우)
+     * @param status   비우면 준비 중({@code DRAFT})이다. {@code OPEN} 이면 담당 강사를 확인한다
+     * @param visible  앱 노출. 상태와 별개 축이다
+     */
+    @Transactional
+    public Lecture createFully(Long academyId, short year, LectureType type, String name,
+                               Long categoryId, Long teacherId, Integer capacity, Integer fee,
+                               String description, List<SessionInput> sessions,
+                               LectureStatus status, boolean visible, AuthPrincipal principal) {
+
+        Lecture lecture = create(academyId, year, type, name, categoryId, principal);
+
+        if (teacherId != null || capacity != null || fee != null || description != null) {
+            update(lecture.getId(), null, null,
+                    description == null ? null : Patch.of(description),
+                    capacity == null ? null : Patch.of(capacity),
+                    null, null, null, null,
+                    fee == null ? null : Patch.of(fee),
+                    teacherId == null ? null : Patch.of(teacherId),
+                    null, principal);
+        }
+
+        if (sessions != null) {
+            for (SessionInput session : sessions) {
+                addSession(lecture.getId(), session.date(), session.startTime(),
+                        session.endTime(), session.room(), principal);
+            }
+        }
+
+        // 상태를 마지막에 바꾼다 — OPEN 검증이 강사·회차를 다 채운 뒤에 돌아야 한다
+        if (status != null && status != LectureStatus.DRAFT) {
+            changeStatus(lecture.getId(), status, principal);
+        }
+        if (visible) {
+            changeVisible(lecture.getId(), true, principal);
+        }
+        return lecture;
+    }
+
+    /** 한 번에 개설할 때 넘기는 회차 하나. */
+    public record SessionInput(LocalDate date, LocalTime startTime, LocalTime endTime,
+                               String room) {
+    }
+
+    /**
      * 유형 조회 + 그 지점에서 쓸 수 있는지 확인.
      *
      * <p>확인하지 않으면 <b>id 만 바꿔 보내 다른 지점 유형을 붙일 수 있다</b>
