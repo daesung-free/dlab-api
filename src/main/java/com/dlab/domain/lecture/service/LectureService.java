@@ -90,6 +90,9 @@ public class LectureService {
      * <p>기존 단건 API 는 그대로 둔다 — 이미 만든 특강에 회차를 더하거나 상태만 바꾸는
      * 일이 따로 있다.
      *
+     * @param startDate 수업 기간 시작. {@code endDate}와 함께 화면이 받는 값이다
+     * @param applyFrom 접수 시작. <b>{@code status=OPEN}으로 한 번에 열 때 특히 중요하다</b> —
+     *                  접수 기간 없이 열리면 그 사이 신청이 들어와 되돌리기 어렵다
      * @param sessions 회차. 비우면 회차 없이 만든다(준비 중으로 두는 경우)
      * @param status   비우면 준비 중({@code DRAFT})이다. {@code OPEN} 이면 담당 강사를 확인한다
      * @param visible  앱 노출. 상태와 별개 축이다
@@ -97,16 +100,26 @@ public class LectureService {
     @Transactional
     public Lecture createFully(Long academyId, short year, LectureType type, String name,
                                Long categoryId, Long teacherId, Integer capacity, Integer fee,
-                               String description, List<SessionInput> sessions,
+                               String description, LocalDate startDate, LocalDate endDate,
+                               Instant applyFrom, Instant applyTo, List<SessionInput> sessions,
                                LectureStatus status, boolean visible, AuthPrincipal principal) {
 
         Lecture lecture = create(academyId, year, type, name, categoryId, principal);
 
-        if (teacherId != null || capacity != null || fee != null || description != null) {
+        // ★ 기간까지 여기서 채운다. 빠뜨리면 화면이 뒤에 수정을 한 번 더 불러야 하고,
+        //   그 두 번째가 실패하면 기간 없는 특강이 남는다 — 한 번에 만드는 의미가 없어진다.
+        //   특히 접수 기간 없이 OPEN 이 되면 그 사이 신청이 들어와 되돌리기 어렵다
+        boolean hasAny = teacherId != null || capacity != null || fee != null
+                || description != null || startDate != null || endDate != null
+                || applyFrom != null || applyTo != null;
+        if (hasAny) {
             update(lecture.getId(), null, null,
                     description == null ? null : Patch.of(description),
                     capacity == null ? null : Patch.of(capacity),
-                    null, null, null, null,
+                    applyFrom == null ? null : Patch.of(applyFrom),
+                    applyTo == null ? null : Patch.of(applyTo),
+                    startDate == null ? null : Patch.of(startDate),
+                    endDate == null ? null : Patch.of(endDate),
                     fee == null ? null : Patch.of(fee),
                     teacherId == null ? null : Patch.of(teacherId),
                     null, principal);

@@ -75,8 +75,9 @@ public class AdminLectureController {
         return ApiResponse.success(LectureResponse.LectureDetail.from(lectureService.createFully(
                 request.academyId(), request.year().shortValue(), request.lectureType(),
                 request.name(), request.categoryId(), request.teacherId(), request.capacity(),
-                request.fee(), request.description(), sessions,
-                request.status(), request.visibleOrFalse(), me)));
+                request.fee(), request.description(),
+                request.startDate(), request.endDate(), request.applyFrom(), request.applyTo(),
+                sessions, request.status(), request.visibleOrFalse(), me)));
     }
 
     /** 특강 수정. 비운 항목은 변경하지 않는다. */

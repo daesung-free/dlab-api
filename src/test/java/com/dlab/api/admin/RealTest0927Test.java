@@ -183,6 +183,8 @@ class RealTest0927Test {
     void createsLectureInOneShot() {
         var lecture = lectureService.createFully(daegu.getId(), year, LectureType.LECTURE,
                 "테스트_수학 특강", null, me.getId(), 20, 200_000, "안내 문구",
+                LocalDate.now(clock).plusDays(1), LocalDate.now(clock).plusDays(30),
+                java.time.Instant.now(clock), java.time.Instant.now(clock).plusSeconds(86400),
                 List.of(new LectureService.SessionInput(
                                 LocalDate.now(clock).plusDays(1), LocalTime.of(19, 0),
                                 LocalTime.of(21, 0), "201호"),
@@ -196,6 +198,12 @@ class RealTest0927Test {
         assertThat(lecture.getTeacher().getId()).isEqualTo(me.getId());
         assertThat(lecture.getCapacity()).isEqualTo(20);
         assertThat(lectureService.sessions(lecture.getId(), admin)).hasSize(2);
+        // ★ 기간도 한 번에 들어가야 한다 — 빠지면 화면이 수정을 또 불러야 하고,
+        //   접수 기간 없이 열린 특강에 신청이 들어오면 되돌리기 어렵다
+        assertThat(lecture.getStartDate()).isNotNull();
+        assertThat(lecture.getEndDate()).isNotNull();
+        assertThat(lecture.getApplyFrom()).isNotNull();
+        assertThat(lecture.getApplyTo()).isNotNull();
     }
 
     /**
@@ -210,6 +218,7 @@ class RealTest0927Test {
     void failsAtTheLastStepWithoutTeacher() {
         assertThatThrownBy(() -> lectureService.createFully(daegu.getId(), year,
                 LectureType.LECTURE, "실패할 특강", null, null, null, null, null,
+                null, null, null, null,
                 List.of(new LectureService.SessionInput(
                         LocalDate.now(clock).plusDays(1), null, null, null)),
                 LectureStatus.OPEN, true, admin))
