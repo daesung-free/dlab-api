@@ -260,6 +260,8 @@ public class AdminSeatController {
      * @param onSeatLeave     지금 자리를 비웠는지(좌석이탈). <b>{@code presence}와 또 다른 축</b>이다 —
      *                        이탈해도 출결로는 재실이라 화면이 이 값으로 덮어 표시한다
      * @param seatLeftAt      이탈 시작 시각. 이탈 중이 아니면 비어 있다
+     * @param seatLeaveReason 이탈 사유(이탈 위치). 키오스크가 지점별로 관리하는 이름이고,
+     *                        보내기 전이면 비어 있다
      */
     public record SeatCellResponse(
             Long seatId,
@@ -273,6 +275,7 @@ public class AdminSeatController {
             SeatPresence presence,
             boolean onSeatLeave,
             java.time.Instant seatLeftAt,
+            String seatLeaveReason,
             Long enrollmentId,
             String studentNo,
             String studentName,
@@ -283,7 +286,7 @@ public class AdminSeatController {
         public static SeatCellResponse from(SeatLayoutService.SeatCell c) {
             return new SeatCellResponse(c.seatId(), c.seatCd(), c.kioskSeatCd(), c.seatNm(),
                     c.xPos(), c.yPos(), c.assignmentState(), c.presence(),
-                    c.onSeatLeave(), c.seatLeftAt(),
+                    c.onSeatLeave(), c.seatLeftAt(), c.seatLeaveReason(),
                     c.enrollmentId(), c.studentNo(), c.studentName(),
                     c.classId(), c.className(), c.masked());
         }

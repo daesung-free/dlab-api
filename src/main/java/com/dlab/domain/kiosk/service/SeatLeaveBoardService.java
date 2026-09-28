@@ -79,10 +79,15 @@ public class SeatLeaveBoardService {
      * @param minutes       이탈 시간(분). {@code OPEN}이면 지금까지 경과, {@code RETURNED}면 실제 이탈 시간,
      *                      그 외에는 알 수 없어 {@code null}
      */
+    /**
+     * @param reasonName 이탈 사유(이탈 위치). 키오스크가 보낸 이름 그대로다.
+     *                   <b>비어 있을 수 있다</b> — 키오스크가 보내기 전 기록이거나
+     *                   사유 없이 들어온 건이다
+     */
     public record LeaveRow(Long leaveLogId, Long enrollmentId, String studentNo, String name,
                            String className, String areaCd, String seatCd,
                            Instant leftAt, Instant closedAt, Status status, Long minutes,
-                           boolean resolved) {
+                           boolean resolved, String reasonName) {
     }
 
     /** 지금 나가 있는 학생. 이탈 중 목록 화면용이다. */
@@ -103,26 +108,34 @@ public class SeatLeaveBoardService {
      * <p>어제치부터 읽는다. 자정을 넘긴 이탈은 키오스크가 00:30에 마감하므로
      * 그 전에 조회하면 아직 열려 있다.
      */
-    public Map<Long, Instant> openLeavesOf(Long academyId) {
+    public Map<Long, OpenLeave> openLeavesOf(Long academyId) {
         LocalDate today = LocalDate.now(clock.withZone(KST));
         List<SeatLeaveLog> logs = logRepository.findByAcademyBetween(academyId,
                 today.minusDays(1).atStartOfDay(KST).toInstant(),
                 today.plusDays(1).atStartOfDay(KST).toInstant());
 
-        Map<Long, Instant> open = new LinkedHashMap<>();
+        Map<Long, OpenLeave> open = new LinkedHashMap<>();
         for (SeatLeaveLog log : logs) {
             if (log.getEnrollment() == null) {
                 continue;
             }
             Long id = log.getEnrollment().getId();
             if (log.getEventType() == SeatLeaveEventType.LEAVE) {
-                open.put(id, log.getOccurredAt());
+                open.put(id, new OpenLeave(log.getOccurredAt(), log.getReasonName()));
             } else {
                 // 복귀든 자동 마감이든 그 이탈은 닫혔다 — 자리에 대한 표시는 사라진다
                 open.remove(id);
             }
         }
         return open;
+    }
+
+    /**
+     * 지금 이탈 중인 한 건 — 배치도가 쓴다.
+     *
+     * @param reasonName 이탈 사유. 키오스크가 보내기 전이면 비어 있다
+     */
+    public record OpenLeave(Instant leftAt, String reasonName) {
     }
 
     /** 기간 이탈 이력. 최근 이탈이 위로 온다. */
@@ -206,7 +219,7 @@ public class SeatLeaveBoardService {
         if (e == null) {
             return new LeaveRow(leave.getId(), null, leave.getStudentNo(), null, null,
                     leave.getAreaCd(), leave.getSeatCd(), leave.getOccurredAt(), closedAt,
-                    status, minutes, false);
+                    status, minutes, false, leave.getReasonName());
         }
         String className = classNames.computeIfAbsent(e.getId(), id -> classAssignmentRepository
                 .findActiveFixedByEnrollmentId(id)
@@ -214,7 +227,7 @@ public class SeatLeaveBoardService {
                 .orElse(null));
         return new LeaveRow(leave.getId(), e.getId(), e.getStudentNo(), e.getStudent().getName(),
                 className, leave.getAreaCd(), leave.getSeatCd(), leave.getOccurredAt(), closedAt,
-                status, minutes, true);
+                status, minutes, true, leave.getReasonName());
     }
 
     private static long minutesBetween(Instant from, Instant to) {

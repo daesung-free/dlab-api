@@ -114,19 +114,21 @@ public class AdminSeatLeaveController {
     }
 
     /**
-     * @param name   상위 관리자가 아니면 가려진 값이다. 학생을 못 찾은 건은 비어 있다
+     * @param name       상위 관리자가 아니면 가려진 값이다. 학생을 못 찾은 건은 비어 있다
+     * @param reasonName 이탈 사유(이탈 위치). 키오스크가 보내기 전이면 비어 있다 —
+     *                   화면은 비었을 때 「-」로 두면 된다
      * @param masked 이 행의 이름이 가려졌는지
      */
     public record LeaveRowResponse(Long leaveLogId, Long enrollmentId, String studentNo,
                                    String name, String className, String areaCd, String seatCd,
                                    Instant leftAt, Instant closedAt, Status status, Long minutes,
-                                   boolean resolved, boolean masked) {
+                                   boolean resolved, String reasonName, boolean masked) {
 
         static LeaveRowResponse of(LeaveRow r, boolean raw) {
             return new LeaveRowResponse(r.leaveLogId(), r.enrollmentId(), r.studentNo(),
                     raw ? r.name() : Masking.name(r.name()),
                     r.className(), r.areaCd(), r.seatCd(), r.leftAt(), r.closedAt(),
-                    r.status(), r.minutes(), r.resolved(), !raw);
+                    r.status(), r.minutes(), r.resolved(), r.reasonName(), !raw);
         }
     }
 }
