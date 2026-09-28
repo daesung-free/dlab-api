@@ -70,10 +70,29 @@ public class SeatLeaveLog extends BaseEntity {
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
 
+    /**
+     * 이탈 사유(이탈 위치). <b>키오스크가 지점별로 관리하는 이름</b>을 그대로 받는다.
+     *
+     * <p>★ 코드가 아니라 이름이다 — 사유는 지점마다 자유롭게 등록하는 값이라 번호로 받으면
+     * 지점 간 비교가 안 된다. {@code RETURN}·{@code AUTO_CLOSE}에는 없다(복귀할 때는
+     * 이유를 고르지 않는다).
+     */
+    @Column(name = "reason_name", length = 50)
+    private String reasonName;
+
     public SeatLeaveLog(Academy academy, short year, Long sourceRowId,
                         StudentEnrollment enrollment, String rfidNo, String studentNo,
                         String areaCd, String seatCd,
                         SeatLeaveEventType eventType, Instant occurredAt) {
+        this(academy, year, sourceRowId, enrollment, rfidNo, studentNo, areaCd, seatCd,
+                eventType, occurredAt, null);
+    }
+
+    public SeatLeaveLog(Academy academy, short year, Long sourceRowId,
+                        StudentEnrollment enrollment, String rfidNo, String studentNo,
+                        String areaCd, String seatCd,
+                        SeatLeaveEventType eventType, Instant occurredAt, String reasonName) {
+        this.reasonName = reasonName;
         this.academy = academy;
         this.year = year;
         this.sourceRowId = sourceRowId;
