@@ -50,9 +50,23 @@ public class BranchConfig extends BaseEntity {
     @Column(name = "pg_merchant_code", length = 100)
     private String pgMerchantCode;
 
-    /** Zyxel Nebula 제어 대상. 단말/정책 중 무엇인지 미확정(E-1)이라 문자열로 둔다. */
+    /**
+     * Zyxel Nebula 장비 ID.
+     *
+     * <p>★ 제어는 <b>사이트 단위</b>로 한다({@link #nebulaSiteId}) — Voucher API 가 그렇다.
+     * 이 값은 장애 시 장비에 직접 붙는 수동 폴백용으로 남긴다.
+     */
     @Column(name = "nebula_device_id", length = 100)
     private String nebulaDeviceId;
+
+    /**
+     * Zyxel Nebula 사이트 ID — <b>Voucher 호출 경로에 들어간다.</b>
+     *
+     * <p>지점마다 다르고, 이 값이 없으면 그 지점은 와이파이 제어가 되지 않는다.
+     * 키오스크 자격증명과 같은 자리라 <b>본사만</b> 수정한다.
+     */
+    @Column(name = "nebula_site_id", length = 64)
+    private String nebulaSiteId;
 
     /**
      * 지점별 정책값.
@@ -84,6 +98,10 @@ public class BranchConfig extends BaseEntity {
 
     public void changeNebulaDeviceId(String nebulaDeviceId) {
         this.nebulaDeviceId = nebulaDeviceId;
+    }
+
+    public void changeNebulaSiteId(String nebulaSiteId) {
+        this.nebulaSiteId = nebulaSiteId;
     }
 
     /** 통째로 갈아끼운다 — 화면이 편집한 전체 맵을 그대로 보낸다. */

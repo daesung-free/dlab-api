@@ -51,6 +51,12 @@ public enum ErrorCode {
     /** KCP 와 통신하지 못했다. 재시도로 풀릴 수 있다. */
     PG_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "결제 서버와 통신하지 못했습니다."),
     PG_SITE_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 사이트코드가 등록되지 않았습니다."),
+
+    /** 와이파이 연동(Nebula)이 설정되지 않았다. 기동은 되지만 제어만 동작하지 않는다. */
+    FIREWALL_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "와이파이 연동이 설정되지 않았습니다."),
+    /** ★ 차단 실패. 와이파이가 열린 채 남아 있을 수 있어 재시도·알림 대상이다. */
+    FIREWALL_REVOKE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "와이파이 차단에 실패했습니다."),
+    FIREWALL_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "와이파이 서버와 통신하지 못했습니다."),
     PG_SITE_DUPLICATED(HttpStatus.CONFLICT, "같은 지점·용도·채널의 사이트코드가 이미 있습니다."),
     /** S3 설정이 비어 있다. 기동은 되지만 파일 기능만 동작하지 않는다 — 기동 로그에 경고가 있다. */
     FILE_STORAGE_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "파일 저장소가 설정되지 않았습니다."),
