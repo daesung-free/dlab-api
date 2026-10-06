@@ -13,6 +13,11 @@ import lombok.NoArgsConstructor;
  */
 @Getter
 @Entity
+@com.dlab.domain.audit.Audited("반")
+// ★ @Audited 만으로는 안 남는다 — 리스너를 함께 붙여야 콜백이 온다(Student 와 같은 이유).
+//   담임 변경 이력을 남기기로 회신했는데(2026-10-06), 학생별 담임 예외는 등록 건에 붙어
+//   남고 있었고 반 단위 변경만 아무 데도 안 남았다 — "누가 담임을 바꿨나"에 답할 수 없었다
+@jakarta.persistence.EntityListeners(com.dlab.domain.audit.AuditEntityListener.class)
 @Table(name = "class_master")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ClassMaster extends BaseEntity {

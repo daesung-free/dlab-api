@@ -19,8 +19,10 @@ import org.junit.jupiter.api.Test;
  */
 class PeriodSummaryTest {
 
-    private final AttendanceQueryService service =
-            new AttendanceQueryService(null, null, null, null);
+    // 집계는 시계를 쓰지 않는다 — 상벌점 기간 필터만 쓰므로 고정 시계로 둔다
+    private final AttendanceQueryService service = new AttendanceQueryService(
+            null, null, null, null,
+            java.time.Clock.systemDefaultZone());
 
     private DailySummary day(int dayOfMonth, DailyStatus status, Integer studyMinutes) {
         return new DailySummary(LocalDate.of(2026, 8, dayOfMonth), status, false,

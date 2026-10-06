@@ -133,6 +133,46 @@ class ExamNumberTest {
     }
 
     @Test
+    @DisplayName("★ 더프 제출용은 6자리로 변환해 내보낸다 — 저장 형식은 그대로 둔다")
+    void submitNoIsSixDigits() {
+        StudentEnrollment student = student("김제출", YEAR + "-0008");
+        classService.assignStudent(class1.getId(), student.getId(), admin);
+        em.flush();
+
+        // 저장은 (반, 순번) — 회차 자료가 이 형식으로 들어온다
+        assertThat(student.getExamStudentNo()).isEqualTo("1001");
+        // 제출은 [반 2자리][번호 4자리]
+        assertThat(student.examSubmitNo()).isEqualTo("011001");
+    }
+
+    @Test
+    @DisplayName("★★ 반이 10 이상이면 제출번호가 비어 있다 — 잘라 내면 남의 성적에 붙는다")
+    void submitNoIsEmptyFromTenthClass() {
+        ClassMaster tenth = new ClassMaster(bundang, YEAR, "N수 10반", ClassType.FIXED, null);
+        tenth.changeExamClassNo((short) 10);
+        em.persist(tenth);
+        em.flush();
+
+        StudentEnrollment student = student("김십반", YEAR + "-0009");
+        classService.assignStudent(tenth.getId(), student.getId(), admin);
+        em.flush();
+
+        // 번호 자체는 채번된다 — 업로드 매칭은 이 값으로 돈다
+        assertThat(student.getExamStudentNo()).isEqualTo("10001");
+        // ★ 4자리 칸에 5자리가 안 들어간다. 억지로 맞추지 않고 비워 둔다(서식 확인 중)
+        assertThat(student.examSubmitNo()).isNull();
+    }
+
+    @Test
+    @DisplayName("채번 전에는 제출번호도 없다")
+    void noSubmitNoBeforeAssignment() {
+        StudentEnrollment student = student("김미배정", YEAR + "-0010");
+        em.flush();
+
+        assertThat(student.examSubmitNo()).isNull();
+    }
+
+    @Test
     @DisplayName("반에 모의고사 번호가 없으면 채번하지 않는다 — 틀린 번호보다 없는 편이 낫다")
     void skipsWhenClassHasNoExamNo() {
         ClassMaster noExamNo = new ClassMaster(bundang, YEAR, "특별반", ClassType.FIXED, null);

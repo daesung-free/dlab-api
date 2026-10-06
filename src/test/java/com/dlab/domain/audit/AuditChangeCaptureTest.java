@@ -59,6 +59,24 @@ class AuditChangeCaptureTest {
     }
 
     @Test
+    @DisplayName("★ 반 담임을 바꾸면 이력이 남는다 — 「누가 담임을 바꿨나」에 답할 수 없었다")
+    void recordsHomeroomChange() {
+        Teacher before = new Teacher(bundang, "이전담임", "010-1000-0001");
+        Teacher after = new Teacher(bundang, "새담임", "010-1000-0002");
+        em.persist(before);
+        em.persist(after);
+
+        ClassMaster clazz = new ClassMaster(bundang, year, "N수 1반", ClassType.FIXED, before);
+        em.persist(clazz);
+        em.flush();
+
+        clazz.assignHomeroom(after);
+        em.flush();
+
+        assertThat(logsOf("반", clazz.getId())).isNotEmpty();
+    }
+
+    @Test
     @DisplayName("★ 학생 등록을 고치면 바뀐 값이 전→후로 남는다")
     void recordsBeforeAndAfter() {
         minji.assignCard("RF-B");

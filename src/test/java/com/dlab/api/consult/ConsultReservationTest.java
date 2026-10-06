@@ -110,6 +110,45 @@ class ConsultReservationTest {
     }
 
     @Test
+    @DisplayName("★ 날짜 범위로 한 번에 연다 — 하루씩 넣으면 두 달치가 60번의 호출이 된다")
+    void opensDateRangeAtOnce() {
+        java.time.LocalDate end = tomorrow.plusDays(6);   // 7일
+        List<ConsultSlot> created = consultService.openSlots(homeroom, (short) 2026,
+                tomorrow, end, null,
+                LocalTime.of(14, 0), LocalTime.of(15, 0), 30, (short) 1, null);
+        em.flush();
+
+        // 7일 × 2칸
+        assertThat(created).hasSize(14);
+        assertThat(consultService.mySlots(homeroom, tomorrow, end)).hasSize(14);
+    }
+
+    @Test
+    @DisplayName("★ 요일을 고르면 그 요일만 열린다 — 범위만 받으면 담임이 없는 날도 예약된다")
+    void opensOnlyChosenDaysOfWeek() {
+        java.time.LocalDate end = tomorrow.plusDays(13);  // 2주
+        java.time.DayOfWeek only = tomorrow.getDayOfWeek();
+
+        List<ConsultSlot> created = consultService.openSlots(homeroom, (short) 2026,
+                tomorrow, end, java.util.Set.of(only),
+                LocalTime.of(14, 0), LocalTime.of(15, 0), 30, (short) 1, null);
+        em.flush();
+
+        // 2주 안에 같은 요일이 두 번 → 2일 × 2칸
+        assertThat(created).hasSize(4);
+        assertThat(created).allMatch(slot -> slot.getSlotDate().getDayOfWeek() == only);
+    }
+
+    @Test
+    @DisplayName("기간 상한을 넘으면 거부한다 — 연도 오입력 한 건이 수만 행을 만든다")
+    void rangeIsCapped() {
+        assertThatThrownBy(() -> consultService.openSlots(homeroom, (short) 2026,
+                tomorrow, tomorrow.plusYears(3), null,
+                LocalTime.of(14, 0), LocalTime.of(15, 0), 30, (short) 1, null))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
     @DisplayName("간격만큼 슬롯이 쪼개지고, 다시 열면 이미 있는 시각은 건너뛴다")
     void splitsByIntervalAndSkipsExisting() {
         List<ConsultSlot> first = consultService.openSlots(homeroom, (short) 2026, tomorrow,
