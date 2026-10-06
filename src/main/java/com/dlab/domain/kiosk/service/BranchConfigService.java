@@ -98,6 +98,18 @@ public class BranchConfigService {
     }
 
     /**
+     * Nebula 사이트 ID 변경.
+     *
+     * <p>★ <b>Voucher 호출 경로에 들어간다.</b> 틀린 값이면 다른 지점 와이파이가 열린다.
+     * 비어 있으면 그 지점은 해제가 되지 않는다(배정이 거부된다).
+     */
+    @Transactional
+    public void changeNebulaSiteId(Long academyId, String siteId) {
+        configOrCreate(academyId).changeNebulaSiteId(blankToNull(siteId));
+        record(academyId, BranchConfigAction.NEBULA_DEVICE_CHANGED, "Nebula 사이트 ID 변경");
+    }
+
+    /**
      * PG 가맹점 코드 비우기. {@code confirm}에 <b>지금 값을 그대로</b> 넣어야 지워진다.
      *
      * <p>비우면 그 지점 결제가 통째로 멈춘다. 빈 값으로 덮어쓰기를 허용하면 입력란을 실수로
@@ -196,18 +208,20 @@ public class BranchConfigService {
     public record View(Long academyId, String academyName, String acadCd,
                        String kioskClientId, String kioskSecretMasked,
                        String pgMerchantCodeMasked, String nebulaDeviceId,
+                       String nebulaSiteId,
                        Map<String, String> policy) {
 
         static View of(Academy academy, BranchConfig config) {
             if (config == null) {
                 return new View(academy.getId(), academy.getName(), academy.getAcadCd(),
-                        null, null, null, null, Map.of());
+                        null, null, null, null, null, Map.of());
             }
             return new View(academy.getId(), academy.getName(), academy.getAcadCd(),
                     config.getKioskClientId(),
                     mask(config.getKioskSecret()),
                     mask(config.getPgMerchantCode()),
                     config.getNebulaDeviceId(),
+                    config.getNebulaSiteId(),
                     config.getConfigJson());
         }
 

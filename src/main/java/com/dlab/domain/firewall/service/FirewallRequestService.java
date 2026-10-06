@@ -30,6 +30,7 @@ public class FirewallRequestService {
     private final AppScopeResolver scopeResolver;
     private final ApprovalService approvalService;
     private final FirewallAdminService firewallAdminService;
+    private final com.dlab.domain.kiosk.repository.BranchConfigRepository branchConfigRepository;
     private final java.time.Clock clock;
 
     /**
@@ -99,6 +100,13 @@ public class FirewallRequestService {
 
         FirewallRequest request = firewallRequestRepository.save(new FirewallRequest(
                 enrollment.getAcademy(), enrollment, approval, (short) requestedMinutes, reason));
+
+        // ★ 지점 사이트를 신청 시점에 박아 둔다 — 설정이 바뀌어도 열어 준 곳에서 닫아야 한다.
+        //   비어 있으면 신청은 받되 활성 단계에서 거부된다(그 지점 설정이 안 된 것이다)
+        branchConfigRepository.findByAcademyIdAndDeletedFalse(enrollment.getAcademy().getId())
+                .map(com.dlab.domain.kiosk.entity.BranchConfig::getNebulaSiteId)
+                .ifPresent(request::assignSite);
+
         if (startAt != null) {
             request.requestWindow(startAt, endAt);
         }
