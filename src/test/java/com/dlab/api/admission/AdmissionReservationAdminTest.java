@@ -32,6 +32,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AdmissionReservationAdminTest {
 
     @Autowired AdmissionReservationAdminService service;
+    @Autowired com.dlab.api.admin.admission.AdminAdmissionReservationController controller;
+    @Autowired com.dlab.api.admin.admission.AdminAdmissionCodeController codeController;
+    @Autowired com.dlab.domain.admission.repository.CommonCodeRepository commonCodeRepository;
     @Autowired EntityManager em;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
@@ -59,6 +62,45 @@ class AdmissionReservationAdminTest {
 
         admin = new AuthPrincipal(1L, "admin", bundang.getId(),
                 Set.of(Role.SUPER_ADMIN), true, false);
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles = "SUPER_ADMIN")
+    @DisplayName("★ 상세에 접수 폼 항목이 실린다 — 목록과 같으면 전화 걸기 전에 볼 정보가 없다")
+    void detailCarriesFormFields() {
+        var detail = controller.detail(admin, reservation.getId()).data();
+
+        assertThat(detail.birth()).isEqualTo("20070315");
+        assertThat(detail.gender()).isEqualTo("M");
+        assertThat(detail.address()).isEqualTo("경기도 성남시");
+        assertThat(detail.addressDetail()).isEqualTo("101동 202호");
+        // 동의는 3종으로 갈릴 예정이라 지금 둘을 따로 내린다 — 합치면 나중에 하나만 철회할 수 없다
+        assertThat(detail.agreePrivacy()).isTrue();
+        assertThat(detail.agreeMarketing()).isFalse();
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles = "STAFF")
+    @DisplayName("★ 코드 목록은 직원 권한으로 조회된다 — 화면에 홈페이지 고정 키를 둘 수 없다")
+    void adminCodesUseStaffAuth() {
+        em.persist(new com.dlab.domain.admission.entity.CommonCode(
+                com.dlab.domain.admission.entity.CommonCode.GRP_FIND,
+                "3", "네이버 블로그", (short) 3, null, (short) 1));
+        em.flush();
+
+        var codes = codeController.codes(admin, "find").data();
+
+        // 소문자로 넣어도 찾는다 — 화면이 대소문자를 맞춰야 할 이유가 없다
+        assertThat(codes).extracting(
+                com.dlab.api.admin.admission.AdminAdmissionCodeController.CodeView::name)
+                .contains("네이버 블로그");
+    }
+
+    @Test
+    @org.springframework.security.test.context.support.WithMockUser(roles = "STAFF")
+    @DisplayName("값 목록을 아직 못 받은 그룹은 빈 배열이다 — 404가 아니다")
+    void unknownGroupIsEmpty() {
+        assertThat(codeController.codes(admin, "ACAD").data()).isEmpty();
     }
 
     @Test

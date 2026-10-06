@@ -51,10 +51,21 @@ public class AdminAdmissionReservationController {
                 .stream().map(ReservationView::from).toList());
     }
 
+    /**
+     * 상세 — <b>접수 폼으로 들어온 항목까지</b> 함께 내린다.
+     *
+     * <p>목록과 같은 모양이면 카드에 적을 것이 이름·학교·연락처뿐이어서, <b>담당자가 전화를
+     * 걸기 전에 볼 정보가 없다.</b> 생년·등원 희망일·유입경로가 저장은 되는데 응답에만
+     * 빠져 있었다.
+     *
+     * <p><b>목록에는 싣지 않는다.</b> 칸반이 수백 건을 한 번에 받는 화면이라, 행마다 주소·동의
+     * 항목까지 실으면 목록이 몇 배로 커진다.
+     */
     @GetMapping("/{reservationId}")
-    public ApiResponse<ReservationView> detail(@CurrentAccount AuthPrincipal me,
-                                               @PathVariable Long reservationId) {
-        return ApiResponse.success(ReservationView.from(adminService.get(me, reservationId)));
+    public ApiResponse<ReservationDetailView> detail(@CurrentAccount AuthPrincipal me,
+                                                     @PathVariable Long reservationId) {
+        return ApiResponse.success(
+                ReservationDetailView.from(adminService.get(me, reservationId)));
     }
 
     /** 상태 변경. <b>이력이 남는다</b> — 없으면 "왜 미등록으로 바뀌었나" 에 답할 수 없다. */
@@ -146,6 +157,62 @@ public class AdminAdmissionReservationController {
                     r.converted(),
                     r.getEnrollment() == null ? null : r.getEnrollment().getId(),
                     r.getEnrollment() == null ? null : r.getEnrollment().getStudentNo(),
+                    r.getCreatedAt());
+        }
+    }
+
+    /**
+     * 상세. 목록({@link ReservationView})에 접수 폼 항목을 더한 것이다.
+     *
+     * <p>⚠️ <b>코드 항목은 숫자로 내려간다</b>(출신학원·유입경로·전형·입학기준). 값 목록을
+     * 아직 받지 못해 이름이 없다 — 이름은 {@code GET /api/v1/admin/admission-codes}로
+     * 따로 받아 화면에서 잇는다. 응답에 이름을 함께 싣지 않는 이유는, 목록·필터에서도 같은
+     * 이름이 필요한데 행마다 같은 문자열이 반복되고 <b>"언제의 이름인가"를 응답이
+     * 결정해 버리기</b> 때문이다.
+     *
+     * <p>⚠️ 연락처·생년·주소를 <b>가리지 않고 내린다.</b> 이 화면은 담당자가 지원자에게
+     * 전화를 거는 업무라 연락처 열람이 업무 자체이고, 목록이 이미 그렇게 돌고 있다.
+     * 권한 매트릭스가 확정되면 열람 범위를 함께 정리한다.
+     *
+     * @param admissionDate 등원 희망일({@code yyyyMMdd} 문자열). 규격서 형식 그대로다
+     * @param track         계열. ⚠️ 수집·노출을 멈추기로 한 항목인데 수신 전문에 남아 있어
+     *                      값이 들어오는 경우가 있다 — 화면에 쓰지 말 것
+     */
+    public record ReservationDetailView(
+            Long id, String rsvCd, short year, Long academyId,
+            String studentName, String studentTel, String parentTel,
+            String stdGrade, String schoolName, Integer schoolCode,
+            ConsultStatus status, String statusName,
+            boolean converted, Long enrollmentId, String studentNo,
+            String birth, String gender, String admissionDate, Short track,
+            Integer previousAcademy,
+            Integer foundPath, String foundPathText,
+            Integer examType, Integer admissionStandard,
+            Short schoolType, java.math.BigDecimal schoolRecord,
+            String universityName, Short universityGrade,
+            Short rejectReason, String rejectReasonText,
+            String zipCode, String address, String addressDetail,
+            boolean agreePrivacy, boolean agreeMarketing,
+            Instant createdAt) {
+
+        static ReservationDetailView from(AdmissionReservation r) {
+            return new ReservationDetailView(
+                    r.getId(), r.getRsvCd(), r.getYear(), r.getAcademy().getId(),
+                    r.getStudentName(), r.getStudentTel(), r.getParentTel(),
+                    r.getStdGrade(), r.getSchNmHigh(), r.getSchCdHigh(),
+                    r.getConsultStatus(), r.getConsultStatus().displayName(),
+                    r.converted(),
+                    r.getEnrollment() == null ? null : r.getEnrollment().getId(),
+                    r.getEnrollment() == null ? null : r.getEnrollment().getStudentNo(),
+                    r.getBirth(), r.getGender(), r.getAdmDt(), r.getGeyulGb(),
+                    r.getSchCd(),
+                    r.getFindGb(), r.getFindTxt(),
+                    r.getPreTest(), r.getAdmiSt(),
+                    r.getNasinSt(), r.getNasinSc(),
+                    r.getUniNm(), r.getUniGd(),
+                    r.getIntrSt(), r.getIntrTxt(),
+                    r.getZip(), r.getAddr1(), r.getAddr2(),
+                    r.isAgreeAd(), r.isPromoAd(),
                     r.getCreatedAt());
         }
     }
