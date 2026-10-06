@@ -56,7 +56,12 @@ public class AdminConsultSlotController {
                 .stream().map(ConsultResponse.ConsultSlotView::from).toList());
     }
 
-    /** 일괄 개설. 이미 있는 시각은 건너뛴다 — 오전을 연 뒤 오후를 추가하는 흐름이 있다. */
+    /**
+     * 일괄 개설. 이미 있는 시각은 건너뛴다 — 오전을 연 뒤 오후를 추가하는 흐름이 있다.
+     *
+     * <p>{@code endDate}를 주면 <b>날짜 범위로 한 번에</b> 만든다. {@code daysOfWeek}로
+     * 요일을 고를 수 있다(비우면 범위 안 모든 날).
+     */
     @PostMapping
     public ApiResponse<List<ConsultResponse.ConsultSlotView>> open(
             @CurrentAccount AuthPrincipal me,
@@ -65,6 +70,7 @@ public class AdminConsultSlotController {
 
         Teacher teacher = consultService.requireTeacher(me.accountId());
         return ApiResponse.success(consultService.openSlots(teacher, year, request.date(),
+                        request.endDate(), request.daysOfWeek(),
                         request.from(), request.to(), request.intervalMinutes(),
                         request.capacity(), request.place())
                 .stream()

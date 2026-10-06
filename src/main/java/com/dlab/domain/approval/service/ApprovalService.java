@@ -151,6 +151,64 @@ public class ApprovalService {
     }
 
     /**
+     * <b>지금 실제로 적용되는 승인자</b>를 유형별로 돌려준다 (2026-10-06 디랩 확인분).
+     *
+     * <h2>왜 필요한가</h2>
+     * 선택값만 내리면 <b>안 고른 학생에게는 아무것도 보여줄 수 없다.</b> 그 학생도 신청은
+     * 되고 지점 정책값이 적용되는데, 화면은 그 값을 알 방법이 없어 "미설정"으로만 떴다.
+     * 그래서 앱이 신청 화면에서 매번 다시 고르게 만들었다.
+     *
+     * <h2>★ 출처를 함께 내린다</h2>
+     * 같은 {@code PARENT}라도 <b>학생이 고른 것</b>과 <b>지점 정책값</b>은 뜻이 다르다 —
+     * 전자는 학생이 고르면 그 뒤로 관리자 설정이 그 학생에게 적용되지 않는다. 출처를
+     * 모르면 관리자가 "설정을 바꿨는데 안 바뀐다"는 이유를 알 수 없다.
+     *
+     * <p>정책이 등록되지 않은 유형은 <b>목록에서 빠진다</b>. 빈 값을 끼워 넣으면 화면이
+     * 「승인자 없음」으로 그리는데, 실제로는 신청 자체가 안 되는 상태다.
+     */
+    @Transactional(readOnly = true)
+    public List<EffectiveApprover> effectiveApprovers(StudentEnrollment enrollment) {
+        ApproverType chosen = preferenceRepository.findCurrent(enrollment.getId())
+                .map(ApproverPreference::getPreferred)
+                .orElse(null);
+
+        return java.util.Arrays.stream(RequestType.values())
+                .map(type -> approvalItemRepository
+                        .findByAcademyIdAndYearAndRequestTypeAndDeletedFalse(
+                                enrollment.getAcademy().getId(), enrollment.getYear(), type)
+                        .map(item -> new EffectiveApprover(
+                                type,
+                                resolvePrimaryApprover(enrollment, item),
+                                // AUTO 는 학생이 고를 수 없으므로 선택값이 있어도 정책이 이긴다
+                                item.getApproverType() != ApproverType.AUTO && chosen != null
+                                        ? ApproverSource.STUDENT_CHOICE : ApproverSource.BRANCH_POLICY,
+                                item.getApproverType(),
+                                item.getTimeoutMinutes(),
+                                item.getEscalationApproverType()))
+                        .orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    /** 적용값이 어디서 왔는지. 같은 값이라도 뜻이 다르다 — 위 설명 참고. */
+    public enum ApproverSource {
+        /** 학생이 앱에서 고른 값. ★ 이 경우 지점 설정을 바꿔도 이 학생에게는 적용되지 않는다 */
+        STUDENT_CHOICE,
+        /** 학생이 고르지 않아 지점 정책값이 그대로 적용된 것 */
+        BRANCH_POLICY
+    }
+
+    /**
+     * @param effective       지금 적용되는 승인자
+     * @param branchDefault   지점 정책값. {@code effective}와 다르면 학생 선택이 덮은 것이다
+     * @param timeoutMinutes  이 시간이 지나면 에스컬레이션 승인자가 처리할 수 있다
+     */
+    public record EffectiveApprover(RequestType requestType, ApproverType effective,
+                                    ApproverSource source, ApproverType branchDefault,
+                                    Short timeoutMinutes, ApproverType escalationApproverType) {
+    }
+
+    /**
      * 자동 재승인 요청 — <b>1회만</b>.
      *
      * <p>학부모가 타임아웃까지 응답하지 않은 건에 한 번 더 알린다.

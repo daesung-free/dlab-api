@@ -65,11 +65,32 @@ public final class AttendanceResponse {
      * @param total <b>벌점은 음수</b>다. 부호를 그대로 내려 앱이 상점·벌점을 구분한다 —
      *              절댓값으로 바꾸면 상쇄가 사라진다
      */
-    public record Penalties(int total, List<PenaltyRow> items) {
+    /**
+     * @param total       <b>전체 기간 누적</b> — 제적 기준(40점)이 보는 값
+     * @param periodPoints 선택한 기간의 증감. 기간을 주지 않았으면 {@code null}
+     */
+    public record Penalties(int total, Integer periodPoints, List<PenaltyRow> items) {
 
         public static Penalties from(AttendanceQueryService.PenaltySummary summary) {
-            return new Penalties(summary.total(),
+            return new Penalties(summary.total(), summary.periodTotal(),
                     summary.items().stream().map(PenaltyRow::from).toList());
+        }
+    }
+
+    /**
+     * 기간 출결 요약.
+     *
+     * @param attendanceRate 확정된 날이 없으면 {@code null} — 0%로 내리면 결석한 것처럼 보인다
+     * @param outingCount    외출 <b>건수</b>. 일자 상태가 아니라 태깅 이벤트라 같은 날 두 번이면 2다
+     */
+    public record Summary(int studyMinutes, Integer attendanceRate, int confirmedDays,
+                          int lateDays, int absentDays, int earlyLeaveDays,
+                          int outingCount, int excusedOutingCount) {
+
+        public static Summary from(AttendanceQueryService.PeriodSummary s) {
+            return new Summary(s.studyMinutes(), s.attendanceRate(), s.confirmedDays(),
+                    s.lateDays(), s.absentDays(), s.earlyLeaveDays(),
+                    s.outingCount(), s.excusedOutingCount());
         }
     }
 

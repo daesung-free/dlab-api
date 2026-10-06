@@ -54,14 +54,42 @@ public class AppAttendanceController {
                 .map(AttendanceResponse.Daily::from).toList());
     }
 
-    /** 상벌점 — 누적 점수 + 내역. 벌점은 음수로 내려간다. */
+    /**
+     * 기간 출결 요약 — 순공·출석률·지각·결석·조퇴·외출 건수.
+     *
+     * <p>목록(`GET /app/attendance`)과 따로 둔다. 화면이 일별 이벤트를 받아 직접 세면
+     * <b>집계 기준이 앱에 박히고</b> 월 하나를 보려고 전 기간을 받아와야 한다.
+     */
+    @GetMapping("/summary")
+    public ApiResponse<AttendanceResponse.Summary> summary(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long studentId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
+        return ApiResponse.success(AttendanceResponse.Summary.from(
+                attendanceQueryService.summarize(enrollmentId, from, to)));
+    }
+
+    /**
+     * 상벌점 — 누적 점수 + 내역. 벌점은 음수로 내려간다.
+     *
+     * <p>{@code from}/{@code to}를 주면 <b>그 기간 내역</b>과 <b>기간 증감</b>이 함께 온다.
+     * 누적 점수({@code total})는 기간과 무관하게 항상 전체다 — 제적 기준이 누적이라서다.
+     *
+     * @param from 비우면 전체 기간. {@code to}와 함께 주어야 한다
+     */
     @GetMapping("/penalties")
     public ApiResponse<AttendanceResponse.Penalties> penalties(
             @CurrentAccount AuthPrincipal me,
-            @RequestParam(required = false) Long studentId) {
+            @RequestParam(required = false) Long studentId,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
-        return ApiResponse.success(
-                AttendanceResponse.Penalties.from(attendanceQueryService.penalties(enrollmentId)));
+        return ApiResponse.success(AttendanceResponse.Penalties.from(
+                attendanceQueryService.penalties(enrollmentId, from, to)));
     }
 
     /** 사유출결 — A-18의 "당월 사유출결/벌점 표". */

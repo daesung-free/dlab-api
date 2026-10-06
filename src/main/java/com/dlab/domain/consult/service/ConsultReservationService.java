@@ -45,6 +45,9 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ConsultReservationService {
 
+    /** 한 번에 등록할 수 있는 기간 상한(일). 연도 오입력 한 건이 수만 행을 만들지 않게. */
+    private static final int MAX_RANGE_DAYS = 200;
+
     private final ConsultSlotRepository slotRepository;
     private final ConsultReservationRepository reservationRepository;
     private final ClassAssignmentRepository classAssignmentRepository;
@@ -76,28 +79,79 @@ public class ConsultReservationService {
     public List<ConsultSlot> openSlots(Teacher teacher, short year, LocalDate date,
                                        LocalTime from, LocalTime to, int intervalMinutes,
                                        short capacity, String place) {
+        return openSlots(teacher, year, date, null, null, from, to,
+                intervalMinutes, capacity, place);
+    }
+
+    /**
+     * 날짜 범위 일괄 개설 (2026-10-06 디랩 요청 — <i>"수능 전날까지 일괄 등록"</i>).
+     *
+     * <p>하루씩 등록하면 두 달치가 60번의 호출이 된다. <b>범위와 요일을 받아 한 번에 만든다.</b>
+     *
+     * <p>★ <b>요일을 고를 수 있게 둔다.</b> 상담 가능 시간은 보통 특정 요일에만 열리는데,
+     * 범위만 받으면 전 날짜에 슬롯이 생겨 학생이 담임이 없는 날에도 예약할 수 있다.
+     * 비우면 범위 안 모든 날이다 — <b>토요일을 빼지 않는다</b>, 이 학원은 토요일에도 운영한다.
+     *
+     * <p>★ <b>공휴일을 빼지 않는다.</b> 교습일 기준이 「설·추석 당일만 제외」라 법정공휴일을
+     * 일괄 제외하면 실제 운영일과 어긋난다. 쉬는 날은 담임이 요일에서 빼거나 노출을 내린다.
+     *
+     * @param endDate   비우면 {@code date} 하루만. 범위 상한은 {@value #MAX_RANGE_DAYS}일이다
+     * @param daysOfWeek 비우면 범위 안 모든 날
+     */
+    @Transactional
+    public List<ConsultSlot> openSlots(Teacher teacher, short year,
+                                       LocalDate date, LocalDate endDate,
+                                       java.util.Set<java.time.DayOfWeek> daysOfWeek,
+                                       LocalTime from, LocalTime to, int intervalMinutes,
+                                       short capacity, String place) {
         if (from == null || to == null || !from.isBefore(to)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "시작 시각이 종료 시각보다 빨라야 합니다.");
         }
         if (intervalMinutes <= 0 || intervalMinutes > 240) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "간격은 1~240분 사이여야 합니다.");
         }
+        LocalDate last = endDate == null ? date : endDate;
+        if (last.isBefore(date)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "종료일이 시작일보다 빨라야 합니다.");
+        }
+        // 상한을 두지 않으면 연도를 잘못 넣은 요청 하나가 수만 행을 만든다
+        if (java.time.temporal.ChronoUnit.DAYS.between(date, last) >= MAX_RANGE_DAYS) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "한 번에 등록할 수 있는 기간은 %d일까지입니다.".formatted(MAX_RANGE_DAYS));
+        }
 
         Academy academy = teacher.getAcademy();
+        List<ConsultSlot> created = new ArrayList<>();
+        for (LocalDate day = date; !day.isAfter(last); day = day.plusDays(1)) {
+            if (daysOfWeek != null && !daysOfWeek.isEmpty()
+                    && !daysOfWeek.contains(day.getDayOfWeek())) {
+                continue;
+            }
+            created.addAll(openOneDay(academy, teacher, year, day, from, to,
+                    intervalMinutes, capacity, place));
+        }
+        log.info("상담 가능 일정 개설: teacher={} {}~{} {}~{} ({}분, 요일={}) → {}건",
+                teacher.getId(), date, last, from, to, intervalMinutes,
+                daysOfWeek == null || daysOfWeek.isEmpty() ? "전체" : daysOfWeek, created.size());
+        return created;
+    }
+
+    /** 하루치. 이미 있는 시각은 건너뛴다 — 오전을 열어둔 뒤 오후를 더하는 흐름이 있다. */
+    private List<ConsultSlot> openOneDay(Academy academy, Teacher teacher, short year,
+                                         LocalDate day, LocalTime from, LocalTime to,
+                                         int intervalMinutes, short capacity, String place) {
         List<ConsultSlot> created = new ArrayList<>();
         for (LocalTime start = from;
              !start.plusMinutes(intervalMinutes).isAfter(to);
              start = start.plusMinutes(intervalMinutes)) {
 
             if (slotRepository.existsByTeacherIdAndSlotDateAndStartTimeAndDeletedFalse(
-                    teacher.getId(), date, start)) {
+                    teacher.getId(), day, start)) {
                 continue;
             }
-            created.add(slotRepository.save(new ConsultSlot(academy, year, teacher, date,
+            created.add(slotRepository.save(new ConsultSlot(academy, year, teacher, day,
                     start, start.plusMinutes(intervalMinutes), capacity, place)));
         }
-        log.info("상담 가능 일정 개설: teacher={} {} {}~{} ({}분) → {}건",
-                teacher.getId(), date, from, to, intervalMinutes, created.size());
         return created;
     }
 

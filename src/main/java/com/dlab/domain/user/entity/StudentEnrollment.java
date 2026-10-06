@@ -228,6 +228,23 @@ public class StudentEnrollment extends BaseEntity {
         return examStudentNo != null;
     }
 
+    /**
+     * 더프 제출용 번호 — <b>{@code [반 2자리][번호 4자리]} 6자리</b> (예 {@code 011001}).
+     *
+     * <p>★ <b>저장 형식을 바꾸지 않고 내보낼 때만 변환한다</b>(2026-10-06 회신). 저장은
+     * {@code (반, 순번)}으로 두어야 회차 자료와 맞고, 6자리는 제출 서식일 뿐이다.
+     *
+     * <p>⚠️ <b>반이 10 이상이면 {@code null}이다.</b> 번호가 {@code 10001}(5자리)이 되어
+     * 4자리 칸에 들어가지 않는다 — 연구소 서식이 9반까지를 전제한 것으로 보여 확인 중이다.
+     * <b>억지로 자르지 않는다</b> — 잘린 번호로 제출하면 남의 성적에 붙는다.
+     */
+    public String examSubmitNo() {
+        if (examStudentNo == null || examClassNo == null || examStudentNo.length() > 4) {
+            return null;
+        }
+        return "%02d%4s".formatted(examClassNo, examStudentNo).replace(' ', '0');
+    }
+
     public void makeCurrent() {
         if (enrollmentStatus.requiresCleanup()) {
             return;

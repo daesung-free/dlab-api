@@ -40,10 +40,20 @@ public record HomeResponse(Profile profile,
      * {@code confirmedDays}를 함께 내려, 화면이 "며칠 기준인지"를 밝힐 수 있게 한다 —
      * 안 밝히면 월초에 출석률 100%가 이상하게 보인다.
      *
+     * <p>★ <b>{@code month}를 함께 내린다.</b> 화면이 고른 달과 서버가 계산한 달이 같은지
+     * 확인할 수 있어야 한다 — 비우고 부르면 서버가 이번 달로 정하므로, 응답만 보고는
+     * 어느 달 숫자인지 알 수 없다.
+     *
+     * <p>{@code weeklyStudyMinutes}는 <b>항상 이번 주</b>다. 고른 달과 무관하다.
+     *
      * @param attendanceRate 확정된 날이 없으면 {@code null}
+     * @param outingCount    외출 <b>건수</b>(태깅 이벤트 기준). 사유외출은 따로 센다
      */
-    public record Metrics(int weeklyStudyMinutes, int monthlyStudyMinutes,
-                          Integer attendanceRate, int confirmedDays) {
+    public record Metrics(java.time.YearMonth month,
+                          int weeklyStudyMinutes, int monthlyStudyMinutes,
+                          Integer attendanceRate, int confirmedDays,
+                          int lateDays, int absentDays, int earlyLeaveDays,
+                          int outingCount, int excusedOutingCount) {
     }
 
     /** 오늘의 데일리 루틴. 점수는 <b>공개된 것만</b> 내려온다(검수 중인 값은 감춘다). */

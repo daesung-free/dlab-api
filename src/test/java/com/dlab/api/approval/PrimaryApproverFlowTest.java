@@ -120,6 +120,47 @@ class PrimaryApproverFlowTest {
     // ── 선택 · 동의 ──────────────────────────────────────
 
     @Test
+    @DisplayName("★ 안 골라도 적용값이 나온다 — 「미설정」만 내리면 화면이 매번 고르게 만든다")
+    void effectiveApproverFallsBackToBranchPolicy() {
+        var items = approvalService.effectiveApprovers(enrollment);
+
+        var firewall = items.stream()
+                .filter(i -> i.requestType() == RequestType.FIREWALL_UNLOCK)
+                .findFirst().orElseThrow();
+
+        assertThat(firewall.effective()).isEqualTo(ApproverType.PARENT);
+        assertThat(firewall.source()).isEqualTo(ApprovalService.ApproverSource.BRANCH_POLICY);
+        assertThat(firewall.branchDefault()).isEqualTo(ApproverType.PARENT);
+        assertThat(firewall.timeoutMinutes()).isEqualTo(TIMEOUT);
+        assertThat(firewall.escalationApproverType()).isEqualTo(ApproverType.TEACHER);
+    }
+
+    @Test
+    @DisplayName("★ 학생이 고르면 출처가 STUDENT_CHOICE다 — 관리자 설정이 안 먹히는 이유가 여기다")
+    void effectiveApproverShowsStudentChoice() {
+        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null);
+        em.flush();
+
+        var firewall = approvalService.effectiveApprovers(enrollment).stream()
+                .filter(i -> i.requestType() == RequestType.FIREWALL_UNLOCK)
+                .findFirst().orElseThrow();
+
+        assertThat(firewall.effective()).isEqualTo(ApproverType.TEACHER);
+        assertThat(firewall.source()).isEqualTo(ApprovalService.ApproverSource.STUDENT_CHOICE);
+        // ★ 지점 정책값도 함께 내린다 — 둘이 다르면 선택이 덮고 있다는 뜻이다
+        assertThat(firewall.branchDefault()).isEqualTo(ApproverType.PARENT);
+    }
+
+    @Test
+    @DisplayName("정책이 없는 유형은 목록에서 빠진다 — 빈 값을 끼우면 「승인자 없음」으로 그려진다")
+    void typesWithoutPolicyAreOmitted() {
+        // 설정한 것은 방화벽 하나뿐이다
+        assertThat(approvalService.effectiveApprovers(enrollment))
+                .extracting(ApprovalService.EffectiveApprover::requestType)
+                .containsExactly(RequestType.FIREWALL_UNLOCK);
+    }
+
+    @Test
     @DisplayName("★ 학생이 고른 우선 승인자가 지점 정책을 이긴다")
     void studentChoiceBeatsBranchPolicy() {
         approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null);
