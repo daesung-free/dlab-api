@@ -134,6 +134,10 @@ public class SecurityConfig {
                         //   로그인 흐름을 새로 만들어야 한다. 검증은 컨트롤러가
                         //   DsaTokenService.resolveAcademyId로 직접 하므로 무인증이 아니다
                         .requestMatchers("/api/v1/kiosk/**").permitAll()
+                        // ★ 홈페이지 입학예약(B안). 우리 JWT 가 아니라 고정 키로 인증한다 —
+                        //   검증은 컨트롤러가 Authorization 헤더를 직접 대조하므로 무인증이 아니다.
+                        //   JWT 를 쓰게 하면 홈페이지에 로그인·갱신 흐름을 새로 만들어야 한다
+                        .requestMatchers("/api/v1/homepage/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(new JwtAuthenticationFilter(jwtProvider, tokenBlacklist),

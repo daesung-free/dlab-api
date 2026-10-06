@@ -48,6 +48,18 @@ public class AdmissionReservation extends BaseEntity {
     @Column(name = "rsv_cd", nullable = false, length = 20)
     private String rsvCd;
 
+    /**
+     * 홈페이지가 붙인 신청 고유번호(멱등키).
+     *
+     * <p>전송이 실패해 다시 보내면 같은 번호가 온다 — 그때 새로 만들지 않고 기존 건을
+     * 돌려준다. <b>없으면 재전송이 곧 중복 접수</b>이고, 나중에 어느 쪽이 진짜인지 가릴
+     * 방법이 없다.
+     *
+     * <p>A안(기존 DSA 방식)으로 들어온 건은 비어 있다.
+     */
+    @Column(name = "request_id", length = 64)
+    private String requestId;
+
     @Column(name = "student_name", nullable = false, length = 20)
     private String studentName;
 
@@ -157,7 +169,9 @@ public class AdmissionReservation extends BaseEntity {
                                 String uniNm, Short uniGd, Short intrSt, String intrTxt,
                                 String zip, String addr1, String addr2,
                                 Integer schCdHigh, String schNmHigh,
-                                boolean agreeAd, boolean promoAd, String stdGrade) {
+                                boolean agreeAd, boolean promoAd, String stdGrade,
+                                String requestId) {
+        this.requestId = requestId;
         this.academy = academy;
         this.year = year;
         this.rsvCd = rsvCd;

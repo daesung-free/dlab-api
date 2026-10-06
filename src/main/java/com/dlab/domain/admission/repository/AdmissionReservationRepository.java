@@ -11,6 +11,9 @@ public interface AdmissionReservationRepository extends JpaRepository<AdmissionR
 
     Optional<AdmissionReservation> findByRsvCdAndDeletedFalse(String rsvCd);
 
+    /** 같은 신청이 다시 들어왔는지. 재전송은 같은 {@code requestId} 로 온다. */
+    Optional<AdmissionReservation> findByRequestIdAndDeletedFalse(String requestId);
+
     boolean existsByRsvCd(String rsvCd);
 
     /**
