@@ -50,6 +50,44 @@ public interface FirewallRequestRepository extends JpaRepository<FirewallRequest
             """)
     List<FirewallRequest> findActive(@Param("academyId") Long academyId);
 
+    /**
+     * 해제 활성 스케줄러가 훑는 경로 — <b>승인됐는데 아직 열지 않은 것</b>.
+     *
+     * <p>지정 구간이 있으면 <b>그 시각이 와야</b> 연다. "15시에 열어달라"를 승인 즉시 열면
+     * 학생이 적어낸 시간대와 어긋난다. 구간을 안 적었으면 승인되는 대로 연다.
+     */
+    @Query("""
+            SELECT r FROM FirewallRequest r
+            JOIN FETCH r.approvalRequest a
+            JOIN FETCH r.enrollment e
+            WHERE r.unlockStatus = com.dlab.domain.firewall.entity.UnlockStatus.WAITING
+              AND a.status = com.dlab.domain.approval.entity.ApprovalStatus.APPROVED
+              AND (r.requestedStartAt IS NULL OR r.requestedStartAt <= :at)
+              AND (r.requestedEndAt IS NULL OR r.requestedEndAt > :at)
+              AND r.deleted = false
+            ORDER BY r.id
+            """)
+    List<FirewallRequest> findApprovedWaiting(@Param("at") Instant at);
+
+    /**
+     * 앱 이력 조회 — 학생 본인·학부모가 보는 목록.
+     *
+     * <p>관리자 목록({@link #search})과 달리 <b>지점 조건이 없다.</b> 등록 건으로 이미
+     * 한 사람에 묶여 있어서, 지점을 또 거는 것은 중복이고 학부모 경로에서는 지점이 없다.
+     */
+    @Query("""
+            SELECT r FROM FirewallRequest r
+            JOIN FETCH r.approvalRequest
+            WHERE r.enrollment.id = :enrollmentId
+              AND r.createdAt >= :from
+              AND r.createdAt < :to
+              AND r.deleted = false
+            ORDER BY r.id DESC
+            """)
+    List<FirewallRequest> findByEnrollmentAndPeriod(@Param("enrollmentId") Long enrollmentId,
+                                                    @Param("from") Instant from,
+                                                    @Param("to") Instant to);
+
     /** 만료 스케줄러가 훑는 경로 — 해제중인데 종료 시각이 지난 것. */
     @Query("""
             SELECT r FROM FirewallRequest r

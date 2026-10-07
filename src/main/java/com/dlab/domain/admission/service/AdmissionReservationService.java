@@ -57,7 +57,25 @@ public class AdmissionReservationService {
                               Integer findGb, String findTxt, Integer schCd,
                               String zip, String addr1, String addr2,
                               Integer schCdHigh, String schNmHigh,
-                              String agreeAd, String promoAd, String stdGrade) {
+                              String agreeAd, String promoAd, String stdGrade,
+                              /** 홈페이지가 붙인 신청 고유번호. A안에는 없다 */
+                              String requestId) {
+
+        /** A안(기존 DSA 방식)용 — 고유번호 없이 만든다. */
+        public SaveCommand(String acid, String regYyyy, String rsvNm,
+                           String stdTel, String parTel, String genderGb, String birth,
+                           Short geyulGb, String admDt, Integer preTest, Integer admiSt,
+                           Short nasinSt, java.math.BigDecimal nasinSc,
+                           String uniNm, Short uniGd, Short intrSt, String intrTxt,
+                           Integer findGb, String findTxt, Integer schCd,
+                           String zip, String addr1, String addr2,
+                           Integer schCdHigh, String schNmHigh,
+                           String agreeAd, String promoAd, String stdGrade) {
+            this(acid, regYyyy, rsvNm, stdTel, parTel, genderGb, birth, geyulGb, admDt,
+                    preTest, admiSt, nasinSt, nasinSc, uniNm, uniGd, intrSt, intrTxt,
+                    findGb, findTxt, schCd, zip, addr1, addr2, schCdHigh, schNmHigh,
+                    agreeAd, promoAd, stdGrade, null);
+        }
     }
 
     // ── 3.3 원생 정보 저장 ────────────────────────────────────
@@ -70,6 +88,15 @@ public class AdmissionReservationService {
      */
     @Transactional
     public String save(SaveCommand command) {
+        // ★ 재전송은 같은 고유번호로 온다 — 새로 만들지 않고 먼저 들어온 건을 돌려준다.
+        //   없으면 한 지원자가 두 건으로 접수되고, 나중에 어느 쪽이 진짜인지 가릴 수 없다
+        if (command.requestId() != null && !command.requestId().isBlank()) {
+            var existing = reservationRepository
+                    .findByRequestIdAndDeletedFalse(command.requestId());
+            if (existing.isPresent()) {
+                return existing.get().getRsvCd();
+            }
+        }
         Academy academy = requireAcademy(command.acid());
         short year = parseYear(command.regYyyy());
 
@@ -81,6 +108,7 @@ public class AdmissionReservationService {
                 .academy(academy)
                 .year(year)
                 .rsvCd(newRsvCd())
+                .requestId(command.requestId())
                 .studentName(command.rsvNm())
                 .studentTel(normalizeTel(command.stdTel()))
                 .parentTel(normalizeTel(command.parTel()))

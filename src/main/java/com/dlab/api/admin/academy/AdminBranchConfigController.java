@@ -79,6 +79,19 @@ public class AdminBranchConfigController {
     }
 
     /**
+     * Nebula 사이트 ID 변경.
+     *
+     * <p>★ Voucher 호출 경로에 들어가는 값이다 — <b>틀리면 다른 지점 와이파이가 열린다.</b>
+     * 비어 있으면 그 지점은 해제 신청이 승인돼도 열리지 않는다.
+     */
+    @PatchMapping("/{academyId}/nebula-site-id")
+    public ApiResponse<Void> changeNebulaSiteId(@PathVariable Long academyId,
+                                                @Valid @RequestBody ValueRequest request) {
+        branchConfigService.changeNebulaSiteId(academyId, request.value());
+        return ApiResponse.empty();
+    }
+
+    /**
      * PG 가맹점 코드 비우기. {@code confirm}에 <b>지금 값을 그대로</b> 넣어야 지워진다 —
      * 비우면 그 지점 결제가 통째로 멈춘다. 이미 비어 있으면 그대로 성공한다.
      */

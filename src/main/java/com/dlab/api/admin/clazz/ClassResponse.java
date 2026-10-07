@@ -126,6 +126,14 @@ public record ClassResponse(
             TrackType track,
             String schoolName,
             String seatCd,
+            /** 모의고사 수험번호 — 반+3자리 순번(예 {@code 1001}). 채번 전이면 비어 있다 */
+            String examStudentNo,
+            /**
+             * 더프 제출용 6자리(예 {@code 011001}).
+             *
+             * <p>⚠️ <b>반이 10 이상이면 비어 있다</b> — 번호가 5자리가 되어 서식에 안 들어간다.
+             */
+            String examSubmitNo,
             Long academyId,
             String academyName
     ) {
@@ -140,6 +148,8 @@ public record ClassResponse(
                     e.getTrack(),
                     e.getStudent().getSchoolName(),
                     view.seatCd(),
+                    e.getExamStudentNo(),
+                    e.examSubmitNo(),
                     e.getAcademy().getId(),
                     view.academyName());
         }

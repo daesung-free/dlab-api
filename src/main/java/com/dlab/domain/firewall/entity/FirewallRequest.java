@@ -84,6 +84,28 @@ public class FirewallRequest extends BaseEntity {
     @Column(name = "requested_end_at")
     private Instant requestedEndAt;
 
+    /**
+     * 배정된 Voucher 코드 — 학생에게 전달되는 값이다.
+     *
+     * <p>★ <b>이 값이 없으면 열어 준 와이파이를 닫을 수 없다.</b> 차단이
+     * {@code logout-user} + {@code delete} 두 호출이고 둘 다 코드를 받는다.
+     */
+    @Column(name = "voucher_code", length = 32)
+    private String voucherCode;
+
+    /**
+     * 차단 실패 횟수.
+     *
+     * <p>★ <b>벤더가 재시도를 제공하지 않는다</b>(실패하면 플랫폼에서 전체 로그아웃하거나
+     * 장비에 직접 붙는 수동 폴백뿐이다). 가장 위험한 상태가 <b>「차단 실패 → 와이파이가
+     * 열린 채 잔존」</b>이라 우리가 세어서 다시 걸고, 계속 실패하면 사람을 부른다.
+     */
+    @Column(name = "block_attempts", nullable = false)
+    private short blockAttempts = 0;
+
+    @Column(name = "block_failed_at")
+    private Instant blockFailedAt;
+
     public FirewallRequest(Academy academy, StudentEnrollment enrollment,
                            ApprovalRequest approvalRequest, short requestedMinutes, String reason) {
         this.academy = academy;
@@ -130,6 +152,42 @@ public class FirewallRequest extends BaseEntity {
     /** 만료 차단 완료. 스케줄러가 Nebula 차단을 보낸 뒤 호출한다. */
     public void expire() {
         this.unlockStatus = UnlockStatus.EXPIRED;
+        this.blockFailedAt = null;
+    }
+
+    /**
+     * 해제 활성 — 배정된 코드를 남기고 구간을 확정한다.
+     *
+     * <p>Nebula 배정이 <b>성공한 뒤에만</b> 불린다. 먼저 상태를 바꾸면 배정이 실패했는데
+     * 해제중으로 보이고, 만료 배치가 <b>코드 없는 건을 닫으려다 계속 실패</b>한다.
+     */
+    /**
+     * 신청 시점의 지점 사이트 ID를 박아 둔다.
+     *
+     * <p>★ <b>스냅샷이다.</b> 나중에 지점 설정이 바뀌어도 이 건은 열어 준 사이트에서
+     * 닫아야 한다 — 바뀐 값으로 닫으러 가면 <b>남의 사이트를 건드리고 이 건은 열린 채 남는다.</b>
+     */
+    public void assignSite(String zyxelSiteId) {
+        this.zyxelSiteId = zyxelSiteId;
+    }
+
+    public void activateWithVoucher(String voucherCode, Instant startAt) {
+        this.voucherCode = voucherCode;
+        activate(startAt);
+    }
+
+    /**
+     * 차단 실패 기록.
+     *
+     * <p><b>상태를 바꾸지 않는다</b> — 해제중으로 남겨야 다음 배치가 다시 잡는다.
+     */
+    public void recordBlockFailure(Instant at) {
+        this.blockAttempts = (short) (this.blockAttempts + 1);
+        this.blockFailedAt = at;
+    }
+
+    public boolean blockFailing() {
+        return blockFailedAt != null;
     }
 
     public void cancel() {

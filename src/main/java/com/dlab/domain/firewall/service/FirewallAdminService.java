@@ -32,6 +32,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 제어 단위(단말 vs 정책)가 미확정이라 {@link NebulaClient} 인터페이스만 두고 로그 구현체가
  * 붙어 있다. <b>상태는 정확히 바뀌지만 와이파이는 실제로 열리고 닫히지 않는다.</b>
  */
+@lombok.extern.slf4j.Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -95,8 +96,12 @@ public class FirewallAdminService {
         FirewallViolation violation = violationRepository.save(
                 new FirewallViolation(enrollment, request, now));
 
-        if (request != null && request.isActive()) {
-            block(request);
+        if (request != null && request.isActive() && !block(request, now)) {
+            // ★ 실패해도 위반 기록은 남긴다 — 예외를 던지면 적발 자체가 롤백된다.
+            //   상태가 해제중으로 남아 1분 뒤 배치가 다시 닫으러 가고,
+            //   그때까지는 blockFailedAt 이 채워져 관리자 목록에 드러난다
+            log.warn("위반 적발 후 즉시 회수 실패 — 배치가 다시 시도한다. requestId={}",
+                    request.getId());
         }
 
         int count = violationRepository
@@ -145,17 +150,74 @@ public class FirewallAdminService {
      */
     @Transactional
     public int expireOverdue() {
-        List<FirewallRequest> overdue = requestRepository.findExpired(Instant.now(clock));
-        for (FirewallRequest request : overdue) {
-            block(request);
+        Instant now = Instant.now(clock);
+        int closed = 0;
+        for (FirewallRequest request : requestRepository.findExpired(now)) {
+            if (block(request, now)) {
+                closed++;
+            }
         }
-        return overdue.size();
+        return closed;
     }
 
-    private void block(FirewallRequest request) {
-        nebulaClient.block(request.getZyxelSiteId(),
-                String.valueOf(request.getEnrollment().getId()));
-        request.expire();
+    /**
+     * 차단 한 건.
+     *
+     * <p>★ <b>실패하면 상태를 바꾸지 않는다.</b> 해제중으로 남겨야 다음 분 배치가 다시
+     * 잡는다 — 만료로 기록하면 와이파이가 열린 채 영원히 남고 아무도 모른다.
+     *
+     * <p><b>한 건의 실패가 다른 건을 막지 않는다.</b> 예외를 올리면 그 뒤 건들이 통째로
+     * 안 닫힌다 — 지점 하나의 장애가 전 지점을 막는다.
+     *
+     * @return 닫았으면 {@code true}
+     */
+    private boolean block(FirewallRequest request, Instant now) {
+        try {
+            nebulaClient.revoke(request.getZyxelSiteId(), request.getVoucherCode());
+            request.expire();
+            return true;
+        } catch (RuntimeException e) {
+            request.recordBlockFailure(now);
+            // ★ 사람이 봐야 하는 상태다 — 학생 와이파이가 열린 채로 남아 있을 수 있다.
+            //   알림 문구가 미확정이라 지금은 로그로 올리고, 관리자 목록에도 드러난다
+            log.error("★ 와이파이 차단 실패 — 열린 채 남아 있을 수 있다. "
+                            + "requestId={}, site={}, code={}, 시도={}회",
+                    request.getId(), request.getZyxelSiteId(),
+                    request.getVoucherCode(), request.getBlockAttempts(), e);
+            return false;
+        }
+    }
+
+    // ── 해제 활성 ─────────────────────────────────────────────
+
+    /**
+     * 승인된 신청을 실제로 연다. 스케줄러가 부른다.
+     *
+     * <p><b>승인과 해제를 나눈 이유</b> — 학생이 "15시에 열어달라"를 적을 수 있어서,
+     * 승인 시점이 아니라 <b>그 시각이 와야</b> 연다. 승인 즉시 열면 적어낸 시간대와 어긋난다.
+     *
+     * <p>★ <b>배정이 성공한 뒤에만 상태를 바꾼다.</b> 먼저 바꾸면 실패했는데 해제중으로
+     * 보이고, 코드가 없어 만료 배치가 계속 실패한다.
+     *
+     * @return 연 건수
+     */
+    @Transactional
+    public int activateApproved() {
+        Instant now = Instant.now(clock);
+        int opened = 0;
+        for (FirewallRequest request : requestRepository.findApprovedWaiting(now)) {
+            try {
+                String code = nebulaClient.assign(
+                        request.getZyxelSiteId(), request.getRequestedMinutes());
+                request.activateWithVoucher(code, now);
+                opened++;
+            } catch (RuntimeException e) {
+                // 다음 분에 다시 잡는다. 대기 상태로 남으니 유실되지 않는다
+                log.warn("와이파이 해제 배정 실패: requestId={}, site={}",
+                        request.getId(), request.getZyxelSiteId(), e);
+            }
+        }
+        return opened;
     }
 
     // ─────────────────────────────────────────────────────────

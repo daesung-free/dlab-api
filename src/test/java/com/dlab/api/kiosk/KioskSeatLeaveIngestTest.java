@@ -111,6 +111,48 @@ class KioskSeatLeaveIngestTest {
     // ── 적재 ─────────────────────────────────────────────────
 
     @Test
+    @DisplayName("★ 이탈 사유(이탈 위치)를 함께 받는다 — 지점마다 다른 이름이라 그대로 저장한다")
+    void storesLeaveReason() throws Exception {
+        String withReason = """
+                {"sourceRowId":81,"rfidNo":"ABC001","areaCd":"A","seatCd":"A-01",
+                 "eventType":"LEAVE","occurredAt":"%s","reasonName":"화장실"}
+                """.formatted(now);
+
+        send(withReason).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].status").value("ACCEPTED"));
+
+        SeatLeaveLog saved = logRepository.findAll().stream()
+                .filter(l -> l.getSourceRowId() == 81L).findFirst().orElseThrow();
+        assertThat(saved.getReasonName()).isEqualTo("화장실");
+    }
+
+    @Test
+    @DisplayName("사유를 안 보내도 그대로 받는다 — 키오스크 배포 전에도 이탈 수신이 돌아야 한다")
+    void reasonIsOptional() throws Exception {
+        send(event(82, "ABC001", "LEAVE")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].status").value("ACCEPTED"));
+
+        SeatLeaveLog saved = logRepository.findAll().stream()
+                .filter(l -> l.getSourceRowId() == 82L).findFirst().orElseThrow();
+        assertThat(saved.getReasonName()).isNull();
+    }
+
+    @Test
+    @DisplayName("★ 복귀에 사유가 실려 와도 저장하지 않는다 — 복귀는 이유를 고르지 않는다")
+    void returnHasNoReason() throws Exception {
+        String returnWithReason = """
+                {"sourceRowId":83,"rfidNo":"ABC001","areaCd":"A","seatCd":"A-01",
+                 "eventType":"RETURN","occurredAt":"%s","reasonName":"화장실"}
+                """.formatted(now);
+
+        send(returnWithReason).andExpect(status().isOk());
+
+        SeatLeaveLog saved = logRepository.findAll().stream()
+                .filter(l -> l.getSourceRowId() == 83L).findFirst().orElseThrow();
+        assertThat(saved.getReasonName()).isNull();
+    }
+
+    @Test
     @DisplayName("★ 학번은 지점 안에서만 찾는다 — 다른 지점에 같은 학번이 있어도 배치가 실패하지 않는다")
     void studentNoIsScopedToAcademy() throws Exception {
         Academy ilsan = new Academy("32", "일산", LocalTime.of(9, 0));

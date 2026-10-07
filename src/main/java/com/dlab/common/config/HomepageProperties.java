@@ -25,10 +25,23 @@ public class HomepageProperties {
     private final String secret;
     private final String service;
 
+    /**
+     * B안(REST) 고정 키. {@code Authorization: Bearer <키>} 로 받는다.
+     *
+     * <p><b>A안의 토큰과 별개다.</b> A안은 매일 바뀌는 해시로 토큰을 받아 쓰는 구조라
+     * 홈페이지가 갱신 주기를 신경 써야 하는데, B안은 고정 키 하나로 끝낸다.
+     *
+     * <p>비어 있으면 B안 경로는 <b>전부 거부</b>된다 — 키를 안 넣은 서버에서 지원자 정보가
+     * 무인증으로 열리면 안 된다.
+     */
+    private final String apiKey;
+
     public HomepageProperties(
             @Value("${homepage.integration.client-id:}") String clientId,
             @Value("${homepage.integration.secret:}") String secret,
-            @Value("${homepage.integration.service:dlab}") String service) {
+            @Value("${homepage.integration.service:dlab}") String service,
+            @Value("${homepage.integration.api-key:}") String apiKey) {
+        this.apiKey = apiKey;
         this.clientId = clientId;
         this.secret = secret;
         this.service = service;

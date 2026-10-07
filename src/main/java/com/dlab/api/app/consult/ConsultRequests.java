@@ -18,6 +18,18 @@ public final class ConsultRequests {
      */
     public record ConsultOpenSlots(
             @NotNull LocalDate date,
+            /**
+             * ★ 날짜 범위 일괄 등록. 비우면 {@code date} 하루만 (2026-10-06 디랩 요청 —
+             * 「수능 전날까지 일괄 등록」). 하루씩 넣으면 두 달치가 60번의 호출이 된다.
+             */
+            LocalDate endDate,
+            /**
+             * 넣을 요일. 비우면 범위 안 모든 날.
+             *
+             * <p><b>토요일을 자동으로 빼지 않는다</b> — 이 학원은 토요일에도 운영한다.
+             * 공휴일도 빼지 않는다(교습일 기준이 「설·추석 당일만 제외」라 일괄 제외하면 어긋난다).
+             */
+            java.util.Set<java.time.DayOfWeek> daysOfWeek,
             @NotNull LocalTime from,
             @NotNull LocalTime to,
             @Min(1) @Max(240) @NotNull(message = "슬롯 간격은 필수입니다.") Integer intervalMinutes,

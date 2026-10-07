@@ -50,7 +50,16 @@ public class SeatLeaveIngestService {
      */
     public record Event(Long sourceRowId, String rfidNo, String studentNo,
                         String areaCd, String seatCd,
-                        SeatLeaveEventType eventType, Instant occurredAt) {}
+                        SeatLeaveEventType eventType, Instant occurredAt,
+                        String reasonName) {
+
+        /** 사유 없이 오던 기존 호출용. 키오스크가 보내기 시작하면 위 생성자를 쓴다. */
+        public Event(Long sourceRowId, String rfidNo, String studentNo,
+                     String areaCd, String seatCd,
+                     SeatLeaveEventType eventType, Instant occurredAt) {
+            this(sourceRowId, rfidNo, studentNo, areaCd, seatCd, eventType, occurredAt, null);
+        }
+    }
 
     /** 건별 처리 결과. 키오스크가 이걸 보고 전송완료 표시를 한다. */
     public record Result(Long sourceRowId, Status status, String message) {
@@ -110,7 +119,9 @@ public class SeatLeaveIngestService {
         try {
             logRepository.save(new SeatLeaveLog(academy, year, event.sourceRowId(), enrollment,
                     event.rfidNo(), event.studentNo(), event.areaCd(), event.seatCd(),
-                    event.eventType(), event.occurredAt()));
+                    event.eventType(), event.occurredAt(),
+                    // 복귀·자동마감에는 사유가 없다 — 보내와도 무시한다
+                    event.eventType() == SeatLeaveEventType.LEAVE ? event.reasonName() : null));
         } catch (DataIntegrityViolationException e) {
             // 유니크 위반 — 다른 요청이 같은 행을 먼저 넣었다는 뜻이라 중복과 같다.
             // 조회로 걸러도 동시 호출에서는 여기까지 온다

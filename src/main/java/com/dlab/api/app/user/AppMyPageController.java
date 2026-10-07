@@ -11,7 +11,10 @@ import com.dlab.domain.user.repository.ClassAssignmentRepository;
 import com.dlab.domain.user.service.AppScopeResolver;
 import com.dlab.domain.user.service.ParentSignupService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -38,6 +41,7 @@ public class AppMyPageController {
     private final AppScopeResolver scopeResolver;
     private final ParentSignupService parentSignupService;
     private final ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.user.service.AppWithdrawalService withdrawalService;
 
     /**
      * 내 정보.
@@ -64,5 +68,46 @@ public class AppMyPageController {
         }
 
         throw new BusinessException(ErrorCode.FORBIDDEN, "학생·학부모 계정만 이용할 수 있습니다.");
+    }
+
+    /**
+     * 회원 탈퇴 (App Store 5.1.1(v) · Google Play 필수 요건).
+     *
+     * <p><b>즉시</b> 로그인이 막히고, 들고 있던 토큰도 그 자리에서 무효가 된다.
+     * 앱이 수집한 것(푸시 토큰·알림 수신 설정)은 지워지고, 학부모면 자녀 연결이 끊긴다.
+     *
+     * <p>★ <b>원생 기록(출결·수납·상벌점)은 남는다.</b> 학원이 계약·학원법 근거로 보유하는
+     * 것이고, 같이 지우면 지점 정산과 과거 통계가 소급해서 바뀐다. 보관기간 경과분 파기는
+     * 정책 확정 후 배치로 붙는다 — <b>화면에 그 사실을 안내해야 한다.</b>
+     *
+     * <p><b>두 번 눌러도 된다</b> — 이미 탈퇴한 계정이면 {@code alreadyWithdrawn=true}로
+     * 그대로 성공한다. 두 번째를 실패로 만들면 화면은 "탈퇴가 안 됐다"로 보이는데
+     * 실제로는 이미 된 상태다.
+     */
+    @DeleteMapping
+    public ApiResponse<com.dlab.domain.user.service.AppWithdrawalService.Result> withdraw(
+            @CurrentAccount AuthPrincipal me,
+            @RequestBody(required = false) WithdrawRequest request,
+            @RequestHeader(value = org.springframework.http.HttpHeaders.AUTHORIZATION,
+                    required = false) String authorization) {
+
+        return ApiResponse.success(withdrawalService.withdraw(
+                me.accountId(),
+                request == null ? null : request.reason(),
+                bearer(authorization)));
+    }
+
+    /** {@code Bearer } 를 떼고 토큰만 넘긴다 — 블랙리스트가 토큰 문자열로 대조한다. */
+    private static String bearer(String authorization) {
+        if (authorization == null) {
+            return null;
+        }
+        String token = authorization.replaceFirst("(?i)^Bearer\\s+", "").trim();
+        return token.isEmpty() ? null : token;
+    }
+
+    /** @param reason 선택. 개선 근거로만 쓰고 <b>재가입을 막는 데 쓰지 않는다</b> */
+    public record WithdrawRequest(
+            @jakarta.validation.constraints.Size(max = 200) String reason) {
     }
 }

@@ -19,7 +19,7 @@ class SeatLeaveMaskingTest {
 
     private static LeaveRow row() {
         return new LeaveRow(1L, 10L, "2026-0001", "김민지", "1반", "A", "A-01",
-                Instant.parse("2026-09-22T01:00:00Z"), null, Status.OPEN, 10L, true);
+                Instant.parse("2026-09-22T01:00:00Z"), null, Status.OPEN, 10L, true, "화장실");
     }
 
     @Test

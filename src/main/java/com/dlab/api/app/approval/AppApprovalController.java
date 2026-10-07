@@ -89,15 +89,53 @@ public class AppApprovalController {
         return ApiResponse.success(PrimaryApproverResponse.from(saved));
     }
 
-    /** 현재 선택값. 없으면 아직 안 골랐다는 뜻이라 화면이 선택을 요구한다. */
+    /**
+     * 현재 선택값 + <b>지금 실제로 적용되는 승인자</b>.
+     *
+     * <p>{@code preferred}가 비어 있으면 아직 안 골랐다는 뜻이고, 그래도 {@code items}에는
+     * <b>지점 정책값이 적용된 결과</b>가 들어 있다. 신청 화면은 이 값을 <b>표시만</b> 하면 된다 —
+     * 거기서 바꾸게 하면 동의 기록이 신청 횟수만큼 쌓이고, 한 번 고른 학생에게는
+     * 그 뒤로 관리자 지점 설정이 적용되지 않는다.
+     */
     @GetMapping("/primary-approver")
-    public ApiResponse<PrimaryApproverResponse> currentPrimaryApprover(
+    public ApiResponse<PrimaryApproverView> currentPrimaryApprover(
             @CurrentAccount AuthPrincipal principal) {
 
         var enrollment = scopeResolver.requireStudent(principal.accountId(), "승인자 선택");
-        return ApiResponse.success(approvalService.findPrimaryApprover(enrollment.getId())
-                .map(PrimaryApproverResponse::from)
-                .orElse(null));
+        var chosen = approvalService.findPrimaryApprover(enrollment.getId()).orElse(null);
+
+        return ApiResponse.success(new PrimaryApproverView(
+                chosen == null ? null : chosen.getPreferred(),
+                chosen == null ? null : chosen.getAgreedAt(),
+                approvalService.effectiveApprovers(enrollment).stream()
+                        .map(EffectiveApproverView::from).toList()));
+    }
+
+    /**
+     * @param preferred 학생이 고른 값. <b>비어 있으면 아직 안 골랐다</b>
+     * @param items     유형별로 지금 적용되는 승인자
+     */
+    public record PrimaryApproverView(ApproverType preferred, java.time.Instant agreedAt,
+                                      java.util.List<EffectiveApproverView> items) {
+    }
+
+    /**
+     * @param source        {@code STUDENT_CHOICE}면 학생 선택이 지점 설정을 덮고 있다는 뜻
+     * @param branchDefault 지점 정책값. {@code effective}와 다르면 선택이 덮은 것이다
+     */
+    public record EffectiveApproverView(
+            com.dlab.domain.approval.entity.RequestType requestType,
+            ApproverType effective,
+            com.dlab.domain.approval.service.ApprovalService.ApproverSource source,
+            ApproverType branchDefault,
+            Short timeoutMinutes,
+            ApproverType escalationApproverType) {
+
+        static EffectiveApproverView from(
+                com.dlab.domain.approval.service.ApprovalService.EffectiveApprover e) {
+            return new EffectiveApproverView(e.requestType(), e.effective(), e.source(),
+                    e.branchDefault(), e.timeoutMinutes(), e.escalationApproverType());
+        }
     }
 
     /**

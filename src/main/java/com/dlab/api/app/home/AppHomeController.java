@@ -12,6 +12,7 @@ import com.dlab.domain.user.service.AppScopeResolver;
 import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,13 +58,23 @@ public class AppHomeController {
      * 왕복하고 그 사이 값이 어긋난다.
      *
      * @param studentId <b>학부모만</b> 쓴다. 계정 하나에 자녀가 여럿이라 서버가 고를 수 없다
+     * @param month     보려는 달({@code yyyy-MM}). 비우면 이번 달.
+     *                  ★ <b>주간 순공은 이 값과 무관하게 항상 이번 주</b>다 — 지난달을 골랐을 때
+     *                  "그 달의 몇째 주"가 정해지지 않는데, 임의로 고르면 화면 이름과 다른 값이 된다
      */
     @GetMapping
     public ApiResponse<HomeResponse> home(@CurrentAccount AuthPrincipal me,
-                                          @RequestParam(required = false) Long studentId) {
+                                          @RequestParam(required = false) Long studentId,
+                                          @RequestParam(required = false) YearMonth month) {
 
         StudentEnrollment enrollment = scopeResolver.resolve(me.accountId(), studentId);
         LocalDate today = LocalDate.now(clock);
+        YearMonth target = month == null ? YearMonth.from(today) : month;
+
+        // 이번 달이면 오늘까지, 지난달이면 그 달 끝까지. 앞으로의 날짜를 분모에 넣으면
+        // 출석률이 월초마다 바닥에서 출발하는 것처럼 보인다
+        LocalDate monthFrom = target.atDay(1);
+        LocalDate monthTo = target.equals(YearMonth.from(today)) ? today : target.atEndOfMonth();
 
         String className = classAssignmentRepository
                 .findActiveFixedByEnrollmentId(enrollment.getId())
@@ -77,22 +88,28 @@ public class AppHomeController {
 
         List<AttendanceQueryService.DailySummary> week = attendanceQueryService.daily(
                 enrollment.getId(), today.with(DayOfWeek.MONDAY), today);
-        List<AttendanceQueryService.DailySummary> month = attendanceQueryService.daily(
-                enrollment.getId(), today.withDayOfMonth(1), today);
+        List<AttendanceQueryService.DailySummary> monthDays = attendanceQueryService.daily(
+                enrollment.getId(), monthFrom, monthTo);
 
         // ★ 집계 규칙은 도메인이 갖는다 — 관리자 대시보드가 같은 값을 봐야 한다.
         //   표현 계층에서 계산하면 화면마다 조금씩 갈리는데, 출석률은 학생·학부모가
         //   직접 보는 숫자라 두 화면이 다른 값을 내면 신뢰가 깨진다
         var weekly = attendanceQueryService.summarize(week);
-        var monthly = attendanceQueryService.summarize(month);
+        var monthly = attendanceQueryService.summarize(monthDays);
 
         return ApiResponse.success(new HomeResponse(
                 HomeResponse.Profile.of(enrollment, className, seatCd),
                 new HomeResponse.Metrics(
+                        target,
                         weekly.studyMinutes(),
                         monthly.studyMinutes(),
                         monthly.attendanceRate(),
-                        monthly.confirmedDays()),
+                        monthly.confirmedDays(),
+                        monthly.lateDays(),
+                        monthly.absentDays(),
+                        monthly.earlyLeaveDays(),
+                        monthly.outingCount(),
+                        monthly.excusedOutingCount()),
                 routineService.today(enrollment.getId(), today).stream()
                         .map(HomeResponse.HomeRoutine::from).toList(),
                 noticeService.banners(enrollment.getId()).stream()

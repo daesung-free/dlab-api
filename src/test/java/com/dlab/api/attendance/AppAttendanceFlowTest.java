@@ -265,6 +265,92 @@ class AppAttendanceFlowTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    @DisplayName("★ 기간을 주면 그 기간 증감이 함께 온다 — 누적은 그대로다(제적 기준이 누적)")
+    void penaltyPeriodKeepsCumulative() throws Exception {
+        PenaltyItem demerit = new PenaltyItem(academy, YEAR, "지각", -3, PenaltyCategory.DEMERIT);
+        em.persist(demerit);
+        // 조회 기간 안 / 밖 각각 한 건
+        em.persist(new PenaltyPoint(academy, myEnrollment, demerit, -3, "이번달",
+                PenaltySource.MANUAL, null, DAY.atTime(10, 0).toInstant(java.time.ZoneOffset.UTC)));
+        em.persist(new PenaltyPoint(academy, myEnrollment, demerit, -5, "지난달",
+                PenaltySource.MANUAL, null,
+                DAY.minusMonths(2).atTime(10, 0).toInstant(java.time.ZoneOffset.UTC)));
+        em.flush();
+
+        mvc.perform(get("/api/v1/app/attendance/penalties")
+                        .header("Authorization", token(studentPhone))
+                        .param("from", DAY.withDayOfMonth(1).toString())
+                        .param("to", DAY.plusDays(5).toString()))
+                .andExpect(status().isOk())
+                // ★ 기간을 걸러도 누적은 전체다 — 여기서 -3이 나오면 학생이 제적 기준을 알 수 없다
+                .andExpect(jsonPath("$.data.total").value(-8))
+                .andExpect(jsonPath("$.data.periodPoints").value(-3))
+                .andExpect(jsonPath("$.data.items.length()").value(1));
+    }
+
+    @Test
+    @DisplayName("기간을 안 주면 periodPoints가 비어 있다 — 0으로 내리면 '그 달 0점'과 섞인다")
+    void penaltyWithoutPeriodHasNoDelta() throws Exception {
+        mvc.perform(get("/api/v1/app/attendance/penalties")
+                        .header("Authorization", token(studentPhone)))
+                .andExpect(jsonPath("$.data.periodPoints").doesNotExist());
+    }
+
+    // ── 기간 요약 (조퇴·외출 집계) ────────────────────────────────
+
+    @Test
+    @DisplayName("★ 외출은 건수로 센다 — 일자 상태에 없어 이벤트에서 세야 한다")
+    void summaryCountsOutings() throws Exception {
+        tag(AttendanceEventType.CHECK_IN, 8, 50);
+        tag(AttendanceEventType.OUTING, 12, 0);
+        tag(AttendanceEventType.RETURN, 13, 0);
+        tag(AttendanceEventType.OUTING, 15, 0);          // 같은 날 두 번째
+        tag(AttendanceEventType.EXCUSED_OUTING, 17, 0);  // 사유외출은 따로 센다
+        tag(AttendanceEventType.CHECK_OUT, 22, 0);
+        confirmDay(DailyStatus.EARLY_LEAVE, false, 500);
+        em.flush();
+
+        mvc.perform(get("/api/v1/app/attendance/summary")
+                        .header("Authorization", token(studentPhone))
+                        .param("from", DAY.minusDays(1).toString())
+                        .param("to", DAY.plusDays(1).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.outingCount").value(2))
+                // ★ 합치면 사유 승인을 받은 외출이 학생에게 불리하게 센다
+                .andExpect(jsonPath("$.data.excusedOutingCount").value(1))
+                .andExpect(jsonPath("$.data.earlyLeaveDays").value(1))
+                .andExpect(jsonPath("$.data.studyMinutes").value(500));
+    }
+
+    @Test
+    @DisplayName("홈 요약은 월을 골라 볼 수 있다 — 고른 달을 응답에 실어 돌려준다")
+    void homeAcceptsMonth() throws Exception {
+        confirmDay(DailyStatus.LATE, false, 400);
+        em.flush();
+
+        mvc.perform(get("/api/v1/app/home")
+                        .header("Authorization", token(studentPhone))
+                        .param("month", "2026-08"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.metrics.month").value("2026-08"))
+                .andExpect(jsonPath("$.data.metrics.lateDays").value(1))
+                .andExpect(jsonPath("$.data.metrics.monthlyStudyMinutes").value(400));
+    }
+
+    @Test
+    @DisplayName("★ 지난달을 고르면 그 달 전체가 집계된다 — 오늘까지로 자르면 숫자가 빈다")
+    void pastMonthCoversWholeMonth() throws Exception {
+        confirmDay(DailyStatus.PRESENT, false, 600);
+        em.flush();
+
+        // DAY(8/3)가 들어간 달을 고르면, 오늘이 그 달이 아니어도 그날이 집계에 들어와야 한다
+        mvc.perform(get("/api/v1/app/home")
+                        .header("Authorization", token(studentPhone))
+                        .param("month", "2026-08"))
+                .andExpect(jsonPath("$.data.metrics.confirmedDays").value(1));
+    }
+
     // ── 사유출결 ─────────────────────────────────────────────────
 
     @Test
@@ -282,6 +368,43 @@ class AppAttendanceFlowTest {
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].reasonType").value("EARLY_LEAVE"))
                 .andExpect(jsonPath("$.data[0].reasonText").value("병원 진료"));
+    }
+
+    // ── 출결 QR (A-4) ────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★ QR payload 는 카드번호다 — 키오스크가 카드와 똑같이 처리한다")
+    void qrCarriesCardNumber() throws Exception {
+        myEnrollment.assignCard("RF-QR-001");
+        em.flush();
+
+        mvc.perform(post("/api/v1/app/attendance/qr-token")
+                        .header("Authorization", token(studentPhone)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payload").value("RF-QR-001"))
+                // 서버가 검증하지 않는다는 것을 앱이 알아야 한다 — 「보안 QR」 표시를 가린다
+                .andExpect(jsonPath("$.data.dynamic").value(false))
+                .andExpect(jsonPath("$.data.expiresAt").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("★ 학부모는 QR 을 발급받을 수 없다 — 집에서 띄우면 대리출석이 된다")
+    void guardianCannotIssueQr() throws Exception {
+        mvc.perform(post("/api/v1/app/attendance/qr-token")
+                        .header("Authorization", token(parentPhone)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("학생 본인만")));
+    }
+
+    @Test
+    @DisplayName("카드가 없으면 원인을 알려준다 — 빈 QR 을 내리면 「인식이 안 된다」로 보인다")
+    void noCardGivesReason() throws Exception {
+        mvc.perform(post("/api/v1/app/attendance/qr-token")
+                        .header("Authorization", token(studentPhone)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("출결 카드가 없어")));
     }
 
     // ── 기간 검증 ────────────────────────────────────────────────

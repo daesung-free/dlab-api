@@ -127,7 +127,7 @@ public class SeatLayoutService {
                 lastEventByEnrollment(area.getAcademy().getId());
         // ★ 이탈은 출결 태깅에 남지 않는다 — 좌석이탈 로그를 함께 봐야 "이탈 중"이 보인다.
         //   재실 값(presence)은 키오스크와 공유하는 코드라 건드리지 않고 별도 축으로 얹는다
-        Map<Long, java.time.Instant> openLeaves =
+        Map<Long, com.dlab.domain.kiosk.service.SeatLeaveBoardService.OpenLeave> openLeaves =
                 seatLeaveBoardService.openLeavesOf(area.getAcademy().getId());
 
         Map<String, SeatAssignment> assignmentBySeat = new HashMap<>();
@@ -169,7 +169,9 @@ public class SeatLayoutService {
                             assignment != null
                                     && openLeaves.containsKey(assignment.getEnrollment().getId()),
                             assignment == null ? null
-                                    : openLeaves.get(assignment.getEnrollment().getId()),
+                                    : leftAtOf(openLeaves.get(assignment.getEnrollment().getId())),
+                            assignment == null ? null
+                                    : reasonOf(openLeaves.get(assignment.getEnrollment().getId())),
                             !raw);
                 })
                 .toList();
@@ -207,6 +209,17 @@ public class SeatLayoutService {
      * <p>배정이 없으면 {@link SeatPresence#EMPTY}다 — 태깅을 볼 필요조차 없다.
      * <b>사용중지 좌석도 EMPTY다</b>: 사용중지는 배정 축이라 재실 축과 별개로 표기된다.
      */
+    private static java.time.Instant leftAtOf(
+            com.dlab.domain.kiosk.service.SeatLeaveBoardService.OpenLeave open) {
+        return open == null ? null : open.leftAt();
+    }
+
+    /** 이탈 사유(이탈 위치). 키오스크가 보내기 전이면 비어 있다. */
+    private static String reasonOf(
+            com.dlab.domain.kiosk.service.SeatLeaveBoardService.OpenLeave open) {
+        return open == null ? null : open.reasonName();
+    }
+
     private static String maskName(String name, boolean raw) {
         return raw ? name : com.dlab.common.privacy.Masking.name(name);
     }
@@ -259,6 +272,7 @@ public class SeatLayoutService {
      * @param onSeatLeave 지금 자리를 비웠는지(좌석이탈). <b>{@code presence}와 별개 축</b>이다 —
      *                    이탈해도 출결로는 여전히 재실이라 화면이 이 값으로 덮어 표시한다
      * @param seatLeftAt  이탈 시작 시각. 이탈 중이 아니면 비어 있다
+     * @param seatLeaveReason 이탈 사유(이탈 위치). 키오스크가 보내기 전이면 비어 있다
      * @param usable      사용중지 여부(배정 축). {@code presence}와 별개다
      * @param studentName {@code masked}가 참이면 가려진 값이다
      * @param className   고정반. 반 미배정이면 비어 있다
@@ -286,6 +300,7 @@ public class SeatLayoutService {
             SeatPresence presence,
             boolean onSeatLeave,
             java.time.Instant seatLeftAt,
+            String seatLeaveReason,
             boolean masked) {
 
         /** 배정 축. 화면이 색을 고를 때 재실 축과 조합한다. */
