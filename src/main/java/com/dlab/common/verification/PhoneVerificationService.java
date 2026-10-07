@@ -51,6 +51,21 @@ public class PhoneVerificationService {
 
     private final StringRedisTemplate redis;
     private final SmsSender smsSender;
+    private final VerificationProperties properties;
+
+    /**
+     * 고정 번호가 설정돼 있으면 기동 시 알린다.
+     *
+     * <p>설정 파일을 열어 보지 않으면 <b>그 번호가 뚫려 있다는 것을 알 방법이 없다.</b>
+     * 번호 자체는 찍지 않는다 — 로그에 남으면 그게 곧 명단이 된다.
+     */
+    @jakarta.annotation.PostConstruct
+    void warnFixedCode() {
+        if (properties.configured()) {
+            log.warn("⚠️ 인증번호 고정이 {}개 번호에 적용 중이다 — 그 번호는 항상 같은 인증번호를 받는다. "
+                    + "심사·테스트가 끝나면 verification.fixed-code.phones 를 비울 것", properties.phoneCount());
+        }
+    }
 
     /**
      * 인증번호 발송.
@@ -59,7 +74,15 @@ public class PhoneVerificationService {
      * 옛 번호를 살려두면 어느 쪽이 맞는지 사용자도 서버도 헷갈린다.
      */
     public void requestCode(String phone) {
-        String code = String.format("%06d", RANDOM.nextInt(1_000_000));
+        // ★ 고정값도 「실제 인증번호」로 저장한다 — 확인 단계·시도 제한·토큰 발급이 그대로 돈다.
+        //   검증을 건너뛰는 분기를 만들면 그 분기가 켜졌을 때 인증 자체가 사라진다
+        boolean fixed = properties.appliesTo(phone);
+        String code = fixed
+                ? properties.code()
+                : String.format("%06d", RANDOM.nextInt(1_000_000));
+        if (fixed) {
+            log.info("인증번호 고정 적용: {}", com.dlab.common.privacy.Masking.phone(phone));
+        }
         redis.opsForValue().set(CODE_KEY + phone, code, CODE_TTL);
         // 재발송했는데 이전 시도 횟수가 남아 있으면 곧바로 한도에 걸린다
         redis.delete(ATTEMPT_KEY + phone);
