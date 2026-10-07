@@ -296,6 +296,32 @@ public class AdminStudentController {
     }
 
     /**
+     * 출결 카드 발급·재발급 (RFID).
+     *
+     * <p>출결이 카드 태깅으로 돌아가는데 <b>학생에게 카드번호를 넣을 경로가 없었다.</b>
+     * 앱 QR 이 담는 값도 이 카드번호다 — 없으면 QR 도 만들 수 없다.
+     *
+     * <p>★ <b>현재 유효한 다른 학생이 쓰는 카드면 거부한다.</b> 같은 카드가 둘에게 붙으면
+     * 키오스크가 태깅할 때 그 자리에서 터진다. 기수가 바뀐 뒤의 재사용은 막지 않는다
+     * (카드번호는 UNIQUE 가 아니고 이력이 쌓인다).
+     *
+     * <p>{@code rfidNo} 를 비우면 <b>카드 해제</b>다 — 분실 신고 후 재발급 전까지.
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+    @PatchMapping("/{enrollmentId}/card")
+    public ApiResponse<StudentResponse> changeCard(@CurrentAccount AuthPrincipal me,
+                                                   @PathVariable Long enrollmentId,
+                                                   @Valid @RequestBody CardRequest request) {
+        return ApiResponse.success(single(
+                studentService.changeCard(me, enrollmentId, request.rfidNo()), me));
+    }
+
+    /** @param rfidNo 카드번호. 비우면 해제. 스키마가 10자다 */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "StudentCardRequest")
+    public record CardRequest(@jakarta.validation.constraints.Size(max = 10) String rfidNo) {
+    }
+
+    /**
      * 오등록 학생 삭제 (soft).
      *
      * <p><b>퇴원·제적에는 쓰지 않는다</b> — 그건 아래 {@code /status}이고 반·좌석 해제와

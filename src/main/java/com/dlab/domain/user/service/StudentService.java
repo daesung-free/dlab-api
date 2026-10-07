@@ -502,4 +502,52 @@ public class StudentService {
         }
         throw new BusinessException(ErrorCode.INVALID_REQUEST, "고유ID 생성에 실패했습니다.");
     }
+
+    // ── 출결 카드 ─────────────────────────────────────────────
+
+    /**
+     * 출결 카드 발급·재발급 (RFID).
+     *
+     * <h2>왜 필요한가</h2>
+     * 출결이 <b>카드 태깅으로 돌아가는데 학생에게 카드번호를 넣을 경로가 없었다.</b>
+     * 직원 카드와 전년도 복사에만 있었고, 신규 학생은 방법이 없어 앱 QR 도 만들 수 없었다
+     * (QR 이 담는 값이 이 카드번호다).
+     *
+     * <h2>★ 같은 카드가 두 학생에게 붙으면 태깅이 깨진다</h2>
+     * 카드번호는 UNIQUE 가 아니다 — 기수가 바뀌면 같은 카드를 다시 쓰기 때문에 이력이 쌓인다.
+     * 그래서 <b>현재 유효한 등록 건끼리만</b> 중복을 막는다. 안 막으면 키오스크가 태깅할 때
+     * {@code findCurrentByRfidNo} 가 두 건을 받아 <b>그 자리에서 터진다</b> — 좌석이탈 학번
+     * 조회에서 실제로 겪은 유형이다.
+     *
+     * <p><b>이력은 감사 로그가 남긴다.</b> 등록 건이 감사 대상이라 "언제 어떤 카드에서 어떤
+     * 카드로 바뀌었나"가 전후값으로 남는다 — 분실 재발급 추적이 그것으로 된다.
+     *
+     * @param rfidNo 비우면 <b>카드 해제</b>다(분실 신고 후 재발급 전까지)
+     */
+    @Transactional
+    public StudentEnrollment changeCard(AuthPrincipal me, Long enrollmentId, String rfidNo) {
+        StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .filter(e -> !e.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+
+        if (!me.canAccessAcademy(enrollment.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+
+        String normalized = rfidNo == null || rfidNo.isBlank() ? null : rfidNo.trim();
+        if (normalized != null) {
+            enrollmentRepository.findCurrentByRfidNo(normalized)
+                    // 자기 카드를 다시 넣는 것은 막지 않는다 — 화면이 저장을 두 번 눌렀을 뿐이다
+                    .filter(owner -> !owner.getId().equals(enrollmentId))
+                    .ifPresent(owner -> {
+                        throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                                "이미 %s 학생이 쓰는 카드입니다.".formatted(owner.getStudentNo()));
+                    });
+        }
+
+        enrollment.assignCard(normalized);
+        log.info("출결 카드 {}: enrollmentId={}",
+                normalized == null ? "해제" : "발급", enrollmentId);
+        return enrollment;
+    }
 }

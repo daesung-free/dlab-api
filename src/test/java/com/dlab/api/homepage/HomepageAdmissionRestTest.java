@@ -124,6 +124,30 @@ class HomepageAdmissionRestTest {
     }
 
     @Test
+    @DisplayName("★★ 본문이 비어 있어도 키가 없으면 401이다 — 실서버에서 400이 나왔다")
+    void missingKeyBeatsBodyValidation() throws Exception {
+        // @Valid 가 메서드 본문보다 먼저 돌아서, 키 확인을 메서드 안에 두면 이 요청이 400 이었다.
+        // 붙이는 쪽은 인증 문제를 필수값 문제로 읽는다 — 그래서 인터셉터로 올렸다
+        mvc.perform(post("/api/v1/homepage/admissions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(post("/api/v1/homepage/admissions")
+                        .header("Authorization", "Bearer wrong-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("코드 조회도 키가 없으면 401이다 — 메서드마다 확인하면 새 경로에서 빠뜨린다")
+    void codesAlsoRequireKey() throws Exception {
+        mvc.perform(get("/api/v1/homepage/codes").param("group", "ACAD"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("필수값이 빠지면 400이다 — 200에 code 숫자로 알리지 않는다")
     void rejectsInvalid() throws Exception {
         mvc.perform(post("/api/v1/homepage/admissions")
