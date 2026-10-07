@@ -53,6 +53,9 @@ public enum ErrorCode {
     PG_SITE_NOT_FOUND(HttpStatus.NOT_FOUND, "결제 사이트코드가 등록되지 않았습니다."),
 
     /** 와이파이 연동(Nebula)이 설정되지 않았다. 기동은 되지만 제어만 동작하지 않는다. */
+    /** 본인이 탈퇴한 계정. 퇴원으로 끊긴 것({@code ACCOUNT_NOT_ACTIVE})과 안내 문구가 다르다. */
+    ACCOUNT_WITHDRAWN(HttpStatus.FORBIDDEN, "탈퇴한 계정입니다. 다시 가입해 주세요."),
+
     FIREWALL_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "와이파이 연동이 설정되지 않았습니다."),
     /** ★ 차단 실패. 와이파이가 열린 채 남아 있을 수 있어 재시도·알림 대상이다. */
     FIREWALL_REVOKE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "와이파이 차단에 실패했습니다."),
