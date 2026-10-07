@@ -212,6 +212,38 @@ class NebulaVoucherFlowTest {
         assertThat(request.blockFailing()).isFalse();
     }
 
+    @Test
+    @DisplayName("★ 해제중인 건의 Voucher 코드가 앱 이력에 내려간다 — 학생이 와이파이에 넣는 값이다")
+    void appHistoryCarriesVoucherCodeWhileActive() {
+        Long id = approvedRequest(null, null);
+        adminService.activateApproved();
+        em.flush();
+
+        var active = com.dlab.api.app.firewall.FirewallResponse.from(reload(id));
+        assertThat(active.unlockStatus()).isEqualTo("ACTIVE");
+        assertThat(active.voucherCode()).isEqualTo("528129");
+
+        // 끝난 건의 코드는 내리지 않는다 — 지난 코드를 계속 넣어 보게 된다
+        rewindEnd(id);
+        adminService.expireOverdue();
+
+        var expired = com.dlab.api.app.firewall.FirewallResponse.from(reload(id));
+        assertThat(expired.unlockStatus()).isEqualTo("EXPIRED");
+        assertThat(expired.voucherCode()).isNull();
+    }
+
+    @Test
+    @DisplayName("대기중에는 코드가 없다 — 아직 배정되지 않았다")
+    void waitingHasNoCode() {
+        Long id = approvedRequest(null, null);
+
+        var waiting = com.dlab.api.app.firewall.FirewallResponse.from(reload(id));
+        assertThat(waiting.unlockStatus()).isEqualTo("WAITING");
+        assertThat(waiting.voucherCode()).isNull();
+        // 승인은 끝났다는 것이 함께 보여야 한다 — 학생이 "승인됐는데 왜 안 열리나"를 안다
+        assertThat(waiting.approvalStatus()).isEqualTo("APPROVED");
+    }
+
     /** 시각을 앞당길 수 없으므로 종료 시각을 과거로 밀어 "만료된" 상황을 만든다. */
     private void rewindEnd(Long id) {
         em.createNativeQuery("""

@@ -69,6 +69,25 @@ public interface FirewallRequestRepository extends JpaRepository<FirewallRequest
             """)
     List<FirewallRequest> findApprovedWaiting(@Param("at") Instant at);
 
+    /**
+     * 앱 이력 조회 — 학생 본인·학부모가 보는 목록.
+     *
+     * <p>관리자 목록({@link #search})과 달리 <b>지점 조건이 없다.</b> 등록 건으로 이미
+     * 한 사람에 묶여 있어서, 지점을 또 거는 것은 중복이고 학부모 경로에서는 지점이 없다.
+     */
+    @Query("""
+            SELECT r FROM FirewallRequest r
+            JOIN FETCH r.approvalRequest
+            WHERE r.enrollment.id = :enrollmentId
+              AND r.createdAt >= :from
+              AND r.createdAt < :to
+              AND r.deleted = false
+            ORDER BY r.id DESC
+            """)
+    List<FirewallRequest> findByEnrollmentAndPeriod(@Param("enrollmentId") Long enrollmentId,
+                                                    @Param("from") Instant from,
+                                                    @Param("to") Instant to);
+
     /** 만료 스케줄러가 훑는 경로 — 해제중인데 종료 시각이 지난 것. */
     @Query("""
             SELECT r FROM FirewallRequest r
