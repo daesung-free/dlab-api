@@ -240,6 +240,11 @@ public class AuthService {
             // 학생 가입 승인 대기. 안내 문구가 달라야 해서 별도 코드로 구분한다.
             throw new BusinessException(ErrorCode.SIGNUP_PENDING);
         }
+        if (account.isWithdrawnByOwner()) {
+            // ★ 퇴원으로 끊긴 것과 구분한다 — 본인 탈퇴면 "다시 가입하라"가 맞고,
+            //   퇴원이면 "학원에 문의하라"가 맞다. 같은 문구를 쓰면 데스크 문의가 늘어난다
+            throw new BusinessException(ErrorCode.ACCOUNT_WITHDRAWN);
+        }
         if (account.getStatus() != AccountStatus.ACTIVE) {
             throw new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE);
         }

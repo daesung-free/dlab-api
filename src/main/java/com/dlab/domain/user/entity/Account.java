@@ -84,6 +84,19 @@ public class Account extends BaseEntity {
     @Column(name = "locked_at")
     private Instant lockedAt;
 
+    /**
+     * 본인 탈퇴 시각.
+     *
+     * <p>★ <b>{@link AccountStatus#WITHDRAWN} 만으로는 구분되지 않는다.</b> 그 상태는
+     * 퇴원·제적·수료로 <b>학원이</b> 끊은 경우에도 쓰인다. 본인 탈퇴는 후속이 달라
+     * (재등록해도 자동으로 열어 주지 않는다) 별도 값으로 남긴다.
+     */
+    @Column(name = "withdrawn_at")
+    private Instant withdrawnAt;
+
+    @Column(name = "withdrawal_reason", length = 200)
+    private String withdrawalReason;
+
     private Account(AccountType accountType, String loginId, String passwordHash, AccountStatus status) {
         this.accountType = accountType;
         this.loginId = loginId;
@@ -152,6 +165,34 @@ public class Account extends BaseEntity {
      */
     public void deactivate() {
         this.status = AccountStatus.WITHDRAWN;
+    }
+
+    /**
+     * 본인 탈퇴 (App Store 5.1.1(v) · Google Play 필수 요건).
+     *
+     * <p><b>계정 행을 지우지 않는다.</b> 로그인 ID 가 유니크라 행을 지우면 같은 번호로
+     * 재가입할 때 과거 이력과의 연결이 끊기고, <b>"탈퇴했다"는 사실 자체도 남지 않는다</b> —
+     * 재가입 분쟁이나 개인정보 처리 문의에 답할 수 없다.
+     *
+     * <p><b>두 번 호출되지 않게 막는다.</b> 두 번째 호출이 통과하면 탈퇴 시각이 덮어써져
+     * 보관기간 계산의 기준일이 밀린다.
+     *
+     * @param reason 선택 입력. 개선 근거로만 쓰고 <b>재가입을 막는 데 쓰지 않는다</b>
+     */
+    public void withdrawByOwner(Instant at, String reason) {
+        if (withdrawnAt != null) {
+            return;
+        }
+        this.status = AccountStatus.WITHDRAWN;
+        this.withdrawnAt = at;
+        this.withdrawalReason = reason;
+        // 탈퇴한 계정에 임시 비밀번호 강제 변경이 걸려 있으면, 재가입 시 그 상태가 따라온다
+        this.mustChangePassword = false;
+    }
+
+    /** 본인이 탈퇴했는가. 퇴원 처리로 끊긴 것과 구분된다. */
+    public boolean isWithdrawnByOwner() {
+        return withdrawnAt != null;
     }
 
     // ─────────────────────────────────────────────────────────────
