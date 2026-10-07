@@ -370,6 +370,43 @@ class AppAttendanceFlowTest {
                 .andExpect(jsonPath("$.data[0].reasonText").value("병원 진료"));
     }
 
+    // ── 출결 QR (A-4) ────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★ QR payload 는 카드번호다 — 키오스크가 카드와 똑같이 처리한다")
+    void qrCarriesCardNumber() throws Exception {
+        myEnrollment.assignCard("RF-QR-001");
+        em.flush();
+
+        mvc.perform(post("/api/v1/app/attendance/qr-token")
+                        .header("Authorization", token(studentPhone)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payload").value("RF-QR-001"))
+                // 서버가 검증하지 않는다는 것을 앱이 알아야 한다 — 「보안 QR」 표시를 가린다
+                .andExpect(jsonPath("$.data.dynamic").value(false))
+                .andExpect(jsonPath("$.data.expiresAt").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("★ 학부모는 QR 을 발급받을 수 없다 — 집에서 띄우면 대리출석이 된다")
+    void guardianCannotIssueQr() throws Exception {
+        mvc.perform(post("/api/v1/app/attendance/qr-token")
+                        .header("Authorization", token(parentPhone)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("학생 본인만")));
+    }
+
+    @Test
+    @DisplayName("카드가 없으면 원인을 알려준다 — 빈 QR 을 내리면 「인식이 안 된다」로 보인다")
+    void noCardGivesReason() throws Exception {
+        mvc.perform(post("/api/v1/app/attendance/qr-token")
+                        .header("Authorization", token(studentPhone)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("출결 카드가 없어")));
+    }
+
     // ── 기간 검증 ────────────────────────────────────────────────
 
     @Test
