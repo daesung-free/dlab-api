@@ -117,7 +117,7 @@ class DoorCodeRequestTest {
     void deniedMessageIsUniform() {
         enroll("DR-2", phone("2222"), true);
 
-        var notFound = requestService.request(academy.getAcadCd(), "01099998888", ip);
+        var notFound = requestService.request(academy.getAcadCd(), digits("9999"), ip);
         Mockito.when(openWindow.isOpen()).thenReturn(false);
         var outsideWindow = requestService.request(academy.getAcadCd(), digits("2222"), ip);
 
@@ -133,7 +133,7 @@ class DoorCodeRequestTest {
     @Test
     @DisplayName("★ 거절도 기록된다 — 빼면 번호를 두드려 본 시도가 기록에서 사라진다")
     void recordsRejections() {
-        requestService.request(academy.getAcadCd(), "01099998888", ip);
+        requestService.request(academy.getAcadCd(), digits("9999"), ip);
         em.flush();
 
         var rows = requestService.history(admin, academy.getId(),
@@ -264,7 +264,7 @@ class DoorCodeRequestTest {
     void exposesIpOnlyForRejections() {
         enroll("DR-11", phone("9090"), true);
         requestService.request(academy.getAcadCd(), digits("9090"), ip);   // 제공
-        requestService.request(academy.getAcadCd(), "01000000000", ip);    // 거절
+        requestService.request(academy.getAcadCd(), digits("0000"), ip);    // 거절
         em.flush();
 
         var rows = requestService.history(admin, academy.getId(),
@@ -294,7 +294,14 @@ class DoorCodeRequestTest {
         return "010-" + mid + "-" + phoneTail;
     }
 
-    /** 입력용 — 숫자만. 같은 번호를 다른 모양으로 넣어도 찾아야 한다 */
+    /**
+     * 입력용 — 숫자만. 같은 번호를 다른 모양으로 넣어도 찾아야 한다.
+     *
+     * <p>★ <b>테스트에 번호를 하드코딩하지 말 것.</b> 시도 제한은 번호로도 세고 그 창이
+     * Redis 에 75분 남아 <b>롤백되지 않는다</b> — 고정 번호를 쓰면 같은 테스트를 스무 번쯤
+     * 돌린 뒤 제한에 걸려 엉뚱하게 실패한다(실제로 두 번 그렇게 깨졌다).
+     * 등록하지 않은 번호를 넣을 때도 이걸 쓴다.
+     */
     private String digits(String mid) {
         return "010" + mid + phoneTail;
     }
