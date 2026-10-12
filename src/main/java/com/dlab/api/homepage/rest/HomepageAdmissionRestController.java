@@ -1,8 +1,5 @@
 package com.dlab.api.homepage.rest;
 
-import com.dlab.common.config.HomepageProperties;
-import com.dlab.common.exception.BusinessException;
-import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.domain.admission.service.AdmissionReservationService;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -12,12 +9,10 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,13 +41,16 @@ import org.springframework.web.bind.annotation.RestController;
  * {@code requestId}가 같으면 몇 번을 보내도 한 건이다. 전송이 실패해 다시 보내는 것이
  * 정상 동작이라, 이것이 없으면 <b>재전송이 곧 중복 접수</b>가 된다.
  */
+/*
+ * 키 확인은 HomepageApiKeyInterceptor 가 한다 — 본문 바인딩보다 먼저 돌아야 해서다.
+ * 여기서 확인하면 본문이 틀린 요청이 키 없이도 400 을 받는다.
+ */
 @Tag(name = "홈페이지 · 입학예약 (B안)")
 @RestController
 @RequestMapping("/api/v1/homepage")
 @RequiredArgsConstructor
 public class HomepageAdmissionRestController {
 
-    private final HomepageProperties properties;
     private final AdmissionReservationService admissionService;
 
     /**
@@ -63,10 +61,8 @@ public class HomepageAdmissionRestController {
      */
     @PostMapping("/admissions")
     public ApiResponse<Receipt> create(
-            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @Valid @RequestBody AdmissionRequest request) {
 
-        verify(authorization);
         String reservationNo = admissionService.save(request.toCommand());
         return ApiResponse.success(new Receipt(reservationNo));
     }
@@ -79,11 +75,9 @@ public class HomepageAdmissionRestController {
      */
     @PostMapping("/admissions/{reservationNo}/files")
     public ApiResponse<Void> uploadFile(
-            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @PathVariable String reservationNo,
             @Valid @RequestBody FileRequest request) {
 
-        verify(authorization);
         admissionService.saveFile(reservationNo, request.file());
         return ApiResponse.empty();
     }
@@ -96,34 +90,13 @@ public class HomepageAdmissionRestController {
      */
     @GetMapping("/codes")
     public ApiResponse<List<CodeView>> codes(
-            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @RequestParam String group,
             // ★ 지점마다 값이 다를 수 있어 생략할 수 없다 — 없으면 어느 지점 목록인지 정해지지 않는다
             @RequestParam String academyCode) {
 
-        verify(authorization);
         return ApiResponse.success(admissionService.commonCodes(academyCode, group).stream()
                 .map(c -> new CodeView(c.getCode(), c.getName()))
                 .toList());
-    }
-
-    /**
-     * 고정 키 확인.
-     *
-     * <p><b>키가 설정돼 있지 않으면 전부 거부한다.</b> 조용히 통과시키면 키를 안 넣은 서버에서
-     * 지원자 정보가 무인증으로 열린다(A안 자격증명과 같은 판단).
-     */
-    private void verify(String authorization) {
-        String expected = properties.getApiKey();
-        if (expected == null || expected.isBlank()) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED,
-                    "홈페이지 연동 키가 설정되지 않았습니다.");
-        }
-        String presented = authorization == null ? null
-                : authorization.replaceFirst("(?i)^Bearer\\s+", "").trim();
-        if (presented == null || !expected.equals(presented)) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED);
-        }
     }
 
     /** @param reservationNo 접수번호. 파일 업로드와 조회가 이 값을 쓴다 */
