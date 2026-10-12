@@ -50,6 +50,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminStaffAttendanceController {
 
     private final StaffAttendanceService staffAttendanceService;
+    private final com.dlab.domain.user.service.ActorNames actorNames;
 
     /**
      * 출근 기록 조회.
@@ -98,8 +99,7 @@ public class AdminStaffAttendanceController {
     @GetMapping("/records/{attendanceId}/edits")
     public ApiResponse<List<EditRow>> edits(@CurrentAccount AuthPrincipal me,
                                             @PathVariable Long attendanceId) {
-        return ApiResponse.success(staffAttendanceService.editsOf(me, attendanceId).stream()
-                .map(EditRow::from).toList());
+        return ApiResponse.success(withNames(staffAttendanceService.editsOf(me, attendanceId)));
     }
 
     /** 지점·기간 수정 이력 — 「이력 보기」 화면. */
@@ -111,8 +111,19 @@ public class AdminStaffAttendanceController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
 
         return ApiResponse.success(
-                staffAttendanceService.editHistory(me, academyId, from, to).stream()
-                        .map(EditRow::from).toList());
+                withNames(staffAttendanceService.editHistory(me, academyId, from, to)));
+    }
+
+    /**
+     * 고친 사람 이름을 붙인다.
+     *
+     * <p>★ <b>계정 id 만으로는 화면에 쓸 수 없다.</b> 이 화면을 지점 관리자도 보는데 그
+     * 계정에는 계정 목록 조회 권한이 없을 수 있어, 화면이 따로 조회하게 맡기면
+     * <b>그 화면에서는 영원히 「-」가 된다.</b> 도어락 이력과 같은 판단이다.
+     */
+    private List<EditRow> withNames(List<StaffAttendanceEdit> edits) {
+        var names = actorNames.of(edits.stream().map(StaffAttendanceEdit::getCreatedBy).toList());
+        return edits.stream().map(e -> EditRow.of(e, names.get(e.getCreatedBy()))).toList();
     }
 
     /**
@@ -145,22 +156,25 @@ public class AdminStaffAttendanceController {
     }
 
     /**
-     * @param editedBy 고친 계정 id. 배치·시스템이면 {@code 0} 이다
-     * @param reason   고친 이유. 필수로 받으므로 비어 있지 않다
+     * @param editedBy     고친 계정 id. 배치·시스템이면 {@code 0} 이다
+     * @param editedByName 고친 사람 이름. <b>비어 있으면 사람이 아니다</b>(배치·시스템) —
+     *                     화면은 그걸로 「시스템」을 구분한다
+     * @param reason       고친 이유. 필수로 받으므로 비어 있지 않다
      */
     public record EditRow(Long id, Long attendanceId, String staffName,
                           LocalDate workDate,
                           StaffAttendanceType beforeEventType, Instant beforeRecordedAt,
                           StaffAttendanceType afterEventType, Instant afterRecordedAt,
-                          String reason, Long editedBy, Instant editedAt) {
+                          String reason, Long editedBy, String editedByName,
+                          Instant editedAt) {
 
-        static EditRow from(StaffAttendanceEdit e) {
+        static EditRow of(StaffAttendanceEdit e, String editedByName) {
             return new EditRow(e.getId(), e.getAttendance().getId(),
                     e.getAttendance().getEnrollment().getStudentName(),
                     e.getAttendance().getWorkDate(),
                     e.getBeforeEventType(), e.getBeforeRecordedAt(),
                     e.getAfterEventType(), e.getAfterRecordedAt(),
-                    e.getReason(), e.getCreatedBy(), e.getCreatedAt());
+                    e.getReason(), e.getCreatedBy(), editedByName, e.getCreatedAt());
         }
     }
 }

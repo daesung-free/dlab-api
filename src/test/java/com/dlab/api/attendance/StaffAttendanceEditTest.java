@@ -48,6 +48,7 @@ class StaffAttendanceEditTest {
     @Autowired StaffAttendanceService service;
     @Autowired MenuRepository menuRepository;
     @Autowired EntityManager em;
+    @Autowired com.dlab.domain.user.service.ActorNames actorNames;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
@@ -55,6 +56,7 @@ class StaffAttendanceEditTest {
     StaffAttendance record;
     AuthPrincipal editor;
     AuthPrincipal viewer;
+    Long editorAccountId;
 
     @BeforeEach
     void setUp() {
@@ -73,6 +75,7 @@ class StaffAttendanceEditTest {
         em.persist(record);
 
         editor = principalWithEditPermission("se-editor");
+        editorAccountId = editor.accountId();
         viewer = principalWithoutEditPermission("se-viewer");
         em.flush();
     }
@@ -190,6 +193,25 @@ class StaffAttendanceEditTest {
 
         var edited = service.editedIdsOf(List.of(record, untouched));
         assertThat(edited).containsExactly(record.getId());
+    }
+
+    @Test
+    @DisplayName("★ 고친 사람 이름이 함께 나온다 — 계정 id 만으로는 화면에 쓸 수 없다")
+    void resolvesEditorName() {
+        // 이 화면을 지점 관리자도 보는데 그 계정에 계정 목록 조회 권한이 없을 수 있다.
+        // 화면이 따로 맞춰야 하면 그 화면에서는 영원히 「-」가 된다
+        var names = actorNames.of(java.util.List.of(editorAccountId));
+
+        assertThat(names).containsEntry(editorAccountId, "관리자se-editor");
+    }
+
+    @Test
+    @DisplayName("★ 배치·시스템이 한 것은 이름이 빈다 — 「사람이 아니다」를 그것으로 안다")
+    void systemActorHasNoName() {
+        // 시스템 계정(0)은 조회에서 아예 제외한다 —
+        // null 로 두는 것과 「그냥 빠뜨렸다」가 섞이지 않게 한다
+        assertThat(actorNames.of(java.util.List.of(
+                com.dlab.common.config.SecurityAuditorAware.SYSTEM_ACCOUNT_ID))).isEmpty();
     }
 
     @Test
