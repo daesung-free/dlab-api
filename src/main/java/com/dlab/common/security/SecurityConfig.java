@@ -128,6 +128,11 @@ public class SecurityConfig {
                         //   로그인 전에 판단해야 하고, 로그인 API 자체가 점검으로 막혔을 수도 있다
                         .requestMatchers("/api/v1/app/app-config").permitAll()
                         // 외부 시스템 수신(키오스크 제외)은 자체 서명검증을 한다
+                        // ★ 긴급 출입 — 출입문 QR 로 여는 공개 페이지(긴급출입 1-6).
+                        //   문 앞에 선 학생이 앱을 깔고 로그인할 상황이 아니라 무인증이다.
+                        //   ⚠️ 그래서 시도 횟수 제한이 서비스에 들어 있다 — 제한이 없으면
+                        //   번호를 바꿔 가며 두드려 도어락 번호를 뽑아낼 수 있다
+                        .requestMatchers("/api/v1/public/**").permitAll()
                         .requestMatchers("/api/v1/webhook/**").permitAll()
                         // ★ 키오스크 신규 구획. 우리 JWT가 아니라 DSA 호환 토큰으로 인증한다 —
                         //   키오스크가 이미 그 토큰을 갖고 있고, JWT를 쓰게 하면 키오스크에
