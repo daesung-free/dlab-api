@@ -58,9 +58,20 @@ public class MenuAccessService {
                 .toList();
     }
 
+    /**
+     * 이 계정에 <b>화면 노출 제한</b>이 걸려 있나.
+     *
+     * <h2>★★ 동작 권한 행은 세지 않는다</h2>
+     * {@code account_menu} 에 두 축이 섞여 있다 — <b>화면 노출</b>(사이드바에 보일 메뉴)과
+     * <b>동작 권한</b>({@code action_only}, 예: 출근 기록 수정·아침 알림 수신).
+     *
+     * <p>행이 있는지만 보면 <b>동작 권한 하나를 켠 순간 그 계정 화면이 전부 사라진다</b> —
+     * 제한이 걸린 것으로 판정되고, 그 목록에 화면이 하나도 없기 때문이다. 최고관리자가
+     * 체크해서 정하라는 바로 그 두 권한이 그래서 쓸 수 없는 상태였다.
+     */
     @Transactional(readOnly = true)
     public boolean restricted(Long accountId) {
-        return !accountMenuRepository.findByAccountId(accountId).isEmpty();
+        return !withoutActionOnly(allowedMenus(accountId)).isEmpty();
     }
 
     /**
@@ -79,9 +90,11 @@ public class MenuAccessService {
      */
     @Transactional(readOnly = true)
     public List<Menu> visibleMenus(AuthPrincipal me) {
-        List<Menu> allowed = allowedMenus(me.accountId());
-        if (!allowed.isEmpty()) {
-            return withoutActionOnly(allowed);
+        // ★ 동작 권한만 켜져 있는 계정은 "제한 없음"이다 — 아래 restricted() 설명 참고.
+        //   화면 목록을 먼저 걸러서 보지 않으면 동작 권한 하나에 사이드바가 비어 버린다
+        List<Menu> allowedScreens = withoutActionOnly(allowedMenus(me.accountId()));
+        if (!allowedScreens.isEmpty()) {
+            return allowedScreens;
         }
         return withoutActionOnly(catalog().stream()
                 .filter(menu -> RoleMenuDefaults.visibleTo(menu.getCode(), me.roles()))
@@ -138,10 +151,19 @@ public class MenuAccessService {
      * 겪었다). 이제 {@code restricted} 로 뜻을 명시받고 <b>추측하지 않는다.</b>
      *
      * <ul>
-     *   <li>{@code restricted=false} — 개별 설정을 지우고 역할 기본값을 쓴다</li>
+     *   <li>{@code restricted=false} — 화면 개별 설정을 지우고 역할 기본값을 쓴다</li>
      *   <li>{@code restricted=true} + 코드 목록 — 그 메뉴만 열린다</li>
-     *   <li>{@code restricted=true} + 빈 목록 — <b>거부한다</b>(아래)</li>
+     *   <li>{@code restricted=true} + 화면 메뉴 없음 — <b>거부한다</b>(아래)</li>
      * </ul>
+     *
+     * <h2>★★ 동작 권한은 화면 제한과 다른 축이다</h2>
+     * {@code action_only} 메뉴(출근 기록 수정·아침 알림 수신)는 <b>{@code restricted} 와
+     * 무관하게 보낸 목록 그대로 저장된다.</b> 같이 지우면 <b>「역할 기본값 화면 + 이 동작 권한」</b>을
+     * 표현할 방법이 없어지는데, 그게 지점 관리자에게 가장 흔한 조합이다
+     * (기본 화면을 그대로 쓰면서 아침 알림만 받는다).
+     *
+     * <p>⚠️ 그래서 <b>동작 권한을 끄려면 목록에서 빼서 보내야 한다</b> —
+     * {@code restricted=false} 로 바꾸는 것만으로는 꺼지지 않는다.
      *
      * <p>★ <b>「직접 지정 + 0개」를 막는 이유</b> — 아무 메뉴도 못 보는 계정은 로그인해도 할
      * 일이 없다. 그 상황에서 맞는 조치는 <b>계정 정지</b>이고, 메뉴를 전부 빼는 것은 같은
@@ -158,7 +180,18 @@ public class MenuAccessService {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
-        if (restricted && (menuCodes == null || menuCodes.isEmpty())) {
+        List<String> codes = menuCodes == null ? List.of() : menuCodes;
+        List<Menu> menus = menuRepository.findByCodes(codes);
+        if (menus.size() != codes.stream().distinct().count()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "없는 메뉴 코드가 있습니다. 메뉴 목록을 다시 받아 주세요.");
+        }
+
+        // ★★ 두 축을 나눈다 — 동작 권한은 화면 제한과 함께 지워지면 안 된다
+        List<Menu> screens = menus.stream().filter(menu -> !menu.isActionOnly()).toList();
+        List<Menu> actions = menus.stream().filter(Menu::isActionOnly).toList();
+
+        if (restricted && screens.isEmpty()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
                     "메뉴를 하나 이상 골라야 합니다. 아무것도 보여주지 않으려면 계정을 정지해 주세요.");
         }
@@ -166,17 +199,13 @@ public class MenuAccessService {
         accountMenuRepository.deleteByAccountId(accountId);
         accountMenuRepository.flush();
 
-        if (!restricted) {
-            // 개별 설정을 지웠다 — 이제 역할 기본값이 내려간다
-            return List.of();
-        }
-        List<Menu> menus = menuRepository.findByCodes(menuCodes);
-        if (menus.size() != menuCodes.stream().distinct().count()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "없는 메뉴 코드가 있습니다. 메뉴 목록을 다시 받아 주세요.");
-        }
-        menus.forEach(menu -> accountMenuRepository.save(new AccountMenu(account, menu)));
-        return menus;
+        // 화면은 restricted 일 때만 남긴다. 동작 권한은 restricted 와 무관하게 보낸 그대로다 —
+        // 그래서 "역할 기본값 화면 + 이 동작 권한"이 표현된다(지점 관리자에게 가장 흔한 조합이다)
+        List<Menu> saved = restricted
+                ? java.util.stream.Stream.concat(screens.stream(), actions.stream()).toList()
+                : actions;
+        saved.forEach(menu -> accountMenuRepository.save(new AccountMenu(account, menu)));
+        return saved;
     }
 
     /** 내 자주 쓰는 메뉴. 정한 순서 그대로다. */

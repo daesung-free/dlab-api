@@ -57,15 +57,16 @@ public class AdminDoorRequestController {
      * @param studentName  <b>거절 건에서는 빈다</b> — 못 찾았으니 이름도 없다
      * @param phoneMasked  입력한 번호(마스킹). 이름이 빌 때 화면이 이 칸으로 대신 보여준다
      * @param needsBranchAction 지점이 조치해야 하는 건가 — 화면이 색을 달리해 묶는다
+     * @param requesterIp  <b>거절 건에만</b> 온다 — 아래 설명 참고
      */
     @io.swagger.v3.oas.annotations.media.Schema(name = "DoorRequestRow")
     public record RequestRow(Long id, Long academyId, String academyName,
                              Instant requestedAt, String studentName, String studentNo,
                              String phoneMasked,
                              DoorCodeRequestResult result, String resultLabel,
-                             boolean needsBranchAction) {
+                             boolean needsBranchAction, String requesterIp) {
 
-        static RequestRow from(DoorCodeRequest r) {
+        public static RequestRow from(DoorCodeRequest r) {
             var enrollment = r.getEnrollment();
             return new RequestRow(r.getId(), r.getAcademy().getId(), r.getAcademy().getAcadNm(),
                     r.getRequestedAt(),
@@ -73,7 +74,24 @@ public class AdminDoorRequestController {
                     enrollment == null ? null : enrollment.getStudentNo(),
                     r.getPhoneMasked(),
                     r.getResult(), r.getResult().label(),
-                    r.getResult().needsBranchAction());
+                    r.getResult().needsBranchAction(),
+                    ipOf(r));
+        }
+
+        /**
+         * 요청 IP — <b>거절 건에만 내린다.</b>
+         *
+         * <h2>★ 왜 필요한가</h2>
+         * 같은 IP 가 짧은 간격으로 <b>다른 번호</b>를 두드린 것이 공격이다. IP 가 없으면
+         * 그 두 건이 <b>서로 다른 두 학생이 각자 실수한 것</b>처럼 읽힌다 —
+         * 공격인지 아닌지가 이 한 칸으로 갈린다.
+         *
+         * <h2>★ 왜 제공 건에는 안 내리나</h2>
+         * 제공된 건은 <b>어느 학생인지 이미 안다</b>(이름·학번이 있다). IP 를 더해도
+         * 조치에 쓸 것이 없고, 개인정보를 한 칸 더 노출하는 것뿐이다.
+         */
+        private static String ipOf(DoorCodeRequest r) {
+            return r.getResult() == DoorCodeRequestResult.PROVIDED ? null : r.getRequesterIp();
         }
     }
 

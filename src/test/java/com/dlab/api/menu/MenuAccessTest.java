@@ -49,6 +49,7 @@ class MenuAccessTest {
     @Autowired EntityManager em;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired ObjectMapper objectMapper;
+    @Autowired com.dlab.domain.menu.repository.AccountMenuRepository accountMenuRepository;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
@@ -141,6 +142,67 @@ class MenuAccessTest {
         assertThat(codes).doesNotContain("EMERGENCY_ACCESS_ALERT");
         assertThat(menuAccessService.catalog()).extracting(
                 com.dlab.domain.menu.entity.Menu::getCode).contains("EMERGENCY_ACCESS_ALERT");
+    }
+
+    @Test
+    @DisplayName("★★ 동작 권한만 켜도 화면은 그대로다 — 켠 순간 사이드바가 비던 것을 고쳤다")
+    void actionOnlyGrantDoesNotHideScreens() {
+        int before = menuAccessService.visibleMenus(viewerPrincipal).size();
+
+        // 아침 알림 수신 권한만 켠다(화면 메뉴는 고르지 않는다)
+        menuAccessService.replace(superAdmin, viewer.getId(), false,
+                List.of("EMERGENCY_ACCESS_ALERT"));
+
+        // 화면은 역할 기본값 그대로여야 한다 —
+        // 행이 있는지만 보면 「제한 걸림」으로 판정돼 화면이 0개가 됐다
+        assertThat(menuAccessService.restricted(viewer.getId())).isFalse();
+        assertThat(menuAccessService.visibleMenus(viewerPrincipal)).hasSize(before);
+
+        // 동작 권한은 실제로 켜져 있다
+        assertThat(accountMenuRepository.hasMenu(viewer.getId(), "EMERGENCY_ACCESS_ALERT"))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("★ 화면 제한과 동작 권한을 함께 걸 수 있다 — 사이드바에는 화면만 나온다")
+    void screenRestrictionAndActionGrantCoexist() {
+        menuAccessService.replace(superAdmin, viewer.getId(), true,
+                List.of("attendance", "STAFF_ATTENDANCE_EDIT"));
+
+        assertThat(menuAccessService.restricted(viewer.getId())).isTrue();
+        assertThat(menuAccessService.visibleMenus(viewerPrincipal))
+                .extracting(com.dlab.domain.menu.entity.Menu::getCode)
+                .containsExactly("attendance");
+        assertThat(accountMenuRepository.hasMenu(viewer.getId(), "STAFF_ATTENDANCE_EDIT"))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("★ 화면 제한을 풀어도 동작 권한은 목록에서 빼야 꺼진다")
+    void clearingRestrictionKeepsListedActionGrants() {
+        menuAccessService.replace(superAdmin, viewer.getId(), true,
+                List.of("attendance", "EMERGENCY_ACCESS_ALERT"));
+
+        // 화면 제한만 푼다. 동작 권한은 그대로 보냈으므로 유지된다 —
+        // 같이 지우면 「역할 기본값 화면 + 이 동작 권한」을 표현할 방법이 없어진다
+        menuAccessService.replace(superAdmin, viewer.getId(), false,
+                List.of("EMERGENCY_ACCESS_ALERT"));
+        assertThat(menuAccessService.restricted(viewer.getId())).isFalse();
+        assertThat(accountMenuRepository.hasMenu(viewer.getId(), "EMERGENCY_ACCESS_ALERT"))
+                .isTrue();
+
+        // 끄려면 목록에서 뺀다
+        menuAccessService.replace(superAdmin, viewer.getId(), false, List.of());
+        assertThat(accountMenuRepository.hasMenu(viewer.getId(), "EMERGENCY_ACCESS_ALERT"))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("★ 동작 권한만 골라 「직접 지정」하면 거절한다 — 화면이 0개가 된다")
+    void rejectsRestrictedWithOnlyActionMenus() {
+        assertThatThrownBy(() -> menuAccessService.replace(superAdmin, viewer.getId(), true,
+                List.of("STAFF_ATTENDANCE_EDIT")))
+                .hasMessageContaining("하나 이상");
     }
 
     @Test
