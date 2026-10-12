@@ -21,6 +21,22 @@ public interface StaffAttendanceRepository extends JpaRepository<StaffAttendance
     Optional<StaffAttendance> findLastOfDay(@Param("enrollmentId") Long enrollmentId,
                                             @Param("workDate") LocalDate workDate);
 
+    /**
+     * 그날 그 지점의 출근(IN) 건수 — 오전 출근 확인(07:05)이 본다.
+     *
+     * <p>★ <b>건수를 센다.</b> "있나/없나"만 보면 경계에서 되짚을 근거가 없고,
+     * 기록에 숫자를 남겨야 "정말 아무도 없었나"에 답할 수 있다.
+     */
+    @Query("""
+            SELECT COUNT(a) FROM StaffAttendance a
+            WHERE a.academy.id = :academyId
+              AND a.workDate = :workDate
+              AND a.eventType = com.dlab.domain.attendance.entity.StaffAttendanceType.IN
+              AND a.deleted = false
+            """)
+    int countArrivalsOfDay(@Param("academyId") Long academyId,
+                           @Param("workDate") LocalDate workDate);
+
     /** 관리자 조회 — 지점·기간. 직원별로 묶는 건 표현 계층이 한다. */
     @Query("""
             SELECT a FROM StaffAttendance a
