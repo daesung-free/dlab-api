@@ -260,6 +260,29 @@ class DoorCodeRequestTest {
     }
 
     @Test
+    @DisplayName("★ IP 는 거절 건에만 내린다 — 제공 건은 누구인지 이미 알아서 더할 것이 없다")
+    void exposesIpOnlyForRejections() {
+        enroll("DR-11", phone("9090"), true);
+        requestService.request(academy.getAcadCd(), digits("9090"), ip);   // 제공
+        requestService.request(academy.getAcadCd(), "01000000000", ip);    // 거절
+        em.flush();
+
+        var rows = requestService.history(admin, academy.getId(),
+                java.time.LocalDate.now(), java.time.LocalDate.now()).stream()
+                .map(com.dlab.api.admin.access.AdminDoorRequestController.RequestRow::from)
+                .toList();
+
+        var provided = rows.stream()
+                .filter(r -> r.result() == DoorCodeRequestResult.PROVIDED).findFirst().orElseThrow();
+        var rejected = rows.stream()
+                .filter(r -> r.result() == DoorCodeRequestResult.NOT_FOUND).findFirst().orElseThrow();
+
+        // 공격 판별에 필요한 쪽에만 있다 — 같은 IP 가 다른 번호를 두드린 것이 보여야 한다
+        assertThat(rejected.requesterIp()).isEqualTo(ip);
+        assertThat(provided.requesterIp()).isNull();
+    }
+
+    @Test
     @DisplayName("없는 지점코드는 오류다 — QR 을 잘못 읽은 경우다")
     void rejectsUnknownAcademy() {
         assertThatThrownBy(() -> requestService.request("99", digits("1111"), ip))
@@ -276,7 +299,13 @@ class DoorCodeRequestTest {
         return "010" + mid + phoneTail;
     }
 
+    /**
+     * ★ <b>공간을 넓게 쓴다.</b> 한 옥텟(250가지)만 무작위로 하면 테스트끼리 IP 가 겹쳐,
+     * 시도 제한을 일부러 넘기는 테스트가 태운 횟수가 <b>엉뚱한 테스트에 걸린다</b>
+     * (실제로 그렇게 깨졌다). Redis 라 롤백도 되지 않아 창(75분)이 다음 실행까지 남는다.
+     */
     private static String randomIp() {
-        return "198.51.100." + (int) (Math.random() * 250 + 1);
+        var rnd = java.util.concurrent.ThreadLocalRandom.current();
+        return "10.%d.%d.%d".formatted(rnd.nextInt(256), rnd.nextInt(256), rnd.nextInt(1, 255));
     }
 }
