@@ -266,7 +266,10 @@ public class MenuAccessService {
      */
     @Transactional(readOnly = true)
     public boolean allows(Long accountId, String requestUri) {
-        List<Menu> allowed = allowedMenus(accountId);
+        // ★★ 화면 메뉴만 본다. 원시 행을 보면 **동작 권한 하나를 켠 계정이 모든 화면 API 에서
+        //   403 을 받는다** — 제한이 걸린 것으로 판정되고 그 목록에 화면이 없기 때문이다.
+        //   restricted()·visibleMenus() 와 같은 판정을 써야 세 곳이 어긋나지 않는다
+        List<Menu> allowed = withoutActionOnly(allowedMenus(accountId));
         if (allowed.isEmpty()) {
             return true;
         }

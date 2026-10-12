@@ -164,6 +164,20 @@ class MenuAccessTest {
     }
 
     @Test
+    @DisplayName("★★ 동작 권한만 켠 계정도 화면 API 를 부를 수 있다 — 전부 403 이 되던 것을 고쳤다")
+    void actionOnlyGrantDoesNotBlockScreenApis() {
+        menuAccessService.replace(superAdmin, viewer.getId(), false,
+                List.of("EMERGENCY_ACCESS_ALERT"));
+
+        // 원시 행을 보면 「제한 걸림」으로 판정돼 경로 주인이 목록에 없다고 막았다.
+        // 사이드바·판정·경로차단 셋이 같은 기준을 써야 어긋나지 않는다
+        assertThat(menuAccessService.allows(viewer.getId(), "/api/v1/admin/attendance/daily"))
+                .isTrue();
+        assertThat(menuAccessService.allows(viewer.getId(), "/api/v1/admin/staff-attendance/records"))
+                .isTrue();
+    }
+
+    @Test
     @DisplayName("★ 화면 제한과 동작 권한을 함께 걸 수 있다 — 사이드바에는 화면만 나온다")
     void screenRestrictionAndActionGrantCoexist() {
         menuAccessService.replace(superAdmin, viewer.getId(), true,
