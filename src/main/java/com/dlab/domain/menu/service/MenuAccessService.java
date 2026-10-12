@@ -81,11 +81,22 @@ public class MenuAccessService {
     public List<Menu> visibleMenus(AuthPrincipal me) {
         List<Menu> allowed = allowedMenus(me.accountId());
         if (!allowed.isEmpty()) {
-            return allowed;
+            return withoutActionOnly(allowed);
         }
-        return catalog().stream()
+        return withoutActionOnly(catalog().stream()
                 .filter(menu -> RoleMenuDefaults.visibleTo(menu.getCode(), me.roles()))
-                .toList();
+                .toList());
+    }
+
+    /**
+     * 화면 없는 권한을 뺀다 — 사이드바·자주 쓰는 메뉴용.
+     *
+     * <p>★ <b>서버에서 뺀다.</b> 화면이 거르게 맡기면 한 곳에서 잊는 순간 <b>눌러도 갈 데가
+     * 없는 항목이 사이드바에 생기고</b>, 쓰는 쪽은 그것을 고장으로 읽는다.
+     * 권한 체크박스 목록은 {@link #catalog()}를 쓰므로 그쪽에는 그대로 나온다.
+     */
+    private static List<Menu> withoutActionOnly(List<Menu> menus) {
+        return menus.stream().filter(menu -> !menu.isActionOnly()).toList();
     }
 
     /**
@@ -121,11 +132,24 @@ public class MenuAccessService {
     /**
      * 설정을 통째로 바꾼다.
      *
-     * <p><b>빈 목록은 "제한 해제"</b>다. 지정한 메뉴만 남기고 나머지는 지운다 — 더하기·빼기로
-     * 두면 화면이 현재 상태를 정확히 모를 때 의도하지 않은 조합이 남는다.
+     * <h2>★ 「기본값 사용」과 「아무것도 못 봄」은 다른 뜻이다</h2>
+     * 예전에는 <b>빈 목록 하나에 두 뜻이 겹쳐</b> 있었다 — 비우면 제한이 풀렸다. 그래서
+     * 화면의 「전체 해제」를 누르고 저장하면 <b>의도와 정반대로 전부 열렸다</b>(프론트가 실제로
+     * 겪었다). 이제 {@code restricted} 로 뜻을 명시받고 <b>추측하지 않는다.</b>
+     *
+     * <ul>
+     *   <li>{@code restricted=false} — 개별 설정을 지우고 역할 기본값을 쓴다</li>
+     *   <li>{@code restricted=true} + 코드 목록 — 그 메뉴만 열린다</li>
+     *   <li>{@code restricted=true} + 빈 목록 — <b>거부한다</b>(아래)</li>
+     * </ul>
+     *
+     * <p>★ <b>「직접 지정 + 0개」를 막는 이유</b> — 아무 메뉴도 못 보는 계정은 로그인해도 할
+     * 일이 없다. 그 상황에서 맞는 조치는 <b>계정 정지</b>이고, 메뉴를 전부 빼는 것은 같은
+     * 결과를 더 알아보기 어렵게 만든다(화면에는 "권한 없음"만 보이고 왜인지가 안 남는다).
      */
     @Transactional
-    public List<Menu> replace(AuthPrincipal me, Long accountId, List<String> menuCodes) {
+    public List<Menu> replace(AuthPrincipal me, Long accountId,
+                              boolean restricted, List<String> menuCodes) {
         if (!me.roles().contains(Role.SUPER_ADMIN)) {
             // 지점 관리자가 남의 노출 범위를 바꾸면 사실상 권한 관리가 지점으로 내려간다
             throw new BusinessException(ErrorCode.FORBIDDEN,
@@ -134,10 +158,16 @@ public class MenuAccessService {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
+        if (restricted && (menuCodes == null || menuCodes.isEmpty())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "메뉴를 하나 이상 골라야 합니다. 아무것도 보여주지 않으려면 계정을 정지해 주세요.");
+        }
+
         accountMenuRepository.deleteByAccountId(accountId);
         accountMenuRepository.flush();
 
-        if (menuCodes == null || menuCodes.isEmpty()) {
+        if (!restricted) {
+            // 개별 설정을 지웠다 — 이제 역할 기본값이 내려간다
             return List.of();
         }
         List<Menu> menus = menuRepository.findByCodes(menuCodes);
@@ -180,7 +210,8 @@ public class MenuAccessService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
 
         // 역할 기본값까지 반영된 목록으로 거른다 — 담을 수 없는 메뉴를 담으면
-        // 눌렀을 때 403 이 나는 칸이 대시보드에 남는다
+        // 눌렀을 때 403 이 나는 칸이 대시보드에 남는다.
+        // 화면 없는 권한은 이 목록에서 이미 빠져 있어 담으려 하면 거절된다
         List<Menu> visible = visibleMenus(me);
         List<Menu> picked = new java.util.ArrayList<>();
         short order = 0;

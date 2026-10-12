@@ -44,6 +44,18 @@ public class Menu extends BaseEntity {
     private short sortOrder;
 
     /**
+     * 화면 없는 권한인가.
+     *
+     * <p>★ <b>{@link #enforceable()} 과 다른 축이다.</b> 그쪽은 "서버가 막을 수 있나"이고
+     * (화면이 있는 메뉴도 접두사가 없으면 false 가 된다), 이쪽은 "누를 화면이 있나"다.
+     *
+     * <p>{@code true} 면 <b>권한 체크박스 목록에는 나오고 사이드바·자주 쓰는 메뉴에서는
+     * 빠진다.</b> 갈 데가 없는 항목이 사이드바에 생기면 고장으로 읽힌다.
+     */
+    @Column(name = "action_only", nullable = false)
+    private boolean actionOnly = false;
+
+    /**
      * 이 요청이 이 메뉴에 속하는가. 접두사가 없으면 서버는 판단하지 않는다.
      *
      * <p>★ <b>경계를 본다.</b> 단순 {@code startsWith} 면 {@code /staff} 가
