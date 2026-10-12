@@ -19,6 +19,21 @@ public interface AccountMenuRepository extends JpaRepository<AccountMenu, Accoun
     void deleteByAccountId(Long accountId);
 
     /**
+     * 그 계정이 이 권한을 <b>명시적으로</b> 갖고 있나 — 동작 권한 검사용.
+     *
+     * <p>★ <b>역할 기본값을 보지 않는다.</b> {@code RoleMenuDefaults} 는 표에 없는 메뉴를
+     * 전 역할에 보이므로, 그 규칙으로 「고칠 수 있나」를 판단하면 <b>개별 설정이 없는
+     * 모든 계정이 고칠 수 있게 된다.</b> 「최고관리자가 체크해서 정한다」는 요구사항과도
+     * 명시적 부여가 맞다.
+     */
+    @Query("""
+            SELECT COUNT(am) > 0 FROM AccountMenu am
+            JOIN am.menu m
+            WHERE am.account.id = :accountId AND m.code = :menuCode
+            """)
+    boolean hasMenu(@Param("accountId") Long accountId, @Param("menuCode") String menuCode);
+
+    /**
      * 그 권한을 <b>명시적으로 부여받은</b> 계정 — 알림 수신 대상 해석용.
      *
      * <h2>★★ 역할 기본값으로는 주지 않는다</h2>
