@@ -121,15 +121,27 @@ public class DoorCodeService {
      * <p>★ <b>따로 빼 둔 이유</b>는 테스트에서 이것만 고정하기 위해서다. 시계를 통째로
      * 바꾸면 같은 컨텍스트의 다른 판정(감사로그 시각·배치 기준일)까지 흔들린다.
      */
+    public interface OpenWindow {
+
+        boolean isOpen();
+    }
+
+    /** 실제 판정 — 서버 시각이 06:59~08:00(KST) 안인가. */
     @org.springframework.stereotype.Component
     @RequiredArgsConstructor
-    public static class OpenWindow {
+    public static class ScheduledOpenWindow implements OpenWindow {
 
         private final Clock clock;
 
+        @Override
         public boolean isOpen() {
             LocalTime now = LocalTime.now(clock.withZone(ZoneId.of("Asia/Seoul")));
             return !now.isBefore(OPEN_FROM) && now.isBefore(OPEN_UNTIL);
+        }
+
+        /** 화면·안내에 쓸 실제 창. */
+        public static String describe() {
+            return "%s~%s".formatted(OPEN_FROM, OPEN_UNTIL);
         }
     }
 
