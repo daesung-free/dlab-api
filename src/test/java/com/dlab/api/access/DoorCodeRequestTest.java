@@ -49,7 +49,7 @@ class DoorCodeRequestTest {
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
     /** 제공 시간 판정만 고정한다 — 시계를 통째로 바꾸면 다른 판정까지 흔들린다 */
-    @MockitoBean DoorCodeService.OpenWindow openWindow;
+    @MockitoBean DoorCodeService.ScheduledOpenWindow openWindow;
 
     Academy academy;
     AuthPrincipal admin;
@@ -203,8 +203,14 @@ class DoorCodeRequestTest {
         requestService.request(academy.getAcadCd(), digits("8888"), ip);
         em.flush();
 
-        var row = requestService.history(admin, academy.getId(),
-                java.time.LocalDate.now(), java.time.LocalDate.now()).get(0);
+        var rows = requestService.history(admin, academy.getId(),
+                java.time.LocalDate.now(), java.time.LocalDate.now());
+        // 순서에 기대지 않는다 — 판정이 어긋나면 어느 사유였는지가 메시지에 남아야 한다
+        var row = rows.stream()
+                .filter(r -> r.getResult() == DoorCodeRequestResult.PROVIDED)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("제공된 건이 없다. 실제 사유: "
+                        + rows.stream().map(r -> r.getResult().name()).toList()));
 
         // 번호 대신 이력 행을 가리킨다 — "그때 어떤 번호였나"는 그걸로 추적한다
         assertThat(row.getDoorCode()).isNotNull();
