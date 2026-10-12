@@ -38,4 +38,7 @@ public interface AcademyRepository extends JpaRepository<Academy, Long> {
 
     /** 홈페이지 입학예약 학원코드로 지점을 찾는다. 키오스크 acadCd와 다른 값이다. */
     Optional<Academy> findByDlabCdAndDeletedFalse(String dlabCd);
+
+    /** 키오스크 지점코드(31~48)로 찾는다 — 출입문 QR 이 이 값을 담는다. */
+    Optional<Academy> findByAcadCdAndDeletedFalse(String acadCd);
 }

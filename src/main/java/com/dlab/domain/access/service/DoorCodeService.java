@@ -53,6 +53,7 @@ public class DoorCodeService {
     private final AcademyRepository academyRepository;
     private final SecretCipher cipher;
     private final Clock clock;
+    private final OpenWindow openWindow;
 
     /**
      * 번호 등록·교체.
@@ -111,8 +112,25 @@ public class DoorCodeService {
 
     /** 지금이 제공 시간인가 — <b>서버 시각 기준</b>(요구사항 1-4). */
     public boolean withinOpenWindow() {
-        LocalTime now = LocalTime.now(clock.withZone(ZoneId.of("Asia/Seoul")));
-        return !now.isBefore(OPEN_FROM) && now.isBefore(OPEN_UNTIL);
+        return openWindow.isOpen();
+    }
+
+    /**
+     * 제공 시간 판정.
+     *
+     * <p>★ <b>따로 빼 둔 이유</b>는 테스트에서 이것만 고정하기 위해서다. 시계를 통째로
+     * 바꾸면 같은 컨텍스트의 다른 판정(감사로그 시각·배치 기준일)까지 흔들린다.
+     */
+    @org.springframework.stereotype.Component
+    @RequiredArgsConstructor
+    public static class OpenWindow {
+
+        private final Clock clock;
+
+        public boolean isOpen() {
+            LocalTime now = LocalTime.now(clock.withZone(ZoneId.of("Asia/Seoul")));
+            return !now.isBefore(OPEN_FROM) && now.isBefore(OPEN_UNTIL);
+        }
     }
 
     /**
@@ -130,6 +148,15 @@ public class DoorCodeService {
     @Transactional(readOnly = true)
     public java.util.Optional<BranchDoorCode> current(AuthPrincipal me, Long academyId) {
         return repository.findCurrent(me.requireAcademyScope(academyId));
+    }
+
+    /**
+     * 이력 행 참조 — 요청 기록이 「그때 어떤 번호였나」를 가리키는 데 쓴다.
+     *
+     * <p><b>번호를 돌려주지 않는다.</b> 요청 기록에 평문을 남기면 암호화한 의미가 사라진다.
+     */
+    public BranchDoorCode referenceOf(Long codeId) {
+        return repository.getReferenceById(codeId);
     }
 
     // ─────────────────────────────────────────────────────────
