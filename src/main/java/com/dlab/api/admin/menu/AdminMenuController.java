@@ -94,34 +94,58 @@ public class AdminMenuController {
     /**
      * 설정을 통째로 바꾼다.
      *
-     * <p><b>빈 목록을 보내면 제한이 풀린다</b>(역할 권한 그대로). 더하기·빼기가 아니라
-     * 교체다 — 화면이 현재 상태를 정확히 모를 때 의도하지 않은 조합이 남지 않게.
+     * <h2>★ {@code restricted} 로 뜻을 명시한다</h2>
+     * 예전에는 <b>빈 목록 하나에 두 뜻이 겹쳐</b> 있었다 — 비우면 제한이 풀렸다.
+     * 그래서 화면의 「전체 해제」를 누르고 저장하면 <b>정반대로 전부 열렸다.</b>
+     *
+     * <pre>
+     * {"restricted": false, "menuCodes": []}                  → 기본값 사용(개별 설정 삭제)
+     * {"restricted": true,  "menuCodes": ["student","meal"]}   → 이 둘만
+     * {"restricted": true,  "menuCodes": []}                   → 400 (계정 정지로 처리할 것)
+     * </pre>
+     *
+     * <p><b>{@code restricted} 는 필수다.</b> 없으면 400 이다 — 추측하면 그 추측이 다시
+     * 같은 함정이 된다. 더하기·빼기가 아니라 교체다.
      */
     @PutMapping("/staff/accounts/{accountId}/menus")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ApiResponse<AccountMenuView> replace(@CurrentAccount AuthPrincipal me,
                                                 @PathVariable Long accountId,
                                                 @RequestBody MenuCodes request) {
-        List<Menu> allowed = menuAccessService.replace(me, accountId, request.menuCodes());
+        if (request.restricted() == null) {
+            throw new com.dlab.common.exception.BusinessException(
+                    com.dlab.common.exception.ErrorCode.INVALID_REQUEST,
+                    "restricted 를 함께 보내 주세요. true=이 계정만 직접 지정, false=역할 기본값 사용");
+        }
+        List<Menu> allowed = menuAccessService.replace(
+                me, accountId, request.restricted(), request.menuCodes());
         return ApiResponse.success(new AccountMenuView(accountId, !allowed.isEmpty(),
                 allowed.stream().map(MenuView::from).toList(),
                 menuAccessService.roleDefaults(accountId).stream().map(MenuView::from).toList()));
     }
 
-    /** @param menuCodes 허용할 메뉴 코드. 비우면 제한 해제다 */
-    public record MenuCodes(List<String> menuCodes) {
+    /**
+     * @param restricted <b>필수.</b> {@code true}=이 계정만 직접 지정, {@code false}=역할 기본값 사용.
+     *                   {@code null} 이면 400 — 빈 목록의 뜻을 추측하지 않는다
+     * @param menuCodes  허용할 메뉴 코드. {@code restricted=false} 면 무시된다
+     */
+    public record MenuCodes(Boolean restricted, List<String> menuCodes) {
     }
 
     /**
      * @param enforceable 서버가 실제로 막을 수 있는 메뉴인가. {@code false} 면 <b>화면에서만</b>
      *                    감춰진다 — 경로가 등록되지 않은 메뉴다
+     * @param actionOnly  <b>화면 없는 권한</b>인가(알림 수신·기록 수정 같은 것).
+     *                    권한 체크박스 목록에는 나오고 <b>사이드바·자주 쓰는 메뉴에서는 서버가
+     *                    빼서 내린다</b> — 화면이 따로 거를 필요가 없다.
+     *                    {@code enforceable} 과 다른 축이다
      */
     public record MenuView(String code, String name, String parentCode,
-                           short sortOrder, boolean enforceable) {
+                           short sortOrder, boolean enforceable, boolean actionOnly) {
 
         static MenuView from(Menu m) {
             return new MenuView(m.getCode(), m.getName(), m.getParentCode(),
-                    m.getSortOrder(), m.enforceable());
+                    m.getSortOrder(), m.enforceable(), m.isActionOnly());
         }
     }
 
