@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminDoorCodeController {
 
     private final DoorCodeService doorCodeService;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
 
     /**
      * 번호 등록·교체.
@@ -47,8 +48,8 @@ public class AdminDoorCodeController {
     public ApiResponse<DoorCodeView> register(@CurrentAccount AuthPrincipal me,
                                               @RequestParam(required = false) Long academyId,
                                               @Valid @RequestBody CodeRequest request) {
-        return ApiResponse.success(DoorCodeView.from(
-                doorCodeService.register(me, academyId, request.code())));
+        BranchDoorCode saved = doorCodeService.register(me, academyId, request.code());
+        return ApiResponse.success(DoorCodeView.of(saved, actorNames(List.of(saved))));
     }
 
     /**
@@ -61,7 +62,7 @@ public class AdminDoorCodeController {
     public ApiResponse<DoorCodeView> current(@CurrentAccount AuthPrincipal me,
                                              @RequestParam(required = false) Long academyId) {
         return ApiResponse.success(doorCodeService.current(me, academyId)
-                .map(DoorCodeView::from)
+                .map(code -> DoorCodeView.of(code, actorNames(List.of(code))))
                 .orElse(null));
     }
 
@@ -69,9 +70,37 @@ public class AdminDoorCodeController {
     @GetMapping("/history")
     public ApiResponse<List<DoorCodeView>> history(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Long academyId) {
-        return ApiResponse.success(doorCodeService.history(me, academyId).stream()
-                .map(DoorCodeView::from)
+        List<BranchDoorCode> history = doorCodeService.history(me, academyId);
+        var names = actorNames(history);
+        return ApiResponse.success(history.stream()
+                .map(code -> DoorCodeView.of(code, names))
                 .toList());
+    }
+
+    /**
+     * 바꾼 사람 이름 — <b>한 번에</b> 받아 붙인다.
+     *
+     * <p>이력 50줄에 계정마다 조회하면 쿼리가 50번 나간다(감사 로그와 같은 방식).
+     * <b>시스템 계정({@code 0})은 조회하지 않는다</b> — 그 id 의 계정은 없고,
+     * 이름이 비어 있는 것이 곧 "사람이 아니다"라는 뜻이다.
+     */
+    private java.util.Map<Long, String> actorNames(List<BranchDoorCode> codes) {
+        var ids = codes.stream()
+                .map(BranchDoorCode::getCreatedBy)
+                .filter(java.util.Objects::nonNull)
+                .filter(id -> !id.equals(
+                        com.dlab.common.config.SecurityAuditorAware.SYSTEM_ACCOUNT_ID))
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return java.util.Map.of();
+        }
+        java.util.Map<Long, String> names = new java.util.HashMap<>();
+        for (Object[] row : accountRepository.findActorNames(ids)) {
+            if (row[1] != null) {
+                names.put((Long) row[0], (String) row[1]);
+            }
+        }
+        return names;
     }
 
     /** @param code 숫자 4~12자리. 공백·하이픈이 섞여도 된다 */
@@ -79,13 +108,19 @@ public class AdminDoorCodeController {
     }
 
     /**
-     * @param changedBy 바꾼 계정. 배치·시스템이면 {@code 0} 이다
+     * @param changedBy     바꾼 계정 id. 배치·시스템이면 {@code 0} 이다
+     * @param changedByName 바꾼 사람 이름. <b>시스템이거나 계정이 지워졌으면 비어 있다</b> —
+     *                      화면은 그때 「시스템」이나 「-」로 그리면 된다.
+     *                      이름을 함께 내리는 이유는 <b>이력 화면을 지점 관리자도 보는데
+     *                      그 계정에는 계정 목록 조회 권한이 없을 수 있어서</b>다
      */
-    public record DoorCodeView(Long id, Long academyId, Instant appliedAt, Long changedBy) {
+    public record DoorCodeView(Long id, Long academyId, Instant appliedAt,
+                               Long changedBy, String changedByName) {
 
-        static DoorCodeView from(BranchDoorCode c) {
+        static DoorCodeView of(BranchDoorCode c, java.util.Map<Long, String> names) {
             return new DoorCodeView(c.getId(), c.getAcademy().getId(),
-                    c.getAppliedAt(), c.getCreatedBy());
+                    c.getAppliedAt(), c.getCreatedBy(),
+                    c.getCreatedBy() == null ? null : names.get(c.getCreatedBy()));
         }
     }
 }

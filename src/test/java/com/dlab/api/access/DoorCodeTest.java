@@ -42,6 +42,7 @@ class DoorCodeTest {
     @Autowired DoorCodeService doorCodeService;
     @Autowired SecretCipher cipher;
     @Autowired EntityManager em;
+    @Autowired com.dlab.domain.user.repository.AccountRepository accountRepository;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
@@ -160,6 +161,40 @@ class DoorCodeTest {
         assertThatThrownBy(() ->
                 doorCodeService.register(branchAdmin, other.getId(), "9999"))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("★ 이름 조회가 계정 유형을 가로질러 돈다 — 응답의 changedByName 이 이걸 쓴다")
+    void resolvesActorName() {
+        // 이력 화면을 지점 관리자도 보는데 그 계정에는 계정 목록 조회 권한이 없을 수 있다.
+        // 이름을 화면이 따로 맞춰야 하면 그 화면에서 영원히 「-」가 된다 — 그래서 함께 내린다
+        com.dlab.domain.user.entity.Employee employee =
+                new com.dlab.domain.user.entity.Employee(academy, "도어락담당");
+        em.persist(employee);
+        com.dlab.domain.user.entity.Account account =
+                com.dlab.domain.user.entity.Account.forEmployee(employee, "dc-staff", "x", false);
+        em.persist(account);
+        em.flush();
+
+        var rows = accountRepository.findActorNames(java.util.Set.of(account.getId()));
+
+        assertThat(rows).hasSize(1);
+        assertThat((Long) rows.get(0)[0]).isEqualTo(account.getId());
+        assertThat((String) rows.get(0)[1]).isEqualTo("도어락담당");
+    }
+
+    @Test
+    @DisplayName("배치·시스템이 넣은 행은 이름이 빈다 — 「사람이 아니다」를 그것으로 안다")
+    void systemActorHasNoName() {
+        // 서비스를 직접 부르면 보안 컨텍스트가 없어 시스템 계정(0)으로 기록된다.
+        // 그 id 의 계정은 존재하지 않으므로 이름 조회에서 아무것도 나오지 않아야 한다
+        var saved = doorCodeService.register(branchAdmin, academy.getId(), "4321");
+        em.flush();
+
+        assertThat(saved.getCreatedBy())
+                .isEqualTo(com.dlab.common.config.SecurityAuditorAware.SYSTEM_ACCOUNT_ID);
+        assertThat(accountRepository.findActorNames(
+                java.util.Set.of(saved.getCreatedBy()))).isEmpty();
     }
 
     private static String sha256(String value) {
