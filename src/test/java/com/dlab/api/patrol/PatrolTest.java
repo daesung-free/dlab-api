@@ -94,9 +94,9 @@ class PatrolTest {
                 List.of(new MarkCommand(minji.getId(), "A01", PatrolMark.TOILET)));
         em.flush();
 
-        var round1 = patrolService.records(teacher, academy.getId(), today, (short) 1);
-        var round3 = patrolService.records(teacher, academy.getId(), today, (short) 3);
-        var all = patrolService.records(teacher, academy.getId(), today, null);
+        var round1 = patrolService.records(teacher, academy.getId(), today, (short) 1, null);
+        var round3 = patrolService.records(teacher, academy.getId(), today, (short) 3, null);
+        var all = patrolService.records(teacher, academy.getId(), today, null, null);
 
         assertThat(round1).singleElement()
                 .extracting(r -> r.getMark()).isEqualTo(PatrolMark.SLEEP);
@@ -118,7 +118,7 @@ class PatrolTest {
                 List.of(new MarkCommand(minji.getId(), "A02", PatrolMark.NONE)));
         em.flush();
 
-        var records = patrolService.records(teacher, academy.getId(), today, (short) 1);
+        var records = patrolService.records(teacher, academy.getId(), today, (short) 1, null);
 
         assertThat(records).hasSize(1);
         assertThat(records.get(0).getMark()).isEqualTo(PatrolMark.NONE);
@@ -134,7 +134,7 @@ class PatrolTest {
                 List.of(new MarkCommand(minji.getId(), "A01", PatrolMark.SLEEP)));
         em.flush();
 
-        var record = patrolService.records(teacher, academy.getId(), today, (short) 1).get(0);
+        var record = patrolService.records(teacher, academy.getId(), today, (short) 1, null).get(0);
 
         assertThat(record.getEnrollment().getId()).isEqualTo(minji.getId());
         // 좌석은 「그때 어느 자리였나」의 기록이다 — 참조가 아니다
@@ -152,7 +152,7 @@ class PatrolTest {
         em.flush();
 
         assertThat(saved).hasSize(2);
-        assertThat(patrolService.records(teacher, academy.getId(), today, (short) 2)).hasSize(2);
+        assertThat(patrolService.records(teacher, academy.getId(), today, (short) 2, null)).hasSize(2);
     }
 
     @Test
@@ -187,7 +187,7 @@ class PatrolTest {
                 List.of(new MarkCommand(minji.getId(), "A01", PatrolMark.NONE)));
         em.flush();
 
-        assertThat(patrolService.records(teacher, academy.getId(), null, (short) 1))
+        assertThat(patrolService.records(teacher, academy.getId(), null, (short) 1, null))
                 .singleElement()
                 .extracting(r -> r.getPatrolDate()).isEqualTo(LocalDate.now());
     }
@@ -199,6 +199,65 @@ class PatrolTest {
         assertThat(PatrolMark.NONE.away()).isFalse();
         assertThat(PatrolMark.TOILET.away()).isTrue();
         assertThat(PatrolMark.CONSULT.away()).isTrue();
+    }
+
+    @Test
+    @DisplayName("★★ 회차를 비우는 것은 별 경로다 — 빈 목록 저장으로 지워지면 화면 버그가 회차를 날린다")
+    void clearRoundIsExplicit() {
+        LocalDate today = LocalDate.now();
+        patrolService.record(teacher, academy.getId(), today, (short) 1,
+                List.of(new MarkCommand(minji.getId(), "A01", PatrolMark.SLEEP),
+                        new MarkCommand(seojun.getId(), "A02", PatrolMark.NONE)));
+        em.flush();
+
+        // 빈 목록 저장으로는 안 지워진다 — 목록을 만드는 코드가 빈 배열을 보내는 실수는 흔하고,
+        // 그때 사감이 한 시간 돌며 찍은 것이 사라지면 안 된다
+        assertThatThrownBy(() -> patrolService.record(teacher, academy.getId(), today,
+                (short) 1, List.of()))
+                .hasMessageContaining("좌석을 골라");
+        assertThat(patrolService.records(teacher, academy.getId(), today, (short) 1, null))
+                .hasSize(2);
+
+        // 지우겠다고 말해야 지워진다
+        int cleared = patrolService.clearRound(teacher, academy.getId(), today, (short) 1);
+        em.flush();
+
+        assertThat(cleared).isEqualTo(2);
+        assertThat(patrolService.records(teacher, academy.getId(), today, (short) 1, null))
+                .isEmpty();
+    }
+
+    @Test
+    @DisplayName("비운 회차에 다시 찍을 수 있다 — soft delete 가 유니크 제약을 막지 않는다")
+    void canRemarkAfterClear() {
+        LocalDate today = LocalDate.now();
+        patrolService.record(teacher, academy.getId(), today, (short) 1,
+                List.of(new MarkCommand(minji.getId(), "A01", PatrolMark.SLEEP)));
+        em.flush();
+        patrolService.clearRound(teacher, academy.getId(), today, (short) 1);
+        em.flush();
+
+        patrolService.record(teacher, academy.getId(), today, (short) 1,
+                List.of(new MarkCommand(minji.getId(), "A01", PatrolMark.NONE)));
+        em.flush();
+
+        assertThat(patrolService.records(teacher, academy.getId(), today, (short) 1, null))
+                .singleElement()
+                .extracting(r -> r.getMark()).isEqualTo(PatrolMark.NONE);
+    }
+
+    @Test
+    @DisplayName("★ 묶음은 서버가 내린다 — 화면이 코드로 묶으면 상태가 늘 때 조용히 빠진다")
+    void groupsAreServerSide() {
+        assertThat(PatrolMark.SLEEP.group()).isEqualTo(PatrolMark.Group.WARN);
+        assertThat(PatrolMark.QNA.group()).isEqualTo(PatrolMark.Group.INSIDE);
+        assertThat(PatrolMark.TOILET.group()).isEqualTo(PatrolMark.Group.BRIEF);
+        assertThat(PatrolMark.OUTING.group()).isEqualTo(PatrolMark.Group.OUTSIDE);
+        assertThat(PatrolMark.NONE.group()).isEqualTo(PatrolMark.Group.OK);
+
+        // 모든 상태에 묶음이 있어야 한다 — 빠지면 화면에서 색 없는 칸이 생긴다
+        assertThat(java.util.Arrays.stream(PatrolMark.values()))
+                .allMatch(m -> m.group() != null);
     }
 
     @Test

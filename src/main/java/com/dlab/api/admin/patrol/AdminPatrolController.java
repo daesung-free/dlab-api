@@ -48,10 +48,14 @@ public class AdminPatrolController {
             @RequestParam(required = false) Long academyId,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(required = false) Short round) {
+            @RequestParam(required = false) Short round,
+            // ★ 기록에 남은 좌석으로 거른다 — 현재 배정으로 거르면 그 사이 자리를 옮긴
+            //   학생이 빠지거나 끼어들어 화면의 좌석표와 어긋난다
+            @RequestParam(required = false) Long studyAreaId) {
 
         boolean raw = PersonalDataPolicy.canViewRaw(me);
-        return ApiResponse.success(patrolService.records(me, academyId, date, round).stream()
+        return ApiResponse.success(
+                patrolService.records(me, academyId, date, round, studyAreaId).stream()
                 .map(r -> PatrolRow.of(r, raw)).toList());
     }
 
@@ -72,11 +76,37 @@ public class AdminPatrolController {
                 .map(r -> PatrolRow.of(r, raw)).toList());
     }
 
+    /**
+     * 그 회차를 비운다 — 잘못 찍은 회차를 통째로 지운다.
+     *
+     * <p>★★ <b>「빈 목록을 저장하면 비운다」로 만들지 않았다.</b> 그러면 <b>화면 버그 하나가
+     * 회차를 조용히 날린다</b> — 목록을 만드는 코드가 빈 배열을 보내는 실수는 흔하고, 그때
+     * 사감이 한 시간 돌며 찍은 것이 사라진다. <b>지우는 것은 지우겠다고 말해야</b> 한다.
+     *
+     * <p>soft delete 다 — 「그 회차에 무엇이 있었나」를 나중에 확인할 수 있어야 한다.
+     *
+     * @return 지운 건수
+     */
+    @DeleteMapping("/rounds/{round}")
+    public ApiResponse<ClearedCount> clearRound(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Short round,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        return ApiResponse.success(
+                new ClearedCount(patrolService.clearRound(me, academyId, date, round)));
+    }
+
+    public record ClearedCount(int cleared) {
+    }
+
     /** 상태 값 목록 — 화면 팔레트가 쓴다. 문구를 화면에 중복 정의하지 않게 서버가 내린다. */
     @GetMapping("/marks")
     public ApiResponse<List<MarkView>> marks() {
         return ApiResponse.success(java.util.Arrays.stream(PatrolMark.values())
-                .map(m -> new MarkView(m.name(), m.label(), m.away()))
+                .map(m -> new MarkView(m.name(), m.label(), m.away(), m.group()))
                 .toList());
     }
 
@@ -122,6 +152,11 @@ public class AdminPatrolController {
         }
     }
 
-    public record MarkView(String code, String label, boolean away) {
+    /**
+     * @param group 사감이 할 일 기준 묶음 — 화면이 색을 가르는 데 쓴다.
+     *              ★ <b>화면이 코드로 묶지 않게 서버가 내린다</b> — 화면에서 묶으면 상태가
+     *              늘 때마다 화면을 고쳐야 하고, 잊으면 새 상태가 아무 묶음에도 안 들어간다
+     */
+    public record MarkView(String code, String label, boolean away, PatrolMark.Group group) {
     }
 }

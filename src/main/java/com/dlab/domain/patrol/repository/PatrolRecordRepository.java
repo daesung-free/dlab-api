@@ -22,12 +22,14 @@ public interface PatrolRecordRepository extends JpaRepository<PatrolRecord, Long
             WHERE p.academy.id = :academyId
               AND p.patrolDate = :date
               AND (:roundNo IS NULL OR p.roundNo = :roundNo)
+              AND (:seatCds IS NULL OR p.seatCd IN :seatCds)
               AND p.deleted = false
             ORDER BY p.roundNo, p.seatCd
             """)
     List<PatrolRecord> findByRound(@Param("academyId") Long academyId,
                                    @Param("date") LocalDate date,
-                                   @Param("roundNo") Short roundNo);
+                                   @Param("roundNo") Short roundNo,
+                                   @Param("seatCds") java.util.Collection<String> seatCds);
 
     /** 그 학생의 그 회차 기록. 다시 찍었을 때 덮어쓰기 위해 찾는다. */
     @Query("""

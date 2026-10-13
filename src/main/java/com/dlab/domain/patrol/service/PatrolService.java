@@ -29,6 +29,7 @@ public class PatrolService {
 
     private final PatrolRecordRepository recordRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final com.dlab.domain.facility.repository.SeatMasterRepository seatMasterRepository;
     private final Clock clock;
 
     /**
@@ -39,13 +40,35 @@ public class PatrolService {
      */
     @Transactional(readOnly = true)
     public List<PatrolRecord> records(AuthPrincipal me, Long academyId,
-                                      LocalDate date, Short roundNo) {
+                                      LocalDate date, Short roundNo, Long studyAreaId) {
         Long scope = me.requireAcademyScope(academyId);
         if (roundNo != null) {
             requireValidRound(roundNo);
         }
         return recordRepository.findByRound(scope,
-                date == null ? LocalDate.now(clock) : date, roundNo);
+                date == null ? LocalDate.now(clock) : date, roundNo, seatCdsOf(studyAreaId));
+    }
+
+    /**
+     * 그 구역의 좌석번호들 — 구역 필터용.
+     *
+     * <p>★ <b>기록에 남은 좌석(`seat_cd`)으로 거른다.</b> 현재 배정으로 거르면
+     * <b>그 사이 자리를 옮긴 학생이 빠지거나 끼어든다</b> — 순찰 기록은 「그때 거기 있었다」는
+     * 뜻이고, 조회도 그 기준이어야 화면에 보이는 좌석표와 맞는다.
+     *
+     * <p>⚠️ 좌석이 지워졌으면 그 번호는 목록에서 빠진다. 그래도 기록은 남아 있으니
+     * <b>구역을 비우고 조회</b>하면 보인다.
+     */
+    private java.util.Collection<String> seatCdsOf(Long studyAreaId) {
+        if (studyAreaId == null) {
+            return null;
+        }
+        var seatCds = seatMasterRepository.findByStudyAreaId(studyAreaId).stream()
+                .map(com.dlab.domain.facility.entity.SeatMaster::getSeatCd)
+                .toList();
+        // 빈 목록을 그대로 넘기면 IN () 이 되어 쿼리가 깨진다 — 아무것도 없는 구역은
+        // 결과가 없어야 하므로 걸리지 않는 값을 넣는다
+        return seatCds.isEmpty() ? List.of("\u0000") : seatCds;
     }
 
     /**
@@ -93,6 +116,31 @@ public class PatrolService {
         log.info("순찰 기록: academy={}, date={}, round={}, 건수={}, 처리자={}",
                 scope, target, roundNo, saved.size(), me.accountId());
         return saved;
+    }
+
+    /**
+     * 그 회차를 비운다 — 잘못 찍은 회차를 통째로 지우는 길.
+     *
+     * <h2>★★ 「빈 목록을 보내면 비운다」로 만들지 않았다</h2>
+     * 그러면 <b>화면 버그 하나가 회차를 조용히 날린다</b> — 목록을 만드는 코드가 빈 배열을
+     * 보내는 실수는 흔하고, 그때 사감이 한 시간 돌며 찍은 것이 사라진다. 지우는 것은
+     * <b>지우겠다고 말해야</b> 한다. 그래서 저장은 빈 목록을 거절하고, 삭제는 별 경로다.
+     *
+     * <p><b>soft delete 다</b> — 「그 회차에 무엇이 있었나」를 나중에 확인할 수 있어야 한다.
+     *
+     * @return 지운 건수
+     */
+    @Transactional
+    public int clearRound(AuthPrincipal me, Long academyId, LocalDate date, short roundNo) {
+        Long scope = me.requireAcademyScope(academyId);
+        requireValidRound(roundNo);
+        LocalDate target = date == null ? LocalDate.now(clock) : date;
+
+        var records = recordRepository.findByRound(scope, target, roundNo, null);
+        records.forEach(PatrolRecord::markDeleted);
+        log.info("순찰 회차 비움: academy={}, date={}, round={}, 건수={}, 처리자={}",
+                scope, target, roundNo, records.size(), me.accountId());
+        return records.size();
     }
 
     private static void requireValidRound(short roundNo) {
