@@ -99,6 +99,28 @@ public class StudyTimeCalculator {
         return total;
     }
 
+    /**
+     * 하루치 <b>재실시간</b> — 순공시간의 원재료다.
+     *
+     * <p>Daily Report 집계(F-4.11-6)가 순공과 나란히 내려야 하는 값이라 여기에 둔다.
+     * <b>같은 재실 구간에서 두 값이 나와야</b> "재실 5시간인데 순공 6시간"처럼 서로
+     * 모순되는 숫자가 한 화면에 나오지 않는다 — 호출부가 따로 계산하면 외출 처리나
+     * 하원 누락 보정이 어긋나면서 그렇게 된다.
+     *
+     * <p>급식·쉬는시간은 <b>빼지 않는다</b>. 그걸 빼는 것이 순공의 정의이고,
+     * 재실은 "자리에 있던 시간"이다 — 둘의 차이가 곧 화면이 보여주려는 정보다.
+     */
+    public Duration presence(List<AttendanceTaggingLog> dayLogs,
+                             List<PeriodMaster> periods,
+                             LocalTime until) {
+        if (dayLogs.isEmpty()) {
+            return Duration.ZERO;
+        }
+        return presenceIntervals(dayLogs, periods, until).stream()
+                .map(Interval::duration)
+                .reduce(Duration.ZERO, Duration::plus);
+    }
+
     /** 재실 구간. 외출은 구간을 닫으므로 여기서 이미 빠진다. */
     private List<Interval> presenceIntervals(List<AttendanceTaggingLog> dayLogs,
                                              List<PeriodMaster> periods,
