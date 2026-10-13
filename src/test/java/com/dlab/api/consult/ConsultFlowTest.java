@@ -258,11 +258,12 @@ class ConsultFlowTest {
     }
 
     @Test
-    @DisplayName("★★ 신상기록부 작성 여부는 null이다 — false로 내리면 '작성 안 함'이라는 없는 사실이 생긴다")
-    void profileWrittenIsUnknownForNow() {
+    @DisplayName("★ 신상기록부를 안 썼으면 false다 — 구현 전에는 null이었다(F-4.11-9)")
+    void profileWrittenIsFalseWhenNotWritten() {
         var row = consultService.status(admin, null, null).get(0);
 
-        assertThat(row.profileWritten()).isNull();
+        // 작성본이 없으면 false 다. 「미확인」을 뜻하는 null 은 신상기록부가 생기면서 사라졌다
+        assertThat(row.profileWritten()).isFalse();
     }
 
     @Test

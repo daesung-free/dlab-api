@@ -32,8 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <h2>범위 — 일지까지다</h2>
  * 학부모용 <b>리포트</b>는 다른 도메인 셋에 얹혀 있어 아직 못 만든다:
- * 성적 상세(F-4.6-1) · 과목별 이행률 별점(F-4.11-2, 표기 정합 I-19 미확정) ·
- * 신상기록부 작성 여부(F-4.11-8).
+ * 성적 상세(F-4.6-1) · 과목별 이행률 별점(F-4.11-2, 표기 정합 I-19 미확정).
+ * <b>신상기록부 작성 여부는 채워진다</b>(F-4.11-9 구현 완료).
  *
  * <h2>상담은 담당선생님이 한다</h2>
  * {@code teacher}만 상담자가 된다 — 행정({@code employee})은 상담 업무가 아니다.
@@ -52,6 +52,7 @@ public class ConsultService {
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
     private final com.dlab.domain.user.repository.AcademyRepository academyRepository;
     private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
+    private final com.dlab.domain.profile.service.StudentProfileService studentProfileService;
     private final Clock clock;
 
     // ── 일지 ──────────────────────────────────────────────────
@@ -135,9 +136,9 @@ public class ConsultService {
      * <p><b>상담을 한 번도 안 한 학생이 목록에 남아야 한다.</b> 일지만 보여주면
      * 미상담자가 화면에서 사라져 "누구를 아직 안 만났나"를 알 수 없다 — 이 화면의 목적이다.
      *
-     * <p>신상기록부 작성 여부는 아직 못 채운다(F-4.11-8 대기) — {@code null}로 내리고
-     * 화면이 "미확인"으로 표시한다. {@code false}로 내리면 "작성 안 함"으로 읽혀
-     * 없는 사실을 만들어낸다.
+     * <p>신상기록부 작성 여부는 <b>실제 작성 여부</b>다(F-4.11-9 구현 완료). ★ 학생마다
+     * 묻지 않고 <b>지점·연도 단위로 한 번</b> 읽어 맞춘다 — 재원생 전원이 대상이라
+     * 줄마다 조회하면 수백 번 쿼리가 나간다.
      */
     @Transactional(readOnly = true)
     public List<ConsultStatusRow> status(AuthPrincipal me, Long requestedAcademyId,
@@ -154,6 +155,8 @@ public class ConsultService {
         short year = targets.get(0).getYear();
         Map<Long, ConsultLog> latest = latestByEnrollment(academyId, year);
         Map<Long, ClassAssignment> classes = classesOf(targets);
+        // 신상기록부 작성 여부. 한 번에 읽는다(위 설명 참고)
+        var profileWritten = studentProfileService.writtenEnrollmentIds(academyId, year);
         LocalDate today = LocalDate.now(clock);
 
         // ★ 담임 범위. teacherId 는 화면이 고르는 필터라 빼고 부르면 지점 전체가 나갔다.
@@ -180,7 +183,7 @@ public class ConsultService {
                             last == null ? null : last.getNextDueDate(),
                             overdueDays(last, today),
                             last == null,
-                            null,   // 신상기록부 — F-4.11-8 대기
+                            profileWritten.contains(e.getId()),
                             e.getAdmissionDate(),
                             daysSinceAdmission(e, today));
                 })
@@ -350,8 +353,8 @@ public class ConsultService {
      *
      * @param neverConsulted 초도상담 미실시. <b>화면이 빨간 경고를 띄운다</b>
      * @param overdueDays    다음 상담 예정일이 지난 일수. 0이면 정상
-     * @param profileWritten 신상기록부 작성 여부 — <b>지금은 항상 {@code null}</b>(F-4.11-8 대기).
-     *                       {@code false}로 내리면 "작성 안 함"으로 읽혀 없는 사실을 만든다
+     * @param profileWritten 신상기록부 작성 여부(F-4.11-9). {@code false}면 <b>실제로 안 쓴 것</b>이다 —
+     *                       구현 전에는 "작성 안 함"이라는 없는 사실을 만들지 않으려 {@code null}이었다
      */
     public record ConsultStatusRow(
             Long enrollmentId,
