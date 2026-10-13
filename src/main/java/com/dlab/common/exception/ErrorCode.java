@@ -319,7 +319,14 @@ public enum ErrorCode {
      * 조건 자체가 성립하지 않는 검색 조합(예: 특정 반 + 반 미배정).
      * 빈 목록으로 돌려주면 화면이 "해당 학생이 없다"로 읽고 조용히 넘어간다.
      */
-    CONFLICTING_SEARCH_CONDITION(HttpStatus.BAD_REQUEST, "함께 지정할 수 없는 검색 조건입니다.");
+    CONFLICTING_SEARCH_CONDITION(HttpStatus.BAD_REQUEST, "함께 지정할 수 없는 검색 조건입니다."),
+
+    // ── 신상기록부 (F-4.11-9) ──
+    STUDENT_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "신상기록부가 작성되지 않았습니다."),
+    STUDENT_PROFILE_FORM_NOT_FOUND(HttpStatus.NOT_FOUND, "신상기록부 양식을 찾을 수 없습니다."),
+    /** 지점 관리자가 공통 양식을 고치면 나머지 지점 화면이 같이 바뀐다(성적 양식과 같은 판단). */
+    STUDENT_PROFILE_FORM_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN,
+            "전 지점 공통 신상기록부 양식은 본사만 다룰 수 있습니다.");
 
     private final HttpStatus status;
     private final String message;
