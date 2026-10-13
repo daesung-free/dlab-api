@@ -71,13 +71,42 @@ public final class StudentRequests {
             /** 영문명(선택) */
             @Size(max = 100) String englishName,
             /** 고교 졸업연도(선택) */
-            @Min(1990) @Max(2100) Short graduationYear) {
+            @Min(1990) @Max(2100) Short graduationYear,
+            /**
+             * 홈페이지 입학예약과 <b>같은 사람이 아니라고 담당자가 확인</b>했는가
+             * (피드백 6-3①).
+             *
+             * <p>★ <b>기본값({@code false})이 차단이다.</b> 겹치는 예약이 있으면 서버가
+             * {@code 409}로 멈추고, 담당자가 「다른 사람입니다」를 고른 경우에만 이 값을
+             * 실어 다시 보낸다. 동명이인이 실제로 있어 <b>자동 병합을 하지 않으므로</b>
+             * 사람의 선택이 유일한 통과 수단이다.
+             *
+             * <p>이걸 요청에 두는 이유는 <b>확인과 저장이 한 번에 끝나야</b> 하기 때문이다 —
+             * 따로 "확인했음" API 를 두면 그 사이에 다른 담당자가 예약을 전환할 수 있고,
+             * 확인만 하고 저장하지 않은 상태가 남는다.
+             */
+            Boolean confirmedNotDuplicate) {
+
+        /**
+         * ⚠️ <b>래퍼({@code Boolean})다 — 원시형으로 두면 기존 호출이 전부 400 이 된다.</b>
+         *
+         * <p>이 프로젝트는 {@code FAIL_ON_NULL_FOR_PRIMITIVES} 가 켜져 있어, JSON 에
+         * 이 칸이 <b>없으면</b> Jackson 이 *"Cannot map null into type boolean"* 으로
+         * 본문 파싱 자체를 거부한다 — 화면은 중복 탐지와 무관한
+         * <b>「요청 본문 형식이 올바르지 않습니다」</b> 를 받는다.
+         *
+         * <p>즉 필드를 더하는 것만으로 <b>이미 돌고 있던 신규접수가 멈춘다.</b>
+         * 비워 보내는 것이 정상이고, 그때는 <b>차단</b>으로 읽는다.
+         */
+        public boolean confirmedNotDuplicateOrFalse() {
+            return Boolean.TRUE.equals(confirmedNotDuplicate);
+        }
 
         public Admit(Long academyId, Integer year, String name, String phone, GradeType grade,
                      Short retakeCount, TrackType track, LocalDate birthDate, String gender,
                      String schoolName, String address, LocalDate admissionDate) {
             this(academyId, year, name, phone, grade, retakeCount, track, birthDate, gender,
-                    schoolName, address, admissionDate, null, null);
+                    schoolName, address, admissionDate, null, null, null);
         }
     }
 

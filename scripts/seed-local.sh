@@ -29,7 +29,7 @@ SEED_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/src/main/resources/db
 FILES=(
   "V20260807_1600__academy_seed.sql"        # 지점 11개
   "V20260807_1740__period_seed.sql"         # 교시 마스터 — 없으면 태깅이 전부 code 113 으로 거부된다
-  "V20260826_1000__branch_pricing_seed.sql" # 지점별 교습비·급식업체
+  "V20260826_1010__branch_pricing_seed.sql" # 지점별 교습비·급식업체
   "dev_seed_scholarship_master.sql"         # 장학 종류 — 없으면 장학 부여가 전부 막힌다
   "dev_seed.sql"                            # 관리자 2계정 + 학생 60명 (화면 연동 확인용)
   "dev_seed_assignment.sql"                 # 반·좌석·사물함·장학·주소 (배정 화면들이 이게 없으면 빈 화면)

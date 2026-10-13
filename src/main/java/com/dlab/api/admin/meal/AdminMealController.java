@@ -9,7 +9,10 @@ import com.dlab.domain.meal.entity.MealPolicy;
 import com.dlab.domain.meal.entity.MealOrderItem;
 import com.dlab.domain.meal.entity.MealOrderStatus;
 import com.dlab.domain.meal.entity.MealType;
+import com.dlab.common.privacy.Masking;
+import com.dlab.common.privacy.PersonalDataPolicy;
 import com.dlab.domain.meal.service.MealAdminService;
+import com.dlab.domain.meal.service.MealDailyRosterService;
 import com.dlab.domain.meal.service.MealOrderListEnricher;
 import com.dlab.domain.meal.service.MealOrderService;
 import jakarta.validation.Valid;
@@ -60,6 +63,7 @@ public class AdminMealController {
     private final MealAdminService mealAdminService;
     private final MealOrderService mealOrderService;
     private final MealOrderListEnricher orderListEnricher;
+    private final MealDailyRosterService dailyRosterService;
 
     /** 월별 신청 현황 — 달력. */
     @GetMapping("/monthly")
@@ -68,6 +72,31 @@ public class AdminMealController {
             @RequestParam(required = false) Long academyId,
             @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
         return ApiResponse.success(mealAdminService.monthly(me, academyId, month));
+    }
+
+    /**
+     * 일자별 신청 명단 — <b>그날 누가 먹는가</b> (피드백 5-4).
+     *
+     * <p>{@link #monthly}는 달력 칸의 인원 수까지만 알려준다. 배식대에서 필요한 것은
+     * 숫자가 아니라 명단이고, {@code /orders}는 월 단위 주문이라 그날만 추리려면
+     * 주문마다 항목을 펼쳐 봐야 한다.
+     *
+     * <h2>★ 「신청 vs 배식 대조」는 여기 없다 — 만들지 말 것</h2>
+     * 배식 태깅(식사체크) 결과가 <b>키오스크에서 우리 쪽으로 들어오는 경로가 아직 없다.</b>
+     * 대조 화면을 만들어도 "실제로 먹은 사람" 칸을 채울 값이 없고, <b>빈 칸은 "안 먹었다"로
+     * 읽힌다</b> — 그 상태로 내보내면 신청했는데 안 먹은 것처럼 보이는 학생이 전원이 된다.
+     * 수신 경로가 정해지면 이 응답에 칸을 더한다.
+     *
+     * <p>이름은 권한에 따라 가려지고, 가려졌는지는 {@code masked}로 알려준다 — 화면이
+     * 모르면 또 가려 이름이 통째로 사라지거나 "잘못 저장됐다"는 오인 문의가 생긴다.
+     */
+    @GetMapping("/daily")
+    public ApiResponse<DailyRosterResponse> daily(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        var roster = dailyRosterService.daily(me.requireAcademyScope(academyId), date);
+        return ApiResponse.success(DailyRosterResponse.from(roster, me));
     }
 
     // ── 급식 일정 관리 ─────────────────────────────────────────
@@ -191,6 +220,48 @@ public class AdminMealController {
     }
 
     // ── DTO ──────────────────────────────────────────────────
+
+    /**
+     * 일자별 신청 명단.
+     *
+     * <p><b>점심·저녁을 합치지 않는다.</b> 배식이 따로 돌고 인원도 다르다 — 한 목록에
+     * 섞어 끼니 칸으로만 구분하면 화면이 매번 다시 갈라야 하고, 인원 수도 직접 세게 된다.
+     *
+     * @param masked 이름이 가려졌는지. 가려진 걸 모르면 화면이 또 가려 이름이 사라진다
+     */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "MealDailyRosterResponse")
+    public record DailyRosterResponse(LocalDate date, int lunchCount, int dinnerCount,
+                                      List<DailyRosterRow> lunch, List<DailyRosterRow> dinner,
+                                      boolean masked) {
+
+        static DailyRosterResponse from(MealDailyRosterService.Roster roster, AuthPrincipal me) {
+            boolean masked = !PersonalDataPolicy.canViewRaw(me);
+            return new DailyRosterResponse(roster.date(),
+                    roster.lunch().size(), roster.dinner().size(),
+                    roster.lunch().stream().map(r -> DailyRosterRow.from(r, masked)).toList(),
+                    roster.dinner().stream().map(r -> DailyRosterRow.from(r, masked)).toList(),
+                    masked);
+        }
+    }
+
+    /**
+     * 명단 한 행.
+     *
+     * @param orderItemId 끼니 항목 id — <b>명단에서 바로 취소</b>할 수 있게 함께 내린다
+     *                    ({@code DELETE /meals/orders/items/{itemId}}가 이 단위다)
+     * @param className   반. 미배정이면 {@code null}
+     * @param seatCd      좌석번호. 미배정이면 {@code null}
+     */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "MealDailyRosterRow")
+    public record DailyRosterRow(Long orderItemId, Long enrollmentId, String studentNo,
+                                 String studentName, String className, String seatCd) {
+
+        static DailyRosterRow from(MealDailyRosterService.Row row, boolean masked) {
+            return new DailyRosterRow(row.orderItemId(), row.enrollmentId(), row.studentNo(),
+                    masked ? Masking.name(row.studentName()) : row.studentName(),
+                    row.className(), row.seatCd());
+        }
+    }
 
     public record ClosureRequest(
             Long academyId,

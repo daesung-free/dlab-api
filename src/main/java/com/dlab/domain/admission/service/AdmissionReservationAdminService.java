@@ -38,6 +38,28 @@ public class AdmissionReservationAdminService {
     private final AdmissionReservationMemoRepository memoRepository;
     private final AdmissionReservationStatusLogRepository statusLogRepository;
     private final StudentService studentService;
+    private final AdmissionDuplicateService duplicateService;
+    private final java.time.Clock clock;
+
+    /**
+     * 같은 사람의 입학예약 찾기 (피드백 6-3①).
+     *
+     * <p>데스크가 신규접수를 저장하기 <b>전에</b> 화면이 「같은 분의 입학예약이 있습니다」를
+     * 띄우려면 이 경로가 필요하다. 저장 시점의 차단만 있으면 담당자는 전부 입력한 뒤에야
+     * 알게 되고, 오류 응답에는 <b>이름·연락처를 싣지 않으므로</b>(로그에 남는다) 안내 문구를
+     * 만들 재료도 없다.
+     *
+     * @param year 비우면 올해. 대기자는 보통 다음 기수라 화면이 연도를 지정해 보낸다
+     */
+    @Transactional(readOnly = true)
+    public List<AdmissionDuplicateService.Match> duplicates(AuthPrincipal me, Long academyId,
+                                                            Short year, String name,
+                                                            String birth, String parentTel) {
+        Long scope = me.requireAcademyScope(academyId);
+        short resolvedYear = year != null
+                ? year : (short) LocalDate.now(clock).getYear();
+        return duplicateService.findReservations(scope, resolvedYear, name, birth, parentTel);
+    }
 
     /**
      * 목록.
@@ -115,10 +137,18 @@ public class AdmissionReservationAdminService {
      * <p>★ <b>두 번 전환하지 않는다.</b> 같은 신청으로 학번이 두 개 생기면 출결·수납이
      * 갈라진다. 학번 채번은 기존 신규 접수 경로를 그대로 쓴다 — 동시 가입 시 유니크 제약
      * 재시도가 이미 거기 있다.
+     *
+     * <p>★ <b>이미 등록된 같은 학생이 있으면 멈춘다</b>(피드백 6-3①). 데스크가 먼저
+     * 등록하고 나중에 예약을 전환하는 순서도 실제로 일어나는데, 신규접수 쪽만 막으면
+     * <b>순서를 바꾸는 것만으로 중복이 통과한다.</b>
+     *
+     * @param confirmedNotDuplicate 담당자가 「다른 사람입니다」를 고른 경우. 자동 병합은
+     *                              하지 않으므로 사람의 선택이 유일한 통과 수단이다
      */
     @Transactional
     public StudentEnrollment convert(AuthPrincipal me, Long reservationId,
-                                     GradeType grade, LocalDate admissionDate) {
+                                     GradeType grade, LocalDate admissionDate,
+                                     boolean confirmedNotDuplicate) {
         AdmissionReservation reservation = require(me, reservationId);
 
         if (reservation.getConsultStatus() != ConsultStatus.CONFIRMED) {
@@ -131,6 +161,7 @@ public class AdmissionReservationAdminService {
                     "이미 학생으로 전환된 신청입니다. 학번 %s"
                             .formatted(reservation.getEnrollment().getStudentNo()));
         }
+        duplicateService.assertNotDuplicatedEnrollment(reservation, confirmedNotDuplicate);
 
         StudentEnrollment enrollment = studentService.admit(
                 reservation.getAcademy().getId(), reservation.getYear(),

@@ -53,6 +53,26 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
     List<StudentEnrollment> findRecentByName(Long academyId, short year, String name,
                                              java.time.Instant since);
 
+    /**
+     * 같은 이름의 등록 건 — <b>입학예약 중복 탐지</b>의 반대 방향 후보 (피드백 6-3①).
+     *
+     * <p>{@link #findRecentByName}와 달리 <b>시간 창이 없다.</b> 그쪽은 "저장 버튼 두 번"을
+     * 가리는 것이라 방금 들어온 건만 보면 되지만, 여기는 <b>며칠 전 데스크에서 등록한
+     * 학생</b>을 찾아야 한다 — 홈페이지 예약과 데스크 접수 사이에 시간 제한이 없다.
+     *
+     * <p>생년월일·연락처 일치는 {@link #findRecentByName}와 같은 이유로 호출부에서 본다.
+     */
+    @Query("""
+            SELECT e FROM StudentEnrollment e
+            JOIN FETCH e.student s
+            WHERE e.academy.id = :academyId
+              AND e.year = :year
+              AND s.name = :name
+              AND e.deleted = false
+            ORDER BY e.id DESC
+            """)
+    List<StudentEnrollment> findByName(Long academyId, short year, String name);
+
     Optional<StudentEnrollment> findByStudentIdAndAcademyIdAndYearAndDeletedFalse(
             Long studentId, Long academyId, short year);
 
