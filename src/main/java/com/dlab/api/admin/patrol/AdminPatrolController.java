@@ -35,6 +35,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminPatrolController {
 
     private final PatrolService patrolService;
+    private final com.dlab.domain.facility.service.SeatLayoutService seatLayoutService;
 
     /**
      * 그날 그 회차 기록.
@@ -103,6 +104,60 @@ public class AdminPatrolController {
     }
 
     /** 상태 값 목록 — 화면 팔레트가 쓴다. 문구를 화면에 중복 정의하지 않게 서버가 내린다. */
+    /**
+     * 순찰용 구역 목록.
+     *
+     * <h2>★ 왜 {@code /seats/areas} 를 쓰지 않나</h2>
+     * 좌석 구획(`/api/v1/admin/seats`)은 <b>데스크 업무</b>라 담임에게 닫혀 있다. 그런데
+     * 순찰 화면은 좌석 배치를 읽어 격자를 그리므로, 그대로 두면 <b>화면은 열리고
+     * 좌석표만 비어 있다.</b>
+     *
+     * <p><b>좌석 구획을 담임에게 열지 않는다.</b> 그러면 독서실 좌석배치·좌석 이탈·
+     * 배정 관리까지 같이 열린다. 순찰이 필요한 것만 여기서 따로 내린다.
+     */
+    @GetMapping("/areas")
+    public ApiResponse<List<PatrolArea>> areas(@CurrentAccount AuthPrincipal me,
+                                               @RequestParam(required = false) Long academyId) {
+        return ApiResponse.success(seatLayoutService.areas(me, academyId, false, null, null)
+                .stream().map(PatrolArea::from).toList());
+    }
+
+    /** 순찰 화면이 구역을 고르는 데 필요한 것만. 반 연결·좌석 수 같은 관리 정보는 뺀다 */
+    public record PatrolArea(Long id, String areaNm, String buildingName, short sortOrder) {
+        static PatrolArea from(com.dlab.domain.facility.service.SeatLayoutService.AreaSummary a) {
+            return new PatrolArea(a.id(), a.areaNm(), a.buildingName(), a.sortOrder());
+        }
+    }
+
+    /**
+     * 순찰용 좌석 배치.
+     *
+     * <h2>★ 배정 정보를 내리지 않는다</h2>
+     * 좌석 화면({@code /seats/layout})은 <b>배정 상태·좌석이탈 사유·반</b>까지 내리는데,
+     * 그건 <b>배정 관리에 쓰는 값</b>이고 담임 업무가 아니다. 순찰에 필요한 것은
+     * 「지금 누가 어디 앉아 있나」뿐이다.
+     *
+     * <p>이렇게 나눠 두면 나중에 좌석 화면 권한을 바꿔도 <b>순찰이 따라 흔들리지 않는다.</b>
+     *
+     * <p>⚠️ 이름은 다른 목록과 같은 규칙으로 마스킹된다 — {@code masked} 로 알려준다.
+     */
+    @GetMapping("/seats")
+    public ApiResponse<List<PatrolSeat>> seats(@CurrentAccount AuthPrincipal me,
+                                               @RequestParam Long studyAreaId) {
+        return ApiResponse.success(seatLayoutService.layout(me, studyAreaId, false)
+                .stream().map(PatrolSeat::from).toList());
+    }
+
+    /** 좌석번호·좌표·앉은 학생. 격자를 그리고 표시를 찍는 데 필요한 최소값이다 */
+    public record PatrolSeat(Long seatId, String seatCd, int xPos, int yPos,
+                             Long enrollmentId, String studentNo, String studentName,
+                             boolean masked) {
+        static PatrolSeat from(com.dlab.domain.facility.service.SeatLayoutService.SeatCell c) {
+            return new PatrolSeat(c.seatId(), c.seatCd(), c.xPos(), c.yPos(),
+                    c.enrollmentId(), c.studentNo(), c.studentName(), c.masked());
+        }
+    }
+
     @GetMapping("/marks")
     public ApiResponse<List<MarkView>> marks() {
         return ApiResponse.success(java.util.Arrays.stream(PatrolMark.values())

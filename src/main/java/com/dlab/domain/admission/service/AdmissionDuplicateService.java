@@ -2,6 +2,7 @@ package com.dlab.domain.admission.service;
 
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
+import com.dlab.domain.admission.entity.AdmissionDuplicateDecision;
 import com.dlab.domain.admission.entity.AdmissionReservation;
 import com.dlab.domain.admission.repository.AdmissionReservationRepository;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -45,6 +46,7 @@ public class AdmissionDuplicateService {
 
     private final AdmissionReservationRepository reservationRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final com.dlab.domain.admission.repository.AdmissionDuplicateDecisionRepository decisionRepository;
 
     /**
      * 데스크 신규접수 → <b>같은 사람의 입학예약</b>을 찾는다.
@@ -100,6 +102,10 @@ public class AdmissionDuplicateService {
             return List.of();
         }
 
+        // ★ 이미 「다른 사람」으로 정리한 등록 건은 다시 묻지 않는다.
+        //   이게 없으면 담당자가 **같은 판단을 볼 때마다 다시** 해야 한다
+        List<Long> decided = decisionRepository.decidedEnrollmentIds(reservation.getId());
+
         List<EnrollmentMatch> matches = new ArrayList<>();
         for (StudentEnrollment e : enrollmentRepository.findByName(
                 reservation.getAcademy().getId(), reservation.getYear(),
@@ -108,6 +114,9 @@ public class AdmissionDuplicateService {
                     ? null : e.getStudent().getBirthDate().format(BIRTH));
             String enrolledTel = digits(e.getStudent().getPhone());
 
+            if (decided.contains(e.getId())) {
+                continue;
+            }
             if (birthDigits != null && birthDigits.equals(enrolledBirth)) {
                 matches.add(new EnrollmentMatch(e, MatchedBy.BIRTH));
             } else if (enrolledTel != null
@@ -131,8 +140,8 @@ public class AdmissionDuplicateService {
                                                LocalDate birthDate, String tel,
                                                boolean confirmedNotDuplicate) {
         if (confirmedNotDuplicate) {
-            // ⚠️ 이 판단을 남길 곳이 아직 없다 — 전용 테이블을 두기 전까지는 로그가 전부다.
-            //    이름·연락처는 남기지 않는다(오류 응답과 같은 기준).
+            // ⚠️ **여기서는 아직 등록 건이 없다** — 저장 직전에 막는 구조라 그렇다.
+            //    쌍은 등록이 끝난 뒤 `recordDecision` 으로 적는다
             log.info("입학예약 중복 아님으로 확인 후 신규접수 진행: 지점={}, 연도={}", academyId, year);
             return;
         }
@@ -156,6 +165,11 @@ public class AdmissionDuplicateService {
         if (confirmedNotDuplicate) {
             log.info("기등록 학생과 다른 사람으로 확인 후 전환 진행: reservationId={}",
                     reservation.getId());
+            // ★ 걸렸던 후보 전부를 「다른 사람」으로 적는다. 하나만 적으면 나머지가
+            //   다음에 또 올라온다 — 담당자는 **그 화면 전체를 보고** 판단했다
+            findEnrollments(reservation)
+                    .forEach(m -> recordDecision(reservation, m.enrollment(),
+                            AdmissionDuplicateDecision.DecidedOn.CONVERT));
             return;
         }
         List<EnrollmentMatch> matches = findEnrollments(reservation);
@@ -166,6 +180,47 @@ public class AdmissionDuplicateService {
                 "같은 분이 이미 학생으로 등록돼 있습니다. 학번 %s"
                         .formatted(matches.get(0).enrollment().getStudentNo()),
                 matches.stream().map(m -> m.enrollment().getId()).toList());
+    }
+
+    /**
+     * 신규접수에서 내린 「다른 사람입니다」 판단을 남긴다 — <b>등록이 끝난 뒤</b>에 부른다.
+     *
+     * <p>막을 때와 <b>같은 조건으로 다시 찾아</b> 걸렸던 예약 전부를 적는다. 하나만 적으면
+     * 나머지가 다음에 또 올라오는데, 담당자는 <b>그 화면 전체를 보고</b> 판단했다.
+     */
+    @Transactional
+    public void recordAdmitDecisions(StudentEnrollment admitted, String name,
+                                     LocalDate birthDate, String tel) {
+        findReservations(admitted.getAcademy().getId(), admitted.getYear(), name,
+                birthDate == null ? null : birthDate.format(BIRTH), tel)
+                .forEach(m -> recordDecision(m.reservation(), admitted,
+                        AdmissionDuplicateDecision.DecidedOn.ADMIT));
+    }
+
+    /**
+     * 「다른 사람입니다」 판단을 남긴다.
+     *
+     * <p>★ <b>같은 쌍이 두 번 들어와도 한 행이다.</b> 두 번 눌렀다고 두 행이 되면
+     * 「몇 번 판단했나」가 흐려지고, 유니크 제약에 걸려 <b>정상 저장까지 막힌다.</b>
+     *
+     * <p>⚠️ <b>이것이 실패해도 본 작업은 굴러가야 한다.</b> 판단 기록은 다음 번을
+     * 편하게 하려는 보조 장치지, 등록·전환을 막을 이유가 아니다.
+     */
+    @Transactional
+    public void recordDecision(AdmissionReservation reservation, StudentEnrollment enrollment,
+                               AdmissionDuplicateDecision.DecidedOn decidedOn) {
+        try {
+            if (decisionRepository.existsByReservationIdAndEnrollmentIdAndDeletedFalse(
+                    reservation.getId(), enrollment.getId())) {
+                return;
+            }
+            decisionRepository.save(new AdmissionDuplicateDecision(
+                    enrollment.getAcademy(), enrollment.getYear(),
+                    reservation, enrollment, decidedOn));
+        } catch (RuntimeException e) {
+            log.warn("중복 아님 판단 기록 실패 — 본 작업은 계속한다: reservationId={}, enrollmentId={}",
+                    reservation.getId(), enrollment.getId(), e);
+        }
     }
 
     private MatchedBy matchedBy(AdmissionReservation r, String birthDigits, String telDigits) {
