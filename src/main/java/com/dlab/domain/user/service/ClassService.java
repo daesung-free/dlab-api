@@ -241,9 +241,12 @@ public class ClassService {
     @Transactional
     public ClassMaster changeExamClassNo(Long classId, Short examClassNo, AuthPrincipal principal) {
         ClassMaster classMaster = loadAccessible(classId, principal);
-        if (examClassNo != null && (examClassNo < 1 || examClassNo > 99)) {
+        // ★ 10의 배수를 막는다 — 10반 1번(10|01)이 1반 1번(1|001)과 **같은 번호**가 된다.
+        //   디랩이 10·20 을 쓰지 않는 이유가 이것이고, 30·40 도 같은 일이 난다.
+        if (examClassNo != null && !StudentEnrollment.isUsableClassNo(examClassNo)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "모의고사 반 번호는 1~99 입니다.");
+                    "모의고사 반 번호는 1~99 중 10의 배수를 뺀 값입니다"
+                            + "(10·20·30… 은 학번이 다른 반과 겹칩니다).");
         }
         classMaster.changeExamClassNo(examClassNo);
         return classMaster;
