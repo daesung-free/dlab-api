@@ -62,4 +62,17 @@ public class StaffAttendance extends BaseEntity {
         this.eventType = eventType;
         this.recordedAt = recordedAt;
     }
+
+    /**
+     * 기록 보정 (긴급출입 2-4).
+     *
+     * <p>★ <b>근무일({@code workDate})은 바꾸지 않는다.</b> 시각을 다른 날로 옮기면
+     * 근무일과 어긋난 행이 생기는데, 오전 출근 확인(07:05)이 근무일로 세기 때문에
+     * <b>그 행은 어느 날에도 안 잡히거나 엉뚱한 날에 잡힌다.</b> 날을 옮겨야 하면
+     * 지우고 새로 넣는 일이다 — 호출부가 날짜가 달라지는 수정을 거절한다.
+     */
+    public void applyEdit(StaffAttendanceType eventType, Instant recordedAt) {
+        this.eventType = eventType;
+        this.recordedAt = recordedAt;
+    }
 }

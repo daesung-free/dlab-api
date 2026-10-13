@@ -85,14 +85,27 @@ public final class AdminSurveyResponses {
      * <p>익명 설문에서도 <b>제출 여부</b>는 알 수 있다 — 미제출자 독려에 필요하다.
      * 알 수 없는 건 "무엇을 냈는가"다.
      */
+    /**
+     * 대상자 한 줄.
+     *
+     * <p>★ <b>이제 미제출 행도 나온다</b>(장학 동의서에서만). 범위로 돌리는 일반 설문은
+     * 대상자를 미리 만들지 않으므로 <b>지금까지와 같이 제출자만</b> 나온다.
+     *
+     * <p>⚠️ <b>제출자 수를 세려면 {@code submittedAt != null} 로 세야 한다</b> —
+     * 행 수로 세면 미제출 대상자까지 포함된다.
+     *
+     * @param state 「발송 / 열람 / 동의 / 제출」. 화면이 이 값으로 네 칸을 그린다
+     */
     public record Participant(Long enrollmentId, String studentNo, String studentName,
-                              Instant submittedAt) {
+                              SurveyParticipant.ConsentState state,
+                              Instant viewedAt, Instant agreedAt, Instant submittedAt) {
 
         static Participant from(SurveyParticipant p) {
             return new Participant(p.getEnrollment().getId(),
                     p.getEnrollment().getStudentNo(),
                     p.getEnrollment().getStudent().getName(),
-                    p.getSubmittedAt());
+                    p.state(),
+                    p.getViewedAt(), p.getAgreedAt(), p.getSubmittedAt());
         }
     }
 }

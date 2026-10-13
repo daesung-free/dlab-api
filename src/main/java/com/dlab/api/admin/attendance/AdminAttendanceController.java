@@ -1,6 +1,7 @@
 package com.dlab.api.admin.attendance;
 
 import com.dlab.common.privacy.Masking;
+import com.dlab.domain.attendance.service.AttendanceInterval;
 import com.dlab.common.privacy.PersonalDataPolicy;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
@@ -52,6 +53,7 @@ public class AdminAttendanceController {
 
     private final AttendanceBoardService boardService;
     private final StudyTimeRecalculationService recalculationService;
+    private final com.dlab.domain.attendance.service.ManualCheckOutService manualCheckOutService;
     private final AttendanceCorrectionService correctionService;
 
     /**
@@ -157,7 +159,18 @@ public class AdminAttendanceController {
             int studyMinutes,
             String studyTime,
             String guardianPhone,
-            boolean unexcusedLate
+            boolean unexcusedLate,
+            /**
+             * 그날의 외출·조퇴 구간 (피드백 5-5).
+             *
+             * <p>★ <b>시간순</b>이고 <b>ISO 인스턴트</b>다 — 등원·하원과 형식이 같아야
+             * 화면이 한 번만 파싱하고, 자정을 넘긴 외출도 표현된다.
+             *
+             * <p>★ 복귀 없음은 {@code returnState} 로 갈린다 —
+             * {@code PENDING}(지금 밖) · {@code NO_RETURN_RECORD}(기록 누락) ·
+             * {@code NOT_EXPECTED}(조퇴). <b>담당자가 할 일이 다르다.</b>
+             */
+            List<AttendanceInterval> events
     ) {
         static AttendanceRowResponse of(AttendanceRow r, boolean raw) {
             return new AttendanceRowResponse(
@@ -168,7 +181,8 @@ public class AdminAttendanceController {
                     r.status(), r.excused(),
                     r.studyMinutes(), r.studyTimeLabel(),
                     raw ? r.guardianPhone() : Masking.phone(r.guardianPhone()),
-                    r.unexcusedLate());
+                    r.unexcusedLate(),
+                    r.events());
         }
     }
 
@@ -191,6 +205,46 @@ public class AdminAttendanceController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return ApiResponse.success(new RecalculationResult(
                 recalculationService.recalculate(me, academyId, from, to)));
+    }
+
+    /**
+     * 하원 시각 수기 입력 (2026-10-13 디랩 피드백 4-2).
+     *
+     * <p>디랩 원문: <i>"조퇴·외출 선택을 하지 않아 하원 미표시된 경우 <b>키오스크에 알림 창이
+     * 표시된 시간을 확인하고 그 시간을 수기 입력</b>합니다."</i>
+     *
+     * <p>★★ <b>서버가 추정하지 않는다.</b> 「하원이 없는 날의 순공시간」은 오래 미확정이던
+     * 항목이고 후보가 셋이었다(순공 0 / 지정 하원시각 간주 / 관리자 보정) — <b>디랩이
+     * 「관리자 보정」을 골랐다.</b> 넣기 전까지는 계산하지 않는다 — 0 으로 두면
+     * <b>진짜 0분과 구분되지 않는다.</b>
+     *
+     * <p>넣으면 <b>그날 순공을 바로 다시 계산해 돌려준다</b> — 「보정했는데 순공이 그대로」로
+     * 보이면 담당자가 또 누른다.
+     */
+    @PostMapping("/{enrollmentId}/check-out")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN', 'TEACHER')")
+    public ApiResponse<CheckOutResult> recordCheckOut(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long enrollmentId,
+            @Valid @RequestBody CheckOutRequest request) {
+
+        int minutes = manualCheckOutService.recordCheckOut(
+                me, enrollmentId, request.date(), request.at());
+        return ApiResponse.success(new CheckOutResult(minutes,
+                "%d시간 %02d분".formatted(minutes / 60, minutes % 60)));
+    }
+
+    /**
+     * @param date 그 날짜. 앞날은 거절한다
+     * @param at   하원 시각. <b>등원보다 빠르면 거절한다</b> — 순공이 음수가 된다
+     */
+    public record CheckOutRequest(
+            @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @NotNull @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime at) {
+    }
+
+    /** @param studyTime 화면 표기 {@code "N시간 MM분"} — 다시 계산한 결과다 */
+    public record CheckOutResult(int studyMinutes, String studyTime) {
     }
 
     /** @param updated 다시 계산한 행 수. 0이면 확정된 날이 없다는 뜻이다 */

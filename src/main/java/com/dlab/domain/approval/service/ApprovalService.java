@@ -434,6 +434,18 @@ public class ApprovalService {
         }
     }
 
+    /**
+     * 이 사람이 어떤 자격으로 승인하는가.
+     *
+     * <h2>★★ 학부모는 「연결돼 있으면」 통과다 (2026-10-12 회신)</h2>
+     * <b>승인자로 지정됐는지 보지 않는다.</b> 부·모 양쪽에 알림이 가고 <b>먼저 승인한 쪽으로
+     * 확정</b>되는 것이 확정 사항이라, 한쪽만 통과시키면 다른 쪽이 알림을 받고 눌렀을 때
+     * {@code NOT_AN_APPROVER} 가 난다.
+     *
+     * <p>⚠️ {@code student_guardian_link.is_approver} 가 그래서 여기 없다 —
+     * 0803 「학부모 최대 1인」을 위해 만든 컬럼이고 <b>그 결정이 뒤집혔다.</b>
+     * 조건으로 넣지 말 것({@code GuardianRaceApprovalTest} 가 막는다).
+     */
     private ApproverType resolveApproverType(ApprovalRequest request, Account approver) {
         Long studentId = request.getEnrollment().getStudent().getId();
 

@@ -147,6 +147,18 @@ public class AdminAdmissionReservationController {
                                   String stdGrade, String schoolName,
                                   ConsultStatus status, String statusName,
                                   boolean converted, Long enrollmentId, String studentNo,
+                                  /**
+                                   * 등원 희망일 (피드백 5-3).
+                                   *
+                                   * <p>★ 상세에만 있던 값이다. 대기자 화면이 <b>등원 예정일별
+                                   * 인원</b>을 세야 해서 목록에도 싣는다 — 없으면 화면이
+                                   * 행마다 상세를 부르게 된다.
+                                   *
+                                   * <p>⚠️ 규격서 필드라 <b>문자열</b>이다({@code yyyyMMdd}).
+                                   * 날짜로 바꾸지 않는다 — 들어온 값을 그대로 보여야
+                                   * 담당자가 이상한 입력을 알아본다.
+                                   */
+                                  String admissionDate,
                                   Instant createdAt) {
 
         static ReservationView from(AdmissionReservation r) {
@@ -157,6 +169,7 @@ public class AdminAdmissionReservationController {
                     r.converted(),
                     r.getEnrollment() == null ? null : r.getEnrollment().getId(),
                     r.getEnrollment() == null ? null : r.getEnrollment().getStudentNo(),
+                    r.getAdmDt(),
                     r.getCreatedAt());
         }
     }

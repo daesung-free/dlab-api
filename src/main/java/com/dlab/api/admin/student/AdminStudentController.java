@@ -14,6 +14,8 @@ import com.dlab.domain.user.service.StudentImportService;
 import com.dlab.domain.user.service.StudentStatusService;
 import com.dlab.domain.user.service.StudentService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -59,6 +61,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminStudentController {
 
     private final StudentService studentService;
+    private final com.dlab.domain.user.service.ActorNames actorNames;
     private final com.dlab.domain.user.service.HomeroomOverrideService homeroomOverrideService;
     private final StudentImportService studentImportService;
     private final StudentExportService studentExportService;
@@ -122,6 +125,9 @@ public class AdminStudentController {
             @RequestParam(required = false) EnrollmentStatus status,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) Long teacherId,
+            // ★ 현재 배정된 좌석번호로 찾는다(피드백 5-2). 화면에 보이는 번호 그대로다 —
+            //   키오스크용 1000번대 변환은 내려줄 때만 하므로 여기서는 쓰지 않는다
+            @RequestParam(required = false) String seatCd,
             @RequestParam(required = false) String schoolName,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedFrom,
@@ -137,7 +143,7 @@ public class AdminStudentController {
 
         Page<StudentEnrollment> page = studentService.search(
                 SearchScope.of(me, year, academyId),
-                scoped(condition(keyword, grade, track, status, classId, teacherId, schoolName,
+                scoped(condition(keyword, grade, track, status, classId, teacherId, seatCd, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
                         unassignedLocker, hasScholarship, scholarshipType, retakeCount),
                         me, year),
@@ -147,15 +153,79 @@ public class AdminStudentController {
         return ApiResponse.from(page.map(e -> StudentResponse.from(e, extras, me)));
     }
 
+    // ── 메모 (2026-10-13 피드백 5-2) ─────────────────────
+
+    /**
+     * 메모 목록. <b>최근 것이 위</b>다.
+     *
+     * <p>★ 작성자 이름을 함께 내린다 — 이 화면을 지점 관리자도 보는데 그 계정에는 계정 목록
+     * 조회 권한이 없을 수 있어, 화면이 id 로 이름을 맞추게 하면 영원히 「-」가 된다.
+     */
+    @GetMapping("/{enrollmentId}/memos")
+    public ApiResponse<List<MemoView>> memos(@CurrentAccount AuthPrincipal me,
+                                             @PathVariable Long enrollmentId) {
+        var memos = studentService.memos(me, enrollmentId);
+        var names = actorNames.of(memos.stream()
+                .map(com.dlab.domain.user.entity.StudentMemo::getCreatedBy).toList());
+        return ApiResponse.success(memos.stream()
+                .map(m -> MemoView.of(m, names.get(m.getCreatedBy()))).toList());
+    }
+
+    /**
+     * 메모 추가.
+     *
+     * <p>★ <b>덮어쓰지 않고 쌓는다.</b> 칸 하나로 두면 담당자가 여럿일 때 서로 덮어쓰고
+     * 누가 언제 썼는지가 사라진다.
+     */
+    @PostMapping("/{enrollmentId}/memos")
+    public ApiResponse<MemoView> addMemo(@CurrentAccount AuthPrincipal me,
+                                         @PathVariable Long enrollmentId,
+                                         @Valid @RequestBody MemoRequest request) {
+        var saved = studentService.addMemo(me, enrollmentId, request.content());
+        return ApiResponse.success(MemoView.of(saved, null));
+    }
+
+    /**
+     * 메모 삭제.
+     *
+     * <p>★ <b>soft delete 다.</b> 「그때 무슨 메모가 있었나」에 답해야 하고, 상담·징계
+     * 근거로 쓰인 메모가 조용히 사라지면 안 된다.
+     */
+    @DeleteMapping("/memos/{memoId}")
+    public ApiResponse<Void> deleteMemo(@CurrentAccount AuthPrincipal me,
+                                        @PathVariable Long memoId) {
+        studentService.deleteMemo(me, memoId);
+        return ApiResponse.empty();
+    }
+
+    @io.swagger.v3.oas.annotations.media.Schema(name = "StudentMemoRequest")
+    public record MemoRequest(@NotBlank(message = "메모 내용을 적어 주세요.")
+                              @Size(max = 2000) String content) {
+    }
+
+    /**
+     * @param writerName 작성자 이름. <b>비어 있으면 사람이 아니다</b>(배치·시스템)
+     */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "StudentMemoView")
+    public record MemoView(Long id, String content, Long writerId, String writerName,
+                           java.time.Instant createdAt) {
+
+        static MemoView of(com.dlab.domain.user.entity.StudentMemo m, String writerName) {
+            return new MemoView(m.getId(), m.getContent(), m.getCreatedBy(), writerName,
+                    m.getCreatedAt());
+        }
+    }
+
     private StudentSearchCondition condition(String keyword, GradeType grade, TrackType track,
                                              EnrollmentStatus status, Long classId, Long teacherId,
+                                             String seatCd,
                                              String schoolName, LocalDate admittedFrom,
                                              LocalDate admittedTo, Boolean unassignedClass,
                                              Boolean unassignedSeat, Boolean unassignedLocker,
                                              Boolean hasScholarship, String scholarshipType,
                                              Short retakeCount) {
         return new StudentSearchCondition(keyword, grade, track, status, classId, teacherId,
-                schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
+                seatCd, schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
                 unassignedLocker, hasScholarship, scholarshipType, retakeCount, null);
     }
 
@@ -296,6 +366,32 @@ public class AdminStudentController {
     }
 
     /**
+     * 출결 카드 발급·재발급 (RFID).
+     *
+     * <p>출결이 카드 태깅으로 돌아가는데 <b>학생에게 카드번호를 넣을 경로가 없었다.</b>
+     * 앱 QR 이 담는 값도 이 카드번호다 — 없으면 QR 도 만들 수 없다.
+     *
+     * <p>★ <b>현재 유효한 다른 학생이 쓰는 카드면 거부한다.</b> 같은 카드가 둘에게 붙으면
+     * 키오스크가 태깅할 때 그 자리에서 터진다. 기수가 바뀐 뒤의 재사용은 막지 않는다
+     * (카드번호는 UNIQUE 가 아니고 이력이 쌓인다).
+     *
+     * <p>{@code rfidNo} 를 비우면 <b>카드 해제</b>다 — 분실 신고 후 재발급 전까지.
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+    @PatchMapping("/{enrollmentId}/card")
+    public ApiResponse<StudentResponse> changeCard(@CurrentAccount AuthPrincipal me,
+                                                   @PathVariable Long enrollmentId,
+                                                   @Valid @RequestBody CardRequest request) {
+        return ApiResponse.success(single(
+                studentService.changeCard(me, enrollmentId, request.rfidNo()), me));
+    }
+
+    /** @param rfidNo 카드번호. 비우면 해제. 스키마가 10자다 */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "StudentCardRequest")
+    public record CardRequest(@jakarta.validation.constraints.Size(max = 10) String rfidNo) {
+    }
+
+    /**
      * 오등록 학생 삭제 (soft).
      *
      * <p><b>퇴원·제적에는 쓰지 않는다</b> — 그건 아래 {@code /status}이고 반·좌석 해제와
@@ -379,6 +475,9 @@ public class AdminStudentController {
             @RequestParam(required = false) EnrollmentStatus status,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) Long teacherId,
+            // ★ 현재 배정된 좌석번호로 찾는다(피드백 5-2). 화면에 보이는 번호 그대로다 —
+            //   키오스크용 1000번대 변환은 내려줄 때만 하므로 여기서는 쓰지 않는다
+            @RequestParam(required = false) String seatCd,
             @RequestParam(required = false) String schoolName,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedFrom,
@@ -393,7 +492,7 @@ public class AdminStudentController {
 
         // 목록과 같은 범위를 건다 — 담임이 내려받은 파일에 남의 반 학생이 들어가면 회수가 안 된다
         byte[] file = studentExportService.export(SearchScope.of(me, year, academyId),
-                scoped(condition(keyword, grade, track, status, classId, teacherId, schoolName,
+                scoped(condition(keyword, grade, track, status, classId, teacherId, seatCd, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
                         unassignedLocker, hasScholarship, scholarshipType, retakeCount),
                         me, year));

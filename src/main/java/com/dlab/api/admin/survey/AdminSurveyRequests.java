@@ -79,6 +79,25 @@ public final class AdminSurveyRequests {
                            List<Integer> sumOfIndexes) {
     }
 
+    /**
+     * 문항 교체 (장학 동의서 — 2026-10-13 회신 5-1).
+     *
+     * <p>★ <b>제출이 하나라도 있으면 거절된다.</b> 고치면 이미 동의한 학생의 동의 내용이
+     * 소급해서 바뀐다 — 그때는 복제해서 새로 만든다.
+     */
+    public record Questions(@NotEmpty List<AdminSurveyQuestion> questions) {
+
+        public List<SurveyService.QuestionCommand> toCommands() {
+            return questions.stream()
+                    .map(q -> new SurveyService.QuestionCommand(
+                            q.type(), q.title(), q.required(),
+                            q.minValue(), q.maxValue(), q.options(),
+                            q.showIfQuestionIndex(), q.showIfOptionIndex(),
+                            q.sumOfIndexes()))
+                    .toList();
+        }
+    }
+
     /** 기간·안내문 수정. 범위·대상·문항은 바꿀 수 없다. */
     public record AdminSurveyUpdate(@NotBlank @Size(max = 200) String title,
                          String description,

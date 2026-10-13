@@ -43,9 +43,11 @@ public class StudentSearchRepository {
      * 매핑되지 않은 이름에서 예외가 나 검색 화면 전체가 죽는다. ②인덱스가 없는 임의 컬럼으로
      * 정렬하면 재원생 전체를 정렬하느라 목록이 급격히 느려진다.
      *
-     * <p><b>반(class)은 넣을 수 없다.</b> 반 배정이 {@code class_assignment} 별도 테이블이라
-     * {@link PathBuilder}로 닿는 경로가 없다(검색 조건도 서브쿼리로 건다). 반 정렬이 필요해지면
-     * 조인을 추가하고 별도 {@code OrderSpecifier}를 만들어야 한다.
+     * <p><b>반(class)·좌석(seat)은 이 목록에 없다 — 여기 넣어도 동작하지 않는다.</b>
+     * 둘 다 별도 테이블이라 {@link PathBuilder}로 닿는 경로가 없고, 이름만 더하면
+     * {@code toOrders}가 <b>조용히 무시</b>한다. 대신
+     * {@link #specialOrder(Sort.Order)}가 서브쿼리로 처리한다 — {@code sort=className}·
+     * {@code sort=seatCd}는 <b>지원된다.</b>
      */
     public static final List<String> SORTABLE = List.of(
             "studentNo",      // 학번 — 기본 정렬이자 tie-breaker
@@ -117,8 +119,19 @@ public class StudentSearchRepository {
      */
     private OrderSpecifier<?>[] toOrders(Sort sort) {
         Sort resolved = applyAliases(sort);
-        List<OrderSpecifier<?>> orders =
-                new ArrayList<>(Arrays.asList(SearchSupport.toOrders(SORT_PATH, resolved, SORTABLE)));
+        List<OrderSpecifier<?>> orders = new ArrayList<>();
+
+        // ★ 요청 순서를 그대로 지킨다 — 정렬키를 한꺼번에 넘기면 반·좌석을 끼워 넣을 자리가
+        //   없어 "반 다음 학년" 같은 두 단계 정렬이 뒤바뀐다
+        for (Sort.Order order : resolved) {
+            OrderSpecifier<?> special = specialOrder(order);
+            if (special != null) {
+                orders.add(special);
+                continue;
+            }
+            orders.addAll(Arrays.asList(SearchSupport.toOrders(
+                    SORT_PATH, Sort.by(order), SORTABLE)));
+        }
 
         boolean alreadySortedByStudentNo = resolved.stream()
                 .anyMatch(order -> TIE_BREAKER.equals(order.getProperty()));
@@ -126,6 +139,52 @@ public class StudentSearchRepository {
             orders.add(QStudentEnrollment.studentEnrollment.studentNo.asc());
         }
         return orders.toArray(new OrderSpecifier<?>[0]);
+    }
+
+    /**
+     * 반·좌석 정렬 (2026-10-13 피드백 5-2 · 5-7 · 5-8 — 세 화면에서 따로 요청됐다).
+     *
+     * <h2>★★ 화이트리스트에 이름만 더하면 안 된다</h2>
+     * 반·좌석은 <b>별도 테이블</b>({@code class_assignment} · {@code seat_assignment})이라
+     * {@link PathBuilder} 로 닿는 경로가 없다. 이름만 추가하면 {@code toOrders} 가
+     * <b>조용히 무시</b>해서 「정렬이 안 먹는다」로만 보인다 — 오류도 안 난다.
+     *
+     * <h2>★ 조인 대신 서브쿼리로 한다</h2>
+     * {@code leftJoin} 을 걸면 <b>배정 이력이 여러 건인 학생이 중복으로 나온다</b>
+     * (비활성 배정도 행이 남는다). 그러면 페이징 건수가 어긋나 화면이 빈 페이지를 그린다.
+     * 서브쿼리는 행 수를 바꾸지 않는다.
+     *
+     * <h2>★ 미배정은 항상 뒤로</h2>
+     * 내림차순이면 PostgreSQL 이 NULL 을 <b>앞에</b> 놓는다 — 반을 역순으로 보려 했는데
+     * 미배정 학생이 먼저 쌓이면 목록이 쓸모없어진다.
+     *
+     * @return 반·좌석 정렬이 아니면 {@code null}
+     */
+    private OrderSpecifier<?> specialOrder(Sort.Order order) {
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        com.querydsl.core.types.Order dir = order.isAscending()
+                ? com.querydsl.core.types.Order.ASC
+                : com.querydsl.core.types.Order.DESC;
+
+        if ("className".equals(order.getProperty())) {
+            QClassAssignment a = QClassAssignment.classAssignment;
+            // 고정반만 본다 — 이동수업반까지 세면 학생당 여러 건이 나와 서브쿼리가 깨진다
+            var sub = com.querydsl.jpa.JPAExpressions
+                    .select(a.classMaster.name)
+                    .from(a)
+                    .where(a.enrollment.eq(e), a.active.isTrue(),
+                            a.classType.eq(com.dlab.domain.user.entity.ClassType.FIXED));
+            return new OrderSpecifier<>(dir, sub).nullsLast();
+        }
+        if ("seatCd".equals(order.getProperty())) {
+            QSeatAssignment a = QSeatAssignment.seatAssignment;
+            var sub = com.querydsl.jpa.JPAExpressions
+                    .select(a.seat.seatCd)
+                    .from(a)
+                    .where(a.enrollment.eq(e), a.releasedAt.isNull(), a.deleted.isFalse());
+            return new OrderSpecifier<>(dir, sub).nullsLast();
+        }
+        return null;
     }
 
     /** {@code sort=name} 같은 화면 친화적 이름을 실제 경로로 바꾼다. 그 외는 그대로 둔다. */
@@ -178,6 +237,7 @@ public class StudentSearchRepository {
                 assignedToTeacher(cond.teacherId()),
                 classAssigned(cond.unassignedClass()),
                 seatAssigned(cond.unassignedSeat()),
+                hasSeatCd(cond.seatCd()),
                 lockerAssigned(cond.unassignedLocker()),
                 SearchPredicates.eq(e.retakeCount, cond.retakeCount()),
                 hasScholarship(cond.hasScholarship(), cond.scholarshipType()),
@@ -272,6 +332,29 @@ public class StudentSearchRepository {
     }
 
     /** 좌석 배정 여부. "배정 중"은 {@code released_at IS NULL}이다(V2 스키마 규약). */
+    /**
+     * 좌석번호 검색 (피드백 5-2).
+     *
+     * <p>좌석 배정도 별도 테이블이라 서브쿼리로 건다. <b>현재 배정만</b> 본다 —
+     * 회수된 좌석까지 걸면 그 자리를 쓰던 옛 학생이 같이 나온다.
+     *
+     * <p>★ <b>키오스크용 번호가 아니라 화면에 보이는 번호로 찾는다.</b> 별관은 키오스크에
+     * 내릴 때만 1000번대로 바꾸므로(§2 동탄2관), 담당자가 화면에서 본 번호로 검색해야 맞는다.
+     */
+    private BooleanExpression hasSeatCd(String seatCd) {
+        if (seatCd == null || seatCd.isBlank()) {
+            return null;
+        }
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        QSeatAssignment a = QSeatAssignment.seatAssignment;
+        return com.querydsl.jpa.JPAExpressions
+                .selectOne()
+                .from(a)
+                .where(a.enrollment.eq(e), a.releasedAt.isNull(), a.deleted.isFalse(),
+                        a.seat.seatCd.eq(seatCd.trim()))
+                .exists();
+    }
+
     private BooleanExpression seatAssigned(Boolean unassigned) {
         if (unassigned == null) {
             return null;

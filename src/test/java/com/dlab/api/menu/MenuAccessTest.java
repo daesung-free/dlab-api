@@ -49,6 +49,7 @@ class MenuAccessTest {
     @Autowired EntityManager em;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired ObjectMapper objectMapper;
+    @Autowired com.dlab.domain.menu.repository.AccountMenuRepository accountMenuRepository;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
@@ -90,7 +91,7 @@ class MenuAccessTest {
     @Test
     @DisplayName("★★ 화면만 감추지 않는다 — 주소를 직접 쳐도 서버가 막는다")
     void serverBlocksHiddenMenu() throws Exception {
-        menuAccessService.replace(superAdmin, viewer.getId(), List.of("attendance"));
+        menuAccessService.replace(superAdmin, viewer.getId(), true, List.of("attendance"));
         em.flush();
 
         String token = login();
@@ -107,20 +108,122 @@ class MenuAccessTest {
     }
 
     @Test
-    @DisplayName("빈 목록을 보내면 제한이 풀린다 — 되돌릴 방법이 있어야 한다")
-    void emptyCodesClearRestriction() {
-        menuAccessService.replace(superAdmin, viewer.getId(), List.of("attendance"));
+    @DisplayName("restricted=false 면 제한이 풀린다 — 되돌릴 방법이 있어야 한다")
+    void clearsRestriction() {
+        menuAccessService.replace(superAdmin, viewer.getId(), true, List.of("attendance"));
         assertThat(menuAccessService.restricted(viewer.getId())).isTrue();
 
-        menuAccessService.replace(superAdmin, viewer.getId(), List.of());
+        menuAccessService.replace(superAdmin, viewer.getId(), false, List.of());
         assertThat(menuAccessService.restricted(viewer.getId())).isFalse();
+    }
+
+    @Test
+    @DisplayName("★★ 「직접 지정 + 0개」는 거부한다 — 예전에는 이게 「전부 열기」가 됐다")
+    void rejectsRestrictedWithNothing() {
+        // 화면의 「전체 해제」를 누르고 저장하면 정반대로 전부 열렸다. 뜻을 추측하지 않는다
+        assertThatThrownBy(() -> menuAccessService.replace(
+                superAdmin, viewer.getId(), true, List.of()))
+                .hasMessageContaining("계정을 정지");
+    }
+
+    @Test
+    @DisplayName("★ 화면 없는 권한은 사이드바에서 빠진다 — 눌러도 갈 데가 없다")
+    void actionOnlyIsHiddenFromSidebar() {
+        menuAccessService.replace(superAdmin, viewer.getId(), true,
+                List.of("attendance", "EMERGENCY_ACCESS_ALERT"));
+
+        AuthPrincipal viewerPrincipal = new AuthPrincipal(viewer.getId(), "EMPLOYEE", 1L,
+                Set.of(Role.READONLY), false, false);
+        var codes = menuAccessService.visibleMenus(viewerPrincipal).stream()
+                .map(com.dlab.domain.menu.entity.Menu::getCode).toList();
+
+        assertThat(codes).contains("attendance");
+        // 권한은 부여됐지만 사이드바에는 안 나온다 — 체크박스 목록(catalog)에는 그대로 있다
+        assertThat(codes).doesNotContain("EMERGENCY_ACCESS_ALERT");
+        assertThat(menuAccessService.catalog()).extracting(
+                com.dlab.domain.menu.entity.Menu::getCode).contains("EMERGENCY_ACCESS_ALERT");
+    }
+
+    @Test
+    @DisplayName("★★ 동작 권한만 켜도 화면은 그대로다 — 켠 순간 사이드바가 비던 것을 고쳤다")
+    void actionOnlyGrantDoesNotHideScreens() {
+        int before = menuAccessService.visibleMenus(viewerPrincipal).size();
+
+        // 아침 알림 수신 권한만 켠다(화면 메뉴는 고르지 않는다)
+        menuAccessService.replace(superAdmin, viewer.getId(), false,
+                List.of("EMERGENCY_ACCESS_ALERT"));
+
+        // 화면은 역할 기본값 그대로여야 한다 —
+        // 행이 있는지만 보면 「제한 걸림」으로 판정돼 화면이 0개가 됐다
+        assertThat(menuAccessService.restricted(viewer.getId())).isFalse();
+        assertThat(menuAccessService.visibleMenus(viewerPrincipal)).hasSize(before);
+
+        // 동작 권한은 실제로 켜져 있다
+        assertThat(accountMenuRepository.hasMenu(viewer.getId(), "EMERGENCY_ACCESS_ALERT"))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("★★ 동작 권한만 켠 계정도 화면 API 를 부를 수 있다 — 전부 403 이 되던 것을 고쳤다")
+    void actionOnlyGrantDoesNotBlockScreenApis() {
+        menuAccessService.replace(superAdmin, viewer.getId(), false,
+                List.of("EMERGENCY_ACCESS_ALERT"));
+
+        // 원시 행을 보면 「제한 걸림」으로 판정돼 경로 주인이 목록에 없다고 막았다.
+        // 사이드바·판정·경로차단 셋이 같은 기준을 써야 어긋나지 않는다
+        assertThat(menuAccessService.allows(viewer.getId(), "/api/v1/admin/attendance/daily"))
+                .isTrue();
+        assertThat(menuAccessService.allows(viewer.getId(), "/api/v1/admin/staff-attendance/records"))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("★ 화면 제한과 동작 권한을 함께 걸 수 있다 — 사이드바에는 화면만 나온다")
+    void screenRestrictionAndActionGrantCoexist() {
+        menuAccessService.replace(superAdmin, viewer.getId(), true,
+                List.of("attendance", "STAFF_ATTENDANCE_EDIT"));
+
+        assertThat(menuAccessService.restricted(viewer.getId())).isTrue();
+        assertThat(menuAccessService.visibleMenus(viewerPrincipal))
+                .extracting(com.dlab.domain.menu.entity.Menu::getCode)
+                .containsExactly("attendance");
+        assertThat(accountMenuRepository.hasMenu(viewer.getId(), "STAFF_ATTENDANCE_EDIT"))
+                .isTrue();
+    }
+
+    @Test
+    @DisplayName("★ 화면 제한을 풀어도 동작 권한은 목록에서 빼야 꺼진다")
+    void clearingRestrictionKeepsListedActionGrants() {
+        menuAccessService.replace(superAdmin, viewer.getId(), true,
+                List.of("attendance", "EMERGENCY_ACCESS_ALERT"));
+
+        // 화면 제한만 푼다. 동작 권한은 그대로 보냈으므로 유지된다 —
+        // 같이 지우면 「역할 기본값 화면 + 이 동작 권한」을 표현할 방법이 없어진다
+        menuAccessService.replace(superAdmin, viewer.getId(), false,
+                List.of("EMERGENCY_ACCESS_ALERT"));
+        assertThat(menuAccessService.restricted(viewer.getId())).isFalse();
+        assertThat(accountMenuRepository.hasMenu(viewer.getId(), "EMERGENCY_ACCESS_ALERT"))
+                .isTrue();
+
+        // 끄려면 목록에서 뺀다
+        menuAccessService.replace(superAdmin, viewer.getId(), false, List.of());
+        assertThat(accountMenuRepository.hasMenu(viewer.getId(), "EMERGENCY_ACCESS_ALERT"))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("★ 동작 권한만 골라 「직접 지정」하면 거절한다 — 화면이 0개가 된다")
+    void rejectsRestrictedWithOnlyActionMenus() {
+        assertThatThrownBy(() -> menuAccessService.replace(superAdmin, viewer.getId(), true,
+                List.of("STAFF_ATTENDANCE_EDIT")))
+                .hasMessageContaining("하나 이상");
     }
 
     @Test
     @DisplayName("★ 없는 메뉴 코드는 거절한다 — 조용히 빠지면 못 준 줄 모른다")
     void rejectsUnknownCode() {
         assertThatThrownBy(() -> menuAccessService.replace(
-                superAdmin, viewer.getId(), List.of("attendance", "없는메뉴")))
+                superAdmin, viewer.getId(), true, List.of("attendance", "없는메뉴")))
                 .hasMessageContaining("없는 메뉴");
     }
 
@@ -131,14 +234,14 @@ class MenuAccessTest {
                 Set.of(Role.BRANCH_ADMIN), false, false);
 
         assertThatThrownBy(() -> menuAccessService.replace(
-                branch, viewer.getId(), List.of("attendance")))
+                branch, viewer.getId(), true, List.of("attendance")))
                 .hasMessageContaining("최고관리자");
     }
 
     @Test
     @DisplayName("★ 경로 경계를 본다 — /staff 가 /staff-cards 까지 삼키면 안 된다")
     void prefixRespectsBoundary() {
-        menuAccessService.replace(superAdmin, viewer.getId(), List.of("staff"));
+        menuAccessService.replace(superAdmin, viewer.getId(), true, List.of("staff"));
         em.flush();
 
         assertThat(menuAccessService.allows(viewer.getId(), "/api/v1/admin/staff/accounts")).isTrue();
@@ -163,7 +266,7 @@ class MenuAccessTest {
     @Test
     @DisplayName("★ 볼 수 없는 메뉴는 담기지 않는다 — 눌러도 403 인 칸이 대시보드에 남는다")
     void cannotFavoriteHiddenMenu() {
-        menuAccessService.replace(superAdmin, viewer.getId(), List.of("attendance"));
+        menuAccessService.replace(superAdmin, viewer.getId(), true, List.of("attendance"));
         em.flush();
 
         assertThatThrownBy(() -> menuAccessService.replaceFavorites(
@@ -174,7 +277,7 @@ class MenuAccessTest {
     @Test
     @DisplayName("자주 쓰는 메뉴를 담아도 권한은 그대로다 — 편의 설정이 권한을 넓히지 않는다")
     void favoriteDoesNotGrantAccess() {
-        menuAccessService.replace(superAdmin, viewer.getId(), List.of("attendance", "penalty"));
+        menuAccessService.replace(superAdmin, viewer.getId(), true, List.of("attendance", "penalty"));
         menuAccessService.replaceFavorites(viewerPrincipal, List.of("penalty"));
         em.flush();
 

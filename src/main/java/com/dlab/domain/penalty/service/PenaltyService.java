@@ -34,6 +34,7 @@ public class PenaltyService {
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
     private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
+    private final com.dlab.domain.facility.repository.SeatAssignmentRepository seatAssignmentRepository;
     private final java.time.Clock clock;
 
     /**
@@ -149,7 +150,8 @@ public class PenaltyService {
         var studentFilter = homeroomScopeService.resolveStudentFilter(
                 principal, (short) from.getYear(), classId);
         if (studentFilter.blocksEverything()) {
-            return new PenaltyBoard(List.of(), 0, 0, 0L, java.util.Map.of(), classes);
+            return new PenaltyBoard(List.of(), 0, 0, 0L, java.util.Map.of(), classes,
+                    java.util.Map.of(), java.util.Map.of());
         }
 
         List<PenaltyPoint> filtered = points.stream()
@@ -169,7 +171,8 @@ public class PenaltyService {
                 .filter(p -> p.getSource() != PenaltySource.MANUAL).count();
 
         return new PenaltyBoard(filtered, plus, -minus, auto,
-                granterNames(filtered), classes);
+                granterNames(filtered), classes,
+                cumulativePointsOf(filtered), seatCodesOf(filtered));
     }
 
     /**
@@ -180,6 +183,43 @@ public class PenaltyService {
      * <p>배치·스케줄러가 부여한 건은 시스템 계정({@code 0})이라 조회되지 않는다 —
      * 화면이 {@code null}을 보고 "자동"으로 표시하면 된다.
      */
+    /**
+     * 등록 건 → <b>누적</b> 점수.
+     *
+     * <p>★ <b>한 번에 받는다.</b> 행마다 조회하면 200명이면 쿼리가 200번 나간다.
+     * 같은 학생의 행이 여러 개여도 조회는 학생 수만큼이다.
+     *
+     * <p>⚠️ <b>기간을 걸지 않는다.</b> 「누적 38점 (이번 달 +3)」에서 앞 숫자이고,
+     * 제적 기준 40점이 그 누적이다 — 기간 합계로 바꾸면 경고가 늦게 뜬다.
+     */
+    private java.util.Map<Long, Integer> cumulativePointsOf(List<PenaltyPoint> rows) {
+        var ids = rows.stream().map(p -> p.getEnrollment().getId())
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return java.util.Map.of();
+        }
+        java.util.Map<Long, Integer> totals = new java.util.HashMap<>();
+        for (Object[] row : pointRepository.sumPointsByEnrollments(ids)) {
+            totals.put((Long) row[0], ((Number) row[1]).intValue());
+        }
+        return totals;
+    }
+
+    /** 등록 건 → 좌석번호. 좌석번호 조회·정렬에 쓴다(피드백 5-7). 미배정이면 없다. */
+    private java.util.Map<Long, String> seatCodesOf(List<PenaltyPoint> rows) {
+        var ids = rows.stream().map(p -> p.getEnrollment().getId())
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return java.util.Map.of();
+        }
+        // 이미 있는 묶음 조회를 쓴다 — 좌석을 fetch 해 오므로 추가 쿼리가 없다
+        java.util.Map<Long, String> seats = new java.util.HashMap<>();
+        for (var assignment : seatAssignmentRepository.findActiveByEnrollmentIds(ids)) {
+            seats.put(assignment.getEnrollment().getId(), assignment.getSeat().getSeatCd());
+        }
+        return seats;
+    }
+
     private java.util.Map<Long, String> granterNames(List<PenaltyPoint> rows) {
         java.util.Set<Long> ids = rows.stream()
                 .map(PenaltyPoint::getCreatedBy)
@@ -239,8 +279,15 @@ public class PenaltyService {
      * @param granterNames 부여자 계정 ID → 이름. 배치 부여분은 없다
      * @param classNames   등록 건 ID → 반 이름. 미배정이면 없다
      */
+    /**
+     * @param cumulativePoints 등록 건 ID → <b>누적</b> 점수. 기간 합계가 아니다 —
+     *                         제적 기준 40점이 누적이라, 기간만 보이면 학부모가 오인한다
+     * @param seatCodes        등록 건 ID → 좌석번호. 미배정이면 없다(피드백 5-7)
+     */
     public record PenaltyBoard(List<PenaltyPoint> rows, int plusTotal, int minusTotal,
                                long autoCount, java.util.Map<Long, String> granterNames,
-                               java.util.Map<Long, String> classNames) {
+                               java.util.Map<Long, String> classNames,
+                               java.util.Map<Long, Integer> cumulativePoints,
+                               java.util.Map<Long, String> seatCodes) {
     }
 }

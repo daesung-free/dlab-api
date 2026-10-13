@@ -69,6 +69,52 @@ public interface StudentEnrollmentRepository extends JpaRepository<StudentEnroll
     Optional<StudentEnrollment> findCurrentByRfidNo(String rfidNo);
 
     /**
+     * 연락처로 그 지점의 <b>현재</b> 등록 건 — 긴급 출입이 학생을 찾는 경로.
+     *
+     * <h2>★ 숫자만 비교한다</h2>
+     * 저장된 값에 하이픈이 섞여 있다({@code 010-1234-5678} 과 {@code 01012345678} 이
+     * 같은 번호다). 문자열 그대로 비교하면 <b>같은 학생이 안 찾아진다</b> —
+     * 그러면 번호를 제대로 넣은 학생이 문 앞에서 거절당한다.
+     *
+     * <h2>★ 여러 건이 나올 수 있다</h2>
+     * {@code student.phone} 은 UNIQUE 가 아니다 — 형제가 같은 보호자 번호를 적어 둔
+     * 경우가 있다. <b>호출부가 1건으로 좁혀지는지 보고</b> 아니면 거절한다.
+     *
+     * <p>네이티브 쿼리인 이유는 JPQL 로 {@code replace} 중첩을 쓰기가 번거롭고,
+     * 조건이 인덱스를 못 타는 것은 어느 쪽이나 같아서다(지점 조건이 먼저 걸린다).
+     */
+    @Query(value = """
+            SELECT e.id FROM student_enrollment e
+            JOIN student s ON s.id = e.student_id
+            WHERE e.academy_id = :academyId
+              AND e.is_current = TRUE
+              AND e.is_deleted = FALSE
+              AND s.is_deleted = FALSE
+              AND s.phone IS NOT NULL
+              AND regexp_replace(s.phone, '[^0-9]', '', 'g') = :phoneDigits
+            """, nativeQuery = true)
+    List<Long> findCurrentIdsByPhoneDigits(@Param("academyId") Long academyId,
+                                           @Param("phoneDigits") String phoneDigits);
+
+    /**
+     * 연락처로 그 지점의 <b>모든</b> 등록 건(종료분 포함) — 「재원생이 아님」을 가리기 위해서다.
+     *
+     * <p>현재 건으로 못 찾았을 때 이걸로 한 번 더 본다. 나오면 <b>퇴원·제적</b>이고,
+     * 그건 「그런 번호 없음」과 다른 사건이라 담당자에게 달리 보여야 한다.
+     */
+    @Query(value = """
+            SELECT e.id FROM student_enrollment e
+            JOIN student s ON s.id = e.student_id
+            WHERE e.academy_id = :academyId
+              AND e.is_deleted = FALSE
+              AND s.is_deleted = FALSE
+              AND s.phone IS NOT NULL
+              AND regexp_replace(s.phone, '[^0-9]', '', 'g') = :phoneDigits
+            """, nativeQuery = true)
+    List<Long> findAnyIdsByPhoneDigits(@Param("academyId") Long academyId,
+                                       @Param("phoneDigits") String phoneDigits);
+
+    /**
      * 학번으로 현재 등록 건.
      *
      * <p>학번은 <b>매년 초기화</b>되므로 현재 등록 건({@code current})만 봐야 한다 —
