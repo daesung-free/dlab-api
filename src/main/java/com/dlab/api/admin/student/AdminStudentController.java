@@ -14,6 +14,8 @@ import com.dlab.domain.user.service.StudentImportService;
 import com.dlab.domain.user.service.StudentStatusService;
 import com.dlab.domain.user.service.StudentService;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -59,6 +61,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminStudentController {
 
     private final StudentService studentService;
+    private final com.dlab.domain.user.service.ActorNames actorNames;
     private final com.dlab.domain.user.service.HomeroomOverrideService homeroomOverrideService;
     private final StudentImportService studentImportService;
     private final StudentExportService studentExportService;
@@ -148,6 +151,69 @@ public class AdminStudentController {
 
         var extras = studentListEnricher.of(page.getContent());
         return ApiResponse.from(page.map(e -> StudentResponse.from(e, extras, me)));
+    }
+
+    // ── 메모 (2026-10-13 피드백 5-2) ─────────────────────
+
+    /**
+     * 메모 목록. <b>최근 것이 위</b>다.
+     *
+     * <p>★ 작성자 이름을 함께 내린다 — 이 화면을 지점 관리자도 보는데 그 계정에는 계정 목록
+     * 조회 권한이 없을 수 있어, 화면이 id 로 이름을 맞추게 하면 영원히 「-」가 된다.
+     */
+    @GetMapping("/{enrollmentId}/memos")
+    public ApiResponse<List<MemoView>> memos(@CurrentAccount AuthPrincipal me,
+                                             @PathVariable Long enrollmentId) {
+        var memos = studentService.memos(me, enrollmentId);
+        var names = actorNames.of(memos.stream()
+                .map(com.dlab.domain.user.entity.StudentMemo::getCreatedBy).toList());
+        return ApiResponse.success(memos.stream()
+                .map(m -> MemoView.of(m, names.get(m.getCreatedBy()))).toList());
+    }
+
+    /**
+     * 메모 추가.
+     *
+     * <p>★ <b>덮어쓰지 않고 쌓는다.</b> 칸 하나로 두면 담당자가 여럿일 때 서로 덮어쓰고
+     * 누가 언제 썼는지가 사라진다.
+     */
+    @PostMapping("/{enrollmentId}/memos")
+    public ApiResponse<MemoView> addMemo(@CurrentAccount AuthPrincipal me,
+                                         @PathVariable Long enrollmentId,
+                                         @Valid @RequestBody MemoRequest request) {
+        var saved = studentService.addMemo(me, enrollmentId, request.content());
+        return ApiResponse.success(MemoView.of(saved, null));
+    }
+
+    /**
+     * 메모 삭제.
+     *
+     * <p>★ <b>soft delete 다.</b> 「그때 무슨 메모가 있었나」에 답해야 하고, 상담·징계
+     * 근거로 쓰인 메모가 조용히 사라지면 안 된다.
+     */
+    @DeleteMapping("/memos/{memoId}")
+    public ApiResponse<Void> deleteMemo(@CurrentAccount AuthPrincipal me,
+                                        @PathVariable Long memoId) {
+        studentService.deleteMemo(me, memoId);
+        return ApiResponse.empty();
+    }
+
+    @io.swagger.v3.oas.annotations.media.Schema(name = "StudentMemoRequest")
+    public record MemoRequest(@NotBlank(message = "메모 내용을 적어 주세요.")
+                              @Size(max = 2000) String content) {
+    }
+
+    /**
+     * @param writerName 작성자 이름. <b>비어 있으면 사람이 아니다</b>(배치·시스템)
+     */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "StudentMemoView")
+    public record MemoView(Long id, String content, Long writerId, String writerName,
+                           java.time.Instant createdAt) {
+
+        static MemoView of(com.dlab.domain.user.entity.StudentMemo m, String writerName) {
+            return new MemoView(m.getId(), m.getContent(), m.getCreatedBy(), writerName,
+                    m.getCreatedAt());
+        }
     }
 
     private StudentSearchCondition condition(String keyword, GradeType grade, TrackType track,

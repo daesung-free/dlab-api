@@ -92,6 +92,8 @@ public record StudentResponse(
         StudentListEnricher.AccountView appAccount,
         /** 연결된 학부모 계정. 학부모도 같은 이유로 잠긴다. 없으면 빈 목록이다 */
         List<StudentListEnricher.AccountView> guardianAccounts,
+        /** 메모 개수 (피드백 5-2). 본문은 상세에서 받는다 — 목록에 싣으면 응답이 커진다 */
+        long memoCount,
         boolean masked
 ) {
 
@@ -133,6 +135,7 @@ public record StudentResponse(
                         : AdminStudentController.HomeroomOverrideView.from(e),
                 extras.studentAccount(id),
                 extras.guardianAccountsOf(id),
+                extras.memoCounts().getOrDefault(id, 0L),
                 masked);
     }
 }

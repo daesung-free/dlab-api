@@ -39,6 +39,7 @@ public class StudentListEnricher {
     private final ClassAssignmentRepository classAssignmentRepository;
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final ScholarshipRepository scholarshipRepository;
+    private final com.dlab.domain.user.repository.StudentMemoRepository memoRepository;
     private final com.dlab.domain.user.repository.StudentGuardianLinkRepository guardianLinkRepository;
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
 
@@ -79,9 +80,15 @@ public class StudentListEnricher {
                 .computeIfAbsent(s.getEnrollment().getId(), k -> new ArrayList<>())
                 .add(s.getScholarshipType()));
 
+        // 메모는 개수만 — 목록에 본문을 실으면 응답이 급격히 커지고 화면은 「있다/없다」만 쓴다
+        Map<Long, Long> memoCounts = new HashMap<>();
+        for (Object[] row : memoRepository.countByEnrollments(ids)) {
+            memoCounts.put((Long) row[0], ((Number) row[1]).longValue());
+        }
+
         return new Extras(classNames, homeroomTeachers, seats, scholarships,
                 guardianPhones(enrollments),
-                studentAccounts(enrollments), guardianAccounts(enrollments));
+                studentAccounts(enrollments), guardianAccounts(enrollments), memoCounts);
     }
 
     /**
@@ -200,12 +207,19 @@ public class StudentListEnricher {
             Map<Long, List<String>> scholarshipTypes,
             Map<Long, String> guardianPhones,
             Map<Long, AccountView> studentAccounts,
-            Map<Long, List<AccountView>> guardianAccounts
+            Map<Long, List<AccountView>> guardianAccounts,
+            /**
+             * 메모 개수 (피드백 5-2).
+             *
+             * <p>★ <b>내용까지 싣지 않는다.</b> 목록에 메모 본문을 넣으면 응답이 급격히
+             * 커지는데 화면은 「있다/없다」만 쓴다. 본문은 상세에서 받는다.
+             */
+            Map<Long, Long> memoCounts
     ) {
 
         public static Extras empty() {
             return new Extras(Map.of(), Map.of(), Map.of(), Map.of(), Map.of(),
-                    Map.of(), Map.of());
+                    Map.of(), Map.of(), Map.of());
         }
 
         /** 학생 앱 계정. 아직 가입하지 않았으면 비어 있다. */
