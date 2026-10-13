@@ -185,7 +185,11 @@ public class AdminStudentController {
                                          @PathVariable Long enrollmentId,
                                          @Valid @RequestBody MemoRequest request) {
         var saved = studentService.addMemo(me, enrollmentId, request.content());
-        return ApiResponse.success(MemoView.of(saved, null));
+        // ★ 저장 응답에도 작성자 이름을 채운다. `null` 로 두면 **화면이 「사람이 아니다」로
+        //   읽어** 방금 내가 쓴 메모가 「시스템」으로 보이고, 새로고침하면 이름이 생겨
+        //   더 헷갈린다(2026-10-13 프론트 확인). 목록과 같은 해석기를 쓴다
+        return ApiResponse.success(MemoView.of(saved,
+                actorNames.of(java.util.List.of(saved.getCreatedBy())).get(saved.getCreatedBy())));
     }
 
     /**

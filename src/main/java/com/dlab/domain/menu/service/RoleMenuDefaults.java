@@ -70,6 +70,9 @@ public final class RoleMenuDefaults {
             Map.entry("learning-plan", WITH_TEACHER),
             Map.entry("personal-record", WITH_TEACHER),
             Map.entry("timetable", WITH_TEACHER),
+            // ★ 순찰은 사감(담임)이 도는 업무다. **`seat` 로 때우면 안 된다** —
+            //   그러면 독서실 좌석배치·좌석 이탈·배정 관리까지 같이 열린다
+            Map.entry("patrol", WITH_TEACHER),
             Map.entry("survey", WITH_TEACHER),
             Map.entry("lecture", WITH_TEACHER),
 
