@@ -17,10 +17,20 @@ public enum DayType {
     SUNDAY;
 
     public static DayType of(LocalDate date) {
-        DayOfWeek dow = date.getDayOfWeek();
-        if (dow == DayOfWeek.SATURDAY) {
+        return of(date.getDayOfWeek());
+    }
+
+    /**
+     * 요일만으로 구분한다.
+     *
+     * <p>시간표 편성처럼 <b>날짜가 아니라 요일 칸</b>을 다루는 쪽이 쓴다. 날짜 버전과 규칙을
+     * 둘로 두면 <b>한쪽만 고쳐져</b> 「같은 토요일인데 출결은 토요일 교시, 시간표는 평일 교시」가
+     * 된다 — 그래서 날짜 버전이 이쪽에 위임한다.
+     */
+    public static DayType of(DayOfWeek dayOfWeek) {
+        if (dayOfWeek == DayOfWeek.SATURDAY) {
             return SATURDAY;
         }
-        return dow == DayOfWeek.SUNDAY ? SUNDAY : WEEKDAY;
+        return dayOfWeek == DayOfWeek.SUNDAY ? SUNDAY : WEEKDAY;
     }
 }

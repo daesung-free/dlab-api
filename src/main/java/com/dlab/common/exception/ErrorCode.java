@@ -302,6 +302,19 @@ public enum ErrorCode {
     /** 0으로 채우게 두면 진짜 0점과 구분되지 않는다. 사유를 남기고 건너뛴다. */
     GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요."),
 
+    // 시간표 편성 (F-C-3)
+    /**
+     * ★ <b>DB 유니크({@code uq_timetable_room})가 최종 방어선이고 이 코드는 안내용이다.</b>
+     * 제약 위반 메시지에는 어느 반이 먼저 쓰고 있는지가 없어 담당자가 무엇을 고칠지 모른다.
+     */
+    TIMETABLE_ROOM_CONFLICT(HttpStatus.CONFLICT, "같은 시간에 이미 그 강의실을 쓰는 반이 있습니다."),
+    /** ⚠️ DB 제약이 아니라 서비스 검사다 — 참관·합반 같은 운영 예외 확인 전이라(§4) 되돌릴 여지를 남겼다. */
+    TIMETABLE_TEACHER_CONFLICT(HttpStatus.CONFLICT, "같은 시간에 이미 수업이 있는 선생님입니다."),
+    /** 평일 교시를 토요일 칸에 넣으면 시간표에 적힌 시각과 실제 교시 시각이 어긋난다. */
+    TIMETABLE_PERIOD_DAY_MISMATCH(HttpStatus.BAD_REQUEST, "그 요일의 교시가 아닙니다."),
+    /** 일요일은 교시 마스터가 없어 칸을 만들면 시각이 비는 행이 된다. */
+    TIMETABLE_SUNDAY_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "일요일에는 시간표를 둘 수 없습니다."),
+
     /**
      * 조건 자체가 성립하지 않는 검색 조합(예: 특정 반 + 반 미배정).
      * 빈 목록으로 돌려주면 화면이 "해당 학생이 없다"로 읽고 조용히 넘어간다.
