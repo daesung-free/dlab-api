@@ -206,8 +206,48 @@ public class StudentEnrollment extends BaseEntity {
         }
         this.examClassNo = classNo;
         this.examSeq = seq;
-        this.examStudentNo = "%d%03d".formatted(classNo, seq);
+        this.examStudentNo = formatExamNo(classNo, seq);
         this.examNoFixedAt = at;
+    }
+
+    /**
+     * 번호 서식 — <b>반 번호 + 순번, 전체 4자리 고정</b>(2026-10-13 피드백 1-1 확정).
+     *
+     * <pre>
+     *  1~9반    반 1자리 + 순번 3자리    1반  → 1001 ~ 1099
+     * 11~19반   반 2자리 + 순번 2자리   11반  → 1101 ~ 1199
+     * </pre>
+     *
+     * <h2>★★ 반마다 순번 자릿수가 다르다</h2>
+     * 전에는 {@code "%d%03d"} 하나로 만들어서 <b>11반이 {@code 11001}(5자리)</b>이 됐다.
+     * 그러면 더프 제출 서식(6자리 = 반 2자리 + 학번 4자리)에 들어가지 않아
+     * <b>대구점 11~19반 학생의 제출번호가 비어 있었다.</b>
+     *
+     * <h2>★ 반 번호가 10의 배수면 충돌한다</h2>
+     * {@code 10|01 = 1001} 이 <b>1반 1번과 같아진다</b>(20반은 2반, 30반은 3반과). 디랩이
+     * 10·20을 쓰지 않는 이유가 이것이고, <b>규칙은 「10·20 금지」가 아니라 「10의 배수 금지」</b>다 —
+     * 30·40반이 생기면 같은 일이 난다. {@link #isUsableClassNo(short)} 가 판정한다.
+     */
+    public static String formatExamNo(short classNo, short seq) {
+        int digits = String.valueOf(classNo).length();
+        return "%d%0{pad}d".replace("{pad}", String.valueOf(TOTAL_DIGITS - digits))
+                .formatted(classNo, seq);
+    }
+
+    /** 번호 전체 자릿수. 키패드 출결이 4자리를 입력받는다(0803 확정) */
+    private static final int TOTAL_DIGITS = 4;
+
+    /** 반마다 1~99번. 100번째 학생은 번호가 없다 */
+    public static final short MAX_SEQ = 99;
+
+    /**
+     * 그 반 번호를 쓸 수 있나.
+     *
+     * <p>★ <b>10의 배수를 막는다</b> — 위 {@link #formatExamNo} 설명 참고.
+     * 1~9 와 11~99 중 10의 배수가 아닌 값만 쓸 수 있다.
+     */
+    public static boolean isUsableClassNo(short classNo) {
+        return classNo >= 1 && classNo <= 99 && !(classNo >= 10 && classNo % 10 == 0);
     }
 
     /** 담임 예외 지정. 사유는 호출부가 필수로 받는다 */
@@ -234,15 +274,20 @@ public class StudentEnrollment extends BaseEntity {
      * <p>★ <b>저장 형식을 바꾸지 않고 내보낼 때만 변환한다</b>(2026-10-06 회신). 저장은
      * {@code (반, 순번)}으로 두어야 회차 자료와 맞고, 6자리는 제출 서식일 뿐이다.
      *
-     * <p>⚠️ <b>반이 10 이상이면 {@code null}이다.</b> 번호가 {@code 10001}(5자리)이 되어
-     * 4자리 칸에 들어가지 않는다 — 연구소 서식이 9반까지를 전제한 것으로 보여 확인 중이다.
-     * <b>억지로 자르지 않는다</b> — 잘린 번호로 제출하면 남의 성적에 붙는다.
+     * <p>★ <b>11~19반도 나온다</b>(2026-10-13 피드백 1-1). 학번이 4자리로 고정되면서
+     * {@code 반 2자리 + 학번 4자리} 가 정확히 6자리로 떨어진다 —
+     * {@code 11반 1번 → 11 + 1101 = 111101}. 전에는 학번이 {@code 11001}(5자리)이라
+     * <b>대구점 11~19반 학생의 제출번호가 비어 있었다.</b>
+     *
+     * <p>⚠️ 그래도 <b>4자리가 아니면 비운다</b> — 옛 서식으로 발급된 행이 남아 있을 수 있고,
+     * <b>잘린 번호로 제출하면 남의 성적에 붙는다.</b>
      */
     public String examSubmitNo() {
-        if (examStudentNo == null || examClassNo == null || examStudentNo.length() > 4) {
+        if (examStudentNo == null || examClassNo == null
+                || examStudentNo.length() != TOTAL_DIGITS) {
             return null;
         }
-        return "%02d%4s".formatted(examClassNo, examStudentNo).replace(' ', '0');
+        return "%02d%s".formatted(examClassNo, examStudentNo);
     }
 
     public void makeCurrent() {

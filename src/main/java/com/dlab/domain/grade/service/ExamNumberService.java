@@ -35,8 +35,13 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ExamNumberService {
 
-    /** 순번은 1~99다. 자료가 3자리라 100 이상은 표현되지 않는다 */
-    private static final short MAX_SEQ = 99;
+    /**
+     * 순번은 반마다 1~99다 (2026-10-13 피드백 1-1).
+     *
+     * <p>⚠️ <b>100번째 학생은 번호가 없다.</b> 넘칠 때 어떻게 할지는 아직 정해지지 않았다 —
+     * 지금은 <b>배정은 되게 하고 번호만 비워 둔다</b>(아래 참고).
+     */
+    private static final short MAX_SEQ = StudentEnrollment.MAX_SEQ;
 
     private final StudentEnrollmentRepository enrollmentRepository;
     private final MockExamStudentKeyRepository keyRepository;

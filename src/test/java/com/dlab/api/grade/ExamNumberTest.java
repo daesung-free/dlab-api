@@ -17,6 +17,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 모의고사 수험번호 채번 (2026-09-21 답변서).
@@ -146,21 +147,50 @@ class ExamNumberTest {
     }
 
     @Test
-    @DisplayName("★★ 반이 10 이상이면 제출번호가 비어 있다 — 잘라 내면 남의 성적에 붙는다")
-    void submitNoIsEmptyFromTenthClass() {
-        ClassMaster tenth = new ClassMaster(bundang, YEAR, "N수 10반", ClassType.FIXED, null);
-        tenth.changeExamClassNo((short) 10);
-        em.persist(tenth);
+    @DisplayName("★★ 11~19반도 4자리다 — 전에 11001(5자리)이라 대구점 제출번호가 비어 있었다")
+    void eleventhClassFitsInFourDigits() {
+        ClassMaster eleventh = new ClassMaster(bundang, YEAR, "N수 11반", ClassType.FIXED, null);
+        eleventh.changeExamClassNo((short) 11);
+        em.persist(eleventh);
         em.flush();
 
-        StudentEnrollment student = student("김십반", YEAR + "-0009");
-        classService.assignStudent(tenth.getId(), student.getId(), admin);
+        StudentEnrollment student = student("김십일반", YEAR + "-0009");
+        classService.assignStudent(eleventh.getId(), student.getId(), admin);
         em.flush();
 
-        // 번호 자체는 채번된다 — 업로드 매칭은 이 값으로 돈다
-        assertThat(student.getExamStudentNo()).isEqualTo("10001");
-        // ★ 4자리 칸에 5자리가 안 들어간다. 억지로 맞추지 않고 비워 둔다(서식 확인 중)
-        assertThat(student.examSubmitNo()).isNull();
+        // 반이 2자리면 순번이 2자리다 — 전체는 늘 4자리다
+        assertThat(student.getExamStudentNo()).isEqualTo("1101");
+        // 제출은 [반 2자리][학번 4자리] = 6자리
+        assertThat(student.examSubmitNo()).isEqualTo("111101");
+    }
+
+    @Test
+    @DisplayName("★★ 반 번호 10의 배수는 거절한다 — 10반 1번이 1반 1번과 같은 번호가 된다")
+    void rejectsClassNoMultipleOfTen() {
+        // 10|01 = 1001 = 1|001 → 1반 1번과 충돌한다.
+        // 디랩이 10·20 을 쓰지 않는 이유가 이것이고, 30·40 도 같은 일이 난다
+        assertThat(StudentEnrollment.formatExamNo((short) 10, (short) 1))
+                .isEqualTo(StudentEnrollment.formatExamNo((short) 1, (short) 1));
+
+        assertThat(StudentEnrollment.isUsableClassNo((short) 10)).isFalse();
+        assertThat(StudentEnrollment.isUsableClassNo((short) 20)).isFalse();
+        assertThat(StudentEnrollment.isUsableClassNo((short) 30)).isFalse();
+        // 11~19·21~29 는 겹치지 않는다 — 막을 이유가 없다
+        assertThat(StudentEnrollment.isUsableClassNo((short) 11)).isTrue();
+        assertThat(StudentEnrollment.isUsableClassNo((short) 21)).isTrue();
+
+        assertThatThrownBy(() -> classService.changeExamClassNo(
+                class1.getId(), (short) 10, admin))
+                .hasMessageContaining("10의 배수");
+    }
+
+    @Test
+    @DisplayName("★ 반마다 1~99번이다 — 1반도 11반도 상한이 같다")
+    void sequenceRangeIsSamePerClass() {
+        assertThat(StudentEnrollment.formatExamNo((short) 1, StudentEnrollment.MAX_SEQ))
+                .isEqualTo("1099");
+        assertThat(StudentEnrollment.formatExamNo((short) 11, StudentEnrollment.MAX_SEQ))
+                .isEqualTo("1199");
     }
 
     @Test
