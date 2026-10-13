@@ -315,6 +315,13 @@ public class AdminStudentController {
                 request.phone(), request.grade(), request.retakeCount(), request.track(),
                 request.birthDate(), request.gender(), request.schoolName(),
                 request.address(), request.admissionDate(), me);
+        // ★ 「다른 사람입니다」 판단을 **등록이 끝난 뒤에** 남긴다 — 위에서 막을 때는
+        //   등록 건이 아직 없어 쌍을 적을 수 없었다. 이 한 번이 지나면 이후 전환·목록에서
+        //   같은 쌍이 걸러져 **담당자가 같은 판단을 다시 하지 않는다**
+        if (request.confirmedNotDuplicateOrFalse()) {
+            admissionDuplicateService.recordAdmitDecisions(admitted, request.name(),
+                    request.birthDate(), request.phone());
+        }
         if (request.englishName() != null || request.graduationYear() != null) {
             admitted = studentService.updateExtra(admitted.getId(), request.englishName(),
                     request.graduationYear(), false, me);

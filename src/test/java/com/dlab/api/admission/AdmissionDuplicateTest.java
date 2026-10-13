@@ -50,6 +50,7 @@ class AdmissionDuplicateTest {
     @Autowired AdmissionReservationAdminService adminService;
     @Autowired AdminAdmissionReservationController reservationController;
     @Autowired AdminStudentController studentController;
+    @Autowired com.dlab.domain.user.service.StudentService studentService;
     @Autowired EntityManager em;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
@@ -175,8 +176,12 @@ class AdmissionDuplicateTest {
     @WithMockUser(roles = "BRANCH_ADMIN")
     @DisplayName("★★ 반대 방향도 막힌다 — 데스크가 먼저 등록하면 순서만 바꿔 통과했다")
     void conversionStopsWhenStudentAlreadyEnrolled() {
-        studentController.admit(admin,
-                admitRequest("홍길동", LocalDate.of(2008, 3, 2), "010-9999-8888", true));
+        // ★ **데스크를 거치지 않고 들어온 학생**으로 만든다(앱 자가가입·엑셀 일괄 등).
+        //   컨트롤러의 「다른 사람입니다」 확인을 거치면 그 판단이 기억되어 아래에서
+        //   막히지 않는다 — 그건 아래 테스트가 따로 본다
+        studentService.admit(bundang.getId(), YEAR, "홍길동", "010-9999-8888",
+                GradeType.N_SU, null, null, LocalDate.of(2008, 3, 2), "M",
+                null, null, null, admin);
         adminService.changeStatus(admin, reservation.getId(), ConsultStatus.CONFIRMED, null);
         em.flush();
 
@@ -185,6 +190,38 @@ class AdmissionDuplicateTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ADMISSION_DUPLICATE_SUSPECTED);
+    }
+
+    @Test
+    @WithMockUser(roles = "BRANCH_ADMIN")
+    @DisplayName("★★ 「다른 사람입니다」는 기억된다 — 같은 조합이 다음에 또 뜨면 매번 같은 판단을 다시 한다")
+    void decisionIsRemembered() {
+        // 데스크가 「다른 사람입니다」를 고르고 등록했다
+        studentController.admit(admin,
+                admitRequest("홍길동", LocalDate.of(2008, 3, 2), "010-9999-8888", true));
+        adminService.changeStatus(admin, reservation.getId(), ConsultStatus.CONFIRMED, null);
+        em.flush();
+        em.clear();
+
+        // ★ 이제 그 예약을 전환해도 **같은 학생이 다시 걸리지 않는다** —
+        //   이미 다른 사람으로 정리했으므로 담당자에게 같은 것을 또 묻지 않는다
+        assertThatCode(() -> adminService.convert(admin, reservation.getId(), null, null, false))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @WithMockUser(roles = "BRANCH_ADMIN")
+    @DisplayName("★ 판단은 한 행으로만 쌓인다 — 두 번 눌렀다고 두 행이면 「몇 번 판단했나」가 흐려진다")
+    void decisionIsRecordedOnce() {
+        studentController.admit(admin,
+                admitRequest("홍길동", LocalDate.of(2008, 3, 2), "010-9999-8888", true));
+        em.flush();
+
+        Long count = em.createQuery("""
+                SELECT COUNT(d) FROM AdmissionDuplicateDecision d
+                WHERE d.reservation.id = :id AND d.deleted = false
+                """, Long.class).setParameter("id", reservation.getId()).getSingleResult();
+        assertThat(count).isEqualTo(1L);
     }
 
     @Test
