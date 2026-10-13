@@ -238,6 +238,139 @@ public class SurveyService {
         return survey;
     }
 
+    // ── 장학 동의서 (2026-10-13 회신 5-1 · 5-2-1) ──────────
+
+    /**
+     * 양식 복제.
+     *
+     * <p>디랩 요구가 <b>「장학 혜택에 따라 각각 동의서를 생성(복사)」</b>다. 문항을 그대로
+     * 옮기고 <b>제목만 새로 받는다</b> — 같은 제목이 둘이면 담당자가 어느 것을 보냈는지 모른다.
+     *
+     * <h2>★ 복제가 「안전한 편집」이기도 하다</h2>
+     * 제출이 있는 양식은 고칠 수 없다(아래 {@link #replaceQuestions}). 그때 할 일이
+     * <b>복제해서 새로 만드는 것</b>이다.
+     *
+     * <p>⚠️ <b>대상자·응답은 복사하지 않는다.</b> 복사하면 <b>남이 동의한 기록이 새 양식에
+     * 붙는다</b> — 복제는 양식만이다.
+     */
+    @Transactional
+    public Survey duplicate(AuthPrincipal me, Long id, String newTitle) {
+        Survey origin = requireWritable(me, id);
+        if (newTitle == null || newTitle.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "새 제목을 적어 주세요.");
+        }
+
+        Survey copy = switch (origin.getScope()) {
+            case ALL -> Survey.ofAll(currentYear(), origin.getSurveyType(), newTitle,
+                    origin.getDescription(), origin.isAnonymous(),
+                    origin.getOpensAt(), origin.getClosesAt());
+            case BRANCH -> Survey.ofBranch(origin.getAcademy(), currentYear(),
+                    origin.getSurveyType(), newTitle, origin.getDescription(),
+                    origin.isAnonymous(), origin.getOpensAt(), origin.getClosesAt());
+            case CLASS -> Survey.ofClass(origin.getClassMaster(), currentYear(),
+                    origin.getSurveyType(), newTitle, origin.getDescription(),
+                    origin.isAnonymous(), origin.getOpensAt(), origin.getClosesAt());
+        };
+        for (var q : origin.activeQuestions()) {
+            var copied = copy.addQuestion(q.getQuestionType(), q.getTitle(), q.isRequired(),
+                    q.getMinValue(), q.getMaxValue());
+            for (var o : q.activeOptions()) {
+                copied.addOption(o.getLabel());
+            }
+        }
+        surveyRepository.save(copy);
+        log.info("설문 복제: origin={}, copy={}, 처리자={}", id, copy.getId(), me.accountId());
+        return copy;
+    }
+
+    /**
+     * 문항 교체.
+     *
+     * <h2>★★ 제출이 하나라도 있으면 거절한다</h2>
+     * 고치면 <b>이미 동의한 학생의 동의 내용이 소급해서 바뀐다.</b> 「환불 7일」에 동의한
+     * 학생이 있는데 문구를 「3일」로 고치면 <b>그 학생이 3일 조항에 동의한 것으로 기록이
+     * 바뀐다</b> — 약관을 버전으로 올리는 것과 같은 이유다.
+     *
+     * <p>그 경우 할 일은 <b>복제해서 새로 만드는 것</b>이고, 오류 문구가 그걸 안내한다.
+     */
+    @Transactional
+    public Survey replaceQuestions(AuthPrincipal me, Long id, List<QuestionCommand> questions) {
+        if (questions == null || questions.isEmpty()) {
+            throw new BusinessException(ErrorCode.SURVEY_QUESTION_EMPTY);
+        }
+        Survey survey = requireWritable(me, id);
+
+        long submitted = participantRepository.countSubmitted(id);
+        if (submitted > 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    ("이미 %d명이 제출해 문항을 고칠 수 없습니다. "
+                            + "제출된 내용이 바뀌기 때문입니다 — 복제해서 새로 만들어 주세요.")
+                            .formatted(submitted));
+        }
+
+        survey.clearQuestions();
+        for (QuestionCommand q : questions) {
+            var added = survey.addQuestion(q.type(), q.title(), q.required(),
+                    q.minValue(), q.maxValue());
+            if (q.options() != null) {
+                q.options().forEach(added::addOption);
+            }
+        }
+        log.info("설문 문항 교체: id={}, 문항={}, 처리자={}", id, questions.size(), me.accountId());
+        return survey;
+    }
+
+    /**
+     * 대상자 발송.
+     *
+     * <p>장학 동의서는 대상이 <b>범위가 아니라 사람</b>이다 — 직원이 장학을 부여한 학생에게만
+     * 간다. 그래서 대상자 행을 미리 만든다.
+     *
+     * <p>★ <b>이미 대상자면 건너뛴다.</b> 두 번 발송해도 행이 두 개가 되지 않는다 —
+     * 중복 행은 「누가 아직 안 냈나」를 세는 것부터 틀어지게 만든다.
+     *
+     * @return 이번에 새로 발송된 수
+     */
+    @Transactional
+    public int assignTargets(AuthPrincipal me, Long id, List<Long> enrollmentIds) {
+        Survey survey = requireWritable(me, id);
+        if (enrollmentIds == null || enrollmentIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "대상 학생을 골라 주세요.");
+        }
+
+        int sent = 0;
+        for (Long enrollmentId : enrollmentIds.stream().distinct().toList()) {
+            if (participantRepository.isTarget(id, enrollmentId)) {
+                continue;
+            }
+            var enrollment = enrollmentRepository.findById(enrollmentId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.STUDENT_NOT_FOUND));
+            participantRepository.save(new SurveyParticipant(survey, enrollment));
+            sent++;
+        }
+        log.info("설문 대상자 발송: id={}, 신규={}, 처리자={}", id, sent, me.accountId());
+        return sent;
+    }
+
+    /**
+     * 열람 기록 (앱이 상세를 열 때).
+     *
+     * <p>★ <b>대상자로 등록된 학생만 찍는다.</b> 범위로 돌리는 일반 설문은 대상자 행이 없어
+     * 아무 일도 하지 않는다 — 열람 추적은 장학 동의서에만 필요하다.
+     */
+    @Transactional
+    public void markViewed(Long surveyId, Long enrollmentId) {
+        participantRepository.findMine(surveyId, enrollmentId)
+                .ifPresent(p -> p.viewed(Instant.now(clock)));
+    }
+
+    /** 동의 기록. 제출과 다른 축이다 — 동의만 하고 제출을 안 누를 수 있다. */
+    @Transactional
+    public void markAgreed(Long surveyId, Long enrollmentId) {
+        participantRepository.findMine(surveyId, enrollmentId)
+                .ifPresent(p -> p.agreed(Instant.now(clock)));
+    }
+
     /** 즉시 마감. 기간을 남겨두고 상태만 바꾸는 방식이 아니라 마감 시각을 당긴다. */
     @Transactional
     public Survey closeNow(AuthPrincipal me, Long id) {

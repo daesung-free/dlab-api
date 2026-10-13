@@ -147,6 +147,16 @@ public class Survey extends BaseEntity {
         return question;
     }
 
+    /**
+     * 문항 전체 비활성화 — 교체 전에 부른다.
+     *
+     * <p>★ <b>물리 삭제하지 않는다.</b> 그 문항에 달린 응답이 고아가 되고,
+     * 「그때 무엇을 물었나」에 답할 수 없다. 호출부가 <b>제출 0건일 때만</b> 부른다.
+     */
+    public void clearQuestions() {
+        questions.forEach(SurveyQuestion::markDeleted);
+    }
+
     public List<SurveyQuestion> activeQuestions() {
         return questions.stream()
                 .filter(q -> !q.isDeleted())

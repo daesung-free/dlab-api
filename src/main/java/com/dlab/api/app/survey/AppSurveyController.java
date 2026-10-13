@@ -60,8 +60,30 @@ public class AppSurveyController {
             @RequestParam(required = false) Long studentId) {
 
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
-        return ApiResponse.success(
-                SurveyResponses.SurveyDetail.from(surveyService.detail(enrollmentId, surveyId)));
+        var detail = surveyService.detail(enrollmentId, surveyId);
+        // ★ 상세를 연 것이 「열람」이다. 대상자로 등록된 학생만 찍히고(장학 동의서),
+        //   범위로 돌리는 일반 설문은 대상자 행이 없어 아무 일도 하지 않는다
+        surveyService.markViewed(surveyId, enrollmentId);
+        return ApiResponse.success(SurveyResponses.SurveyDetail.from(detail));
+    }
+
+    /**
+     * 동의 체크 (장학 동의서 — 2026-10-13 회신 5-2-1).
+     *
+     * <p>★ <b>제출과 다른 축이다.</b> 동의만 하고 제출을 안 누르는 경우가 실제로 있어,
+     * 「동의했는데 안 냈다」와 「아직 안 봤다」를 담당자가 가려야 한다.
+     *
+     * <p>서명은 <b>체크만</b>이다 — 손서명은 받지 않는 것으로 확정됐다.
+     */
+    @PostMapping("/{surveyId}/agree")
+    public ApiResponse<Void> agree(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long surveyId,
+            @RequestParam(required = false) Long studentId) {
+
+        Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
+        surveyService.markAgreed(surveyId, enrollmentId);
+        return ApiResponse.success(null);
     }
 
     /**
