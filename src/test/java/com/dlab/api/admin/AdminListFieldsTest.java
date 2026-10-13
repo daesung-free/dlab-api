@@ -204,6 +204,97 @@ class AdminListFieldsTest {
         assertThat(classService.changeExamClassNo(class1.getId(), (short) 1, admin)).isNotNull();
     }
 
+    @Test
+    @DisplayName("★★ 좌석번호로 정렬된다 — 화이트리스트에 이름만 더하면 조용히 무시된다")
+    void sortsBySeatCd() {
+        assignSeat("A05");
+        StudentEnrollment second = anotherStudent("둘째", "0002");
+        assignSeatTo(second, "A01");
+        StudentEnrollment noSeat = anotherStudent("미배정", "0003");
+
+        var asc = search(org.springframework.data.domain.Sort.by("seatCd").ascending());
+
+        // A01 → A05 순. 정렬이 무시되면 학번순(0001, 0002, 0003)으로 떨어진다
+        assertThat(asc).containsSubsequence(second.getId(), enrollment.getId());
+        // ★ 미배정은 뒤로 — 내림차순이면 PostgreSQL 이 NULL 을 앞에 놓는다
+        assertThat(asc).last().isEqualTo(noSeat.getId());
+
+        var desc = search(org.springframework.data.domain.Sort.by("seatCd").descending());
+        assertThat(desc).containsSubsequence(enrollment.getId(), second.getId());
+        assertThat(desc).last().isEqualTo(noSeat.getId());
+    }
+
+    @Test
+    @DisplayName("★ 반 이름으로 정렬된다 — 미배정은 뒤다")
+    void sortsByClassName() {
+        em.persist(new ClassAssignment(academy, enrollment, class1, ClassType.FIXED));
+        ClassMaster classA = new ClassMaster(academy, year, "A반", ClassType.FIXED, null);
+        em.persist(classA);
+        StudentEnrollment second = anotherStudent("A반생", "0002");
+        em.persist(new ClassAssignment(academy, second, classA, ClassType.FIXED));
+        StudentEnrollment noClass = anotherStudent("반없음", "0003");
+        em.flush();
+
+        var asc = search(org.springframework.data.domain.Sort.by("className").ascending());
+
+        // "A반" < "LF 1반" (한글·영문 혼재라 DB 콜레이션을 따른다 — 순서 자체가 있는지를 본다)
+        assertThat(asc).hasSize(3);
+        assertThat(asc).last().isEqualTo(noClass.getId());
+        assertThat(asc.indexOf(second.getId())).isNotEqualTo(asc.indexOf(enrollment.getId()));
+    }
+
+    @Test
+    @DisplayName("★ 배정 이력이 여러 건이어도 학생이 중복되지 않는다 — 조인이면 늘어난다")
+    void doesNotDuplicateOnMultipleAssignments() {
+        // 반을 옮긴 학생. 이전 배정은 비활성으로 남는다
+        ClassAssignment old = new ClassAssignment(academy, enrollment, class1, ClassType.FIXED);
+        em.persist(old);
+        ClassMaster moved = new ClassMaster(academy, year, "옮긴반", ClassType.FIXED, null);
+        em.persist(moved);
+        // ★ 비활성으로 내린 것을 먼저 반영해야 한다 — DB 가 활성 고정반을 학생당 1건으로
+        //   제약한다(uq_class_assignment_active). 그 제약이 곧 서브쿼리 정렬의 전제다
+        old.deactivate();
+        em.flush();
+        em.persist(new ClassAssignment(academy, enrollment, moved, ClassType.FIXED));
+        em.flush();
+
+        var rows = search(org.springframework.data.domain.Sort.by("className").ascending());
+
+        // 조인으로 정렬하면 여기서 2건이 된다 — 페이징 건수가 어긋나 빈 페이지가 생긴다
+        assertThat(rows).containsOnlyOnce(enrollment.getId());
+    }
+
+    /** 그 지점에 학생 하나를 더 만든다 */
+    private StudentEnrollment anotherStudent(String name, String studentNo) {
+        Student person = new Student("LF-" + studentNo, name, "010-7000-" + studentNo);
+        em.persist(person);
+        StudentEnrollment e = new StudentEnrollment(person, academy, year, studentNo,
+                "RF-" + studentNo, GradeType.N_SU);
+        em.persist(e);
+        em.flush();
+        return e;
+    }
+
+    private void assignSeatTo(StudentEnrollment target, String seatCd) {
+        com.dlab.domain.facility.entity.Building building =
+                new com.dlab.domain.facility.entity.Building(academy, "B" + seatCd, "본관",
+                        (short) 1, 0);
+        em.persist(building);
+        StudyArea area = new StudyArea(building, "A" + seatCd, "A" + seatCd, "A구역", (short) 1);
+        em.persist(area);
+        SeatMaster seat = new SeatMaster(area, seatCd, seatCd, seatCd, 1, 1);
+        em.persist(seat);
+        em.persist(new SeatAssignment(academy, seat, target));
+        em.flush();
+    }
+
+    private List<Long> search(org.springframework.data.domain.Sort sort) {
+        return studentService.search(
+                        com.dlab.common.search.SearchScope.of(admin, (int) year, academy.getId()),
+                        condition(null), PageRequest.of(0, 20, sort))
+                .getContent().stream().map(StudentEnrollment::getId).toList();
+    }
+
     private StudentSearchCondition condition(String seatCd) {
         return new StudentSearchCondition(null, null, null, null, null, null, seatCd,
                 null, null, null, null, null, null, null, null, null, null);
