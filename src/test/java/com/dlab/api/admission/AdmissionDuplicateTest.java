@@ -116,7 +116,9 @@ class AdmissionDuplicateTest {
                 admitRequest("홍길동", LocalDate.of(2008, 3, 2), "010-9999-8888", true));
         em.flush();
 
-        assertThat(response.data().studentNo()).startsWith(String.valueOf(YEAR));
+        // ★ 학번은 **반 배정 때** 나온다(#198) — 접수만으로는 비어 있다.
+        //   여기서 볼 것은 「막히지 않고 등록됐는가」이므로 등록 건이 생긴 것으로 본다
+        assertThat(response.data().enrollmentId()).isNotNull();
         // 예약은 그대로 남는다 — 합치지 않았으므로 대기자 목록에서 사라지면 안 된다
         assertThat(reservation.converted()).isFalse();
     }
