@@ -82,4 +82,18 @@ public class AttendanceTaggingLog extends BaseEntity {
     public void correctEventType(AttendanceEventType corrected) {
         this.eventType = corrected;
     }
+
+    /**
+     * 시각 보정 — 하원 수기 입력 (2026-10-13 피드백 4-2).
+     *
+     * <p>★ <b>새 행을 만들지 않는다.</b> 하원이 두 개면 <b>어느 것이 하원인지 모호해지고</b>
+     * 순공 계산이 마지막 것을 쓰므로 조용히 값이 달라진다.
+     *
+     * <p>★ <b>출처를 {@code MANUAL} 로 바꾼다.</b> 키오스크가 찍은 것과 사람이 고친 것을
+     * 구분해야 한다 — 앱이 「직접 등록됨」을 표시하고, 나중에 「태깅률」을 셀 때도 갈린다.
+     */
+    public void correctRecordedAt(Instant recordedAt) {
+        this.recordedAt = recordedAt;
+        this.source = AttendanceSource.MANUAL;
+    }
 }
