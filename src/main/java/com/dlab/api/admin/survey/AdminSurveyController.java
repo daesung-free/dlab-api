@@ -7,6 +7,9 @@ import com.dlab.domain.survey.service.SurveyService;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -22,9 +25,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 /**
  * 관리자 — 설문 개설·마감·집계 (F-4.11-3 · F-4.6).
  *
- * <p><b>문항 수정 API는 두지 않는다.</b> 응답이 들어온 뒤 문항이 바뀌면 앞사람과 뒷사람이
- * 다른 질문에 답한 결과가 한 집계에 섞인다 — 고칠 일이 생기면 마감하고 새로 낸다.
- * 바꿀 수 있는 건 기간·안내문뿐이다.
+ * <p><b>★ 문항 수정은 「제출 0건」일 때만 열린다</b>(2026-10-13 디랩 회신 5-1 — 장학 동의서가
+ * 「구글 설문처럼 양식을 만들고 고치는 기능」을 요구했다). 전에는 아예 두지 않았는데,
+ * 막아야 하는 것은 <b>응답이 들어온 뒤의 수정</b>이고 그것만 거절하면 된다.
+ *
+ * <p>제출이 있으면 고칠 수 없다 — 앞사람과 뒷사람이 다른 질문에 답한 결과가 한 집계에 섞이고,
+ * 동의서라면 <b>이미 동의한 학생의 동의 내용이 소급해서 바뀐다.</b> 그때는
+ * <b>복제({@code POST /{id}/duplicate})해서 새로 만든다</b> — 오류 문구가 그걸 안내한다.
  */
 @Tag(name = "관리자 · 설문 (F-4.11-3)")
 @RestController
@@ -124,6 +131,63 @@ public class AdminSurveyController {
                         "attachment; filename*=UTF-8''" + filename)
                 .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
                 .body(new org.springframework.core.io.ByteArrayResource(bytes));
+    }
+
+    /**
+     * 양식 복제 (장학 동의서 — 2026-10-13 회신 5-1).
+     *
+     * <p>문항을 그대로 옮기고 <b>제목만 새로 받는다.</b>
+     * ⚠️ <b>대상자·응답은 복사하지 않는다</b> — 복사하면 남이 동의한 기록이 새 양식에 붙는다.
+     */
+    @PostMapping("/{surveyId}/duplicate")
+    public ApiResponse<AdminSurveyResponses.AdminSurveySummary> duplicate(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long surveyId,
+            @Valid @RequestBody SurveyTitle request) {
+        return ApiResponse.success(AdminSurveyResponses.AdminSurveySummary.from(
+                surveyService.duplicate(me, surveyId, request.title())));
+    }
+
+    /**
+     * 문항 교체.
+     *
+     * <p>★★ <b>제출이 하나라도 있으면 400 이다.</b> 고치면 이미 동의한 학생의 동의 내용이
+     * 소급해서 바뀐다 — 그때는 복제해서 새로 만든다(오류 문구가 안내한다).
+     */
+    @PutMapping("/{surveyId}/questions")
+    public ApiResponse<AdminSurveyResponses.AdminSurveySummary> replaceQuestions(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long surveyId,
+            @Valid @RequestBody AdminSurveyRequests.Questions request) {
+        return ApiResponse.success(AdminSurveyResponses.AdminSurveySummary.from(
+                surveyService.replaceQuestions(me, surveyId, request.toCommands())));
+    }
+
+    /**
+     * 대상자 발송.
+     *
+     * <p>장학 동의서는 대상이 <b>범위가 아니라 사람</b>이다 — 직원이 장학을 부여한 학생에게만
+     * 간다. <b>이미 대상자면 건너뛴다</b>(두 번 눌러도 행이 두 개가 되지 않는다).
+     *
+     * @return 이번에 새로 발송된 수
+     */
+    @PostMapping("/{surveyId}/targets")
+    public ApiResponse<SentCount> assignTargets(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long surveyId,
+            @Valid @RequestBody TargetRequest request) {
+        return ApiResponse.success(
+                new SentCount(surveyService.assignTargets(me, surveyId, request.enrollmentIds())));
+    }
+
+    /** @param title 복제본 제목. 같은 제목이 둘이면 담당자가 어느 것을 보냈는지 모른다 */
+    public record SurveyTitle(@NotBlank(message = "새 제목을 적어 주세요.")
+                              @Size(max = 200) String title) {
+    }
+
+    public record TargetRequest(@NotEmpty(message = "대상 학생을 골라 주세요.")
+                                List<Long> enrollmentIds) {
+    }
+
+    /** @param sent 이번에 새로 발송된 수. 이미 대상자였던 학생은 세지 않는다 */
+    public record SentCount(int sent) {
     }
 
     @GetMapping("/{surveyId}/participants")
