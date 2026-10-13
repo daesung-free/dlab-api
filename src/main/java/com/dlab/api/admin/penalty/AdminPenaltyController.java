@@ -76,7 +76,8 @@ public class AdminPenaltyController {
 
         // 반·부여자 이름은 한 번에 조회해 Map으로 붙인다(행마다 부르면 목록 크기만큼 쿼리)
         List<PenaltyRowResponse> all = board.rows().stream()
-                .map(p -> PenaltyRowResponse.of(p, raw, board.granterNames(), board.classNames()))
+                .map(p -> PenaltyRowResponse.of(p, raw, board.granterNames(), board.classNames(),
+                        board.cumulativePoints(), board.seatCodes()))
                 .toList();
 
         // summary 는 페이지 합계가 아니라 필터 전체 기준이다 — 상단 통계 타일이
@@ -153,7 +154,8 @@ public class AdminPenaltyController {
                 penaltyService.findByEnrollment(me, enrollmentId).stream()
                         // 학생 상세는 건수가 적어 부여자 이름을 붙이지 않는다 —
                         // 목록에서만 쓰는 값이고, 여기서 조회하면 화면당 쿼리가 하나 는다
-                        .map(p -> PenaltyRowResponse.of(p, raw, Map.of(), Map.of())).toList(),
+                        .map(p -> PenaltyRowResponse.of(p, raw, Map.of(), Map.of(), Map.of(), Map.of()))
+                        .toList(),
                 penaltyService.totalPoints(enrollmentId)));
     }
 
@@ -201,10 +203,18 @@ public class AdminPenaltyController {
             Long grantedBy,
             String grantedByName,
             String className,
-            EnrollmentStatus enrollmentStatus
+            EnrollmentStatus enrollmentStatus,
+            Integer cumulativePoint,
+            String seatCd
     ) {
+        /**
+         * @param cumulative 등록 건 → <b>누적</b> 점수. 기간 합계가 아니다 —
+         *                   제적 기준 40점이 누적이라, 기간만 보이면 학부모가 오인한다
+         * @param seats      등록 건 → 좌석번호. 미배정이면 비어 있다
+         */
         static PenaltyRowResponse of(PenaltyPoint p, boolean raw,
-                                    Map<Long, String> granters, Map<Long, String> classes) {
+                                    Map<Long, String> granters, Map<Long, String> classes,
+                                    Map<Long, Integer> cumulative, Map<Long, String> seats) {
             boolean demerit = p.getPenaltyItem().getCategory() == PenaltyCategory.DEMERIT;
             int value = Math.abs(p.getPoints());
 
@@ -223,7 +233,9 @@ public class AdminPenaltyController {
                     p.getCreatedBy(),
                     granters.get(p.getCreatedBy()),
                     classes.get(p.getEnrollment().getId()),
-                    p.getEnrollment().getEnrollmentStatus());
+                    p.getEnrollment().getEnrollmentStatus(),
+                    cumulative.get(p.getEnrollment().getId()),
+                    seats.get(p.getEnrollment().getId()));
         }
     }
 

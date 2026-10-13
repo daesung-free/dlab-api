@@ -43,9 +43,11 @@ public class StudentSearchRepository {
      * 매핑되지 않은 이름에서 예외가 나 검색 화면 전체가 죽는다. ②인덱스가 없는 임의 컬럼으로
      * 정렬하면 재원생 전체를 정렬하느라 목록이 급격히 느려진다.
      *
-     * <p><b>반(class)은 넣을 수 없다.</b> 반 배정이 {@code class_assignment} 별도 테이블이라
-     * {@link PathBuilder}로 닿는 경로가 없다(검색 조건도 서브쿼리로 건다). 반 정렬이 필요해지면
-     * 조인을 추가하고 별도 {@code OrderSpecifier}를 만들어야 한다.
+     * <p><b>반(class)·좌석(seat)은 넣을 수 없다.</b> 둘 다 별도 테이블
+     * ({@code class_assignment} · {@code seat_assignment})이라 {@link PathBuilder}로 닿는
+     * 경로가 없다(검색 조건도 서브쿼리로 건다). 정렬이 필요해지면 <b>조인을 추가하고 별도
+     * {@code OrderSpecifier}를 만들어야 한다</b> — 화이트리스트에 이름만 더하면
+     * {@code toOrders}가 <b>조용히 무시</b>해서 「정렬이 안 먹는다」로만 보인다.
      */
     public static final List<String> SORTABLE = List.of(
             "studentNo",      // 학번 — 기본 정렬이자 tie-breaker
@@ -178,6 +180,7 @@ public class StudentSearchRepository {
                 assignedToTeacher(cond.teacherId()),
                 classAssigned(cond.unassignedClass()),
                 seatAssigned(cond.unassignedSeat()),
+                hasSeatCd(cond.seatCd()),
                 lockerAssigned(cond.unassignedLocker()),
                 SearchPredicates.eq(e.retakeCount, cond.retakeCount()),
                 hasScholarship(cond.hasScholarship(), cond.scholarshipType()),
@@ -272,6 +275,29 @@ public class StudentSearchRepository {
     }
 
     /** 좌석 배정 여부. "배정 중"은 {@code released_at IS NULL}이다(V2 스키마 규약). */
+    /**
+     * 좌석번호 검색 (피드백 5-2).
+     *
+     * <p>좌석 배정도 별도 테이블이라 서브쿼리로 건다. <b>현재 배정만</b> 본다 —
+     * 회수된 좌석까지 걸면 그 자리를 쓰던 옛 학생이 같이 나온다.
+     *
+     * <p>★ <b>키오스크용 번호가 아니라 화면에 보이는 번호로 찾는다.</b> 별관은 키오스크에
+     * 내릴 때만 1000번대로 바꾸므로(§2 동탄2관), 담당자가 화면에서 본 번호로 검색해야 맞는다.
+     */
+    private BooleanExpression hasSeatCd(String seatCd) {
+        if (seatCd == null || seatCd.isBlank()) {
+            return null;
+        }
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+        QSeatAssignment a = QSeatAssignment.seatAssignment;
+        return com.querydsl.jpa.JPAExpressions
+                .selectOne()
+                .from(a)
+                .where(a.enrollment.eq(e), a.releasedAt.isNull(), a.deleted.isFalse(),
+                        a.seat.seatCd.eq(seatCd.trim()))
+                .exists();
+    }
+
     private BooleanExpression seatAssigned(Boolean unassigned) {
         if (unassigned == null) {
             return null;

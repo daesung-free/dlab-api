@@ -32,4 +32,21 @@ public interface ClassMasterRepository extends JpaRepository<ClassMaster, Long> 
             WHERE c.id = :id AND c.deleted = false
             """)
     Optional<ClassMaster> findDetailById(Long id);
+
+    /**
+     * 그 지점·연도에서 이 수험번호 반을 이미 쓰는 반.
+     *
+     * <p>★ <b>이름까지 돌려줘야 한다.</b> 「그 번호는 이미 쓰고 있습니다」만으로는 담당자가
+     * 어느 반을 고쳐야 할지 모른다. DB 유니크 제약({@code uq_class_master_exam_no})이
+     * 막아 주기는 하지만 그 오류에는 반 이름이 없다.
+     */
+    @Query("""
+            SELECT c FROM ClassMaster c
+            WHERE c.academy.id = :academyId AND c.year = :year
+              AND c.examClassNo = :examClassNo AND c.deleted = false
+            """)
+    java.util.Optional<ClassMaster> findByExamClassNo(
+            @org.springframework.data.repository.query.Param("academyId") Long academyId,
+            @org.springframework.data.repository.query.Param("year") short year,
+            @org.springframework.data.repository.query.Param("examClassNo") Short examClassNo);
 }

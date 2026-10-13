@@ -122,6 +122,9 @@ public class AdminStudentController {
             @RequestParam(required = false) EnrollmentStatus status,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) Long teacherId,
+            // ★ 현재 배정된 좌석번호로 찾는다(피드백 5-2). 화면에 보이는 번호 그대로다 —
+            //   키오스크용 1000번대 변환은 내려줄 때만 하므로 여기서는 쓰지 않는다
+            @RequestParam(required = false) String seatCd,
             @RequestParam(required = false) String schoolName,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedFrom,
@@ -137,7 +140,7 @@ public class AdminStudentController {
 
         Page<StudentEnrollment> page = studentService.search(
                 SearchScope.of(me, year, academyId),
-                scoped(condition(keyword, grade, track, status, classId, teacherId, schoolName,
+                scoped(condition(keyword, grade, track, status, classId, teacherId, seatCd, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
                         unassignedLocker, hasScholarship, scholarshipType, retakeCount),
                         me, year),
@@ -149,13 +152,14 @@ public class AdminStudentController {
 
     private StudentSearchCondition condition(String keyword, GradeType grade, TrackType track,
                                              EnrollmentStatus status, Long classId, Long teacherId,
+                                             String seatCd,
                                              String schoolName, LocalDate admittedFrom,
                                              LocalDate admittedTo, Boolean unassignedClass,
                                              Boolean unassignedSeat, Boolean unassignedLocker,
                                              Boolean hasScholarship, String scholarshipType,
                                              Short retakeCount) {
         return new StudentSearchCondition(keyword, grade, track, status, classId, teacherId,
-                schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
+                seatCd, schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
                 unassignedLocker, hasScholarship, scholarshipType, retakeCount, null);
     }
 
@@ -405,6 +409,9 @@ public class AdminStudentController {
             @RequestParam(required = false) EnrollmentStatus status,
             @RequestParam(required = false) Long classId,
             @RequestParam(required = false) Long teacherId,
+            // ★ 현재 배정된 좌석번호로 찾는다(피드백 5-2). 화면에 보이는 번호 그대로다 —
+            //   키오스크용 1000번대 변환은 내려줄 때만 하므로 여기서는 쓰지 않는다
+            @RequestParam(required = false) String seatCd,
             @RequestParam(required = false) String schoolName,
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate admittedFrom,
@@ -419,7 +426,7 @@ public class AdminStudentController {
 
         // 목록과 같은 범위를 건다 — 담임이 내려받은 파일에 남의 반 학생이 들어가면 회수가 안 된다
         byte[] file = studentExportService.export(SearchScope.of(me, year, academyId),
-                scoped(condition(keyword, grade, track, status, classId, teacherId, schoolName,
+                scoped(condition(keyword, grade, track, status, classId, teacherId, seatCd, schoolName,
                         admittedFrom, admittedTo, unassignedClass, unassignedSeat,
                         unassignedLocker, hasScholarship, scholarshipType, retakeCount),
                         me, year));
