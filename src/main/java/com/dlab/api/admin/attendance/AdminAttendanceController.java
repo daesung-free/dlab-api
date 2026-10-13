@@ -1,6 +1,7 @@
 package com.dlab.api.admin.attendance;
 
 import com.dlab.common.privacy.Masking;
+import com.dlab.domain.attendance.service.AttendanceInterval;
 import com.dlab.common.privacy.PersonalDataPolicy;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
@@ -157,7 +158,18 @@ public class AdminAttendanceController {
             int studyMinutes,
             String studyTime,
             String guardianPhone,
-            boolean unexcusedLate
+            boolean unexcusedLate,
+            /**
+             * 그날의 외출·조퇴 구간 (피드백 5-5).
+             *
+             * <p>★ <b>시간순</b>이고 <b>ISO 인스턴트</b>다 — 등원·하원과 형식이 같아야
+             * 화면이 한 번만 파싱하고, 자정을 넘긴 외출도 표현된다.
+             *
+             * <p>★ 복귀 없음은 {@code returnState} 로 갈린다 —
+             * {@code PENDING}(지금 밖) · {@code NO_RETURN_RECORD}(기록 누락) ·
+             * {@code NOT_EXPECTED}(조퇴). <b>담당자가 할 일이 다르다.</b>
+             */
+            List<AttendanceInterval> events
     ) {
         static AttendanceRowResponse of(AttendanceRow r, boolean raw) {
             return new AttendanceRowResponse(
@@ -168,7 +180,8 @@ public class AdminAttendanceController {
                     r.status(), r.excused(),
                     r.studyMinutes(), r.studyTimeLabel(),
                     raw ? r.guardianPhone() : Masking.phone(r.guardianPhone()),
-                    r.unexcusedLate());
+                    r.unexcusedLate(),
+                    r.events());
         }
     }
 

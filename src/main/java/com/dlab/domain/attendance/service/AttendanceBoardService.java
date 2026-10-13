@@ -19,6 +19,7 @@ import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import com.dlab.domain.user.repository.StudentGuardianLinkRepository;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Comparator;
@@ -62,6 +63,7 @@ public class AttendanceBoardService {
     private final SeatAssignmentRepository seatAssignmentRepository;
     private final StudentGuardianLinkRepository guardianLinkRepository;
     private final com.dlab.domain.user.service.StudentListEnricher studentListEnricher;
+    private final com.dlab.domain.attendance.repository.AbsenceReasonRepository absenceReasonRepository;
     private final PeriodMasterRepository periodMasterRepository;
     private final StudyTimeCalculator studyTimeCalculator;
     private final com.dlab.common.excel.ExcelExporter excelExporter;
@@ -144,6 +146,11 @@ public class AttendanceBoardService {
         Map<Long, ClassAssignment> classes = classesOf(targets);
         Map<Long, String> seats = seatsOf(scope);
         Map<Long, String> guardianPhones = guardianPhonesOf(targets);
+        // 사유 문구는 사유신청에 있다. 행마다 조회하면 재원생 수만큼 쿼리가 나간다
+        Map<Long, List<com.dlab.domain.attendance.entity.AbsenceReason>> reasons =
+                absenceReasonRepository.findByAcademyIdAndAttendanceDate(scope, date).stream()
+                        .collect(java.util.stream.Collectors.groupingBy(
+                                r -> r.getEnrollment().getId()));
 
         var periods = periodMasterRepository.findByDayType(
                 scope, targets.get(0).getYear(), DayType.of(date));
@@ -182,11 +189,97 @@ public class AttendanceBoardService {
                             //   매일 보는데 학부모 번호가 원본으로 나가고 있었다 — 학생 목록과 같게 가린다
                             com.dlab.common.privacy.PersonalDataPolicy.phone(me, guardianPhones.get(e.getId())),
                             unexcusedLate(logs, confirmed.get(e.getId())),
-                            !com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me));
+                            !com.dlab.common.privacy.PersonalDataPolicy.canViewRaw(me),
+                            eventsOf(logs, date, reasons.get(e.getId())));
                 })
                 .sorted(Comparator.comparing(AttendanceRow::studentNo,
                         Comparator.nullsLast(Comparator.naturalOrder())))
                 .toList();
+    }
+
+    /**
+     * 그날의 외출·조퇴 구간 (피드백 5-5).
+     *
+     * <h2>★ 짝을 시간순으로 맞춘다</h2>
+     * 외출({@code D}·{@code N}) 뒤에 오는 <b>첫 복귀({@code R})</b>가 그 외출의 복귀다.
+     * 하루에 여러 번 나갔다 들어올 수 있어 순서대로 걸어가며 맞춘다.
+     *
+     * <h2>★★ 복귀 없음을 두 가지로 가른다</h2>
+     * <ul>
+     *   <li><b>오늘</b>이면 {@code PENDING} — 지금 밖에 있다. 찾아야 한다</li>
+     *   <li><b>지난 날</b>이면 {@code NO_RETURN_RECORD} — 복귀를 안 찍은 것이다.
+     *       기록을 고쳐야 순공시간이 맞는다</li>
+     * </ul>
+     * 둘 다 {@code returnedAt} 이 비어 있어 <b>그 값만으로는 구분되지 않는다.</b>
+     *
+     * <p>조퇴({@code C})는 {@code NOT_EXPECTED} 다 — 복귀가 없는 것이 정상이라
+     * 「미복귀」로 표시하면 오해를 만든다.
+     */
+    private List<AttendanceInterval> eventsOf(
+            List<AttendanceTaggingLog> logs, LocalDate date,
+            List<com.dlab.domain.attendance.entity.AbsenceReason> reasons) {
+
+        List<AttendanceTaggingLog> ordered = logs.stream()
+                .sorted(Comparator.comparing(AttendanceTaggingLog::getRecordedAt))
+                .toList();
+
+        boolean today = date.equals(LocalDate.now(clock));
+        List<AttendanceInterval> events = new java.util.ArrayList<>();
+
+        for (int i = 0; i < ordered.size(); i++) {
+            AttendanceTaggingLog log = ordered.get(i);
+            AttendanceEventType type = log.getEventType();
+            if (type != AttendanceEventType.OUTING
+                    && type != AttendanceEventType.EXCUSED_OUTING
+                    && type != AttendanceEventType.EARLY_LEAVE) {
+                continue;
+            }
+
+            boolean excused = type == AttendanceEventType.EXCUSED_OUTING;
+            if (type == AttendanceEventType.EARLY_LEAVE) {
+                events.add(new AttendanceInterval(type, log.getRecordedAt(), null,
+                        AttendanceInterval.ReturnState.NOT_EXPECTED, excused,
+                        reasonTextAt(reasons, log.getRecordedAt())));
+                continue;
+            }
+
+            Instant returnedAt = null;
+            for (int j = i + 1; j < ordered.size(); j++) {
+                if (ordered.get(j).getEventType() == AttendanceEventType.RETURN) {
+                    returnedAt = ordered.get(j).getRecordedAt();
+                    break;
+                }
+            }
+            AttendanceInterval.ReturnState state = returnedAt != null
+                    ? AttendanceInterval.ReturnState.RETURNED
+                    : today ? AttendanceInterval.ReturnState.PENDING
+                            : AttendanceInterval.ReturnState.NO_RETURN_RECORD;
+
+            events.add(new AttendanceInterval(type, log.getRecordedAt(), returnedAt, state, excused,
+                    reasonTextAt(reasons, log.getRecordedAt())));
+        }
+        return events;
+    }
+
+    /**
+     * 그 시각에 걸리는 사유 문구.
+     *
+     * <p>사유신청에 시간대({@code startTime}~{@code endTime})가 있으면 그 안에 드는 건을
+     * 고르고, 없으면 그날 첫 건을 쓴다 — <b>종일 사유</b>(결석·조퇴 사유)는 시간대가 없다.
+     */
+    private static String reasonTextAt(
+            List<com.dlab.domain.attendance.entity.AbsenceReason> reasons, Instant at) {
+        if (reasons == null || reasons.isEmpty()) {
+            return null;
+        }
+        LocalTime time = at.atZone(com.dlab.common.config.TimeConfig.KST).toLocalTime();
+        return reasons.stream()
+                .filter(r -> r.getStartTime() == null || r.getEndTime() == null
+                        || (!time.isBefore(r.getStartTime()) && !time.isAfter(r.getEndTime())))
+                .map(com.dlab.domain.attendance.entity.AbsenceReason::getReasonText)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
     }
 
     /**
@@ -371,7 +464,14 @@ public class AttendanceBoardService {
             String guardianPhone,
             boolean unexcusedLate,
             /** 연락처가 가려졌는지 — 화면이 "번호가 잘못 저장됐다"로 오인하지 않게 */
-            boolean masked
+            boolean masked,
+            /**
+             * 그날의 외출·조퇴 구간 (피드백 5-5).
+             *
+             * <p>★ <b>시간순으로 정렬돼 있다</b> — 화면이 등원~하원 사이에 끼워 그리므로
+             * 서버가 한 번만 정렬한다. 없으면 빈 목록이다({@code null} 아님).
+             */
+            List<AttendanceInterval> events
     ) {
 
         /** 화면 표기 {@code "N시간 MM분"}. */
