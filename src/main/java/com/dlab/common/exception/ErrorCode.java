@@ -56,6 +56,15 @@ public enum ErrorCode {
     /** 본인이 탈퇴한 계정. 퇴원으로 끊긴 것({@code ACCOUNT_NOT_ACTIVE})과 안내 문구가 다르다. */
     ACCOUNT_WITHDRAWN(HttpStatus.FORBIDDEN, "탈퇴한 계정입니다. 다시 가입해 주세요."),
 
+    /**
+     * 성적표 API 와 통신하지 못했다.
+     *
+     * <p>★ <b>「성적표가 없다」는 이 오류가 아니다.</b> 그건 404 로 오고 「아직 발행 안 됨」과
+     * 구분되지 않아 {@code null} 로 돌려준다 — 한 건이 없다고 배치가 멈추면 뒤의 학생이
+     * 전부 안 받아진다.
+     */
+    REPORT_API_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "성적표 서버와 통신하지 못했습니다."),
+    REPORT_API_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "성적표 연동이 설정되지 않았습니다."),
     FIREWALL_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "와이파이 연동이 설정되지 않았습니다."),
     /** ★ 차단 실패. 와이파이가 열린 채 남아 있을 수 있어 재시도·알림 대상이다. */
     FIREWALL_REVOKE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "와이파이 차단에 실패했습니다."),
