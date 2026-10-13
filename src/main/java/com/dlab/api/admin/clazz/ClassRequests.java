@@ -18,7 +18,18 @@ public final class ClassRequests {
             /** 미지정 가능 — 나중에 담임 지정 API로 붙일 수 있다. */
             Long homeroomTeacherId,
             /** 정원. <b>미지정 가능</b> — 정원을 두지 않는 반이 있다. */
-            @Min(value = 1, message = "정원은 1명 이상이어야 합니다.") @Max(999) Short capacity) {
+            @Min(value = 1, message = "정원은 1명 이상이어야 합니다.") @Max(999) Short capacity,
+            /**
+             * 모의고사 반 번호(1~99, 10의 배수 제외).
+             *
+             * <p>★ <b>여기서 받는 이유</b>: 전에는 별도 API 로만 넣을 수 있어
+             * <b>새로 만든 반이 항상 비어 있었다.</b> 그 반에 학생을 배정하면
+             * <b>학번이 안 나가는데 배정은 성공</b>해서, 화면에는 「채번이 고장났다」로 보였다.
+             *
+             * <p>비워도 만들어진다 — 다만 <b>학생을 배정하려면 그 전에 지정해야 한다.</b>
+             */
+            @Min(value = 1, message = "모의고사 반 번호는 1 이상입니다.")
+            @Max(value = 99, message = "모의고사 반 번호는 99 이하입니다.") Short examClassNo) {
     }
 
     /**

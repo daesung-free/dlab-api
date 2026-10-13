@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 학번 채번 · 연도 전환 (실행가이드 P1-13 "학번 초기화", F-4.1-4).
@@ -149,16 +150,21 @@ class StudentNoResetTest {
     }
 
     @Test
-    @DisplayName("반에 수험번호 반이 없으면 학번도 안 나간다 — 틀린 번호보다 없는 편이 낫다")
-    void noNumberWhenClassHasNoExamNo() {
+    @DisplayName("★★ 반에 수험번호 반이 없으면 배정을 막는다 — 통과시키면 학번 없는 학생이 생긴다")
+    void rejectsAssignWhenClassHasNoExamNo() {
         StudentEnrollment student = admit(academy, (short) 2026, "번호없는반학생");
         ClassMaster noExamNo = new ClassMaster(academy, (short) 2026, "특별반",
                 ClassType.FIXED, null);
         em.persist(noExamNo);
         em.flush();
 
-        classService.assignStudent(noExamNo.getId(), student.getId(), principal);
-        em.flush();
+        // ★ 전에는 배정이 통과하고 학번만 안 붙었다. 학번은 **키패드 출결·식사체크가 쓰는
+        //   4자리**라 없으면 그 학생은 키패드를 쓸 수 없고, 나중에 붙이려면 그 반 순번을
+        //   통째로 다시 정리해야 한다 — 한 번 거절하는 쪽이 싸다
+        assertThatThrownBy(() ->
+                classService.assignStudent(noExamNo.getId(), student.getId(), principal))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class)
+                .hasMessageContaining("반 관리에서 먼저 지정");
 
         assertThat(student.getStudentNo()).isNull();
     }

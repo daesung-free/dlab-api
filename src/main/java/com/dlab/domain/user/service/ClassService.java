@@ -177,7 +177,7 @@ public class ClassService {
     @Transactional
     public ClassMaster create(Long academyId, short year, String name,
                               ClassType classType, Long homeroomTeacherId, Short capacity,
-                              AuthPrincipal principal) {
+                              Short examClassNo, AuthPrincipal principal) {
         if (!principal.canAccessAcademy(academyId)) {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
@@ -191,6 +191,12 @@ public class ClassService {
         ClassMaster classMaster =
                 new ClassMaster(academy, year, name, classType, resolveTeacher(homeroomTeacherId, academyId));
         classMaster.changeCapacity(capacity);
+        // ★ 반 번호를 **만들 때 함께 받는다.** 전에는 별도 API 로만 넣을 수 있어
+        //   **새로 만든 반이 항상 비어 있었고**, 그 반에 배정하면 학번이 안 나갔다
+        if (examClassNo != null) {
+            validateExamClassNo(academyId, year, examClassNo, null);
+            classMaster.changeExamClassNo(examClassNo);
+        }
         return classMasterRepository.save(classMaster);
     }
 
@@ -241,27 +247,38 @@ public class ClassService {
     @Transactional
     public ClassMaster changeExamClassNo(Long classId, Short examClassNo, AuthPrincipal principal) {
         ClassMaster classMaster = loadAccessible(classId, principal);
+        validateExamClassNo(classMaster.getAcademy().getId(), classMaster.getYear(),
+                examClassNo, classMaster.getId());
+        classMaster.changeExamClassNo(examClassNo);
+        return classMaster;
+    }
+
+    /**
+     * 모의고사 반 번호 검증. <b>생성과 수정이 같은 규칙을 타야 한다</b> —
+     * 한쪽에만 두면 다른 경로로 들어온 값이 규칙을 비껴간다.
+     *
+     * @param selfId 수정이면 자기 자신(중복 검사에서 뺀다), 생성이면 {@code null}
+     */
+    private void validateExamClassNo(Long academyId, short year, Short examClassNo, Long selfId) {
+        if (examClassNo == null) {
+            return;
+        }
         // ★ 10의 배수를 막는다 — 10반 1번(10|01)이 1반 1번(1|001)과 **같은 번호**가 된다.
         //   디랩이 10·20 을 쓰지 않는 이유가 이것이고, 30·40 도 같은 일이 난다.
-        if (examClassNo != null && !StudentEnrollment.isUsableClassNo(examClassNo)) {
+        if (!StudentEnrollment.isUsableClassNo(examClassNo)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
                     "모의고사 반 번호는 1~99 중 10의 배수를 뺀 값입니다"
                             + "(10·20·30… 은 학번이 다른 반과 겹칩니다).");
         }
         // ★ 중복이면 반 이름을 담아 거절한다. DB 유니크 제약이 막아 주기는 하지만
         //   그 오류에는 반 이름이 없어 담당자가 어느 반을 고쳐야 할지 모른다
-        if (examClassNo != null) {
-            classMasterRepository.findByExamClassNo(
-                            classMaster.getAcademy().getId(), classMaster.getYear(), examClassNo)
-                    .filter(other -> !other.getId().equals(classMaster.getId()))
-                    .ifPresent(other -> {
-                        throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                                "모의고사 반 번호 %d 는 이미 「%s」가 쓰고 있습니다."
-                                        .formatted(examClassNo, other.getName()));
-                    });
-        }
-        classMaster.changeExamClassNo(examClassNo);
-        return classMaster;
+        classMasterRepository.findByExamClassNo(academyId, year, examClassNo)
+                .filter(other -> selfId == null || !other.getId().equals(selfId))
+                .ifPresent(other -> {
+                    throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                            "모의고사 반 번호 %d 는 이미 「%s」가 쓰고 있습니다."
+                                    .formatted(examClassNo, other.getName()));
+                });
     }
 
     /**
@@ -278,6 +295,30 @@ public class ClassService {
     }
 
     /**
+     * 반에 「시험용 반 번호」가 있어야 배정할 수 있다.
+     *
+     * <h2>★★ 없으면 배정은 성공하는데 학번만 조용히 안 붙었다</h2>
+     * 학번이 <b>「반 번호 + 순번」</b>이라 반 번호가 없으면 만들 자리가 없다. 그런데
+     * 채번이 조용히 건너뛰던 탓에 <b>화면에는 「채번이 고장났다」로 보였다</b>
+     * (2026-10-13 프론트 확인). 실제로 그렇게 보고됐다.
+     *
+     * <h2>★ 그래서 막는다 — 비는 것이 더 비싸다</h2>
+     * 학번은 <b>키패드 출결·식사체크가 쓰는 4자리</b>다(0803 답변서). 학번 없는 학생은
+     * <b>키패드를 쓸 수 없고</b>, 나중에 붙이려면 그 반 순번을 통째로 다시 정리해야 한다.
+     * 배정을 한 번 거절하는 쪽이 싸다.
+     *
+     * <p>⚠️ <b>무엇을 해야 하는지까지 돌려준다.</b> 「채번되지 않았습니다」만 보면
+     * 담당자는 어디를 고쳐야 할지 모른다.
+     */
+    private void requireExamClassNo(ClassMaster classMaster) {
+        if (classMaster.getExamClassNo() == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "'%s' 반에 시험용 반 번호가 없어 학번을 매길 수 없습니다. 반 관리에서 먼저 지정해 주세요."
+                            .formatted(classMaster.getName()));
+        }
+    }
+
+    /**
      * 배정 본체. 단건·일괄이 같은 규칙을 타야 해서 분리했다 —
      * 일괄에만 다른 검증이 들어가면 두 경로로 만든 데이터가 서로 다른 상태가 된다.
      */
@@ -288,6 +329,7 @@ public class ClassService {
         if (!enrollment.getAcademy().getId().equals(classMaster.getAcademy().getId())) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "다른 지점의 반에는 배정할 수 없습니다.");
         }
+        requireExamClassNo(classMaster);
         if (enrollment.getYear() != classMaster.getYear()) {
             // 연도가 어긋나면 "올해 학생이 작년 반에" 같은 상태가 만들어진다
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "학생의 등록 연도와 반의 연도가 다릅니다.");
