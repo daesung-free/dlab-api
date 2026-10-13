@@ -92,15 +92,15 @@ class StudentAdmissionFlowTest {
     }
 
     @Test
-    @DisplayName("★ 학번은 연도+4자리로 채번되고 1부터 증가한다")
-    void studentNoIsGenerated() throws Exception {
+    @DisplayName("★★ 접수만으로는 학번이 없다 — 번호가 반에 종속되어 반을 모르면 만들 수 없다")
+    void studentNoIsNotIssuedOnAdmit() throws Exception {
+        // 2026-10-13 피드백 1-1: 「신규생 접수 → 행정직원이 반배정 → **학번 자동부여**」.
+        // 번호가 반 1~2자리 + 순번(전체 4자리)이라 **반을 모르면 만들 수 없다.**
+        // ⚠️ 0 이나 임시값을 넣으면 그 값이 키패드 출결·성적 매칭에 섞인다
         String first = admit("학생일");
-        String second = admit("학생이");
 
-        assertThat(objectMapper.readTree(first).path("data").path("studentNo").asString())
-                .isEqualTo("2026-0001");
-        assertThat(objectMapper.readTree(second).path("data").path("studentNo").asString())
-                .isEqualTo("2026-0002");
+        assertThat(objectMapper.readTree(first).path("data").path("studentNo").isNull())
+                .isTrue();
     }
 
     @Test
@@ -125,9 +125,12 @@ class StudentAdmissionFlowTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].name").value("검색될학생"));
 
+        // ★ 학번으로도 검색된다. 다만 접수 직후에는 학번이 없으므로(반 배정 전)
+        //   이름 검색만 걸린다 — 학번 검색은 배정 뒤에 쓰인다
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
-                        .param("year", "2026").param("keyword", "0001"))
-                .andExpect(jsonPath("$.data[0].studentNo").value("2026-0001"));
+                        .param("year", "2026").param("keyword", "없는학번"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
@@ -151,8 +154,8 @@ class StudentAdmissionFlowTest {
         // 사람은 같고 고유ID도 그대로 — 상담 이력이 이어지는 근거
         assertThat(re.path("data").path("studentId").asLong()).isEqualTo(studentId);
         assertThat(re.path("data").path("uniqueCode").asString()).isEqualTo(uniqueCode);
-        // 새 기수라 학번은 다시 1번
-        assertThat(re.path("data").path("studentNo").asString()).isEqualTo("2027-0001");
+        // ★ 재등록도 반 배정 전에는 학번이 없다 — 번호가 반에서 나온다(피드백 1-1)
+        assertThat(re.path("data").path("studentNo").isNull()).isTrue();
 
         em.flush();
         Long enrollmentCount = em.createQuery("""

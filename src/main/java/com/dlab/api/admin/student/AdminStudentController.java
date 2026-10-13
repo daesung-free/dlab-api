@@ -273,10 +273,8 @@ public class AdminStudentController {
      */
     @GetMapping("/next-student-no")
     public ApiResponse<String> nextStudentNo(@CurrentAccount AuthPrincipal me,
-                                             @RequestParam(required = false) Long academyId,
-                                             @RequestParam short year) {
-        return ApiResponse.success(studentService.previewStudentNo(
-                me.requireAcademyScope(academyId), year, me));
+                                             @RequestParam Long classId) {
+        return ApiResponse.success(studentService.previewStudentNo(classId, me));
     }
 
     /**

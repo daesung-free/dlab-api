@@ -63,8 +63,8 @@ public class StudentSearchRepository {
      */
     private static final Map<String, String> SORT_ALIASES = Map.of("name", "student.name");
 
-    /** 기본 정렬이자 tie-breaker. 이 값이 바뀌면 지금 화면의 기본 순서가 달라진다. */
-    private static final String TIE_BREAKER = "studentNo";
+    /** 기본 정렬. 이 값이 바뀌면 지금 화면의 기본 순서가 달라진다. */
+    private static final String DEFAULT_SORT = "studentNo";
 
     /**
      * {@code toOrders}에 넘길 경로 루트. 별칭은 쿼리에서 쓰는
@@ -133,11 +133,22 @@ public class StudentSearchRepository {
                     SORT_PATH, Sort.by(order), SORTABLE)));
         }
 
+        QStudentEnrollment e = QStudentEnrollment.studentEnrollment;
+
         boolean alreadySortedByStudentNo = resolved.stream()
-                .anyMatch(order -> TIE_BREAKER.equals(order.getProperty()));
+                .anyMatch(order -> DEFAULT_SORT.equals(order.getProperty()));
         if (!alreadySortedByStudentNo) {
-            orders.add(QStudentEnrollment.studentEnrollment.studentNo.asc());
+            // ★ 학번이 <b>비어 있을 수 있다</b> — 2026-10-13 이후 학번은 반 배정 시 나간다.
+            //   접수만 하고 배정 전인 학생이 그렇다. nullsLast 가 없으면 내림차순에서
+            //   미배정 학생이 앞으로 쌓인다
+            orders.add(e.studentNo.asc().nullsLast());
         }
+
+        // ★★ <b>tie-breaker 를 id 로 바꿨다.</b> 전에는 학번이었는데 <b>학번이 비는 순간
+        //   순서를 정하는 값이 없어진다</b> — 미배정 학생이 여럿이면 DB 가 순서를 보장하지
+        //   않아 <b>페이지를 넘길 때 같은 학생이 두 번 보이거나 아예 빠진다.</b>
+        //   그게 tie-breaker 가 애초에 막으려던 증상이다. `id` 는 항상 있고 단조증가한다.
+        orders.add(e.id.asc());
         return orders.toArray(new OrderSpecifier<?>[0]);
     }
 

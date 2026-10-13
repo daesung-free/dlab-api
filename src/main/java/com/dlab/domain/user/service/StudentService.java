@@ -43,6 +43,8 @@ public class StudentService {
     private final StudentRepository studentRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final com.dlab.domain.user.repository.StudentMemoRepository memoRepository;
+    private final com.dlab.domain.user.repository.ClassMasterRepository classMasterRepository;
+    private final com.dlab.domain.grade.service.ExamNumberService examNumberService;
     private final StudentSearchRepository studentSearchRepository;
     private final AcademyRepository academyRepository;
     private final TransactionTemplate transactionTemplate;
@@ -210,8 +212,15 @@ public class StudentService {
                 .findByStudentIdAndAcademyIdAndYearAndDeletedFalse(student.getId(), academyId, year)
                 .filter(StudentEnrollment::isCurrent)
                 .ifPresent(e -> {
+                    // ★ 학번이 없을 수 있다 — 2026-10-13 이후 학번은 **반 배정 시** 나간다.
+                    //   접수만 하고 반 배정 전인 학생이 그렇다. 그때 "학번 null" 을 내보내면
+                    //   담당자가 **그 학생을 찾을 단서를 못 받는다** — 반 배정 전이라는
+                    //   사실 자체가 단서이므로 그렇게 적는다
+                    String hint = e.getStudentNo() != null
+                            ? "학번 " + e.getStudentNo()
+                            : "반 배정 전이라 학번이 아직 없습니다";
                     throw new BusinessException(ErrorCode.DUPLICATE_ADMISSION,
-                            "이미 등록된 학생입니다. (학번 " + e.getStudentNo() + ")",
+                            "이미 등록된 학생입니다. (" + hint + ")",
                             new DuplicateAdmission(e.getId(), e.getStudentNo(),
                                     e.getAcademy().getId(), e.getAcademy().getAcadNm()));
                 });
@@ -288,10 +297,16 @@ public class StudentService {
     }
 
     /**
-     * 채번 충돌 시 <b>새 트랜잭션으로</b> 다시 시도한다.
+     * 학번 충돌 시 <b>새 트랜잭션으로</b> 다시 시도한다.
      *
      * <p>애플리케이션 락으로 막지 않는 이유는 <b>다중 인스턴스에서 무의미</b>하기 때문이다.
      * {@code UNIQUE(academy_id, year, student_no)} 제약을 심판으로 두고, 진 쪽이 다시 계산한다.
+     *
+     * <h2>⚠️ 2026-10-13 이후 이 경로에서 학번 충돌은 나지 않는다</h2>
+     * 학번 채번이 <b>접수 → 반 배정</b>으로 옮겨가(피드백 1-1) 접수는 학번을 만들지 않는다.
+     * <b>충돌은 반 배정으로 이동했고</b> 그쪽에 같은 재시도가 붙어 있다
+     * ({@code ExamNumberService}). 여기 남겨 두는 이유는 <b>이행 기간에 옛 형식 학번을 가진
+     * 행이 남아 있을 수 있고</b>, 그때도 제약은 그대로 동작해야 하기 때문이다.
      */
     private StudentEnrollment withStudentNoRetry(Supplier<StudentEnrollment> attempt) {
         for (int i = 0; i < STUDENT_NO_RETRY; i++) {
@@ -497,9 +512,15 @@ public class StudentService {
     private StudentEnrollment enroll(Academy academy, short year, Student student,
                                      GradeType grade, TrackType track,
                                      LocalDate admissionDate) {
-        String studentNo = nextStudentNo(academy.getId(), year);
+        // ★★ **학번을 여기서 발급하지 않는다** (2026-10-13 피드백 1-1).
+        //    디랩 요구가 「신규생 접수 → 행정직원이 반배정 → **학번 자동부여**」이고,
+        //    번호가 **반에 종속**(반 1~2자리 + 순번, 전체 4자리)이라 **반을 모르면 만들 수 없다.**
+        //    반 배정 시점에 `ExamNumberService` 가 채운다.
+        //
+        //    ⚠️ 그래서 **반 배정 전에는 학번이 비어 있다.** 화면이 「미배정」으로 보여야 하고,
+        //    0 이나 임시값을 넣으면 **그 값이 키패드 출결·성적 매칭에 섞인다.**
         StudentEnrollment enrollment = enrollmentRepository.save(
-                new StudentEnrollment(student, academy, year, studentNo, null, grade));
+                new StudentEnrollment(student, academy, year, null, null, grade));
         enrollment.changeTrack(track);
         // ★ 채우지 않으면 등원일 검색·재원기간 산정이 전부 빈 값을 보게 된다.
         //   소급 등록(이미 다니던 학생을 나중에 넣는 경우)이 실제로 있어 지정도 받는다
@@ -509,25 +530,31 @@ public class StudentService {
     }
 
     /**
-     * 다음 학번 미리보기.
+     * 그 반의 다음 학번 미리보기.
      *
-     * <p>⚠️ <b>예약이 아니다.</b> 등록 시점에 다시 계산하므로, 두 사람이 동시에 화면을 열면
-     * 같은 번호가 보이고 실제로는 한 명만 그 번호를 갖는다(유니크 제약이 심판이다).
-     * 화면에 "예정"이라고 적어야 하고, 이 값을 등록 요청에 실어 보내면 안 된다.
+     * <h2>★ 반을 골라야 알 수 있다</h2>
+     * 번호가 <b>반에 종속</b>(반 1~2자리 + 순번, 전체 4자리)이라 지점·연도만으로는 만들 수
+     * 없다 — 전에는 연도별 일련번호였고 그래서 반 없이 미리 보여줄 수 있었다.
+     *
+     * <p>⚠️ <b>예약이 아니다.</b> 배정 시점에 다시 계산하므로 두 사람이 동시에 화면을 열면
+     * 같은 번호가 보이고 실제로는 한 명만 갖는다(유니크 제약이 심판이다).
+     * 화면에 "예정"이라고 적어야 하고, <b>이 값을 요청에 실어 보내면 안 된다.</b>
+     *
+     * @return 그 반의 다음 번호. 반에 모의고사 반 번호가 없거나 99명이 찼으면 비어 있다
      */
     @Transactional(readOnly = true)
-    public String previewStudentNo(Long academyId, short year, AuthPrincipal principal) {
-        if (!principal.canAccessAcademy(academyId)) {
+    public String previewStudentNo(Long classId, AuthPrincipal principal) {
+        var classMaster = classMasterRepository.findById(classId)
+                .filter(c -> !c.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "반을 찾을 수 없습니다."));
+        if (!principal.canAccessAcademy(classMaster.getAcademy().getId())) {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
-        return nextStudentNo(academyId, year);
+        return examNumberService.previewNext(classMaster);
     }
 
-    /** {@code year + %04d}. 요구사항 F-4.1-3 — 매년 초기화되므로 연도별로 1부터 센다. */
-    private String nextStudentNo(Long academyId, short year) {
-        int next = enrollmentRepository.findMaxSequence(academyId, year) + 1;
-        return "%d-%04d".formatted(year, next);
-    }
+    // ★ 연도별 일련번호(`2026-0001`) 채번은 제거했다 — 번호가 반에 종속되는 구조로 바뀌어
+    //   지점·연도만으로는 만들 수 없다(2026-10-13 피드백 1-1). `ExamNumberService` 가 채운다.
 
     /**
      * 학생 고유ID. 학부모 자녀연결의 유일한 키이고 마이페이지에 상시 노출된다.
