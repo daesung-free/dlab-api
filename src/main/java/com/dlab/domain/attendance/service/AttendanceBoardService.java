@@ -239,7 +239,7 @@ public class AttendanceBoardService {
             if (type == AttendanceEventType.EARLY_LEAVE) {
                 events.add(new AttendanceInterval(type, log.getRecordedAt(), null,
                         AttendanceInterval.ReturnState.NOT_EXPECTED, excused,
-                        reasonTextAt(reasons, log.getRecordedAt())));
+                        reasonTextAt(reasons, type, log.getRecordedAt())));
                 continue;
             }
 
@@ -256,24 +256,38 @@ public class AttendanceBoardService {
                             : AttendanceInterval.ReturnState.NO_RETURN_RECORD;
 
             events.add(new AttendanceInterval(type, log.getRecordedAt(), returnedAt, state, excused,
-                    reasonTextAt(reasons, log.getRecordedAt())));
+                    reasonTextAt(reasons, type, log.getRecordedAt())));
         }
         return events;
     }
 
     /**
-     * 그 시각에 걸리는 사유 문구.
+     * 그 이벤트에 걸리는 사유 문구.
      *
-     * <p>사유신청에 시간대({@code startTime}~{@code endTime})가 있으면 그 안에 드는 건을
-     * 고르고, 없으면 그날 첫 건을 쓴다 — <b>종일 사유</b>(결석·조퇴 사유)는 시간대가 없다.
+     * <h2>★★ 종류를 먼저 맞춘다</h2>
+     * 시간대만 보면 <b>조퇴 사유가 외출에도 붙는다</b> — 종일 사유(조퇴·결석)는 시간대가
+     * 없어서 그날 모든 이벤트에 걸렸다. 실제로 그렇게 나왔다:
+     * 외출 11:00 에 조퇴 사유 「가족 행사」가 붙어, <b>담당자가 잘못된 사유를 읽게 됐다.</b>
+     *
+     * <p>그래서 {@code reasonType} 을 이벤트 종류와 먼저 맞추고, 그 안에서 시간대를 본다.
+     * 시간대가 있으면 그 안에 드는 건, 없으면 그 종류의 첫 건이다.
+     *
+     * <p>⚠️ 맞는 종류가 없으면 <b>비운다.</b> 아무 사유나 붙이는 것보다 비는 쪽이 낫다 —
+     * 화면은 빈 칸을 「사유신청을 안 했다」로 읽는다.
      */
     private static String reasonTextAt(
-            List<com.dlab.domain.attendance.entity.AbsenceReason> reasons, Instant at) {
+            List<com.dlab.domain.attendance.entity.AbsenceReason> reasons,
+            AttendanceEventType type, Instant at) {
         if (reasons == null || reasons.isEmpty()) {
             return null;
         }
+        var wanted = type == AttendanceEventType.EARLY_LEAVE
+                ? com.dlab.domain.attendance.entity.AbsenceReasonType.EARLY_LEAVE
+                : com.dlab.domain.attendance.entity.AbsenceReasonType.OUTING;
+
         LocalTime time = at.atZone(com.dlab.common.config.TimeConfig.KST).toLocalTime();
         return reasons.stream()
+                .filter(r -> r.getReasonType() == wanted)
                 .filter(r -> r.getStartTime() == null || r.getEndTime() == null
                         || (!time.isBefore(r.getStartTime()) && !time.isAfter(r.getEndTime())))
                 .map(com.dlab.domain.attendance.entity.AbsenceReason::getReasonText)

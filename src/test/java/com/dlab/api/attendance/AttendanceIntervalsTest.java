@@ -161,6 +161,33 @@ class AttendanceIntervalsTest {
     }
 
     @Test
+    @DisplayName("★★ 조퇴 사유가 외출에 붙지 않는다 — 종일 사유는 시간대가 없어 전부 걸렸다")
+    void doesNotLeakEarlyLeaveReasonToOuting() {
+        LocalDate yesterday = LocalDate.now().minusDays(1);
+        tag(AttendanceEventType.CHECK_IN, yesterday, LocalTime.of(8, 10));
+        tag(AttendanceEventType.OUTING, yesterday, LocalTime.of(11, 0));
+        tag(AttendanceEventType.EARLY_LEAVE, yesterday, LocalTime.of(19, 40));
+
+        // 조퇴 사유만 있다. 시간대가 없는 종일 건이다
+        em.persist(new com.dlab.domain.attendance.entity.AbsenceReason(
+                academy, enrollment, yesterday,
+                com.dlab.domain.attendance.entity.AbsenceReasonType.EARLY_LEAVE,
+                "가족 행사"));
+        em.flush();
+
+        var events = eventsOf(yesterday);
+
+        var outing = events.stream()
+                .filter(e -> e.type() == AttendanceEventType.OUTING).findFirst().orElseThrow();
+        var earlyLeave = events.stream()
+                .filter(e -> e.type() == AttendanceEventType.EARLY_LEAVE).findFirst().orElseThrow();
+
+        // ★ 외출에는 붙지 않는다 — 붙으면 담당자가 잘못된 사유를 읽는다
+        assertThat(outing.reason()).isNull();
+        assertThat(earlyLeave.reason()).isEqualTo("가족 행사");
+    }
+
+    @Test
     @DisplayName("등원·하원만 있으면 구간은 빈 목록이다 — null 이 아니다")
     void emptyWhenNoOuting() {
         LocalDate yesterday = LocalDate.now().minusDays(1);
