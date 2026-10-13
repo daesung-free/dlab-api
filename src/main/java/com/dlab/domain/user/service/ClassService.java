@@ -248,6 +248,18 @@ public class ClassService {
                     "모의고사 반 번호는 1~99 중 10의 배수를 뺀 값입니다"
                             + "(10·20·30… 은 학번이 다른 반과 겹칩니다).");
         }
+        // ★ 중복이면 반 이름을 담아 거절한다. DB 유니크 제약이 막아 주기는 하지만
+        //   그 오류에는 반 이름이 없어 담당자가 어느 반을 고쳐야 할지 모른다
+        if (examClassNo != null) {
+            classMasterRepository.findByExamClassNo(
+                            classMaster.getAcademy().getId(), classMaster.getYear(), examClassNo)
+                    .filter(other -> !other.getId().equals(classMaster.getId()))
+                    .ifPresent(other -> {
+                        throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                                "모의고사 반 번호 %d 는 이미 「%s」가 쓰고 있습니다."
+                                        .formatted(examClassNo, other.getName()));
+                    });
+        }
         classMaster.changeExamClassNo(examClassNo);
         return classMaster;
     }

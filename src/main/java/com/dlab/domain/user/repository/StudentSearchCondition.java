@@ -55,6 +55,8 @@ public record StudentSearchCondition(
         EnrollmentStatus status,
         Long classId,
         Long teacherId,
+        /** 좌석번호. 현재 배정 기준으로 찾는다(피드백 5-2) */
+        String seatCd,
         String schoolName,
         LocalDate admittedFrom,
         LocalDate admittedTo,
@@ -92,13 +94,13 @@ public record StudentSearchCondition(
     /** 조건 없음. 전체 조회·테스트용. */
     public static StudentSearchCondition none() {
         return new StudentSearchCondition(null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
     }
 
     /** 담임 범위를 덧붙인다 — 검색 조건은 화면이 만들고, 범위는 서버가 얹는다. */
     public StudentSearchCondition restrictedTo(java.util.Set<Long> enrollmentIds) {
         return new StudentSearchCondition(keyword, grade, track, status, classId, teacherId,
-                schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
+                seatCd, schoolName, admittedFrom, admittedTo, unassignedClass, unassignedSeat,
                 unassignedLocker, hasScholarship, scholarshipType, retakeCount, enrollmentIds);
     }
 }

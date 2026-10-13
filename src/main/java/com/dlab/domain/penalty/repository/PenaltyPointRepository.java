@@ -32,6 +32,25 @@ public interface PenaltyPointRepository extends JpaRepository<PenaltyPoint, Long
     int sumPointsByEnrollment(@Param("enrollmentId") Long enrollmentId);
 
     /**
+     * 여러 학생의 <b>누적</b> 점수를 한 번에.
+     *
+     * <h2>★ 목록이 행마다 조회하면 안 된다</h2>
+     * 상벌점 목록은 「누적 38점 (이번 달 +3)」을 <b>학생마다</b> 보여야 한다(디랩 피드백 5-7).
+     * 행마다 {@link #sumPointsByEnrollment} 를 부르면 <b>200명이면 쿼리가 200번</b> 나간다.
+     *
+     * <p>⚠️ <b>기간을 걸지 않는다 — 누적이다.</b> 제적 기준 40점이 누적이라, 기간 합계만
+     * 보이면 학부모가 「이번 달 +3」만 보고 안심한다. 그게 디랩 지적의 핵심이다.
+     */
+    @Query("""
+            SELECT p.enrollment.id, COALESCE(SUM(p.points), 0) FROM PenaltyPoint p
+            WHERE p.deleted = false
+              AND p.enrollment.id IN :enrollmentIds
+            GROUP BY p.enrollment.id
+            """)
+    List<Object[]> sumPointsByEnrollments(
+            @Param("enrollmentIds") java.util.Collection<Long> enrollmentIds);
+
+    /**
      * 지점 전체의 기간 내 상벌점. 키오스크 {@code getPointStdList}가 쓴다.
      *
      * <p><b>학생 단건 조회가 아니다</b> — 키오스크가 지점 전체를 한 번 받아

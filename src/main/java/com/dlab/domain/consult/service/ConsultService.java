@@ -180,7 +180,9 @@ public class ConsultService {
                             last == null ? null : last.getNextDueDate(),
                             overdueDays(last, today),
                             last == null,
-                            null);   // 신상기록부 — F-4.11-8 대기
+                            null,   // 신상기록부 — F-4.11-8 대기
+                            e.getAdmissionDate(),
+                            daysSinceAdmission(e, today));
                 })
                 .sorted(Comparator.comparing(ConsultStatusRow::studentNo,
                         Comparator.nullsLast(Comparator.naturalOrder())))
@@ -362,6 +364,22 @@ public class ConsultService {
             LocalDate nextDueDate,
             long overdueDays,
             boolean neverConsulted,
-            Boolean profileWritten) {
+            Boolean profileWritten,
+            LocalDate admissionDate,
+            Long daysSinceAdmission) {
+    }
+
+    /**
+     * 등원일로부터 지난 일수.
+     *
+     * <p>★ <b>서버가 센다.</b> 「초도 상담 7일 경과」 강조(피드백 5-9)에 쓰는 값인데,
+     * 화면이 {@code new Date()} 로 세면 <b>브라우저 시간대에 따라 경계에서 하루가 어긋난다</b> —
+     * {@code overdueDays} 를 서버가 세는 것과 같은 이유다.
+     *
+     * <p>등원일이 없으면 {@code null} 이다. 0 으로 두면 <b>오늘 등원한 것</b>과 구분되지 않는다.
+     */
+    private static Long daysSinceAdmission(StudentEnrollment e, LocalDate today) {
+        return e.getAdmissionDate() == null ? null
+                : java.time.temporal.ChronoUnit.DAYS.between(e.getAdmissionDate(), today);
     }
 }
