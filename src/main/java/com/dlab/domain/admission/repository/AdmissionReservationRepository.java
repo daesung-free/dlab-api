@@ -38,6 +38,32 @@ public interface AdmissionReservationRepository extends JpaRepository<AdmissionR
                                       @Param("studentTel") String studentTel);
 
     /**
+     * 같은 이름의 <b>아직 전환되지 않은</b> 입학예약 — 중복 탐지 후보 (피드백 6-3①).
+     *
+     * <p>★ <b>생년월일·연락처 일치는 호출부에서 본다.</b> 규격서 필드라 생년이
+     * {@code yyyyMMdd} 문자열이고 연락처에는 하이픈이 섞여 있어, SQL 로 비교하면
+     * {@code 010-1234-5678} 과 {@code 01012345678} 이 다른 번호가 된다. 숫자만 뽑아
+     * 비교해야 하는데 그 변환을 DB 함수로 넣으면 인덱스를 못 타고 방언에 묶인다 —
+     * 후보가 "같은 지점·같은 연도·같은 이름"이라 많아야 몇 건이므로 Java 에서 걸러도
+     * 비용이 없다({@code StudentEnrollmentRepository.findRecentByName}와 같은 판단).
+     *
+     * <p><b>전환된 건은 후보가 아니다.</b> 이미 학생이 된 예약을 또 가리키면 화면이
+     * "그 예약을 전환" 버튼을 띄우는데 그 버튼은 눌려도 막힌다.
+     */
+    @Query("""
+            SELECT r FROM AdmissionReservation r
+            WHERE r.academy.id = :academyId
+              AND r.year = :year
+              AND r.studentName = :studentName
+              AND r.enrollment IS NULL
+              AND r.deleted = false
+            ORDER BY r.id DESC
+            """)
+    List<AdmissionReservation> findUnconvertedByName(@Param("academyId") Long academyId,
+                                                     @Param("year") short year,
+                                                     @Param("studentName") String studentName);
+
+    /**
      * 관리자 목록 (F-4.2-1).
      *
      * <p>★ <b>지점은 파라미터가 아니라 권한에서 온다.</b> 요청 값으로 받으면 바꿔 보내는

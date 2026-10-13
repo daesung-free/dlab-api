@@ -69,6 +69,9 @@ public class AdminStudentController {
     private final StudentStatusService studentStatusService;
     private final StudentListEnricher studentListEnricher;
     private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
+    /** 홈페이지 입학예약과의 중복 탐지 (피드백 6-3①). 신규접수 저장 전에 본다 */
+    private final com.dlab.domain.admission.service.AdmissionDuplicateService
+            admissionDuplicateService;
 
     /**
      * 학생 검색. 조건이 12개라 {@code SearchPredicates}로 조합한다 — 값이 없으면 그 조건이 빠진다.
@@ -285,11 +288,26 @@ public class AdminStudentController {
      * <p>상세 정보(생년월일·성별·출신학교·주소)와 등원일을 <b>함께 받아 한 번에 끝낸다</b> —
      * 등록과 수정으로 나누면 뒤가 실패했을 때 학생만 남고, 화면은 "저장 실패"로만 알려
      * 담당자가 다시 등록해 중복이 생긴다.
+     *
+     * <h2>★ 홈페이지 입학예약과 겹치면 멈춘다 (피드백 6-3①)</h2>
+     * 홈페이지 입학상담예약과 데스크 신규접수는 <b>서로 다른 경로</b>라, 예약을 넣은 학생을
+     * 여기서 그냥 등록하면 <b>같은 사람이 두 건으로 쌓인다</b> — 한쪽은 대기자 목록에 남고
+     * 한쪽은 재원생이 되어 둘을 잇는 단서가 이름뿐이다.
+     *
+     * <p><b>자동으로 합치지 않는다.</b> 동명이인이 있고 전환은 학번을 채번해 되돌릴 수
+     * 없다 — 후보를 {@code 409}로 알려주고 담당자가 「그 예약을 전환」과 「다른 사람입니다」
+     * 중에서 고른다. 후자면 {@code confirmedNotDuplicate}를 실어 다시 보낸다.
      */
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @PostMapping
     public ApiResponse<StudentResponse> admit(@CurrentAccount AuthPrincipal me,
                                               @Valid @RequestBody StudentRequests.Admit request) {
+        // ★ 채번 전에 본다 — 등록한 뒤에 알려주면 이미 학번이 나가 있어 되돌릴 수 없다.
+        //   지점은 요청 값을 그대로 쓰지 않고 권한으로 확정한다(§7)
+        admissionDuplicateService.assertNotDuplicatedReservation(
+                me.requireAcademyScope(request.academyId()), request.year().shortValue(),
+                request.name(), request.birthDate(), request.phone(),
+                request.confirmedNotDuplicate());
         StudentEnrollment admitted = studentService.admit(
                 request.academyId(), request.year().shortValue(), request.name(),
                 request.phone(), request.grade(), request.retakeCount(), request.track(),
