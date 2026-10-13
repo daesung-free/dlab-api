@@ -85,13 +85,28 @@ public final class StudentRequests {
              * 따로 "확인했음" API 를 두면 그 사이에 다른 담당자가 예약을 전환할 수 있고,
              * 확인만 하고 저장하지 않은 상태가 남는다.
              */
-            boolean confirmedNotDuplicate) {
+            Boolean confirmedNotDuplicate) {
+
+        /**
+         * ⚠️ <b>래퍼({@code Boolean})다 — 원시형으로 두면 기존 호출이 전부 400 이 된다.</b>
+         *
+         * <p>이 프로젝트는 {@code FAIL_ON_NULL_FOR_PRIMITIVES} 가 켜져 있어, JSON 에
+         * 이 칸이 <b>없으면</b> Jackson 이 *"Cannot map null into type boolean"* 으로
+         * 본문 파싱 자체를 거부한다 — 화면은 중복 탐지와 무관한
+         * <b>「요청 본문 형식이 올바르지 않습니다」</b> 를 받는다.
+         *
+         * <p>즉 필드를 더하는 것만으로 <b>이미 돌고 있던 신규접수가 멈춘다.</b>
+         * 비워 보내는 것이 정상이고, 그때는 <b>차단</b>으로 읽는다.
+         */
+        public boolean confirmedNotDuplicateOrFalse() {
+            return Boolean.TRUE.equals(confirmedNotDuplicate);
+        }
 
         public Admit(Long academyId, Integer year, String name, String phone, GradeType grade,
                      Short retakeCount, TrackType track, LocalDate birthDate, String gender,
                      String schoolName, String address, LocalDate admissionDate) {
             this(academyId, year, name, phone, grade, retakeCount, track, birthDate, gender,
-                    schoolName, address, admissionDate, null, null, false);
+                    schoolName, address, admissionDate, null, null, null);
         }
     }
 

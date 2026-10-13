@@ -307,7 +307,7 @@ public class AdminStudentController {
         admissionDuplicateService.assertNotDuplicatedReservation(
                 me.requireAcademyScope(request.academyId()), request.year().shortValue(),
                 request.name(), request.birthDate(), request.phone(),
-                request.confirmedNotDuplicate());
+                request.confirmedNotDuplicateOrFalse());
         StudentEnrollment admitted = studentService.admit(
                 request.academyId(), request.year().shortValue(), request.name(),
                 request.phone(), request.grade(), request.retakeCount(), request.track(),
