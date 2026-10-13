@@ -264,6 +264,52 @@ class AdminListFieldsTest {
         assertThat(rows).containsOnlyOnce(enrollment.getId());
     }
 
+    @Test
+    @DisplayName("★★ 메모는 덮어쓰지 않고 쌓인다 — 칸 하나면 서로 덮어쓰고 작성자가 사라진다")
+    void memosAccumulate() {
+        studentService.addMemo(admin, enrollment.getId(), "1차 상담 — 수학 보강 희망");
+        studentService.addMemo(admin, enrollment.getId(), "2차 상담 — 보강 시작");
+        em.flush();
+
+        var memos = studentService.memos(admin, enrollment.getId());
+
+        assertThat(memos).hasSize(2);
+        // 최근 것이 위다 — 목록이 늘 이 순서로 나간다
+        assertThat(memos.get(0).getContent()).contains("2차");
+    }
+
+    @Test
+    @DisplayName("빈 메모는 거절한다")
+    void rejectsBlankMemo() {
+        assertThatThrownBy(() -> studentService.addMemo(admin, enrollment.getId(), "   "))
+                .hasMessageContaining("메모 내용");
+    }
+
+    @Test
+    @DisplayName("★ 삭제는 soft 다 — 상담·징계 근거로 쓰인 메모가 조용히 사라지면 안 된다")
+    void deleteIsSoft() {
+        var memo = studentService.addMemo(admin, enrollment.getId(), "지울 메모");
+        em.flush();
+
+        studentService.deleteMemo(admin, memo.getId());
+        em.flush();
+
+        assertThat(studentService.memos(admin, enrollment.getId())).isEmpty();
+        // 행 자체는 남는다
+        assertThat(em.find(com.dlab.domain.user.entity.StudentMemo.class, memo.getId()))
+                .isNotNull();
+    }
+
+    @Test
+    @DisplayName("★ 메모는 사람이 아니라 등록 건에 붙는다 — 다음 기수에 섞이면 안 된다")
+    void memoBelongsToEnrollment() {
+        var memo = studentService.addMemo(admin, enrollment.getId(), "올해 메모");
+        em.flush();
+
+        assertThat(memo.getEnrollment().getId()).isEqualTo(enrollment.getId());
+        assertThat(memo.getYear()).isEqualTo(year);
+    }
+
     /** 그 지점에 학생 하나를 더 만든다 */
     private StudentEnrollment anotherStudent(String name, String studentNo) {
         Student person = new Student("LF-" + studentNo, name, "010-7000-" + studentNo);

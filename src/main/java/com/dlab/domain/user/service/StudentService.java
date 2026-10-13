@@ -42,6 +42,7 @@ public class StudentService {
 
     private final StudentRepository studentRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final com.dlab.domain.user.repository.StudentMemoRepository memoRepository;
     private final StudentSearchRepository studentSearchRepository;
     private final AcademyRepository academyRepository;
     private final TransactionTemplate transactionTemplate;
@@ -86,6 +87,51 @@ public class StudentService {
      * <p>사람 생성까지 통째로 재시도 범위에 넣는다. 사람만 바깥 트랜잭션에서 만들면
      * 등록 건을 새 트랜잭션에서 넣을 때 <b>아직 커밋되지 않은 사람을 참조</b>해 FK가 깨진다.
      */
+    // ── 메모 (2026-10-13 피드백 5-2) ─────────────────────
+
+    /**
+     * 메모 추가.
+     *
+     * <p>★ <b>덮어쓰지 않고 쌓는다.</b> 칸 하나로 두면 담당자가 여럿일 때 서로 덮어쓰고
+     * <b>누가 언제 썼는지가 사라진다.</b> 입학예약 메모와 같은 방식이다.
+     *
+     * <p>작성자는 {@code SecurityAuditorAware} 가 {@code created_by} 에 채운다 —
+     * 직접 넣지 않는다(§7).
+     */
+    @Transactional
+    public StudentMemo addMemo(AuthPrincipal principal, Long enrollmentId, String content) {
+        if (content == null || content.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "메모 내용을 적어 주세요.");
+        }
+        StudentEnrollment enrollment = get(enrollmentId, principal);
+        return memoRepository.save(new StudentMemo(enrollment, content.trim()));
+    }
+
+    /** 그 학생 메모. 최근 것이 위다. */
+    @Transactional(readOnly = true)
+    public java.util.List<StudentMemo> memos(AuthPrincipal principal, Long enrollmentId) {
+        get(enrollmentId, principal);
+        return memoRepository.findByEnrollment(enrollmentId);
+    }
+
+    /**
+     * 메모 삭제(soft).
+     *
+     * <p>★ <b>물리 삭제하지 않는다.</b> 「그때 무슨 메모가 있었나」에 답해야 하고,
+     * 상담·징계 근거로 쓰인 메모가 조용히 사라지면 안 된다.
+     */
+    @Transactional
+    public void deleteMemo(AuthPrincipal principal, Long memoId) {
+        StudentMemo memo = memoRepository.findById(memoId)
+                .filter(m -> !m.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
+                        "메모를 찾을 수 없습니다."));
+        if (!principal.canAccessAcademy(memo.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        memo.markDeleted();
+    }
+
     public StudentEnrollment admit(Long academyId, short year, String name, String phone,
                                    GradeType grade, Short retakeCount, TrackType track,
                                    LocalDate birthDate, String gender, String schoolName,
