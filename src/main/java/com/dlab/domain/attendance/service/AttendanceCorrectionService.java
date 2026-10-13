@@ -75,6 +75,7 @@ public class AttendanceCorrectionService {
 
         Instant recordedAt = date.atTime(at).atZone(clock.getZone()).toInstant();
         requireNotDuplicated(enrollmentId, date, eventType, recordedAt);
+        requireAfterArrival(enrollmentId, date, eventType, recordedAt);
 
         taggingLogRepository.save(new AttendanceTaggingLog(
                 enrollment.getAcademy(), enrollment, eventType,
@@ -88,6 +89,54 @@ public class AttendanceCorrectionService {
 
         log.info("출결 태깅 보정: enrollmentId={}, 일자={}, 이벤트={}, 시각={}, 처리자={}",
                 enrollmentId, date, eventType, at, me.accountId());
+    }
+
+    /**
+     * 하원·외출·조퇴는 <b>등원 뒤</b>여야 한다 (2026-10-13 피드백 4-2 반영).
+     *
+     * <h2>★ 등원이 없으면 거절한다</h2>
+     * 하원만 끼워 넣으면 <b>「온 적 없는데 갔다」는 기록</b>이 남고 순공시간이 음수나 0 이
+     * 된다. 등원을 안 찍고 간 것이면 그건 <b>결석 처리 문제</b>이고, 하원 보정으로 덮을
+     * 일이 아니다.
+     *
+     * <h2>★ 등원보다 이른 시각을 거절한다</h2>
+     * 순공이 음수가 되고, 그 값이 <b>Daily Report·상벌점 자동부여로 흘러간다.</b>
+     * 숫자가 한 번 흘러가면 어디까지 번졌는지 되짚기 어렵다.
+     *
+     * <p>⚠️ <b>지각({@code LATE})도 등원이다.</b> 출결 7종 중 등원에 해당하는 것이 둘이라
+     * ({@code S}등원·{@code A}지각) 하나만 보면 <b>늦게 온 학생의 하원 보정이 거절된다.</b>
+     *
+     * <p>등원·지각 자신과 복귀({@code RETURN})는 검사하지 않는다 — 앞의 둘은 자기 자신이고,
+     * 복귀는 외출이 선행 조건이라 <b>중복 검사가 이미 막는다.</b>
+     */
+    private void requireAfterArrival(Long enrollmentId, LocalDate date,
+                                     AttendanceEventType eventType, Instant recordedAt) {
+        if (eventType != AttendanceEventType.CHECK_OUT
+                && eventType != AttendanceEventType.OUTING
+                && eventType != AttendanceEventType.EXCUSED_OUTING
+                && eventType != AttendanceEventType.EARLY_LEAVE) {
+            return;
+        }
+
+        var arrival = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(enrollmentId, date)
+                .stream()
+                // ★★ **지각(`A`)도 등원이다.** `CHECK_IN` 만 보면 **늦게 온 학생의 하원
+                //    보정이 거절된다** — 출결 7종 중 등원에 해당하는 것이 둘이다(§3).
+                //    기존 테스트가 이 실수를 잡았다
+                .filter(l -> l.getEventType() == AttendanceEventType.CHECK_IN
+                        || l.getEventType() == AttendanceEventType.LATE)
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "등원 기록이 없는 날입니다. 등원을 먼저 넣어 주세요 — "
+                                + "하원만 넣으면 「온 적 없는데 갔다」가 됩니다."));
+
+        if (!recordedAt.isAfter(arrival.getRecordedAt())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "등원(%s)보다 빠른 시각입니다. 순공시간이 음수가 됩니다."
+                            .formatted(LocalTime.ofInstant(
+                                    arrival.getRecordedAt(), clock.getZone())));
+        }
     }
 
     /**

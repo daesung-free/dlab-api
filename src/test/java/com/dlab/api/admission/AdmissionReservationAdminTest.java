@@ -122,7 +122,7 @@ class AdmissionReservationAdminTest {
     }
 
     @Test
-    @DisplayName("입학확정이면 학생이 된다 — 학번은 기존 신규 접수 경로가 채번한다")
+    @DisplayName("입학확정이면 학생이 된다 — 학번은 반 배정 때 나간다")
     void convertsWhenConfirmed() {
         service.changeStatus(admin, reservation.getId(), ConsultStatus.CONFIRMED, null);
         em.flush();
@@ -130,7 +130,8 @@ class AdmissionReservationAdminTest {
         var enrollment = service.convert(admin, reservation.getId(), null, null);
         em.flush();
 
-        assertThat(enrollment.getStudentNo()).startsWith(String.valueOf(YEAR));
+        // ★ 학번은 반 배정 시 나간다(2026-10-13 피드백 1-1) — 전환만으로는 비어 있다
+        assertThat(enrollment.getStudentNo()).isNull();
         assertThat(enrollment.getStudent().getName()).isEqualTo("박예약");
         assertThat(reservation.converted()).isTrue();
     }

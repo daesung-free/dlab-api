@@ -96,31 +96,6 @@ public class StudyTimeRecalculationService {
         return updated;
     }
 
-    /**
-     * 한 학생의 한 날만 다시 계산한다 — 하원 수기 입력 직후에 쓴다.
-     *
-     * <p>★ <b>확정 행이 없으면 만들지 않고 계산값만 돌려준다.</b> 확정은 일자 배치가 하는
-     * 일이고, 보정 때마다 만들면 <b>아직 끝나지 않은 날이 확정된 것처럼 남는다.</b>
-     *
-     * @return 순공시간(분)
-     */
-    @Transactional
-    public int recalculateOne(com.dlab.domain.user.entity.StudentEnrollment enrollment,
-                              LocalDate date) {
-        var logs = taggingLogRepository
-                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(enrollment.getId(), date);
-        var periods = periodMasterRepository.findByDayType(
-                enrollment.getAcademy().getId(), enrollment.getYear(), DayType.of(date));
-
-        int minutes = (int) studyTimeCalculator.calculate(logs, periods, LocalTime.MAX)
-                .toMinutes();
-
-        dailyStatusRepository
-                .findByEnrollmentIdAndAttendanceDate(enrollment.getId(), date)
-                .ifPresent(status -> status.recordStudyMinutes(minutes, Instant.now(clock)));
-        return minutes;
-    }
-
     private int recalculateDay(Academy academy, LocalDate date,
                                Map<DayType, List<PeriodMaster>> periodCache, Instant now) {
         Map<Long, List<AttendanceTaggingLog>> logsByEnrollment = new HashMap<>();

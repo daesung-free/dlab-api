@@ -128,37 +128,46 @@ class StudentSearchSortTest {
     }
 
     @Test
-    @DisplayName("★ 허용 목록에 없는 필드는 오류가 아니라 무시되고 기본 정렬(학번)로 떨어진다")
+    @DisplayName("★ 허용 목록에 없는 필드는 오류가 아니라 무시되고 기본 정렬로 떨어진다")
     void unknownSortFieldIsIgnored() throws Exception {
+        // 접수 순서(= id 순)로 떨어진다. 학번은 반 배정 전이라 비어 있다(피드백 1-1)
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026").param("sort", "password,desc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].studentNo").value("2026-0001"))
-                .andExpect(jsonPath("$.data[1].studentNo").value("2026-0002"))
-                .andExpect(jsonPath("$.data[2].studentNo").value("2026-0003"));
+                .andExpect(jsonPath("$.data[0].name").value("다정렬"))
+                .andExpect(jsonPath("$.data[1].name").value("가정렬"))
+                .andExpect(jsonPath("$.data[2].name").value("나정렬"));
     }
 
     @Test
-    @DisplayName("★ 정렬을 주지 않으면 기존 동작 그대로 학번 오름차순이다")
-    void defaultSortIsStudentNo() throws Exception {
-        mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
-                        .param("year", "2026"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].studentNo").value("2026-0001"))
-                .andExpect(jsonPath("$.data[2].studentNo").value("2026-0003"));
+    @DisplayName("★★ 학번이 비어도 순서가 안정적이다 — tie-breaker 가 id 라서다")
+    void stableWhenStudentNoIsNull() throws Exception {
+        // ★ 전에는 tie-breaker 가 **학번**이었다. 학번이 반 배정 시 나가도록 바뀌면서
+        //   **미배정 학생이 여럿일 때 순서를 정하는 값이 없어졌다** — DB 가 순서를
+        //   보장하지 않아 페이지를 넘길 때 같은 학생이 두 번 보이거나 아예 빠진다.
+        //   `id` 로 바꿔서 그 증상을 막는다. 세 번 호출해도 같은 순서여야 한다
+        for (int i = 0; i < 3; i++) {
+            mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
+                            .param("year", "2026"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data[0].studentNo").doesNotExist())
+                    .andExpect(jsonPath("$.data[0].name").value("다정렬"))
+                    .andExpect(jsonPath("$.data[1].name").value("가정렬"))
+                    .andExpect(jsonPath("$.data[2].name").value("나정렬"));
+        }
     }
 
     @Test
-    @DisplayName("★ 값이 겹치는 필드로 정렬해도 학번 tie-breaker 덕에 순서가 안정적이다")
+    @DisplayName("★ 값이 겹치는 필드로 정렬해도 순서가 안정적이다")
     void tieBreakerKeepsOrderStable() throws Exception {
         // 세 명 모두 같은 학년(N_SU)이라 학년만으로는 순서가 정해지지 않는다.
         for (int i = 0; i < 3; i++) {
             mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                             .param("year", "2026").param("sort", "grade,asc"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.data[0].studentNo").value("2026-0001"))
-                    .andExpect(jsonPath("$.data[1].studentNo").value("2026-0002"))
-                    .andExpect(jsonPath("$.data[2].studentNo").value("2026-0003"));
+                    .andExpect(jsonPath("$.data[0].name").value("다정렬"))
+                    .andExpect(jsonPath("$.data[1].name").value("가정렬"))
+                    .andExpect(jsonPath("$.data[2].name").value("나정렬"));
         }
     }
 }

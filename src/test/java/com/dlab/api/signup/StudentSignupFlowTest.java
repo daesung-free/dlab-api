@@ -125,7 +125,7 @@ class StudentSignupFlowTest {
     }
 
     @Test
-    @DisplayName("사람 + 등록 건이 함께 만들어지고 학번이 채번된다")
+    @DisplayName("사람 + 등록 건이 함께 만들어진다 — 학번은 반 배정 때 나간다")
     void createsStudentAndEnrollment() throws Exception {
         signup(verifyPhone(PHONE)).andExpect(status().isOk());
         em.flush();
@@ -138,7 +138,9 @@ class StudentSignupFlowTest {
                 .setParameter("academyId", academy.getId()).getSingleResult();
 
         assertThat(enrollment.getStudent().getName()).isEqualTo("김학생");
-        assertThat(enrollment.getStudentNo()).isNotBlank();
+        // ★ 학번은 반 배정 때 나간다(2026-10-13 피드백 1-1) — 가입만으로는 없다.
+        //   번호가 반 1~2자리 + 순번이라 반을 모르면 만들 수 없다
+        assertThat(enrollment.getStudentNo()).isNull();
         assertThat(enrollment.getGrade()).isEqualTo(GradeType.HIGH3);
         assertThat(enrollment.isCurrent()).isTrue();
         // 카드는 아직 없다 — 발급은 등원 시점 운영 절차다

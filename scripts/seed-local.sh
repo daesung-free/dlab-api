@@ -34,6 +34,7 @@ FILES=(
   "dev_seed.sql"                            # 관리자 2계정 + 학생 60명 (화면 연동 확인용)
   "dev_seed_assignment.sql"                 # 반·좌석·사물함·장학·주소 (배정 화면들이 이게 없으면 빈 화면)
   "dev_seed_approval_penalty.sql"           # 승인정책·상벌점 항목·보호자·오늘 태깅 (없으면 사유신청/상벌점 화면이 빈다)
+  "dev_seed_role_accounts.sql"              # 담임·조회전용 계정 — 역할별 화면 차단 확인용
   "dev_seed_billing_standard.sql"           # 청구기준 (F-4.10-5 화면이 이게 없으면 빈다)
 )
 

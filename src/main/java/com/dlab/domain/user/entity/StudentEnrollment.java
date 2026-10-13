@@ -211,6 +211,24 @@ public class StudentEnrollment extends BaseEntity {
     }
 
     /**
+     * 수험번호를 학번으로 쓴다 (2026-10-13 피드백 1-1).
+     *
+     * <h2>★★ 두 벌로 들지 않는다</h2>
+     * 디랩이 「반배정 시 번호가 <b>반별로</b> 자동배정」을 요구했고 <b>그 번호가 곧 학번</b>이다.
+     * 두 벌로 들면 「1001」이 두 가지 뜻을 갖고, <b>키패드 출결과 성적 매칭이 서로 다른 값을
+     * 본다.</b>
+     *
+     * <p>★ <b>이미 학번이 있으면 덮어쓰지 않는다.</b> 연도별 일련번호(`2026-0001`)로 발급된
+     * 기존 행이 있을 수 있고, <b>학번은 학생이 외우고 카드·출결에 쓰는 값</b>이라 바꾸면
+     * 그 학생의 과거 기록과의 연결이 흐려진다.
+     */
+    public void assignStudentNoFromExamNo() {
+        if (studentNo == null && examStudentNo != null) {
+            this.studentNo = examStudentNo;
+        }
+    }
+
+    /**
      * 번호 서식 — <b>반 번호 + 순번, 전체 4자리 고정</b>(2026-10-13 피드백 1-1 확정).
      *
      * <pre>
