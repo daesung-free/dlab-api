@@ -150,14 +150,69 @@ class ClassAssignmentFlowTest {
         return "Bearer " + objectMapper.readTree(body).path("data").path("accessToken").asString();
     }
 
+    @Test
+    @DisplayName("★★ 반 번호가 없는 반에는 배정할 수 없다 — 전에는 통과하면서 학번만 조용히 안 붙었다")
+    void cannotAssignWhenExamClassNoMissing() throws Exception {
+        long classId = createClass(teacherId, null, "번호없는반");
+
+        mvc.perform(post("/api/v1/admin/classes/{id}/students", classId)
+                        .header("Authorization", token("CLADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"enrollmentId":%d}""".formatted(enrollmentId)))
+                .andExpect(status().isBadRequest())
+                // ★ 무엇을 해야 하는지까지 돌려준다 — 「채번되지 않았습니다」만 보면
+                //   담당자는 어디를 고쳐야 할지 모른다
+                .andExpect(jsonPath("$.error.message").value(
+                        org.hamcrest.Matchers.containsString("반 관리에서 먼저 지정")));
+    }
+
+    @Test
+    @DisplayName("★ 반을 만들 때 번호를 함께 받는다 — 별도 API 로만 넣게 두면 새 반이 늘 비어 있다")
+    void createAcceptsExamClassNo() throws Exception {
+        // 생성 응답에서 바로 확인한다 — 단건 상세 엔드포인트는 없다
+        mvc.perform(post("/api/v1/admin/classes")
+                        .header("Authorization", token("CLADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"year":2026,"name":"칠반","classType":"FIXED","examClassNo":7}"""
+                                .formatted(academyId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.examClassNo").value(7));
+    }
+
+    @Test
+    @DisplayName("★ 10의 배수는 생성에서도 막힌다 — 10반 1번과 1반 1번이 같은 학번이 된다")
+    void createRejectsMultipleOfTen() throws Exception {
+        mvc.perform(post("/api/v1/admin/classes")
+                        .header("Authorization", token("CLADM"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"year":2026,"name":"십반","classType":"FIXED","examClassNo":10}"""
+                                .formatted(academyId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("10의 배수")));
+    }
+
     private long createClass(Long homeroomTeacherId) throws Exception {
+        return createClass(homeroomTeacherId, (short) 1, "1반");
+    }
+
+    /**
+     * ★ <b>반 번호를 함께 준다.</b> 없으면 배정이 거절된다 — 학번이 「반 번호 + 순번」이라
+     * 만들 자리가 없기 때문이다. 전에는 조용히 통과하면서 학번만 안 붙었다.
+     */
+    private long createClass(Long homeroomTeacherId, Short examClassNo, String name)
+            throws Exception {
         String homeroom = homeroomTeacherId == null ? "null" : homeroomTeacherId.toString();
+        String examNo = examClassNo == null ? "null" : examClassNo.toString();
         String body = mvc.perform(post("/api/v1/admin/classes")
                         .header("Authorization", token("CLADM"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"academyId":%d,"year":2026,"name":"1반","classType":"FIXED","homeroomTeacherId":%s,"capacity":2}"""
-                                .formatted(academyId, homeroom)))
+                                {"academyId":%d,"year":2026,"name":"%s","classType":"FIXED","homeroomTeacherId":%s,"capacity":2,"examClassNo":%s}"""
+                                .formatted(academyId, name, homeroom, examNo)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").path("id").asLong();
@@ -252,7 +307,7 @@ class ClassAssignmentFlowTest {
                         .header("Authorization", token("CLADM"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"academyId":%d,"year":2026,"name":"2반","classType":"FIXED","homeroomTeacherId":null}"""
+                                {"academyId":%d,"year":2026,"name":"2반","classType":"FIXED","homeroomTeacherId":null,"examClassNo":2}"""
                                 .formatted(academyId)))
                 .andReturn().getResponse().getContentAsString();
         long second = objectMapper.readTree(body).path("data").path("id").asLong();
@@ -544,13 +599,17 @@ class ClassAssignmentFlowTest {
         ClassResponse.from(view);
     }
 
+    /** ★ 반 번호는 지점·연도 안에서 유일해야 해서 이름마다 다른 값을 준다 */
+    private final java.util.concurrent.atomic.AtomicInteger examNoSeq =
+            new java.util.concurrent.atomic.AtomicInteger(30);
+
     private long createClass2(String name) throws Exception {
         String body = mvc.perform(post("/api/v1/admin/classes")
                         .header("Authorization", token("CLADM"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"academyId":%d,"year":2026,"name":"%s","classType":"FIXED","homeroomTeacherId":null}"""
-                                .formatted(academyId, name)))
+                                {"academyId":%d,"year":2026,"name":"%s","classType":"FIXED","homeroomTeacherId":null,"examClassNo":%d}"""
+                                .formatted(academyId, name, examNoSeq.incrementAndGet())))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).path("data").path("id").asLong();

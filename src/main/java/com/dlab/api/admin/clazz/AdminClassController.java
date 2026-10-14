@@ -71,7 +71,8 @@ public class AdminClassController {
                                              @Valid @RequestBody ClassRequests.ClassCreate request) {
         return ApiResponse.success(ClassResponse.from(classService.create(
                 request.academyId(), request.year().shortValue(), request.name(),
-                request.classType(), request.homeroomTeacherId(), request.capacity(), me)));
+                request.classType(), request.homeroomTeacherId(), request.capacity(),
+                request.examClassNo(), me)));
     }
 
     /** 반 기본정보 수정(이름·정원). 담임은 아래 {@code /homeroom}이 담당한다. */

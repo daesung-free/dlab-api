@@ -1,5 +1,6 @@
 package com.dlab.api.grade;
 
+import com.dlab.common.exception.BusinessException;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
 import com.dlab.domain.grade.repository.MockExamStudentKeyRepository;
@@ -203,15 +204,23 @@ class ExamNumberTest {
     }
 
     @Test
-    @DisplayName("반에 모의고사 번호가 없으면 채번하지 않는다 — 틀린 번호보다 없는 편이 낫다")
-    void skipsWhenClassHasNoExamNo() {
+    @DisplayName("★★ 반에 모의고사 번호가 없으면 배정 자체를 막는다 — 조용히 넘기면 학번 없는 학생이 생긴다")
+    void rejectsAssignWhenClassHasNoExamNo() {
         ClassMaster noExamNo = new ClassMaster(bundang, YEAR, "특별반", ClassType.FIXED, null);
         em.persist(noExamNo);
         em.flush();
 
         StudentEnrollment student = student("무번호", YEAR + "-0007");
-        classService.assignStudent(noExamNo.getId(), student.getId(), admin);
-        em.flush();
+
+        // ★ 전에는 **배정이 통과하고 채번만 조용히 건너뛰었다.** 그러면 화면에는
+        //   「채번이 고장났다」로 보이고(2026-10-13 프론트 보고), 그 학생은 학번이 없어
+        //   **키패드 출결·식사체크를 쓸 수 없다**. 나중에 붙이려면 그 반 순번을
+        //   통째로 다시 정리해야 하므로, 한 번 거절하는 쪽이 싸다
+        assertThatThrownBy(() ->
+                classService.assignStudent(noExamNo.getId(), student.getId(), admin))
+                .isInstanceOf(BusinessException.class)
+                // 무엇을 해야 하는지까지 돌려준다
+                .hasMessageContaining("반 관리에서 먼저 지정");
 
         assertThat(student.getExamStudentNo()).isNull();
     }

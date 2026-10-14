@@ -188,8 +188,13 @@ class ConcurrencyTest {
         List<Long> classIds = tx.execute(status -> {
             Academy academy = academyRepository.findById(academyId).orElseThrow();
             return java.util.stream.IntStream.range(0, THREADS)
-                    .mapToObj(i -> classMasterRepository.save(new ClassMaster(
-                            academy, (short) 2026, "반" + i, ClassType.FIXED, null)).getId())
+                    .mapToObj(i -> {
+                        ClassMaster c = new ClassMaster(
+                                academy, (short) 2026, "반" + i, ClassType.FIXED, null);
+                        // ★ 반 번호가 없으면 배정이 거절된다. 10의 배수는 쓸 수 없어 1부터 올린다
+                        c.changeExamClassNo((short) (i + 1));
+                        return classMasterRepository.save(c).getId();
+                    })
                     .toList();
         });
 
