@@ -6,6 +6,9 @@ import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.GradeType;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.repository.AcademyRepository;
+import com.dlab.domain.user.entity.ClassMaster;
+import com.dlab.domain.user.entity.ClassType;
+import com.dlab.domain.user.service.ClassService;
 import com.dlab.domain.user.service.StudentService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,16 +24,26 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 학번 채번 · 연도 전환 (실행가이드 P1-13 "학번 초기화", F-4.1-4).
  *
- * <p><b>학번 초기화는 별도 기능이 아니라 채번 구조가 보장하는 성질이다.</b>
- * 채번이 {@code (지점, 연도)} 범위의 최대값 + 1이라 <b>연도가 바뀌면 자동으로 1번부터</b> 시작한다.
- * 실행가이드 체크 항목도 *"학번채번 정책 재확인(연도전환 엣지케이스)"* 이라 만드는 게 아니라 확인이다.
+ * <h2>★★ 2026-10-13 피드백 1-1 로 채번 구조가 바뀌었다</h2>
+ * 전에는 <b>접수 시점에 연도별 일련번호</b>(`2026-0001`)를 발급했다. 지금은 디랩 요구대로
+ * <b>반 배정 시점에 반별 4자리</b>로 발급한다 — 「신규생 접수 → 행정직원이 반배정 →
+ * <b>학번 자동부여</b>」.
  *
- * <p>그래서 이 클래스는 <b>그 성질이 실제로 성립하는지 고정</b>한다 — 채번 로직을 나중에
- * 손댈 때(예: 지점 무관 전역 채번으로 바꾸려 할 때) 여기서 걸린다.
+ * <p>그래서 이 클래스가 고정하는 것이 바뀌었다.
+ * <ol>
+ *   <li><b>★ 접수만으로는 학번이 없다</b> — 번호가 반에 종속되어 반을 모르면 만들 수 없다</li>
+ *   <li><b>★ 반 배정 시 발급된다</b>(반 1~2자리 + 순번, 전체 4자리)</li>
+ *   <li><b>매년 초기화는 그대로 성립</b>한다 — 반이 해마다 새로 만들어지고 순번도 1부터다</li>
+ *   <li><b>지점이 다르면 겹친다</b>는 것도 그대로다 — 학번만으로 학생을 식별하면 안 된다</li>
+ * </ol>
+ *
+ * <p>⚠️ <b>0 이나 임시값을 넣지 않는다.</b> 그 값이 키패드 출결·성적 매칭에 섞인다 —
+ * 비어 있는 것이 「아직 배정 전」의 정직한 표현이다.
  */
 @SpringBootTest
 @Transactional
@@ -39,6 +52,7 @@ class StudentNoResetTest {
     private static final AtomicInteger SEQ = new AtomicInteger();
 
     @Autowired StudentService studentService;
+    @Autowired ClassService classService;
     @Autowired AcademyRepository academyRepository;
     @Autowired EntityManager em;
 
@@ -70,40 +84,124 @@ class StudentNoResetTest {
     }
 
     @Test
-    @DisplayName("★ 연도가 바뀌면 학번이 1번부터 다시 시작한다 — 이게 '매년 초기화'다")
-    void studentNoRestartsEachYear() {
-        assertThat(admit(academy, (short) 2026, "첫해첫번째").getStudentNo()).isEqualTo("2026-0001");
-        assertThat(admit(academy, (short) 2026, "첫해두번째").getStudentNo()).isEqualTo("2026-0002");
+    @DisplayName("★★ 접수만으로는 학번이 없다 — 번호가 반에 종속되어 반을 모르면 만들 수 없다")
+    void noStudentNoBeforeClassAssignment() {
+        StudentEnrollment admitted = admit(academy, (short) 2026, "접수만한학생");
 
-        // 다음 해 — 2026-0002 다음이 2027-0003이 되면 안 된다
-        assertThat(admit(academy, (short) 2027, "다음해첫번째").getStudentNo()).isEqualTo("2027-0001");
+        // ⚠️ 0 이나 임시값을 넣지 않는다 — 그 값이 키패드 출결·성적 매칭에 섞인다
+        assertThat(admitted.getStudentNo()).isNull();
+    }
+
+    @Test
+    @DisplayName("★★ 반 배정 시 반별 4자리로 발급된다 — 학번과 수험번호가 같은 값이다")
+    void assignedOnClassAssignment() {
+        StudentEnrollment student = admit(academy, (short) 2026, "배정받을학생");
+        ClassMaster class1 = classWithExamNo(academy, (short) 2026, "1반", (short) 1);
+
+        classService.assignStudent(class1.getId(), student.getId(), principal);
+        em.flush();
+
+        // 1반 1번 → 1001. 두 벌로 들면 「1001」이 두 뜻을 갖는다
+        assertThat(student.getStudentNo()).isEqualTo("1001");
+        assertThat(student.getExamStudentNo()).isEqualTo("1001");
+    }
+
+    @Test
+    @DisplayName("★ 같은 반 안에서 순번이 1부터 증가한다")
+    void sequenceIncreasesWithinClass() {
+        ClassMaster class1 = classWithExamNo(academy, (short) 2026, "1반", (short) 1);
+
+        assertThat(assignTo(class1, "첫번째", (short) 2026)).isEqualTo("1001");
+        assertThat(assignTo(class1, "두번째", (short) 2026)).isEqualTo("1002");
+        assertThat(assignTo(class1, "세번째", (short) 2026)).isEqualTo("1003");
+    }
+
+    @Test
+    @DisplayName("★ 반이 다르면 앞자리가 다르다 — 11반은 반 2자리 + 순번 2자리다")
+    void classPrefixDiffers() {
+        ClassMaster class1 = classWithExamNo(academy, (short) 2026, "1반", (short) 1);
+        ClassMaster class11 = classWithExamNo(academy, (short) 2026, "11반", (short) 11);
+
+        assertThat(assignTo(class1, "1반생", (short) 2026)).isEqualTo("1001");
+        // 전체가 늘 4자리다 — 전에는 11001(5자리)이라 더프 제출번호가 비었다
+        assertThat(assignTo(class11, "11반생", (short) 2026)).isEqualTo("1101");
+    }
+
+    @Test
+    @DisplayName("★ 연도가 바뀌면 1번부터 다시 시작한다 — 이게 '매년 초기화'다")
+    void resetsEachYear() {
+        ClassMaster y2026 = classWithExamNo(academy, (short) 2026, "1반", (short) 1);
+        ClassMaster y2027 = classWithExamNo(academy, (short) 2027, "1반", (short) 1);
+
+        assertThat(assignTo(y2026, "올해첫번째", (short) 2026)).isEqualTo("1001");
+        assertThat(assignTo(y2026, "올해두번째", (short) 2026)).isEqualTo("1002");
+        // 반이 해마다 새로 만들어지고 순번도 1부터다
+        assertThat(assignTo(y2027, "내년첫번째", (short) 2027)).isEqualTo("1001");
     }
 
     @Test
     @DisplayName("★ 지점이 다르면 학번이 겹친다 — 학번만으로 학생을 식별하면 안 된다")
-    void studentNoIsScopedToAcademy() {
-        String mine = admit(academy, (short) 2026, "우리지점").getStudentNo();
-        String theirs = admit(otherAcademy, (short) 2026, "다른지점").getStudentNo();
+    void collidesAcrossBranches() {
+        ClassMaster mine = classWithExamNo(academy, (short) 2026, "1반", (short) 1);
+        ClassMaster theirs = classWithExamNo(otherAcademy, (short) 2026, "1반", (short) 1);
 
-        // 유니크 제약이 (academy_id, year, student_no)라 지점 간에는 같은 번호가 나온다.
-        // 학번을 PK나 외부 연동 키로 쓰면 여기서 깨진다.
-        assertThat(mine).isEqualTo("2026-0001");
-        assertThat(theirs).isEqualTo("2026-0001");
+        assertThat(assignTo(mine, "우리지점", (short) 2026)).isEqualTo("1001");
+        assertThat(assignTo(theirs, "다른지점", (short) 2026)).isEqualTo("1001");
     }
 
     @Test
-    @DisplayName("이전 연도에 등록 건이 있어도 새 연도 채번에 영향을 주지 않는다")
-    void previousYearDoesNotLeak() {
-        for (int i = 0; i < 5; i++) {
-            admit(academy, (short) 2026, "이전해" + i);
-        }
-        assertThat(admit(academy, (short) 2027, "새해").getStudentNo()).isEqualTo("2027-0001");
+    @DisplayName("★★ 반에 수험번호 반이 없으면 배정을 막는다 — 통과시키면 학번 없는 학생이 생긴다")
+    void rejectsAssignWhenClassHasNoExamNo() {
+        StudentEnrollment student = admit(academy, (short) 2026, "번호없는반학생");
+        ClassMaster noExamNo = new ClassMaster(academy, (short) 2026, "특별반",
+                ClassType.FIXED, null);
+        em.persist(noExamNo);
+        em.flush();
+
+        // ★ 전에는 배정이 통과하고 학번만 안 붙었다. 학번은 **키패드 출결·식사체크가 쓰는
+        //   4자리**라 없으면 그 학생은 키패드를 쓸 수 없고, 나중에 붙이려면 그 반 순번을
+        //   통째로 다시 정리해야 한다 — 한 번 거절하는 쪽이 싸다
+        assertThatThrownBy(() ->
+                classService.assignStudent(noExamNo.getId(), student.getId(), principal))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class)
+                .hasMessageContaining("반 관리에서 먼저 지정");
+
+        assertThat(student.getStudentNo()).isNull();
     }
 
     @Test
-    @DisplayName("학번 형식은 yyyy-NNNN 4자리다 — 자릿수가 바뀌면 정렬·파싱이 깨진다")
-    void studentNoFormat() {
-        assertThat(admit(academy, (short) 2026, "형식확인").getStudentNo())
-                .matches("^\\d{4}-\\d{4}$");
+    @DisplayName("★ 반을 옮겨도 학번은 그대로다 — 학생이 외우고 카드·출결에 쓰는 값이다")
+    void keepsNumberWhenMovingClass() {
+        ClassMaster class1 = classWithExamNo(academy, (short) 2026, "1반", (short) 1);
+        ClassMaster class2 = classWithExamNo(academy, (short) 2026, "2반", (short) 2);
+
+        StudentEnrollment student = admit(academy, (short) 2026, "옮기는학생");
+        classService.assignStudent(class1.getId(), student.getId(), principal);
+        em.flush();
+        String first = student.getStudentNo();
+
+        classService.assignStudent(class2.getId(), student.getId(), principal);
+        em.flush();
+
+        // 번호가 반에서 나오지만 **한 번 받으면 바뀌지 않는다** —
+        // 바뀌면 지난 회차 성적·상담과의 연결이 끊긴다
+        assertThat(student.getStudentNo()).isEqualTo(first);
+    }
+
+    // ── 픽스처 ───────────────────────────────────────────
+
+    private ClassMaster classWithExamNo(Academy target, short year, String name, short examNo) {
+        ClassMaster classMaster = new ClassMaster(target, year, name, ClassType.FIXED, null);
+        classMaster.changeExamClassNo(examNo);
+        em.persist(classMaster);
+        em.flush();
+        return classMaster;
+    }
+
+    private String assignTo(ClassMaster classMaster, String name, short year) {
+        StudentEnrollment student = admit(classMaster.getAcademy(), year, name);
+        classService.assignStudent(classMaster.getId(), student.getId(), principal);
+        em.flush();
+        return student.getStudentNo();
     }
 }

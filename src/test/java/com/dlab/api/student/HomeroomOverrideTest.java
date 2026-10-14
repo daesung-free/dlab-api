@@ -59,6 +59,9 @@ class HomeroomOverrideTest {
         em.persist(overrideTeacher);
         class1 = new ClassMaster(bundang, (short) 2085, "N수 1반", ClassType.FIXED, classHomeroom);
         class2 = new ClassMaster(bundang, (short) 2085, "N수 2반", ClassType.FIXED, overrideTeacher);
+        // ★ 반 번호가 없으면 배정이 거절된다 — 학번이 「반 번호 + 순번」이라 만들 자리가 없다
+        class1.changeExamClassNo((short) 1);
+        class2.changeExamClassNo((short) 2);
         em.persist(class1);
         em.persist(class2);
         Student s = new Student("DL-H1", "예외학생", "010-3333-0000");

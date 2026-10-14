@@ -5,6 +5,8 @@ import com.dlab.common.security.Role;
 import com.dlab.domain.user.entity.*;
 import com.dlab.domain.user.repository.*;
 import com.dlab.domain.user.service.ClassService;
+import com.dlab.domain.user.entity.ClassMaster;
+import com.dlab.domain.user.entity.ClassType;
 import com.dlab.domain.user.service.StudentService;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
@@ -133,31 +135,50 @@ class ConcurrencyTest {
     }
 
     @Test
-    @DisplayName("★ 동시 접수해도 학번이 중복되지 않는다 — 매년 초 대량 접수에서 실제로 부딪히는 경로")
+    @DisplayName("★★ 동시에 같은 반에 배정해도 학번이 중복되지 않는다 — 경합이 접수에서 여기로 옮겨왔다")
     void studentNoNeverDuplicates() throws Exception {
-        // ★ 스레드마다 <b>다른 사람</b>으로 넣는다. 이름·연락처가 같으면 이제 중복 제출
-        //   방어(DUPLICATE_ADMISSION)에 걸려 한 명만 통과한다 — 그건 학번 채번이 아니라
-        //   다른 장치를 재는 것이다. 여기서 보려는 것은 "동시에 8명이 접수해도
-        //   학번이 겹치지 않는가" 다.
-        java.util.concurrent.atomic.AtomicInteger seq = new java.util.concurrent.atomic.AtomicInteger();
-        int succeeded = runConcurrently(THREADS, () -> {
-            int n = seq.incrementAndGet();
-            studentService.admit(academyId, (short) 2026, "동시접수" + n,
+        // ★ 2026-10-13 피드백 1-1 로 학번 채번이 **접수 → 반 배정**으로 옮겨갔다.
+        //   그래서 경합도 여기로 왔다 — 여러 직원이 같은 반에 동시에 배정하면
+        //   둘 다 같은 「최대값 + 1」을 읽는다. `pg_advisory_xact_lock` 으로 직렬화한다.
+        //
+        //   ⚠️ 접수는 이제 학번을 만들지 않으므로 그 경로를 재는 것은 의미가 없다.
+        ClassMaster classMaster = tx.execute(status -> {
+            ClassMaster c = new ClassMaster(
+                    academyRepository.findById(academyId).orElseThrow(),
+                    (short) 2026, "동시배정반", ClassType.FIXED, null);
+            c.changeExamClassNo((short) 1);
+            return classMasterRepository.save(c);
+        });
+
+        // 먼저 학생들을 만들어 둔다(접수는 학번과 무관하므로 경합 대상이 아니다)
+        List<Long> enrollmentIds = new java.util.ArrayList<>();
+        for (int i = 1; i <= THREADS; i++) {
+            int n = i;
+            enrollmentIds.add(tx.execute(status -> studentService.admit(
+                    academyId, (short) 2026, "동시배정" + n,
                     String.format("010-0000-%04d", n),
                     GradeType.N_SU, null, TrackType.SCIENCE,
-                    null, null, null, null, null, principal);
-        });
+                    null, null, null, null, null, principal).getId()));
+        }
+
+        java.util.concurrent.atomic.AtomicInteger idx =
+                new java.util.concurrent.atomic.AtomicInteger();
+        int succeeded = runConcurrently(THREADS, () ->
+                classService.assignStudent(classMaster.getId(),
+                        enrollmentIds.get(idx.getAndIncrement()), principal));
 
         List<String> numbers = tx.execute(status -> em.createQuery("""
                 SELECT e.studentNo FROM StudentEnrollment e
-                WHERE e.academy.id = :id AND e.year = 2026
+                WHERE e.academy.id = :id AND e.year = 2026 AND e.studentNo IS NOT NULL
                 """, String.class).setParameter("id", academyId).getResultList());
 
-        // 성공한 만큼 행이 있고, 학번이 전부 다르다
+        // 배정이 성공한 만큼 학번이 나가고, 전부 다르다
         assertThat(numbers).hasSize(succeeded);
         assertThat(numbers).doesNotHaveDuplicates();
-        // 재시도가 붙어 있으므로 대부분 성공해야 한다. 전멸하면 채번 자체가 고장난 것이다
-        assertThat(succeeded).isGreaterThan(THREADS / 2);
+        // ★ 잠금으로 직렬화하므로 **전부 성공해야 한다** — 하나라도 실패하면 잠금이 안 걸린 것이다
+        assertThat(succeeded).isEqualTo(THREADS);
+        // 1반이므로 1001 부터 순서대로 — 번호가 반에서 나온다
+        assertThat(numbers).allMatch(no -> no.startsWith("1"));
     }
 
     @Test
@@ -167,8 +188,13 @@ class ConcurrencyTest {
         List<Long> classIds = tx.execute(status -> {
             Academy academy = academyRepository.findById(academyId).orElseThrow();
             return java.util.stream.IntStream.range(0, THREADS)
-                    .mapToObj(i -> classMasterRepository.save(new ClassMaster(
-                            academy, (short) 2026, "반" + i, ClassType.FIXED, null)).getId())
+                    .mapToObj(i -> {
+                        ClassMaster c = new ClassMaster(
+                                academy, (short) 2026, "반" + i, ClassType.FIXED, null);
+                        // ★ 반 번호가 없으면 배정이 거절된다. 10의 배수는 쓸 수 없어 1부터 올린다
+                        c.changeExamClassNo((short) (i + 1));
+                        return classMasterRepository.save(c).getId();
+                    })
                     .toList();
         });
 

@@ -147,7 +147,9 @@ class StudentAdmitGuardTest {
 
         StudentEnrollment second = admit("동명이인", "010-4444-5555", LocalDate.of(2006, 5, 2));
 
-        assertThat(second.getStudentNo()).isNotNull();
+        // ★ 등록 자체는 된다. 학번은 반 배정 때 나가므로 여기서는 비어 있다(피드백 1-1)
+        assertThat(second.getId()).isNotNull();
+        assertThat(second.getStudentNo()).isNull();
     }
 
     @Test
@@ -163,7 +165,9 @@ class StudentAdmitGuardTest {
 
         assertThatThrownBy(() -> admit("사람재사용", "010-5555-1111", LocalDate.of(2007, 4, 1)))
                 .isInstanceOf(BusinessException.class)
-                .satisfies(e -> assertThat(e.getMessage()).contains(first.getStudentNo()));
+                // ★ 학번이 아직 없으면 그 사실을 문구에 담는다 —
+                //   "학번 null" 을 내보내면 담당자가 그 학생을 찾을 단서를 못 받는다
+                .satisfies(e -> assertThat(e.getMessage()).contains("반 배정 전"));
 
         Long count = tx.execute(status -> em.createQuery(
                         "SELECT count(s) FROM Student s WHERE s.id = :id", Long.class)

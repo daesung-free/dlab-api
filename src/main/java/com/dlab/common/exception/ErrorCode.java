@@ -56,6 +56,15 @@ public enum ErrorCode {
     /** 본인이 탈퇴한 계정. 퇴원으로 끊긴 것({@code ACCOUNT_NOT_ACTIVE})과 안내 문구가 다르다. */
     ACCOUNT_WITHDRAWN(HttpStatus.FORBIDDEN, "탈퇴한 계정입니다. 다시 가입해 주세요."),
 
+    /**
+     * 성적표 API 와 통신하지 못했다.
+     *
+     * <p>★ <b>「성적표가 없다」는 이 오류가 아니다.</b> 그건 404 로 오고 「아직 발행 안 됨」과
+     * 구분되지 않아 {@code null} 로 돌려준다 — 한 건이 없다고 배치가 멈추면 뒤의 학생이
+     * 전부 안 받아진다.
+     */
+    REPORT_API_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "성적표 서버와 통신하지 못했습니다."),
+    REPORT_API_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "성적표 연동이 설정되지 않았습니다."),
     FIREWALL_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "와이파이 연동이 설정되지 않았습니다."),
     /** ★ 차단 실패. 와이파이가 열린 채 남아 있을 수 있어 재시도·알림 대상이다. */
     FIREWALL_REVOKE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "와이파이 차단에 실패했습니다."),
@@ -89,6 +98,19 @@ public enum ErrorCode {
     /** 저장 버튼 중복 제출. 같은 사람이 두 번 만들어지는 것을 막는다 */
     DUPLICATE_ADMISSION(HttpStatus.CONFLICT,
             "방금 같은 내용으로 등록된 학생이 있습니다. 목록을 확인해 주세요."),
+
+    /**
+     * 홈페이지 입학예약과 데스크 신규접수가 <b>같은 사람</b>으로 보인다 (피드백 6-3①).
+     *
+     * <p>★ <b>오류가 아니라 확인 요청이다.</b> 동명이인이 실제로 있어 자동 병합은 하지
+     * 않고, 담당자가 「그 예약을 전환」과 「다른 사람입니다」 중에서 고른다. 후자를 고르면
+     * 같은 요청에 확인 표시를 실어 다시 보내 통과한다.
+     *
+     * <p>{@code data}에 후보 id 가 실린다 — <b>이름·연락처는 싣지 않는다.</b> 오류 응답은
+     * 로그·모니터링에 그대로 남는다.
+     */
+    ADMISSION_DUPLICATE_SUSPECTED(HttpStatus.CONFLICT,
+            "같은 분의 입학예약이 있습니다. 그 예약을 전환할지, 다른 사람으로 새로 등록할지 선택해 주세요."),
 
     STUDENT_HAS_HISTORY(HttpStatus.CONFLICT,
             "출결·상벌점 이력이 있는 학생은 삭제할 수 없습니다. 퇴원 또는 제적으로 처리해 주세요."),
@@ -302,11 +324,31 @@ public enum ErrorCode {
     /** 0으로 채우게 두면 진짜 0점과 구분되지 않는다. 사유를 남기고 건너뛴다. */
     GRADE_SKIP_REASON_REQUIRED(HttpStatus.BAD_REQUEST, "성적을 입력하지 않는 사유를 적어주세요."),
 
+    // 시간표 편성 (F-C-3)
+    /**
+     * ★ <b>DB 유니크({@code uq_timetable_room})가 최종 방어선이고 이 코드는 안내용이다.</b>
+     * 제약 위반 메시지에는 어느 반이 먼저 쓰고 있는지가 없어 담당자가 무엇을 고칠지 모른다.
+     */
+    TIMETABLE_ROOM_CONFLICT(HttpStatus.CONFLICT, "같은 시간에 이미 그 강의실을 쓰는 반이 있습니다."),
+    /** ⚠️ DB 제약이 아니라 서비스 검사다 — 참관·합반 같은 운영 예외 확인 전이라(§4) 되돌릴 여지를 남겼다. */
+    TIMETABLE_TEACHER_CONFLICT(HttpStatus.CONFLICT, "같은 시간에 이미 수업이 있는 선생님입니다."),
+    /** 평일 교시를 토요일 칸에 넣으면 시간표에 적힌 시각과 실제 교시 시각이 어긋난다. */
+    TIMETABLE_PERIOD_DAY_MISMATCH(HttpStatus.BAD_REQUEST, "그 요일의 교시가 아닙니다."),
+    /** 일요일은 교시 마스터가 없어 칸을 만들면 시각이 비는 행이 된다. */
+    TIMETABLE_SUNDAY_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "일요일에는 시간표를 둘 수 없습니다."),
+
     /**
      * 조건 자체가 성립하지 않는 검색 조합(예: 특정 반 + 반 미배정).
      * 빈 목록으로 돌려주면 화면이 "해당 학생이 없다"로 읽고 조용히 넘어간다.
      */
-    CONFLICTING_SEARCH_CONDITION(HttpStatus.BAD_REQUEST, "함께 지정할 수 없는 검색 조건입니다.");
+    CONFLICTING_SEARCH_CONDITION(HttpStatus.BAD_REQUEST, "함께 지정할 수 없는 검색 조건입니다."),
+
+    // ── 신상기록부 (F-4.11-9) ──
+    STUDENT_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "신상기록부가 작성되지 않았습니다."),
+    STUDENT_PROFILE_FORM_NOT_FOUND(HttpStatus.NOT_FOUND, "신상기록부 양식을 찾을 수 없습니다."),
+    /** 지점 관리자가 공통 양식을 고치면 나머지 지점 화면이 같이 바뀐다(성적 양식과 같은 판단). */
+    STUDENT_PROFILE_FORM_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN,
+            "전 지점 공통 신상기록부 양식은 본사만 다룰 수 있습니다.");
 
     private final HttpStatus status;
     private final String message;

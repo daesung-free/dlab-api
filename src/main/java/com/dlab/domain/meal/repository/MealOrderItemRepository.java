@@ -50,6 +50,33 @@ public interface MealOrderItemRepository extends JpaRepository<MealOrderItem, Lo
                                                      @Param("from") LocalDate from,
                                                      @Param("to") LocalDate to);
 
+    /**
+     * 그날 살아 있는 신청 <b>명단</b> — 학생까지 함께 가져온다 (피드백 5-4).
+     *
+     * <p>{@link #findActiveByAcademyAndDate}와 대상은 같지만 <b>용도가 다르다.</b>
+     * 그쪽은 일괄 취소용이라 학생을 볼 필요가 없고, 여기는 이름·학번을 화면에 찍는다 —
+     * 등록 건·학생을 fetch join 하지 않으면 <b>행마다 쿼리가 두 번씩 더 나간다.</b>
+     * 그날 전원이 대상인 화면이라 수백 건에서 그대로 드러난다.
+     *
+     * <p>정렬을 쿼리에서 끝낸다 — 끼니별로 나눈 뒤 각각 다시 정렬하면 같은 기준을
+     * 두 군데서 들고 있게 된다.
+     */
+    @Query("""
+            SELECT i FROM MealOrderItem i
+            JOIN FETCH i.order o
+            JOIN FETCH o.enrollment e
+            JOIN FETCH e.student s
+            WHERE o.academy.id = :academyId
+              AND i.mealDate = :date
+              AND i.canceledAt IS NULL
+              AND i.deleted = false
+              AND o.status <> com.dlab.domain.meal.entity.MealOrderStatus.CANCELLED
+              AND o.deleted = false
+            ORDER BY i.mealType ASC, e.studentNo ASC, s.name ASC
+            """)
+    List<MealOrderItem> findRosterByAcademyAndDate(@Param("academyId") Long academyId,
+                                                   @Param("date") LocalDate date);
+
     /** 그날 살아 있는 신청 전체. 중단일 등록이 이걸 일괄 취소한다. */
     @Query("""
             SELECT i FROM MealOrderItem i

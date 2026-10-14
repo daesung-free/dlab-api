@@ -4,6 +4,7 @@ import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.admission.entity.*;
+import com.dlab.domain.admission.service.AdmissionDuplicateService;
 import com.dlab.domain.admission.service.AdmissionReservationAdminService;
 import com.dlab.domain.user.entity.GradeType;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -49,6 +50,40 @@ public class AdminAdmissionReservationController {
                                                    @RequestParam(required = false) String keyword) {
         return ApiResponse.success(adminService.search(me, year, status, keyword)
                 .stream().map(ReservationView::from).toList());
+    }
+
+    /**
+     * 같은 사람의 입학예약 찾기 — <b>중복 등록 방지</b> (피드백 6-3①).
+     *
+     * <p>홈페이지로 입학상담예약을 넣은 학생을 데스크에서 그냥 등록하면 <b>같은 사람이
+     * 두 건으로 쌓인다.</b> 화면이 저장 전에 「같은 분의 입학예약이 있습니다」를 띄우려면
+     * 이 경로가 필요하다 — 저장 차단만 있으면 담당자는 전부 입력한 뒤에야 알게 되고,
+     * 차단 응답에는 <b>이름·연락처가 실리지 않으므로</b>(로그에 남는다) 안내 문구를 만들
+     * 재료도 없다.
+     *
+     * <p>★ <b>자동으로 합치지 않는다.</b> 동명이인이 실제로 있고 전환은 학번을 채번해
+     * 되돌릴 수 없다 — 찾아서 알려주고 사람이 고른다.
+     *
+     * <p>판정은 <b>[이름 + 생년월일] 또는 [이름 + 연락처]</b>다. 이름만으로는 동명이인이
+     * 전부 걸리고, 셋을 모두 요구하면 생년월일을 안 받은 건에서 아무것도 안 걸린다.
+     *
+     * @param birth     {@code yyyyMMdd} 또는 {@code yyyy-MM-dd}. <b>숫자만 뽑아 비교</b>하므로
+     *                  형식이 달라도 된다 — 규격서 필드가 문자열이라 날짜로 바꿔 비교하면
+     *                  형식이 다른 값에서 터진다
+     * @param parentTel 학부모 또는 학생 연락처. 하이픈이 있어도 된다
+     * @param year      비우면 올해
+     */
+    @GetMapping("/duplicates")
+    public ApiResponse<List<DuplicateView>> duplicates(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam(required = false) Short year,
+            @RequestParam String name,
+            @RequestParam(required = false) String birth,
+            @RequestParam(required = false) String parentTel) {
+        return ApiResponse.success(
+                adminService.duplicates(me, academyId, year, name, birth, parentTel)
+                        .stream().map(DuplicateView::from).toList());
     }
 
     /**
@@ -113,6 +148,10 @@ public class AdminAdmissionReservationController {
      * <p>★ <b>「입학확정」 상태에서만</b> 되고, <b>한 번만</b> 된다. 학번 채번은 기존 신규
      * 접수 경로를 그대로 탄다.
      *
+     * <p>★ <b>이미 등록된 같은 학생이 있으면 멈춘다</b>(피드백 6-3①, {@code 409}). 신규접수
+     * 쪽만 막으면 <b>데스크가 먼저 등록하는 순서에서 중복이 그대로 통과한다.</b> 담당자가
+     * 「다른 사람입니다」를 고르면 {@code confirmedNotDuplicate}를 실어 다시 보낸다.
+     *
      * @param grade 신청서의 학년 표기(1·2·3·N)로 판단되지 않을 때만 지정한다
      */
     @PostMapping("/{reservationId}/convert")
@@ -122,7 +161,8 @@ public class AdminAdmissionReservationController {
                                               @RequestBody(required = false) Convert request) {
         var enrollment = adminService.convert(me, reservationId,
                 request == null ? null : request.grade(),
-                request == null ? null : request.admissionDate());
+                request == null ? null : request.admissionDate(),
+                request != null && request.confirmedNotDuplicate());
         return ApiResponse.success(new ConvertedView(enrollment.getId(),
                 enrollment.getStudentNo(), enrollment.getStudent().getName()));
     }
@@ -135,7 +175,41 @@ public class AdminAdmissionReservationController {
                            @Size(max = 2000) String content) {
     }
 
-    public record Convert(GradeType grade, LocalDate admissionDate) {
+    /**
+     * @param confirmedNotDuplicate 담당자가 「다른 사람입니다」를 고른 경우 {@code true}.
+     *                              <b>자동 병합을 하지 않으므로 사람의 선택이 유일한
+     *                              통과 수단이다</b> — 기본값({@code false})은 차단이다
+     */
+    public record Convert(GradeType grade, LocalDate admissionDate,
+                          boolean confirmedNotDuplicate) {
+    }
+
+    /**
+     * 중복 후보 한 건 — 화면의 「같은 분의 입학예약이 있습니다」 카드.
+     *
+     * <p>이름·생년·연락처를 <b>가리지 않고</b> 내린다. 이 화면은 담당자가 "같은 사람인가"를
+     * 눈으로 판단하는 자리라 가리면 판단이 불가능하고, 대기자 목록·상세가 이미 같은
+     * 값을 그대로 내린다.
+     *
+     * @param matchedBy 무엇이 같아서 걸렸는가({@code BIRTH}/{@code TEL}). 카드가
+     *                  「생년월일이 같습니다」까지 보여줘야 사람이 판단할 수 있다
+     * @param birth     규격서 형식 그대로의 {@code yyyyMMdd} 문자열이다
+     */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "AdmissionDuplicateView")
+    public record DuplicateView(Long reservationId, String rsvCd, short year, Long academyId,
+                                String studentName, String birth, String studentTel,
+                                String parentTel, ConsultStatus status, String statusName,
+                                AdmissionDuplicateService.MatchedBy matchedBy,
+                                Instant createdAt) {
+
+        static DuplicateView from(AdmissionDuplicateService.Match match) {
+            AdmissionReservation r = match.reservation();
+            return new DuplicateView(r.getId(), r.getRsvCd(), r.getYear(),
+                    r.getAcademy().getId(), r.getStudentName(), r.getBirth(),
+                    r.getStudentTel(), r.getParentTel(),
+                    r.getConsultStatus(), r.getConsultStatus().displayName(),
+                    match.matchedBy(), r.getCreatedAt());
+        }
     }
 
     /**

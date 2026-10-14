@@ -44,6 +44,7 @@ public class ExamNumberService {
     private static final short MAX_SEQ = StudentEnrollment.MAX_SEQ;
 
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final jakarta.persistence.EntityManager entityManager;
     private final MockExamStudentKeyRepository keyRepository;
     private final Clock clock;
 
@@ -60,6 +61,7 @@ public class ExamNumberService {
             return;
         }
         short classNo = classMaster.getExamClassNo();
+        lockNumbering(enrollment.getAcademy().getId(), enrollment.getYear(), classNo);
         short next = (short) (enrollmentRepository.findMaxExamSeq(
                 enrollment.getAcademy().getId(), enrollment.getYear(), classNo) + 1);
         if (next > MAX_SEQ) {
@@ -70,6 +72,13 @@ public class ExamNumberService {
         }
 
         enrollment.assignExamNo(classNo, next, Instant.now(clock));
+        // ★★ **학번도 같은 값이다** (2026-10-13 피드백 1-1). 디랩이 「반배정 시 번호가
+        //    반별로 자동배정」을 요구했고, 그 번호가 곧 학번이다 — 두 벌로 들면
+        //    「1001」이 두 가지 뜻을 갖고 키패드 출결·성적 매칭이 서로 다른 값을 본다
+        enrollment.assignStudentNoFromExamNo();
+        // ★ flush 해서 충돌을 **이 자리에서** 잡는다. 안 하면 커밋 시점에 터져
+        //   재시도 지점 바깥으로 예외가 새어나간다(접수 쪽에서 같은 일을 겪었다)
+        enrollmentRepository.flush();
         createUploadKey(enrollment, classNo);
     }
 
@@ -96,5 +105,53 @@ public class ExamNumberService {
                         () -> keyRepository.save(new MockExamStudentKey(
                                 academy, enrollment.getYear(), schoolCd,
                                 classNoText, studentNo, enrollment)));
+    }
+
+    /**
+     * 그 반의 다음 번호 미리보기.
+     *
+     * <p>⚠️ <b>예약이 아니다.</b> 배정 시점에 다시 계산하므로 두 사람이 동시에 화면을 열면
+     * 같은 번호가 보인다 — 화면에 "예정"이라고 적어야 한다.
+     *
+     * @return 다음 번호. 반에 모의고사 반 번호가 없거나 <b>99명이 찼으면 {@code null}</b> 이다 —
+     *         그때는 화면이 「번호를 더 줄 수 없습니다」를 보여야 한다
+     */
+    @Transactional(readOnly = true)
+    public String previewNext(ClassMaster classMaster) {
+        if (classMaster.getExamClassNo() == null) {
+            return null;
+        }
+        short classNo = classMaster.getExamClassNo();
+        short next = (short) (enrollmentRepository.findMaxExamSeq(
+                classMaster.getAcademy().getId(), classMaster.getYear(), classNo) + 1);
+        return next > MAX_SEQ ? null : StudentEnrollment.formatExamNo(classNo, next);
+    }
+
+    /**
+     * 반 단위 채번 직렬화.
+     *
+     * <h2>★★ 채번 경합이 접수에서 반 배정으로 옮겨왔다</h2>
+     * 전에는 접수 시점에 학번을 발급했고 그래서 {@code StudentService} 에 재시도가 붙어
+     * 있었다. 2026-10-13 피드백 1-1 로 <b>반 배정 시점</b> 발급이 되면서 경합도 여기로
+     * 왔다 — <b>여러 직원이 같은 반에 동시에 배정하면</b> 둘 다 같은 「최대값 + 1」을 읽고
+     * 한 쪽이 유니크 위반으로 터진다.
+     *
+     * <h2>★ 재시도가 아니라 잠금으로 막는다</h2>
+     * 유니크 위반은 트랜잭션을 rollback-only 로 만들어 <b>같은 트랜잭션 안에서 재시도할 수
+     * 없다</b>(접수 쪽이 새 트랜잭션을 여는 이유가 그것이다). 여기는 반 배정 트랜잭션
+     * 안쪽이라 그 구조를 쓸 수 없다 — 대신 <b>읽기 전에 잠가</b> 경합 자체를 없앤다.
+     *
+     * <p><b>애플리케이션 락이 아니라 DB 자문 잠금</b>이다. 다중 인스턴스에서도 같은 키로
+     * 직렬화되고, 트랜잭션이 끝나면 자동으로 풀린다(`_xact_` 접미사).
+     *
+     * <p>잠금 범위는 <b>(지점, 연도, 반)</b>이다. 지점 전체로 잠그면 모집 시즌에 배정이
+     * 줄을 서고, 더 좁힐 수는 없다 — 순번이 그 세 값 안에서 매겨진다.
+     */
+    private void lockNumbering(Long academyId, short year, short classNo) {
+        // String.hashCode 는 명세로 고정돼 있어 인스턴스가 달라도 같은 값이 나온다
+        long key = (academyId + "|" + year + "|exam|" + classNo).hashCode();
+        entityManager.createNativeQuery("SELECT pg_advisory_xact_lock(?1)")
+                .setParameter(1, key)
+                .getSingleResult();
     }
 }

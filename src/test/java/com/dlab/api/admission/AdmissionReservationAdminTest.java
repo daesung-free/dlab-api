@@ -116,21 +116,22 @@ class AdmissionReservationAdminTest {
         service.changeStatus(admin, reservation.getId(), ConsultStatus.CANCELED, "연락 두절");
         em.flush();
 
-        assertThatThrownBy(() -> service.convert(admin, reservation.getId(), null, null))
+        assertThatThrownBy(() -> service.convert(admin, reservation.getId(), null, null, false))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("입학확정");
     }
 
     @Test
-    @DisplayName("입학확정이면 학생이 된다 — 학번은 기존 신규 접수 경로가 채번한다")
+    @DisplayName("입학확정이면 학생이 된다 — 학번은 반 배정 때 나간다")
     void convertsWhenConfirmed() {
         service.changeStatus(admin, reservation.getId(), ConsultStatus.CONFIRMED, null);
         em.flush();
 
-        var enrollment = service.convert(admin, reservation.getId(), null, null);
+        var enrollment = service.convert(admin, reservation.getId(), null, null, false);
         em.flush();
 
-        assertThat(enrollment.getStudentNo()).startsWith(String.valueOf(YEAR));
+        // ★ 학번은 반 배정 시 나간다(2026-10-13 피드백 1-1) — 전환만으로는 비어 있다
+        assertThat(enrollment.getStudentNo()).isNull();
         assertThat(enrollment.getStudent().getName()).isEqualTo("박예약");
         assertThat(reservation.converted()).isTrue();
     }
@@ -139,10 +140,10 @@ class AdmissionReservationAdminTest {
     @DisplayName("★ 두 번 전환하지 않는다 — 학번이 두 개면 출결·수납이 갈라진다")
     void doesNotConvertTwice() {
         service.changeStatus(admin, reservation.getId(), ConsultStatus.CONFIRMED, null);
-        service.convert(admin, reservation.getId(), null, null);
+        service.convert(admin, reservation.getId(), null, null, false);
         em.flush();
 
-        assertThatThrownBy(() -> service.convert(admin, reservation.getId(), null, null))
+        assertThatThrownBy(() -> service.convert(admin, reservation.getId(), null, null, false))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("이미");
     }

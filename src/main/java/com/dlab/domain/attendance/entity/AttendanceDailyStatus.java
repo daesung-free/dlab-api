@@ -102,7 +102,14 @@ AttendanceDailyStatus extends BaseEntity {
      *       교시 마스터에서 빼기 때문이다 — 저장해두면 그 시점 기준으로 고정된다</li>
      * </ul>
      */
-    public void recordStudyMinutes(int minutes, Instant at) {
+    /**
+     * 순공시간 기록.
+     *
+     * <p>★ <b>{@code null} 을 받는다</b> — 하원·조퇴 태깅이 없어 **언제 갔는지 알 수 없는
+     * 날**이다(2026-10-13 피드백 4-2). 0 으로 바꾸지 말 것: **진짜 0분과 구분되지 않고**
+     * 담당자가 보정할 필요를 못 느낀다.
+     */
+    public void recordStudyMinutes(Integer minutes, Instant at) {
         this.studyMinutes = minutes;
         this.calculatedAt = at;
     }

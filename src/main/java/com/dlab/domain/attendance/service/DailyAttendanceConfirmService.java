@@ -150,6 +150,33 @@ public class DailyAttendanceConfirmService {
                 !excusedOf(List.of(enrollment), date).isEmpty(), Instant.now(clock));
     }
 
+    /**
+     * 그날을 닫는 태깅이 있는가.
+     *
+     * <p>하원(`T`)이나 조퇴(`C`) 중 하나라도 있으면 그날이 끝난 것으로 본다 —
+     * <b>조퇴도 하원이다.</b> 둘 다 없으면 <b>언제 갔는지 알 수 없고</b> 추정하지 않는다.
+     *
+     * <p>⚠️ 외출(`D`·`N`)은 닫지 않는다 — 돌아올 수 있다. 복귀 없이 그날이 끝났으면
+     * 그것도 「미입력」이고, 출결 화면이 {@code NO_RETURN_RECORD} 로 드러낸다.
+     */
+    /**
+     * 그날 온 적이 있는가.
+     *
+     * <p>★ <b>지각(`A`)도 등원이다</b> — 출결 7종 중 등원에 해당하는 것이 둘이다(§3).
+     * 둘 다 없으면 <b>결석</b>이고, 결석은 순공 0 이 맞다(안 왔으니 0 이다).
+     */
+    private static boolean hasArrival(List<AttendanceTaggingLog> logs) {
+        return logs.stream().anyMatch(l ->
+                l.getEventType() == AttendanceEventType.CHECK_IN
+                        || l.getEventType() == AttendanceEventType.LATE);
+    }
+
+    private static boolean hasDeparture(List<AttendanceTaggingLog> logs) {
+        return logs.stream().anyMatch(l ->
+                l.getEventType() == AttendanceEventType.CHECK_OUT
+                        || l.getEventType() == AttendanceEventType.EARLY_LEAVE);
+    }
+
     /** 한 학생의 하루 확정. 배치와 단건 보정이 함께 쓴다. */
     private void apply(Academy academy, StudentEnrollment enrollment, LocalDate date,
                        List<AttendanceTaggingLog> logs,
@@ -158,9 +185,28 @@ public class DailyAttendanceConfirmService {
 
         DailyStatus status = statusOf(logs.stream().map(AttendanceTaggingLog::getEventType).toList());
 
-        // 지난 날이라 하원이 끝났다 — 마지막 교시 종료로 닫고 계산한다
-        int studyMinutes = (int) studyTimeCalculator
-                .calculate(logs, periods, LocalTime.MAX).toMinutes();
+        // ★★ **하원·조퇴 태깅이 없으면 순공을 계산하지 않는다** (2026-10-13 피드백 4-2).
+        //    전에는 「마지막 교시 종료로 닫고」 계산했는데, 그건 미확정이던 후보 ②
+        //    (지정 하원시각까지로 간주)를 코드에 박아 둔 것이었다 — CLAUDE.md §4 가
+        //    *"정해지기 전에 임의 기본값을 박지 말 것"* 이라고 경고한 바로 그 자리다.
+        //
+        //    디랩이 고른 것은 **③ 관리자 보정**이다: *"키오스크에 알림 창이 표시된 시간을
+        //    확인하고 그 시간을 수기 입력합니다."*
+        //
+        //    ★ 추정값을 채워 두면 **담당자가 보정할 필요를 못 느끼고**(숫자가 이미 있다)
+        //    **학생은 추정값을 자기 순공시간으로 본다.** 비워 두는 것이 「미입력」의 정직한
+        //    표현이고, 그래야 보정 경로(`POST /admin/attendance/{id}/taggings`)가 쓰인다.
+        //
+        //    ⚠️ 0 으로 채우지 않는다 — **진짜 0분과 구분되지 않는다.**
+        //    ★★ 단 **결석과 구분한다.** 안 온 학생은 **0분이 맞다** — 오지 않았으니
+        //    공부한 시간이 0 인 것이고, 그건 「모른다」가 아니다. 기존 테스트가
+        //    *「결석자는 순공시간 0 — null 이 아니다」* 로 그 판단을 고정해 뒀다.
+        //
+        //    null 이 되는 경우는 **등원은 했는데 하원·조퇴가 없는 날** 하나다 —
+        //    그때만 「언제 갔는지 모른다」가 성립한다.
+        Integer studyMinutes = !hasArrival(logs) || hasDeparture(logs)
+                ? (int) studyTimeCalculator.calculate(logs, periods, LocalTime.MAX).toMinutes()
+                : null;
 
         // 이미 확정된 날을 다시 돌 수 있다 — 사유가 뒤늦게 승인되면 무단이 사유로 바뀐다
         AttendanceDailyStatus confirmed = dailyStatusRepository
