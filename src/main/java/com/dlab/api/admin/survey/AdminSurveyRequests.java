@@ -43,11 +43,15 @@ public final class AdminSurveyRequests {
 
         SurveyService.SurveyCommand toCommand() {
             return new SurveyService.SurveyCommand(
-                    surveyType, scope, academyId, classId, title, description, anonymous,
+                    // ★★ **`anonymousOrFalse()` 를 쓴다.** 바로 아래에 그 메서드를 만들어 두고
+                    //    여기서 `anonymous` 를 그대로 넘기고 있었다 — 받는 쪽이 **primitive
+                    //    `boolean`** 이라, 요청에서 이 칸을 **생략하면 널 언박싱으로 500** 이 났다.
+                    //    화면에는 「서버 오류」만 뜨고 어느 칸 때문인지 보이지 않는다
+                    surveyType, scope, academyId, classId, title, description, anonymousOrFalse(),
                     opensAt, closesAt,
                     questions.stream()
                             .map(q -> new SurveyService.QuestionCommand(
-                                    q.type(), q.title(), q.required(),
+                                    q.type(), q.title(), q.requiredOrFalse(),
                                     q.minValue(), q.maxValue(), q.options(),
                                     q.showIfQuestionIndex(), q.showIfOptionIndex(),
                                     q.sumOfIndexes()))
@@ -70,13 +74,25 @@ public final class AdminSurveyRequests {
      */
     public record AdminSurveyQuestion(@NotNull SurveyQuestionType type,
                            @NotBlank @Size(max = 300) String title,
-                           boolean required,
+                           /**
+                            * 필수 응답 여부. <b>생략 가능</b> — 없으면 {@code false} 다.
+                            *
+                            * <p>⚠️ <b>원시형으로 두면 생략만으로 400 이 된다.</b> 이 프로젝트는
+                            * {@code FAIL_ON_NULL_FOR_PRIMITIVES} 가 켜져 있어 Jackson 이
+                            * 본문 파싱 자체를 거부하고, 화면은 <b>문항과 무관한</b>
+                            * 「요청 본문 형식이 올바르지 않습니다」를 받는다.
+                            */
+                           Boolean required,
                            BigDecimal minValue,
                            BigDecimal maxValue,
                            List<String> options,
                            Integer showIfQuestionIndex,
                            Integer showIfOptionIndex,
                            List<Integer> sumOfIndexes) {
+
+        public boolean requiredOrFalse() {
+            return Boolean.TRUE.equals(required);
+        }
     }
 
     /**
@@ -90,7 +106,7 @@ public final class AdminSurveyRequests {
         public List<SurveyService.QuestionCommand> toCommands() {
             return questions.stream()
                     .map(q -> new SurveyService.QuestionCommand(
-                            q.type(), q.title(), q.required(),
+                            q.type(), q.title(), q.requiredOrFalse(),
                             q.minValue(), q.maxValue(), q.options(),
                             q.showIfQuestionIndex(), q.showIfOptionIndex(),
                             q.sumOfIndexes()))
