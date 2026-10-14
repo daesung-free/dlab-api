@@ -4,7 +4,9 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.Role;
+import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.notice.entity.Notice;
+import com.dlab.domain.notice.entity.NoticeTarget;
 import com.dlab.domain.notice.entity.NoticeAuthorType;
 import com.dlab.domain.notice.entity.NoticeRead;
 import com.dlab.domain.notice.entity.NoticeScope;
@@ -56,6 +58,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class NoticeService {
 
     private final NoticeRepository noticeRepository;
+    private final com.dlab.domain.notice.repository.NoticeTargetRepository targetRepository;
     private final com.dlab.domain.notice.repository.NoticeReadRepository noticeReadRepository;
     private final AccountRepository accountRepository;
     private final ClassMasterRepository classMasterRepository;
@@ -135,6 +138,61 @@ public class NoticeService {
         Notice notice = noticeRepository.save(Notice.ofIndividual(
                 enrollment, currentYear(), title, content, author.type(), author.id()));
         log.info("개별 공지 등록: id={}, 학생={}", notice.getId(), enrollmentId);
+        return notice;
+    }
+
+    /**
+     * 고른 학생들에게 공지를 보낸다 (요구사항 1-5).
+     *
+     * <h2>★★ 사람마다 공지를 만들지 않는다</h2>
+     * {@code INDIVIDUAL} 을 사람 수만큼 쓰면 목록에 <b>같은 글이 N개</b> 뜨고,
+     * 오타 하나를 고치려면 <b>N번 고쳐야</b> 하며, 「읽음 몇 명」이 <b>N개로 쪼개진다.</b>
+     *
+     * <h2>★ 생성과 대상자 지정이 한 트랜잭션이다</h2>
+     * 나뉘면 중간에 실패했을 때 <b>받는 사람이 없는 공지</b>가 목록에 남는다. 담당자는
+     * 보냈다고 생각하는데 <b>아무에게도 안 간다.</b>
+     *
+     * <p>권한은 <b>학생마다</b> 본다 — 담임은 자기 반 학생에게만 보낼 수 있고,
+     * 목록에 남의 반 학생이 섞여 있으면 거절한다. 한 번만 검사하고 넘기면
+     * <b>자기 반 학생 하나를 끼워 넣어 전교생에게 보내는</b> 길이 열린다.
+     */
+    @Transactional
+    public Notice createForSelected(AuthPrincipal me, List<Long> enrollmentIds,
+                                    String title, String content) {
+        Author author = requireAuthor(me);
+        if (enrollmentIds == null || enrollmentIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "받을 학생을 선택해주세요.");
+        }
+        // ★ 같은 학생이 두 번 들어와도 한 번만 넣는다 — 중복 행이 있으면 읽음 집계가 틀어진다
+        List<Long> ids = enrollmentIds.stream().distinct().toList();
+
+        List<StudentEnrollment> enrollments = enrollmentRepository.findAllById(ids).stream()
+                .filter(e -> !e.isDeleted())
+                .toList();
+        if (enrollments.size() != ids.size()) {
+            throw new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND);
+        }
+
+        Academy academy = enrollments.get(0).getAcademy();
+        for (StudentEnrollment enrollment : enrollments) {
+            // ⚠️ 지점이 섞이면 거절한다. 공지는 지점 하나에 속하므로 섞인 채로 저장되면
+            //    **어느 지점 공지인지가 모호해진다**
+            if (!enrollment.getAcademy().getId().equals(academy.getId())) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "여러 지점 학생을 한 공지로 보낼 수 없습니다.");
+            }
+            ClassMaster classMaster = classAssignmentRepository
+                    .findActiveFixedByEnrollmentId(enrollment.getId())
+                    .map(ClassAssignment::getClassMaster)
+                    .orElse(null);
+            requireIndividualWriter(me, author, enrollment, classMaster);
+        }
+
+        Notice notice = noticeRepository.save(Notice.ofSelected(
+                academy, currentYear(), title, content, author.type(), author.id()));
+        enrollments.forEach(e -> targetRepository.save(new NoticeTarget(notice, e)));
+
+        log.info("선택 공지 등록: id={}, 대상={}명", notice.getId(), enrollments.size());
         return notice;
     }
 

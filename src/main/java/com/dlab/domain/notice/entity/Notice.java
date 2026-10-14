@@ -135,6 +135,23 @@ public class Notice extends BaseEntity {
     }
 
     /**
+     * 고른 학생들에게 보내는 공지.
+     *
+     * <p>★ <b>여기서는 대상을 받지 않는다.</b> 누가 받는지는 {@code notice_target} 이
+     * 정한다 — 공지 한 건에 대상자가 여럿이라 공지 테이블의 한 칸으로는 담기지 않는다.
+     *
+     * <p>⚠️ 그래서 <b>대상자를 넣기 전에는 아무에게도 안 보인다.</b> 생성과 대상자 지정이
+     * 같은 트랜잭션이어야 하는 이유다 — 나뉘면 중간에 실패했을 때
+     * <b>받는 사람이 없는 공지</b>가 목록에 남는다.
+     */
+    public static Notice ofSelected(Academy academy, short year,
+                                    String title, String content,
+                                    NoticeAuthorType authorType, Long authorId) {
+        return new Notice(academy, year, NoticeScope.SELECTED,
+                title, content, authorType, authorId);
+    }
+
+    /**
      * 내용 수정.
      *
      * <p><b>범위와 대상은 바꾸지 않는다.</b> 반공지를 전체공지로 바꾸면 이미 읽은 사람과
