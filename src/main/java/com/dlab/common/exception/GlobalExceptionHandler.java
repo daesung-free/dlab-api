@@ -210,19 +210,34 @@ public class GlobalExceptionHandler {
      *
      * <p>{@code MissingServletRequestPartException}(멀티파트 누락)도 같이 받는다 —
      * 성적표·합격증 업로드가 붙으면 같은 유형이 생긴다.
+     *
+     * <h2>★ "없다"와 "비었다"를 갈라 말한다</h2>
+     * 스프링은 <b>칸이 아예 없는 경우</b>와 <b>칸은 왔는데 값이 빈 경우</b>({@code ?from=})를
+     * 같은 예외로 던진다 — 빈 값은 {@code null}로 변환된 뒤 필수 검사에서 걸린다.
+     * 그래서 한 문구로 두면 <b>보낸 쪽은 "보냈는데 없다고 한다"로 읽고</b> 엉뚱한 데를 파게 된다.
+     * 실제로 긴급 출입 화면이 {@code from=}을 빈 값으로 보내 놓고 원인을 다른 파라미터에서 찾았다.
+     *
+     * <p>갈라 말하면 고칠 곳이 바로 나온다 — <b>비었다</b>면 화면이 그 칸을 채우기 전에 부른 것이고
+     * (대개 최초 렌더), <b>없다</b>면 요청을 만드는 코드에서 칸을 빠뜨린 것이다.
      */
     @ExceptionHandler({org.springframework.web.bind.MissingServletRequestParameterException.class,
             org.springframework.web.multipart.support.MissingServletRequestPartException.class})
     public ResponseEntity<ApiResponse<Void>> handleMissingParameter(Exception e) {
-        String name = e instanceof org.springframework.web.bind.MissingServletRequestParameterException missing
-                ? missing.getParameterName()
-                : ((org.springframework.web.multipart.support.MissingServletRequestPartException) e)
-                        .getRequestPartName();
+        boolean blank = false;
+        String name;
+        if (e instanceof org.springframework.web.bind.MissingServletRequestParameterException missing) {
+            name = missing.getParameterName();
+            blank = missing.isMissingAfterConversion();
+        } else {
+            name = ((org.springframework.web.multipart.support.MissingServletRequestPartException) e)
+                    .getRequestPartName();
+        }
 
-        log.warn("필수 파라미터 누락: {}", name);
+        log.warn("필수 파라미터 {}: {}", blank ? "빈 값" : "누락", name);
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getStatus())
                 .body(ApiResponse.fail(ErrorCode.INVALID_REQUEST,
-                        "필수 파라미터 '%s' 이(가) 없습니다.".formatted(name)));
+                        blank ? "필수 파라미터 '%s' 이(가) 비어 있습니다.".formatted(name)
+                              : "필수 파라미터 '%s' 이(가) 없습니다.".formatted(name)));
     }
 
     /**
