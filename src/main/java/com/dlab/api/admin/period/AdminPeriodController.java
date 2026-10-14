@@ -50,6 +50,14 @@ public class AdminPeriodController {
      * @param academyId 전 지점 권한자만 지정한다. 지점 관리자는 자기 지점으로 고정된다
      * @param dayType   없으면 평일·토요일을 함께 내린다
      */
+    /**
+     * ★ <b>담임도 읽는다.</b> 시간표 격자의 <b>세로축</b>이라, 이게 막히면 담임이
+     * 시간표를 열었을 때 <b>빈 화면</b>이 뜬다 — 메뉴는 보이는데 쓸 수가 없다.
+     *
+     * <p>⚠️ <b>읽기만</b> 연다. 클래스 권한을 담임까지 넓히면 <b>교시 마스터를 고칠 수</b>
+     * 있게 되고, 교시는 <b>순공시간 계산의 기준</b>이라 한 지점 전체 통계가 흔들린다.
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER')")
     @GetMapping
     public ApiResponse<List<PeriodResponse>> list(
             @CurrentAccount AuthPrincipal me,

@@ -44,7 +44,15 @@ public class AdminTimetableController {
      *
      * <p>칸마다 <b>실제 적용 강의실</b>({@code effectiveRoomNo})을 함께 내린다 —
      * 셀 강의실이 비면 반 홈룸이다. 이 판정을 화면에 맡기면 화면마다 다르게 떨어진다.
+     *
+     * <h2>★★ 담임도 읽는다 — 이게 격자의 <b>본체</b>다</h2>
+     * 교시·강의실·교사만 열고 이것을 막으면 <b>축은 그려지고 내용이 비는</b> 더 헷갈리는
+     * 모양이 된다. 담임에게 `timetable` 메뉴를 열어 둔 이상 함께 열려야 한다.
+     *
+     * <p>⚠️ <b>편성(`PUT`)·복사(`POST`)는 그대로 막힌다.</b> 담임이 자기 반을 보는 것과
+     * 지점 시간표를 짜는 것은 다른 일이다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER')")
     @GetMapping("/classes/{classId}")
     public ApiResponse<List<TimetableCellRow>> week(@CurrentAccount AuthPrincipal me,
                                                     @PathVariable Long classId) {
@@ -54,7 +62,10 @@ public class AdminTimetableController {
 
     /**
      * 그 지점·연도 전체 — 「이 시간에 어느 반이 어디에」를 되짚는 화면용.
+     *
+     * <p>★ <b>담임도 읽는다</b> — 아래 주 단위 조회와 같은 이유다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER')")
     @GetMapping
     public ApiResponse<List<TimetableCellRow>> year(@CurrentAccount AuthPrincipal me,
                                                     @RequestParam(required = false) Long academyId,
