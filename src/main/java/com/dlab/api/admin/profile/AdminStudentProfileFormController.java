@@ -41,7 +41,13 @@ public class AdminStudentProfileFormController {
      * 양식 목록 — 지점 양식 + 전 지점 공통.
      *
      * <p>I-17 확정 전에는 <b>공통 한 행만 있는 것이 정상</b>이다.
+     *
+     * <p>★ <b>담임도 읽는다.</b> 신상기록부 <b>작성은 담임이 하는데</b> 양식을 못 읽으면
+     * 입력 칸이 뜨지 않는다 — 쓰기만 열고 읽기를 막아 둔 셈이었다.
+     *
+     * <p>⚠️ 양식 <b>등록·수정</b>은 그대로 본사·지점관리자다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER')")
     @GetMapping
     public ApiResponse<List<FormRow>> list(@CurrentAccount AuthPrincipal me,
                                            @RequestParam(required = false) Long academyId,

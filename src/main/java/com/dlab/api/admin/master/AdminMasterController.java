@@ -411,6 +411,13 @@ public class AdminMasterController {
      *
      * @param active 상태 필터. 비우면 사용중 + 중지 전부
      */
+    /**
+     * ★ <b>담임도 읽는다.</b> 시간표가 강의실을 고르거나 표시하는 데 쓴다.
+     *
+     * <p>⚠️ <b>이 메서드만</b> 연다 — 이 컨트롤러에는 교습비·장학 같은 <b>돈과 관련된
+     * 마스터</b>가 함께 있어 클래스째 열면 그것까지 보인다.
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER')")
     @GetMapping("/rooms")
     public ApiResponse<List<MasterResponses.Room>> rooms(
             @CurrentAccount AuthPrincipal me,
