@@ -53,6 +53,16 @@ class TypeMismatchHandlingTest {
             return java.time.YearMonth.parse(month).toString();
         }
 
+        /** 긴급 출입 내역과 같은 모양 — 날짜 필수, 지점 선택. */
+        @GetMapping("/api/v1/test/date-range")
+        String byRange(@RequestParam(required = false) Long academyId,
+                       @RequestParam
+                       @org.springframework.format.annotation.DateTimeFormat(
+                               iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+                       java.time.LocalDate from) {
+            return "ok";
+        }
+
         @GetMapping("/api/v1/test/enum-mismatch")
         String byTrack(@RequestParam Track track) {
             return "ok";
@@ -178,6 +188,29 @@ class TypeMismatchHandlingTest {
                 .andExpect(jsonPath("$.error.message")
                         .value(org.hamcrest.Matchers.not(
                                 org.hamcrest.Matchers.containsString("com.dlab"))));
+    }
+
+    @Test
+    @DisplayName("★★ 빈 값으로 보낸 필수 파라미터는 「비어 있습니다」다 — 「없습니다」면 보낸 쪽이 엉뚱한 데를 판다")
+    void blankRequiredParamSaysBlank() throws Exception {
+        mvc.perform(get("/api/v1/test/date-range").param("from", ""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("from")))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("비어 있습니다")));
+    }
+
+    @Test
+    @DisplayName("칸 자체가 없으면 「없습니다」다 — 선택 파라미터(academyId)는 빠져도 걸리지 않는다")
+    void absentRequiredParamSaysAbsent() throws Exception {
+        mvc.perform(get("/api/v1/test/date-range"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("from")))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("없습니다")));
     }
 
     @Test
