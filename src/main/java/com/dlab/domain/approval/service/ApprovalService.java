@@ -485,6 +485,12 @@ public class ApprovalService {
 
     private void notifyRequestCreated(ApprovalRequest request, Teacher escalationTarget) {
         Map<String, String> variables = new LinkedHashMap<>();
+        // ★★ **무엇을 승인하는지**를 함께 보낸다(디랩 B안). 없으면 학부모는
+        //    「승인 요청이 왔습니다」만 보고 **와이파이인지 외출인지 모른 채** 승인한다.
+        //
+        //    ⚠️ **카카오 템플릿은 등록한 뒤 변수를 더하면 재심사다.** 그래서 템플릿을
+        //    올리기 전인 지금 넣는다 — 나중이면 승인 대기가 며칠 늘어난다
+        variables.put("requestType", request.getApprovalItem().getRequestType().displayName());
         variables.put("requestedAt", TIME_FORMAT.format(request.getRequestedAt()));
         variables.put("timeoutMinutes", String.valueOf(request.getTimeoutMinutes()));
 

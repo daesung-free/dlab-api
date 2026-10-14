@@ -97,6 +97,35 @@ class PrimaryApproverFlowTest {
         em.flush();
     }
 
+    @Test
+    @DisplayName("★★ 승인 요청 알림에 「무엇을 승인하는지」가 실린다 — 없으면 알림이 통째로 보류된다")
+    void notificationCarriesRequestType() {
+        request();
+        em.flush();
+        em.clear();
+
+        var logs = em.createQuery("""
+                SELECT l FROM NotificationLog l
+                WHERE l.eventCode = 'APPROVAL_REQUEST_CREATED'
+                ORDER BY l.id DESC
+                """, com.dlab.domain.notification.entity.NotificationLog.class)
+                .setMaxResults(1).getResultList();
+
+        assertThat(logs).isNotEmpty();
+        var sent = logs.get(0);
+
+        // ★ 학부모는 「승인 요청이 왔습니다」만 보면 **와이파이인지 외출인지 모른 채** 승인한다
+        assertThat(sent.getVariables()).containsEntry("requestType", "와이파이 해제");
+
+        // ★★ 변수가 빠지면 예외가 아니라 **조용히 보류**된다 — 그래서 테스트로 묶는다.
+        //    `required_variables` 에 넣고 서비스가 안 채우면 그 알림이 영영 안 나간다.
+        //
+        //    ⚠️ 「보류가 아님」으로 보면 안 된다 — **발송 구현체가 아직 0개**라
+        //    지금은 모든 알림이 「발송 구현체 없음」으로 보류된다(그건 정상이다).
+        //    가려야 할 것은 **보류 사유**다
+        assertThat(sent.getFailReason()).doesNotContain("변수 누락");
+    }
+
     private ApprovalRequest request() {
         ApprovalRequest r = approvalService.create(enrollment, RequestType.FIREWALL_UNLOCK);
         em.flush();
