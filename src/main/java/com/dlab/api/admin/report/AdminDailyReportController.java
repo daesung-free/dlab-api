@@ -28,7 +28,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/v1/admin/daily-reports")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+// ★ **조회 전용도 본다.** Daily Report 는 **집계이지 개별 기록이 아니고**, 조회 전용
+//   계정의 업무가 곧 「보는 것」이다. 메뉴(`statistics`)는 열려 있는데 API 만 막혀 있어
+//   **빈 화면**이 떴다 — 메뉴와 권한이 어긋난 자리였다.
+@PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
 public class AdminDailyReportController {
 
     private final DailyReportBoardService boardService;

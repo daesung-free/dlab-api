@@ -55,6 +55,14 @@ public class AdminStaffController {
     }
 
     /** 담당선생님(사감) 목록. 반 담임·승인 에스컬레이션 대상이 여기서 나온다. */
+    /**
+     * ★ <b>담임도 읽는다.</b> 반 담임 드롭다운과 시간표의 담당 교사 표시에 쓴다.
+     *
+     * <p>⚠️⚠️ <b>이 메서드 하나만</b> 연다. 이 컨트롤러에는 <b>계정 역할 변경</b>
+     * ({@code PUT /accounts/&#123;id&#125;/roles})이 있어, 클래스 권한을 넓히면
+     * <b>담임이 자기 권한을 올릴 수 있다.</b>
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER')")
     @GetMapping("/teachers")
     public ApiResponse<List<StaffResponse>> teachers(@CurrentAccount AuthPrincipal me,
                                                      @RequestParam Long academyId) {
