@@ -10,6 +10,7 @@ import com.dlab.domain.notice.entity.NoticeScope;
 import com.dlab.domain.notice.service.NoticeService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.List;
@@ -97,6 +98,33 @@ public class AdminNoticeController {
         return ApiResponse.success(NoticeResponse.from(
                 noticeService.createForIndividual(
                         me, enrollmentId, request.title(), request.content())));
+    }
+
+    /**
+     * 고른 학생들에게 보내는 공지 (요구사항 1-5).
+     *
+     * <h2>★★ 사람마다 공지를 만들지 않는다</h2>
+     * 「반 내에 해당하는 <b>학생들을</b> 개별 선택하여 발송」이 원문이고 <b>복수</b>다.
+     * {@code /students/&#123;id&#125;} 를 사람 수만큼 부르면 목록에 <b>같은 글이 N개</b> 뜨고,
+     * 오타 하나를 고치려면 <b>N번 고쳐야</b> 하며, 「읽음 몇 명」이 <b>N개로 쪼개진다.</b>
+     *
+     * <p>⚠️ 담임은 <b>자기 반 학생에게만</b> 보낼 수 있고, 목록에 남의 반 학생이 섞이면
+     * 거절한다 — 한 번만 검사하고 넘기면 자기 반 학생 하나를 끼워 넣어
+     * <b>전교생에게 보내는</b> 길이 열린다.
+     */
+    @PostMapping("/students")
+    public ApiResponse<NoticeResponse> createForSelected(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody SelectedRequest request) {
+        return ApiResponse.success(NoticeResponse.from(noticeService.createForSelected(
+                me, request.enrollmentIds(), request.title(), request.content())));
+    }
+
+    /** @param enrollmentIds 받을 학생들. 같은 학생이 두 번 들어와도 한 번만 들어간다 */
+    public record SelectedRequest(
+            @NotEmpty(message = "받을 학생을 선택해주세요.") List<Long> enrollmentIds,
+            @NotBlank(message = "제목은 필수입니다.") @Size(max = 200) String title,
+            @NotBlank(message = "내용은 필수입니다.") String content) {
     }
 
     /** <b>범위와 대상은 못 바꾼다</b> — 바꿀 수 있으면 권한 검사를 한 번만 통과하고 범위를 넓힐 수 있다. */

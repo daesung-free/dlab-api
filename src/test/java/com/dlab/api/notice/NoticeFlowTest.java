@@ -437,4 +437,75 @@ class NoticeFlowTest {
 
         assertThat(noticeService.readCounts(List.of(notice.getId()))).isEmpty();
     }
+    @Test
+    @DisplayName("★★ 고른 학생들에게 공지 하나를 보낸다 — 사람마다 만들면 목록에 같은 글이 N개 뜬다")
+    void selectedNoticeIsOneRow() {
+        Notice notice = noticeService.createForSelected(
+                branchAdmin, List.of(minji.getId(), seojun.getId()), "선택 공지", "본문");
+        em.flush();
+        em.clear();
+
+        assertThat(notice.getScope()).isEqualTo(NoticeScope.SELECTED);
+
+        // ★ 공지는 **한 건**이고 대상자만 둘이다
+        Long count = em.createQuery("""
+                SELECT COUNT(t) FROM NoticeTarget t
+                WHERE t.notice.id = :id AND t.deleted = false
+                """, Long.class).setParameter("id", notice.getId()).getSingleResult();
+        assertThat(count).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("★ 대상 학생의 피드에만 보인다 — 아닌 학생에게는 안 간다")
+    void onlyTargetsSeeIt() {
+        Notice notice = noticeService.createForSelected(
+                branchAdmin, List.of(minji.getId()), "민지에게만", "본문");
+        em.flush();
+        em.clear();
+
+        assertThat(noticeService.feed(minji.getId()))
+                .extracting(Notice::getTitle).contains("민지에게만");
+        assertThat(noticeService.feed(seojun.getId()))
+                .extracting(Notice::getTitle).doesNotContain("민지에게만");
+        assertThat(notice.getId()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("★ 같은 학생을 두 번 넣어도 한 번만 들어간다 — 중복 행이 있으면 읽음 집계가 틀어진다")
+    void duplicateTargetsCollapse() {
+        Notice notice = noticeService.createForSelected(
+                branchAdmin, List.of(minji.getId(), minji.getId()), "중복", "본문");
+        em.flush();
+
+        Long count = em.createQuery("""
+                SELECT COUNT(t) FROM NoticeTarget t
+                WHERE t.notice.id = :id AND t.deleted = false
+                """, Long.class).setParameter("id", notice.getId()).getSingleResult();
+        assertThat(count).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("★★ 담임은 자기 반 학생에게만 — 남의 반을 끼워 넣으면 거절한다")
+    void teacherCannotSlipInOutsiders() {
+        // minji 는 담임 반, seojun 은 미배정이다
+        assertThatCode(() -> noticeService.createForSelected(
+                homeroomTeacher, List.of(minji.getId()), "우리 반", "본문"))
+                .doesNotThrowAnyException();
+
+        // ★ 하나만 자기 반이고 나머지가 남이면 **전체를 거절한다.** 한 번만 검사하고
+        //   넘기면 자기 반 학생 하나를 끼워 넣어 전교생에게 보내는 길이 열린다
+        assertThatThrownBy(() -> noticeService.createForSelected(
+                homeroomTeacher, List.of(minji.getId(), seojun.getId()), "섞어서", "본문"))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("받을 학생을 안 고르면 거절한다 — 아무에게도 안 가는 공지가 목록에 남는다")
+    void rejectsEmptyTargets() {
+        assertThatThrownBy(() -> noticeService.createForSelected(
+                branchAdmin, List.of(), "빈 대상", "본문"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("학생을 선택");
+    }
+
 }
