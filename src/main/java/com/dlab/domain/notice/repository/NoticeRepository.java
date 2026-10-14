@@ -42,6 +42,13 @@ public interface NoticeRepository extends JpaRepository<Notice, Long> {
      *
      * @param classId      배정된 반. 없으면 {@code null}
      * @param enrollmentId 본인 등록 건
+     *
+     * <p>★ <b>{@code SELECTED} 는 대상자가 공지가 아니라 {@code notice_target} 에 있다.</b>
+     * {@code EXISTS} 로 본다 — {@code JOIN} 하면 대상자 수만큼 <b>같은 공지가 여러 줄</b>로 나온다.
+     *
+     * <p>⚠️ <b>이 쿼리 안에 {@code --} 주석을 쓰지 말 것.</b> JPQL 은 그 문법을 모르고,
+     * 깨지면 <b>리포지토리 빈이 안 떠서 그 컨텍스트를 쓰는 테스트가 통째로 실패</b>한다 —
+     * 원인이 쿼리라는 것이 한눈에 안 보인다.
      */
     @Query("""
             SELECT n FROM Notice n
@@ -55,6 +62,11 @@ public interface NoticeRepository extends JpaRepository<Notice, Long> {
                      AND n.classMaster.id = :classId)
                  OR (n.scope = com.dlab.domain.notice.entity.NoticeScope.INDIVIDUAL
                      AND n.enrollment.id = :enrollmentId)
+                 OR (n.scope = com.dlab.domain.notice.entity.NoticeScope.SELECTED
+                     AND EXISTS (SELECT 1 FROM NoticeTarget t
+                                  WHERE t.notice = n
+                                    AND t.enrollment.id = :enrollmentId
+                                    AND t.deleted = false))
               )
             ORDER BY n.pinned DESC, n.createdAt DESC
             """)
