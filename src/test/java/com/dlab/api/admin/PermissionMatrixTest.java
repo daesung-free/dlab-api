@@ -114,6 +114,11 @@ class PermissionMatrixTest {
 
         assertThat(codes).contains("student", "attendance", "class", "penalty", "consult");
         assertThat(codes).doesNotContain("billing", "meal", "staff", "branch-config");
+        // ★ 특강도 빠진다 — 출석 체크는 행정 몫이고 API 도 관리자만 열려 있다.
+        //   출석부가 반 단위가 아니라 신청자 전원이라 열면 자기 반 밖 학생까지 보인다
+        assertThat(codes).doesNotContain("lecture");
+        // 성적은 남는다 — 담임이 맡은 학생의 성적을 보고 정정한다(0826 회신)
+        assertThat(codes).contains("grade");
     }
 
     @Test
@@ -129,9 +134,13 @@ class PermissionMatrixTest {
         var codes = menuAccessService.visibleMenus(viewer).stream()
                 .map(com.dlab.domain.menu.entity.Menu::getCode).toList();
 
-        assertThat(codes).contains("student", "attendance", "billing", "meal", "grade");
+        assertThat(codes).contains("student", "attendance", "billing", "meal");
         // 담임 업무·설정은 조회 전용에 없다
         assertThat(codes).doesNotContain("class", "penalty", "consult", "master", "staff");
+        // ★ 성적은 빠진다 — 읽기 API 가 READONLY 에 하나도 열려 있지 않아(양식·학생 성적·추이
+        //   전부 403) 메뉴만 두면 빈 화면이 「고장」으로 읽힌다. 신상기록부·시간표와 같은 판단이다.
+        //   ⚠️ 권한 매트릭스 초안은 「조회만」이라 적혀 있어 어긋난다 — 확정 때 함께 정리한다
+        assertThat(codes).doesNotContain("grade", "lecture");
     }
 
     @Test
