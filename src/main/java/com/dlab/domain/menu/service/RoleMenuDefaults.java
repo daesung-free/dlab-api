@@ -42,8 +42,6 @@ public final class RoleMenuDefaults {
             EnumSet.of(Role.SUPER_ADMIN, Role.BRANCH_ADMIN, Role.STAFF);
     private static final Set<Role> DESK_AND_VIEWER =
             EnumSet.of(Role.SUPER_ADMIN, Role.BRANCH_ADMIN, Role.STAFF, Role.READONLY);
-    private static final Set<Role> TEACHER_AND_VIEWER =
-            EnumSet.of(Role.SUPER_ADMIN, Role.BRANCH_ADMIN, Role.TEACHER, Role.READONLY);
 
     /**
      * 메뉴 코드 → 기본으로 보이는 역할.
@@ -56,7 +54,11 @@ public final class RoleMenuDefaults {
             Map.entry("student", ALL),
             Map.entry("attendance", ALL),
             Map.entry("statistics", ALL),
-            Map.entry("grade", TEACHER_AND_VIEWER),
+            // ★ 조회 전용에서 뺀다 — 성적 읽기 API 가 READONLY 에 열려 있지 않다
+            //   (`exam-forms` · `students/{id}/grades` · `/grades/exams` · `/grades/trend` 전부 403).
+            //   신상기록부·시간표와 같은 판단이다: 성적은 장학 취소 판정의 근거이고
+            //   조회 전용의 실사용 범위가 아직 정해지지 않았다. 메뉴만 열면 빈 화면이 「고장」으로 읽힌다
+            Map.entry("grade", WITH_TEACHER),
 
             // 담임 업무 — 행정·조회 전용에는 없다
             Map.entry("class", WITH_TEACHER),
@@ -74,7 +76,9 @@ public final class RoleMenuDefaults {
             //   그러면 독서실 좌석배치·좌석 이탈·배정 관리까지 같이 열린다
             Map.entry("patrol", WITH_TEACHER),
             Map.entry("survey", WITH_TEACHER),
-            Map.entry("lecture", WITH_TEACHER),
+            // ★ 특강은 담임 업무가 아니다 — 출석 체크는 행정이 하고, API 도 관리자만 열려 있다.
+            //   출석부가 **반 단위가 아니라 신청자 전원**이라 담임에게 열면 자기 반 밖 학생까지 보인다
+            Map.entry("lecture", MANAGERS),
 
             // 공지 — 전체공지는 행정, 반공지는 담임(CLAUDE.md §2)
             Map.entry("notice", EnumSet.of(Role.SUPER_ADMIN, Role.BRANCH_ADMIN,

@@ -47,7 +47,7 @@ public class ExamFormAdminService {
 
     @Transactional(readOnly = true)
     public List<ExamMaster> list(AuthPrincipal me, short year, Long academyId) {
-        requireScope(me, academyId);
+        requireReadScope(me, academyId);
         return examMasterRepository.findAllByScope(year, academyId);
     }
 
@@ -148,6 +148,28 @@ public class ExamFormAdminService {
     }
 
     /**
+     * 읽기 범위 — <b>공통 양식 목록은 지점 소속도 볼 수 있다.</b>
+     *
+     * <p>아래 {@link #requireScope}를 읽기에도 쓰고 있었더니 <b>담임이 성적 화면을 아예 못 썼다.</b>
+     * 양식은 거의 전부 공통 행({@code academy_id IS NULL})으로 들어 있어서,
+     * {@code academyId}를 비우면 「본사만」에 걸려 403이고 자기 지점을 넣으면 그 행들이 걸러져
+     * <b>0건</b>이 온다. 어느 쪽으로도 표의 열을 만들 수 없어 조회도 정정도 못 했다
+     * (정정은 {@code PUT .../grades/school-record}로 담임에게 열려 있다 — 0826 회신).
+     *
+     * <p><b>여는 것은 읽기뿐이다.</b> 만들기·고치기·삭제·전년도 복사는 {@link #requireScope}
+     * 그대로 본사다 — 지점이 공통 행을 고치면 나머지 열 지점 가입 화면이 같이 바뀐다.
+     * 목록 자체는 「올해 어떤 시험이 있나」일 뿐이라 지점이 봐도 새는 것이 없다.
+     */
+    private void requireReadScope(AuthPrincipal me, Long academyId) {
+        if (academyId == null) {
+            return;
+        }
+        if (!me.canAccessAcademy(academyId)) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+    }
+
+    /**
      * @param academyId {@code null}이면 전 지점 공통 — <b>본사만</b> 다룰 수 있다
      */
     private void requireScope(AuthPrincipal me, Long academyId) {
@@ -173,7 +195,7 @@ public class ExamFormAdminService {
     @Transactional(readOnly = true)
     public List<com.dlab.domain.grade.entity.ExamSubjectPreset> presets(
             AuthPrincipal me, short year, GradeType gradeType, Long academyId) {
-        requireScope(me, academyId);
+        requireReadScope(me, academyId);
         if (academyId == null) {
             return presetRepository.findOwn(year, null).stream()
                     .filter(p -> gradeType == null || p.getGradeType() == gradeType)
