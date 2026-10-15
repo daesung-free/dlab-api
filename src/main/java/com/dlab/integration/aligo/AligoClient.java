@@ -43,11 +43,20 @@ public class AligoClient {
     private final RestClient restClient;
 
     public AligoClient(AligoProperties properties) {
+        this(properties, RestClient.builder().requestFactory(factory()));
+    }
+
+    /**
+     * 테스트 이음새 — 호출할 서버를 바꿔 끼운다.
+     *
+     * <p><b>응답 해석을 테스트로 고정하려면 이것이 필요하다.</b> 이 클래스의 값은
+     * {@code result_code} 판정에 있는데(실패도 HTTP 200 이다), 실제 알리고로는
+     * 확인할 수 없다 — 호출 IP 등록이 끝나야 응답이 오고, 실패 응답은 일부러
+     * 만들어 낼 수도 없다.
+     */
+    AligoClient(AligoProperties properties, RestClient.Builder builder) {
         this.properties = properties;
-        this.restClient = RestClient.builder()
-                .baseUrl(BASE_URL)
-                .requestFactory(factory())
-                .build();
+        this.restClient = builder.baseUrl(BASE_URL).build();
 
         if (properties.testModeOrDefault()) {
             // 목업과 같은 함정이다 — 호출은 성공하고 과금도 없는데 수신자는 아무것도 못 받는다
