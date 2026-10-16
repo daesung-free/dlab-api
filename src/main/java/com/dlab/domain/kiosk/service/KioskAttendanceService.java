@@ -75,6 +75,7 @@ public class KioskAttendanceService {
     private final AttendancePolicy attendancePolicy;
     private final PenaltyRuleEngine penaltyRuleEngine;
     private final com.dlab.domain.attendance.service.StaffAttendanceService staffAttendanceService;
+    private final com.dlab.domain.attendance.service.AttendanceNotifier attendanceNotifier;
     private final Clock clock;
 
     /**
@@ -129,7 +130,7 @@ public class KioskAttendanceService {
 
         // ★ 원장은 decision.event(), 응답은 decision.reportedAs()다.
         //   보통 같지만 사유지각은 갈린다 — 원장엔 지각, 화면엔 등원
-        taggingLogRepository.save(new AttendanceTaggingLog(
+        AttendanceTaggingLog tagging = taggingLogRepository.save(new AttendanceTaggingLog(
                 enrollment.getAcademy(), enrollment, decision.event(),
                 AttendanceSource.KIOSK_NFC, at.atZone(clock.getZone()).toInstant(), date));
 
@@ -139,6 +140,14 @@ public class KioskAttendanceService {
         //   롤백되면 학생이 등원한 사실 자체가 사라진다
         penaltyRuleEngine.apply(enrollment, PenaltyTriggerType.ATTENDANCE,
                 decision.event().getCode(), date);
+
+        // ★ 원장 기준으로 학부모에게 알린다(디랩 1016 문구 1~5번). 사유지각은 원장이 지각이고
+        //   화면엔 등원인데, 둘 다 등원 알림으로 묶이므로 결과가 같다.
+        //
+        // ★ 맨 마지막에 둔다. REQUIRES_NEW 로 떼어 둬서 **알림은 즉시 커밋되는데** 태깅은
+        //   이 트랜잭션이 끝나야 확정된다 — 뒤에 실패할 일이 남아 있으면 「알림은 갔는데
+        //   태깅은 없는」 상태가 된다. 반대로 알림이 터져도 태깅은 남는다(예외를 삼킨다)
+        attendanceNotifier.notifyTagged(enrollment, tagging);
 
         return TagResult.accepted(enrollment, decision.reportedAs());
     }
@@ -219,9 +228,13 @@ public class KioskAttendanceService {
         }
 
         last.correctEventType(AttendanceEventType.OUTING);
-        taggingLogRepository.save(new AttendanceTaggingLog(
+        AttendanceTaggingLog tagging = taggingLogRepository.save(new AttendanceTaggingLog(
                 enrollment.getAcademy(), enrollment, AttendanceEventType.RETURN,
                 AttendanceSource.KIOSK_NFC, Instant.now(clock), date));
+
+        // 조퇴가 외출로 정정되고 복귀가 붙는 경로다. 학부모에게는 복귀 알림만 간다 —
+        // 「조퇴」가 이미 나갔으므로 정정 사실을 복귀로 덮는 셈이고, 그게 실제 상태다
+        attendanceNotifier.notifyTagged(enrollment, tagging);
 
         return enrollment;
     }

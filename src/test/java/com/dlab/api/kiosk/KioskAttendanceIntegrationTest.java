@@ -90,6 +90,14 @@ class KioskAttendanceIntegrationTest {
     @MockitoBean
     com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
+    /**
+     * ★ 알림은 {@code REQUIRES_NEW}라 이 트랜잭션의 학생·지점을 못 본다 — 결과를 확인할 수
+     * 없으므로 <b>호출이 걸리는가</b>만 본다(상벌점 트리거와 같은 방식).
+     * 보내는 내용은 {@code AttendanceNotifierTest}가 검증한다.
+     */
+    @MockitoBean
+    com.dlab.domain.attendance.service.AttendanceNotifier attendanceNotifier;
+
     MockMvc mvc;
     String token;
     Academy bundang;
@@ -182,6 +190,22 @@ class KioskAttendanceIntegrationTest {
                 .andExpect(jsonPath("$.data.att_gn").doesNotExist());
 
         assertThat(logCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("★ 태깅이 학부모 알림으로 이어진다 — 부르는 곳이 없으면 템플릿만 있고 아무 일도 안 난다")
+    void taggingTriggersGuardianNotification() throws Exception {
+        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+
+        var captor = org.mockito.ArgumentCaptor
+                .forClass(com.dlab.domain.attendance.entity.AttendanceTaggingLog.class);
+        org.mockito.Mockito.verify(attendanceNotifier)
+                .notifyTagged(org.mockito.ArgumentMatchers.any(), captor.capture());
+
+        // ★ 넘기는 것은 **저장이 끝난 원장 행**이다 — id가 중복 방지 키에 들어가므로
+        //   저장 전에 부르면 키가 전부 같아져 학부모가 첫 알림만 받는다
+        assertThat(captor.getValue().getId()).isNotNull();
+        assertThat(captor.getValue().getEventType()).isEqualTo(AttendanceEventType.CHECK_IN);
     }
 
     @Test

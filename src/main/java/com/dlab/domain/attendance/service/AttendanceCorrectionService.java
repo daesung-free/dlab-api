@@ -84,6 +84,14 @@ public class AttendanceCorrectionService {
         modificationRepository.save(AttendanceModification.ofTaggingAdded(
                 enrollment, date, eventType, recordedAt, reason));
 
+        // ★★ 여기서는 학부모 알림을 보내지 않는다 — 일부러다.
+        //    보정은 **과거 일자도 된다**(미래만 막는다). 붙이면 「3일 전 18:00에 하원했습니다」가
+        //    오늘 나가고, 학부모는 그게 어제 일인지 지금 일인지 알 수 없다.
+        //    디랩 문구도 「태깅 시점」 발송이고, 보정은 직원이 사실을 아는 상태에서 하는 일이다.
+        //
+        //    ⚠️ 그래서 **당일 하원 미태그를 수기 입력하면 하원 알림이 안 간다.** 알고 둔
+        //    구멍이다 — 필요해지면 「당일 보정만」으로 좁혀서 붙일 것. 통째로 붙이지 말 것.
+
         // 배치를 기다리면 화면이 그날 밤까지 옛 상태를 보여준다
         confirmService.confirmSingle(enrollment, date);
 
