@@ -122,6 +122,16 @@ services:
       #   .env 에만 넣고 여기 빠뜨리면 컨테이너까지 전달되지 않아 결제만 조용히 실패한다
       #   (CORS_ALLOWED_ORIGINS 로 한 번 겪은 일이다)
       KCP_PRIVATE_KEY_PASSWORD: ${KCP_PRIVATE_KEY_PASSWORD:-}
+      # 문자·알림톡(알리고). ★ 비어 있으면 목업이 남아 **문자가 로그로만 찍히는데
+      #   API 는 200 을 준다** — 인증번호가 아무에게도 가지 않는다.
+      # ★★ ALIGO_TEST_MODE 가 true 면 과금도 실제 발송도 없이 호출만 성공한다.
+      #    운영 전환 때 false 로 바꿀 것(기동 로그에 경고가 남는다).
+      # ★ ALIGO_SENDER_KEY(발신프로필 키)는 알림톡 전용이다 — 문자는 없이도 나간다.
+      ALIGO_API_KEY: ${ALIGO_API_KEY:-}
+      ALIGO_USER_ID: ${ALIGO_USER_ID:-}
+      ALIGO_SENDER_KEY: ${ALIGO_SENDER_KEY:-}
+      ALIGO_SENDER_PHONE: ${ALIGO_SENDER_PHONE:-}
+      ALIGO_TEST_MODE: ${ALIGO_TEST_MODE:-true}
       # ★ 저장용 비밀키(AES-256). 도어락 번호를 암호화해 보관하는 데 쓴다.
       #   Base64 로 인코딩된 32바이트여야 한다 — `openssl rand -base64 32` 로 만든다.
       #   비어 있으면 앱은 정상 기동하고 **도어락 번호 등록만** 실패한다.
