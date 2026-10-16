@@ -585,6 +585,16 @@ public class AdminMasterController {
          * <p>취소 <b>판정</b>은 여기가 아니라 {@code /api/v1/admin/scholarship-reviews}다 —
          * 자동 판정 결과를 사람이 확정하는 흐름이라 축이 다르다.
          */
+    /*
+     * ★ 조회는 STAFF 에도 열어 둔다 — 클래스 기본값은 SUPER_ADMIN · BRANCH_ADMIN 이다.
+     *   청구 발행이 STAFF 권한인데(POST /admin/tuition/billings/**) 장학을 못 읽으면
+     *   데스크가 <b>할인율 근거 없이 손으로 숫자를 넣게 된다</b> — 그 값으로 청구가
+     *   나가고, 장학과 어긋나도 아무도 모른다. 1016 피드백 2-5 가 요구한 것이
+     *   「청구 등록 시 장학명·할인율 표기」다.
+     *
+     *   부여(POST)·회수는 그대로 상위 권한이다. 읽는 것과 주는 것은 다르다.
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     @GetMapping("/scholarships")
     public ApiResponse<List<MasterResponses.ScholarshipItem>> scholarships(@RequestParam Long enrollmentId) {
         return ApiResponse.success(masterDataService.scholarshipsOf(enrollmentId).stream()
