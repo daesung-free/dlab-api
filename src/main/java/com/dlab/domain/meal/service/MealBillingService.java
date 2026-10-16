@@ -82,34 +82,74 @@ public class MealBillingService {
      * 그 달 지점 전체를 한 번에 발행.
      *
      * <p>급식은 <b>월 단위 일괄 결제</b>라(A-9) 건별로 누르는 화면이 아니다.
-     * 이미 발행됐거나 내역이 없는 주문은 <b>조용히 건너뛴다</b> — 한 건 때문에
-     * 전체가 멈추면 데스크가 어디까지 됐는지 모른다.
+     * 이미 발행됐거나 내역이 없는 주문은 건너뛴다 — 한 건 때문에 전체가 멈추면
+     * 데스크가 어디까지 됐는지 모른다.
      *
-     * @return 새로 발행된 청구 목록
+     * <p>★ <b>건너뛴 주문은 사유와 함께 돌려준다.</b> 발행 건수만 주면
+     * <i>"200명 중 197건 발행"</i> 에서 <b>빠진 셋이 누구인지 화면이 알 수 없다</b> —
+     * 그 셋은 단가가 없어 빠진 것일 수 있고, 그러면 급식비가 영영 청구되지 않는다.
+     * 엑셀 업로드를 <b>오류행이 있어도 정상행은 반영하고 왜 빠졌는지 알려주는</b>
+     * 방식으로 둔 것과 같은 판단이다.
      */
     @Transactional
-    public List<Billing> issueMonth(AuthPrincipal me, Long academyId, YearMonth month,
-                                    LocalDate dueDate) {
+    public MonthIssueOutcome issueMonth(AuthPrincipal me, Long academyId, YearMonth month,
+                                        LocalDate dueDate) {
         if (!me.canAccessAcademy(academyId)) {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
 
         List<MealOrder> orders = orderRepository.findByAcademyAndMonth(academyId, month.atDay(1));
         List<Billing> issued = new java.util.ArrayList<>();
-        int skipped = 0;
+        List<SkippedOrder> skipped = new java.util.ArrayList<>();
 
         for (MealOrder order : orders) {
-            if (order.isBilled() || order.activeItems().isEmpty()
-                    || order.activeItems().stream().anyMatch(i -> i.getUnitPrice() == null)) {
-                skipped++;
+            String reason = skipReason(order);
+            if (reason != null) {
+                skipped.add(SkippedOrder.of(order, reason));
                 continue;
             }
             issued.add(issue(me, order.getId(), dueDate));
         }
 
         log.info("급식 일괄 청구: academyId={}, {}, 발행={}건, 건너뜀={}건",
-                academyId, month, issued.size(), skipped);
-        return issued;
+                academyId, month, issued.size(), skipped.size());
+        return new MonthIssueOutcome(issued, skipped);
+    }
+
+    /** 건너뛸 사유. 없으면 {@code null} — 발행 대상이다. */
+    private String skipReason(MealOrder order) {
+        if (order.isBilled()) {
+            return "이미 청구가 발행됐습니다.";
+        }
+        if (order.activeItems().isEmpty()) {
+            return "신청 내역이 없습니다(전부 취소됐습니다).";
+        }
+        if (order.activeItems().stream().anyMatch(i -> i.getUnitPrice() == null)) {
+            // ★ 이것만은 운영이 손을 써야 한다 — 업체·단가를 등록하지 않으면 영영 안 나간다
+            return "단가가 등록되지 않아 금액을 알 수 없습니다. 급식업체 단가를 먼저 등록해 주세요.";
+        }
+        return null;
+    }
+
+    /**
+     * 일괄 발행 결과.
+     *
+     * @param issued  새로 발행된 청구
+     * @param skipped 건너뛴 주문과 사유. <b>비어 있어야 정상</b>이다
+     */
+    public record MonthIssueOutcome(List<Billing> issued, List<SkippedOrder> skipped) {
+    }
+
+    /** 건너뛴 주문 한 줄. 화면이 <b>누가 빠졌는지</b>를 보여줄 수 있어야 한다. */
+    public record SkippedOrder(Long orderId, String studentNo, String studentName,
+                               String reason) {
+
+        static SkippedOrder of(MealOrder order, String reason) {
+            return new SkippedOrder(order.getId(),
+                    order.getEnrollment().getStudentNo(),
+                    order.getEnrollment().getStudent().getName(),
+                    reason);
+        }
     }
 
     /**
