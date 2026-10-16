@@ -40,6 +40,22 @@ FROM (VALUES
 -- 이미 있으면 건너뛴다. 개발 중 손으로 넣어둔 지점을 덮어쓰지 않는다
 WHERE NOT EXISTS (SELECT 1 FROM academy a WHERE a.acad_cd = v.cd);
 
+-- ── 관(building) ─────────────────────────────────────────────
+-- ★★ 지점마다 본관을 같이 넣는다. 없으면 **구역을 만들 수 없다** —
+--    study_area.building_id 가 NOT NULL 이다.
+--
+-- ⚠️ 마이그레이션(V20260914100000)이 `INSERT INTO building ... FROM academy` 로 백필하는데
+--    그건 **마이그레이션 시점**에 돈다. 지점 시드는 그 뒤에 손으로 들어오므로 빈 DB 에서는
+--    **관이 0건**이 되고, 좌석 시드가 `null value in column "building_id"` 로 멈춘다
+--    (실제로 그렇게 멈췄다). 지점별 교습비·급식업체가 0건이 되던 것과 같은 함정이다(§4).
+--
+-- ★ 컷오버에서도 같다 — 운영에 지점을 넣을 때 관을 같이 넣지 않으면 좌석 구역을 못 만든다.
+INSERT INTO building (academy_id, code, name, sort_order, seat_cd_offset, created_by)
+SELECT a.id, 'MAIN', '본관', 0, 0, 0
+FROM academy a
+WHERE NOT EXISTS (
+    SELECT 1 FROM building b WHERE b.academy_id = a.id AND b.code = 'MAIN');
+
 COMMENT ON COLUMN academy.acad_cd IS
     '대성전산 부여 지점코드. 연속이 아니다(31~34 다음 42) — 키오스크가 이 값으로 인증한다';
 COMMENT ON COLUMN academy.store_code IS
