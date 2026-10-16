@@ -171,7 +171,15 @@ public class TuitionPricingService {
                             int discountRate, int discountAmount, int billedAmount,
                             String rounding) {
 
-        /** 월 전체 청구인가 — 화면이 「정액」과 「일할」 식을 가른다. */
+        /**
+         * 월 전체 청구인가 — 화면이 「정액」과 「일할」 식을 가른다.
+         *
+         * <p>⚠️ <b>{@code @JsonProperty} 가 없으면 응답에 실리지 않는다.</b> 레코드는
+         * <b>컴포넌트만</b> 직렬화되고 파생 메서드는 빠진다 — 실제로 한 번 빠뜨렸고,
+         * 화면은 <b>없는 칸을 {@code undefined} 로 받아 「일할」로 읽는다.</b>
+         * 그러면 월 전체 청구에 나눗셈 식이 붙어 18원이 어긋난 값이 화면에 적힌다.
+         */
+        @com.fasterxml.jackson.annotation.JsonProperty("wholeMonth")
         public boolean wholeMonth() {
             return remainingDays == null;
         }

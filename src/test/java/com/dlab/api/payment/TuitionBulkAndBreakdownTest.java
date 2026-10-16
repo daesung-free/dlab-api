@@ -43,6 +43,7 @@ class TuitionBulkAndBreakdownTest {
     @Autowired TuitionPricingService pricingService;
     @Autowired EntityManager em;
     @Autowired org.springframework.transaction.support.TransactionTemplate tx;
+    @Autowired tools.jackson.databind.ObjectMapper objectMapper;
 
     @MockitoBean
     com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
@@ -229,5 +230,22 @@ class TuitionBulkAndBreakdownTest {
         assertThat(billing.getServiceFrom()).isEqualTo(LocalDate.of(YEAR, 3, 15));
         assertThat(billing.getServiceTo()).isEqualTo(LocalDate.of(YEAR, 3, 31));
         assertThat(billing.coversWholeMonth()).isFalse();
+    }
+
+    @Test
+    @DisplayName("★★ wholeMonth 가 응답 JSON 에 실린다 — 레코드 파생 메서드는 기본으로 빠진다")
+    void wholeMonthIsSerialized() {
+        TuitionPrice price = pricingService.price(YEAR, GradeType.N_SU, SeatType.GENERAL,
+                academy.getId());
+
+        String whole = objectMapper.writeValueAsString(
+                pricingService.breakdown(price, YEAR, 3, academy.getId(), 0, null));
+        String partial = objectMapper.writeValueAsString(
+                pricingService.breakdown(price, YEAR, 3, academy.getId(), 0, 12));
+
+        // ★ 실제로 한 번 빠뜨렸다. 칸이 없으면 화면은 undefined 를 「일할」로 읽고,
+        //   월 전체 청구에 나눗셈 식을 붙여 18원이 어긋난 값을 적는다
+        assertThat(whole).contains("\"wholeMonth\":true");
+        assertThat(partial).contains("\"wholeMonth\":false");
     }
 }
