@@ -48,6 +48,8 @@ public class MasterDataService {
     private final AcademyRepository academyRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final ScholarshipMasterService scholarshipMasterService;
+    private final com.dlab.domain.master.repository.ScholarshipMasterRepository
+            scholarshipMasterRepository;
 
     // ── 학과 ──
 
@@ -605,9 +607,50 @@ public class MasterDataService {
 
     // ── 장학 ──
 
+    /**
+     * 그 학생의 장학 — <b>표시 이름을 서버가 붙여서</b> 내린다.
+     *
+     * <h2>★★ 표시 이름을 화면이 만들면 안 된다</h2>
+     * 저장된 값은 <b>코드</b>({@code CSAT_100})다. 그걸 그대로 보여주면 데스크가 읽을 수 없고,
+     * 화면이 각자 변환하면 <b>매출장·청구 근거·취소 판정이 서로 다른 이름을 보게 된다</b> —
+     * 특히 청구의 {@code discount_source} 는 <b>화면이 보낸 문자열이 그대로 박히므로</b>,
+     * 변환이 화면마다 다르면 과거 청구의 장학명 표기가 들쭉날쭉해진다.
+     *
+     * <h2>★★ {@code registered=false} 는 표시 문제가 아니다</h2>
+     * 마스터에 없는 코드라는 뜻이고, <b>취소 판정이 그 학생을 조용히 건너뛴다</b>
+     * ({@code scholarship_cancel_rule.scholarship_type} 과 문자열 일치로 걸린다).
+     * 오류도 안 나고 검토 목록에 안 뜰 뿐이라 아무도 알아채지 못한다 —
+     * <b>화면이 이 값을 경고로 띄워야 그 학생이 드러난다.</b>
+     *
+     * <p>조회 축은 <b>부여할 때와 같다</b>({@code findApplicableByCode}) — 다르면
+     * 「부여는 됐는데 이름이 안 나오는」 장학이 생긴다.
+     */
     @Transactional(readOnly = true)
-    public List<Scholarship> scholarshipsOf(Long enrollmentId) {
-        return scholarshipRepository.findByEnrollmentId(enrollmentId);
+    public List<ScholarshipWithName> scholarshipsOf(Long enrollmentId) {
+        List<Scholarship> scholarships = scholarshipRepository.findByEnrollmentId(enrollmentId);
+        List<ScholarshipWithName> result = new java.util.ArrayList<>();
+
+        for (Scholarship s : scholarships) {
+            var master = scholarshipMasterRepository.findApplicableByCode(
+                    // ★ scholarship 에는 year 가 없다 — 등록 건이 연도를 내포한다(V1 주석)
+                    s.getEnrollment().getYear(), s.getScholarshipType(),
+                    s.getAcademy().getId());
+            result.add(new ScholarshipWithName(s,
+                    // 못 찾으면 코드를 그대로 쓴다 — 빈 칸으로 두면 화면에 아무것도 안 뜨고
+                    // 「장학이 없다」로 읽힌다
+                    master.map(com.dlab.domain.master.entity.ScholarshipMaster::getName)
+                            .orElse(s.getScholarshipType()),
+                    master.isPresent()));
+        }
+        return result;
+    }
+
+    /**
+     * @param displayName 데스크가 읽는 이름(예: {@code 수능 100%}). 마스터에 없으면 코드 그대로
+     * @param registered  마스터에 있는 코드인가. ⚠️ {@code false} 면 <b>취소 판정에서 빠진다</b>
+     */
+    public record ScholarshipWithName(Scholarship scholarship, String displayName,
+                                      boolean registered) {
     }
 
     /**
@@ -627,8 +670,9 @@ public class MasterDataService {
      *                     입력한 값이 아닌 것이 저장된 줄 모른다
      */
     @Transactional
-    public Scholarship grantScholarship(Long enrollmentId, String type, BigDecimal discountRate,
-                                        AuthPrincipal principal) {
+    public ScholarshipWithName grantScholarship(Long enrollmentId, String type,
+                                               BigDecimal discountRate,
+                                               AuthPrincipal principal) {
         StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
         verifyAccess(enrollment.getAcademy().getId(), principal);
@@ -644,8 +688,12 @@ public class MasterDataService {
                                     .toPlainString()));
         }
 
-        return scholarshipRepository.save(new Scholarship(enrollment.getAcademy(), enrollment,
-                master.getCode(), master.getDiscountRate()));
+        // ★ 마스터를 이미 들고 있으니 이름을 함께 돌려준다 — 화면이 변환하지 않게 한다.
+        //   부여 직후라 코드는 반드시 마스터에 있다(위에서 requireApplicable 로 확인했다)
+        return new ScholarshipWithName(
+                scholarshipRepository.save(new Scholarship(enrollment.getAcademy(), enrollment,
+                        master.getCode(), master.getDiscountRate())),
+                master.getName(), true);
     }
 
     @Transactional
