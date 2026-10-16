@@ -63,10 +63,28 @@ public final class MasterResponses {
         }
     }
 
-    public record ScholarshipItem(Long id, Long enrollmentId, String scholarshipType, BigDecimal discountRate) {
-        public static ScholarshipItem from(Scholarship s) {
+    /**
+     * 학생에게 부여된 장학 한 줄.
+     *
+     * @param scholarshipType 저장된 <b>코드</b>({@code CSAT_100}). ★ <b>취소 규칙이 이 값과
+     *                        문자열 일치로 걸린다</b> — 화면에 함께 노출할 것
+     * @param displayName     데스크가 읽는 이름({@code 수능 100%}). ★ <b>청구 등록 시
+     *                        {@code discountSource} 로 이 값을 보내면 된다</b> — 화면이
+     *                        따로 변환하면 매출장·청구 근거·취소 판정이 서로 다른 이름을 본다
+     * @param registered      마스터에 있는 코드인가. ⚠️ <b>{@code false} 면 취소 판정에서
+     *                        이 학생이 조용히 빠진다</b>(오류도 안 나고 검토 목록에 안 뜬다) —
+     *                        화면이 경고로 띄워야 드러난다
+     */
+    public record ScholarshipItem(Long id, Long enrollmentId, String scholarshipType,
+                                  String displayName, boolean registered,
+                                  BigDecimal discountRate) {
+
+        public static ScholarshipItem from(
+                com.dlab.domain.master.service.MasterDataService.ScholarshipWithName w) {
+            Scholarship s = w.scholarship();
             return new ScholarshipItem(s.getId(), s.getEnrollment().getId(),
-                    s.getScholarshipType(), s.getDiscountRate());
+                    s.getScholarshipType(), w.displayName(), w.registered(),
+                    s.getDiscountRate());
         }
     }
 
