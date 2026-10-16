@@ -64,6 +64,7 @@ public class SurveyService {
     private final com.dlab.common.excel.ExcelExporter excelExporter;
     private final SurveyResponseRepository responseRepository;
     private final SurveyParticipantRepository participantRepository;
+    private final SurveyNotifier surveyNotifier;
     private final AccountRepository accountRepository;
     private final AcademyRepository academyRepository;
     private final ClassMasterRepository classMasterRepository;
@@ -417,18 +418,54 @@ public class SurveyService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "대상 학생을 골라 주세요.");
         }
 
-        int sent = 0;
+        List<SurveyParticipant> added = new ArrayList<>();
         for (Long enrollmentId : enrollmentIds.stream().distinct().toList()) {
             if (participantRepository.isTarget(id, enrollmentId)) {
                 continue;
             }
             var enrollment = enrollmentRepository.findById(enrollmentId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.STUDENT_NOT_FOUND));
-            participantRepository.save(new SurveyParticipant(survey, enrollment));
-            sent++;
+            added.add(participantRepository.save(new SurveyParticipant(survey, enrollment)));
         }
-        log.info("설문 대상자 발송: id={}, 신규={}, 처리자={}", id, sent, me.accountId());
-        return sent;
+        // ★ 이번에 새로 만든 행에만 보낸다 — 이미 대상이던 학생에게 또 보내면
+        //   같은 설문 안내를 두 번 받는다(두 번 누르는 것이 실제로 있다)
+        surveyNotifier.notifyAssigned(survey, added);
+        log.info("설문 대상자 발송: id={}, 신규={}, 처리자={}", id, added.size(), me.accountId());
+        return added.size();
+    }
+
+    /**
+     * 미응답자 독촉 (F-4.6).
+     *
+     * <p>★★ <b>대상자 행이 없는 설문은 거절한다.</b> 범위로 돌리는 일반 설문은
+     * {@code SurveyParticipant} 행을 만들지 않아 <b>누가 아직 안 냈는지 알 수 없다.</b>
+     * 그때 0건을 보내고 성공을 돌려주면 데스크는 「독촉을 보냈다」고 알고 끝내는데
+     * <b>아무에게도 가지 않았다.</b>
+     *
+     * <p>⚠️ 문자는 <b>건당 과금</b>이고 되돌릴 수 없다 — 화면은 {@link #remindPreview} 로
+     * 건수를 확인받은 뒤 이걸 부른다.
+     *
+     * @return 발송을 시도한 수
+     */
+    @Transactional
+    public int remindPending(AuthPrincipal me, Long id) {
+        Survey survey = requireWritable(me, id);
+        List<SurveyParticipant> participants = participantRepository.findBySurvey(id);
+
+        surveyNotifier.requireRemindable(surveyNotifier.preview(participants));
+        return surveyNotifier.notifyPending(survey, participants);
+    }
+
+    /**
+     * 독촉 발송 전 집계 — <b>화면 확인 모달용</b>.
+     *
+     * <p>★ 「몇 명에게 가는가」를 누르기 전에 보여주지 않으면 전 지점 설문에서
+     * 수천 건이 한 번에 나간다.
+     */
+    @Transactional(readOnly = true)
+    public SurveyNotifier.Preview remindPreview(AuthPrincipal me, Long id) {
+        requireReadable(me, id);
+        return surveyNotifier.preview(participantRepository.findBySurvey(id));
     }
 
     /**
