@@ -51,7 +51,8 @@ public class MealBillingService {
     public Billing issue(AuthPrincipal me, Long orderId, LocalDate dueDate) {
         MealOrder order = requireOrder(me, orderId);
 
-        if (order.isBilled()) {
+        // ★ isBilled() 가 아니다 — 취소된 청구가 붙어 있으면 다시 발행할 수 있어야 한다
+        if (order.hasActiveBilling()) {
             throw new BusinessException(ErrorCode.BILLING_ALREADY_ISSUED,
                     "이미 청구가 발행된 급식 주문입니다.");
         }
@@ -118,7 +119,7 @@ public class MealBillingService {
 
     /** 건너뛸 사유. 없으면 {@code null} — 발행 대상이다. */
     private String skipReason(MealOrder order) {
-        if (order.isBilled()) {
+        if (order.hasActiveBilling()) {
             return "이미 청구가 발행됐습니다.";
         }
         if (order.activeItems().isEmpty()) {

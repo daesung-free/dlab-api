@@ -89,6 +89,18 @@ public class MealOrder extends BaseEntity {
         return activeItems().stream().mapToInt(MealOrderItem::amount).sum();
     }
 
+    /**
+     * 단가가 없는 끼니가 섞여 있는가 — <b>합계를 믿을 수 없다는 뜻</b>이다.
+     *
+     * <p>★ {@link #totalAmount()} 는 단가 없는 끼니를 <b>0으로 더한다.</b> 그래서 단가를
+     * 등록하지 않은 주문이 합계 <b>0원</b>으로 내려가고, 화면은 그것을 <b>「무료」로 읽는다</b> —
+     * 끼니 단위에서 {@code unitPrice} 를 {@code null} 로 지켜 「무료」와 「금액 미상」을
+     * 구분해 둔 것이 주문 단위에서 무너지는 자리다. 표시 계층이 이걸로 가른다.
+     */
+    public boolean hasUnpricedItem() {
+        return activeItems().stream().anyMatch(i -> i.getUnitPrice() == null);
+    }
+
     public YearMonth month() {
         return YearMonth.from(targetMonth);
     }
@@ -143,6 +155,21 @@ public class MealOrder extends BaseEntity {
 
     public boolean isBilled() {
         return billing != null;
+    }
+
+    /**
+     * <b>살아 있는</b> 청구가 붙어 있는가 — 재발행 가능 여부를 이걸로 판단한다.
+     *
+     * <p>★★ {@link #isBilled()} 는 <b>취소 여부를 보지 않는다.</b> 그래서 잘못 발행한
+     * 급식 청구를 데스크가 취소하면 주문은 여전히 「발행됨」으로 남아
+     * <b>다시 발행할 수 없는 상태로 영구히 굳는다</b> — 그 학생 급식비는 그대로 미청구가 된다.
+     * 발행 판정에는 이쪽을 쓴다.
+     *
+     * <p>{@code isBilled()} 를 그대로 둔 이유는 <b>이력</b>이기 때문이다. 목록의 청구번호·
+     * 청구금액은 취소된 청구라도 보여야 한다 — 안 보이면 데스크가 「취소한 적이 없다」로 읽는다.
+     */
+    public boolean hasActiveBilling() {
+        return billing != null && !billing.isCancelled();
     }
 
     /**

@@ -46,16 +46,22 @@ public class AdminBillingController {
     public ApiResponse<List<BillingResponse>> list(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam(required = false) Long academyId,
                                                    @RequestParam short year) {
-        return ApiResponse.success(billingService.findByAcademy(me, academyId, year).stream()
-                .map(BillingResponse::from).toList());
+        List<com.dlab.domain.payment.entity.Billing> billings =
+                billingService.findByAcademy(me, academyId, year);
+        var items = billingService.itemsOf(billings);
+        return ApiResponse.success(billings.stream()
+                .map(b -> BillingResponse.from(b, items)).toList());
     }
 
     /** 그 학생의 청구 전체. <b>완납 건도 내린다</b> — 미납만 주면 "낸 것"이 화면에서 사라진다. */
     @GetMapping("/students/{enrollmentId}")
     public ApiResponse<List<BillingResponse>> byStudent(@CurrentAccount AuthPrincipal me,
                                                         @PathVariable Long enrollmentId) {
-        return ApiResponse.success(billingService.findByStudent(me, enrollmentId).stream()
-                .map(BillingResponse::from).toList());
+        List<com.dlab.domain.payment.entity.Billing> billings =
+                billingService.findByStudent(me, enrollmentId);
+        var items = billingService.itemsOf(billings);
+        return ApiResponse.success(billings.stream()
+                .map(b -> BillingResponse.from(b, items)).toList());
     }
 
     /**
@@ -131,21 +137,62 @@ public class AdminBillingController {
             @NotNull(message = "수납 수단은 필수입니다.") PaymentMethod method) {
     }
 
-    /** @param unpaidAmount 미납액. 키오스크 {@code mi_amt}와 같은 값이다 */
+    /**
+     * @param unpaidAmount 미납액. 키오스크 {@code mi_amt}와 같은 값이다
+     * @param items        하위 항목. <b>교습비·독서실비가 한 청구 안에서 나뉘어 있다</b> —
+     *                     합계만으로는 환불 계산이 성립하지 않는다(아래 참고).
+     *                     급식·특강처럼 나눌 것이 없는 청구는 <b>빈 목록</b>이다
+     */
     public record BillingResponse(Long id, String studentNo, String studentName,
                                   String name, BillingType billingType,
                                   int suppliedAmount, int discountAmount, int billedAmount,
                                   int receivedAmount, int unpaidAmount,
-                                  LocalDate dueDate, BillingStatus status) {
+                                  LocalDate dueDate, BillingStatus status,
+                                  List<BillingItemResponse> items) {
 
-        static BillingResponse from(Billing b) {
+        static BillingResponse from(Billing b,
+                java.util.Map<Long, List<com.dlab.domain.payment.entity.BillingItem>> itemsByBilling) {
             return new BillingResponse(b.getId(),
                     b.getEnrollment().getStudentNo(),
                     b.getEnrollment().getStudent().getName(),
                     b.getName(), b.getBillingType(),
                     b.getSuppliedAmount(), b.getDiscountAmount(), b.getBilledAmount(),
                     b.receivedAmount(), b.unpaidAmount(),
-                    b.getDueDate(), b.getStatus());
+                    b.getDueDate(), b.getStatus(),
+                    itemsByBilling.getOrDefault(b.getId(), List.of()).stream()
+                            .map(BillingItemResponse::from).toList());
+        }
+
+        /** 항목을 모르는 자리(생성·수납 직후 단건 응답)에서 쓴다. */
+        static BillingResponse from(Billing b) {
+            return from(b, java.util.Map.of());
+        }
+    }
+
+    /**
+     * 청구 하위 항목.
+     *
+     * <h2>★ 왜 합계만으로는 안 되는가</h2>
+     * 한 청구(750,000)가 <b>교습비 660,000 + 독서실비 90,000</b>으로 나뉘어 있고
+     * <b>환불 계산 방식이 서로 다르다</b> — 교습비는 이용기간 <b>구간</b>(1/3·1/2),
+     * 독서실비는 <b>일할</b>이다. 합계 한 줄로는 나눌 수가 없다.
+     *
+     * @param suppliedAmount <b>항목별 정가</b>. ★ 환불 차감이 <b>정상가 기준</b>이라
+     *                       (할인받았으면 차감이 납부액보다 커질 수 있다) 이 값이 없으면
+     *                       청구 합계에서 교습비 몫을 되짚을 수 없다
+     * @param discountAmount 할인액. ⚠️ <b>독서실비는 규정상 할인이 없다</b>
+     *                       ({@code isDiscountable()} 이 false) — 화면에 할인 칸을 두지 말 것
+     */
+    public record BillingItemResponse(Long id,
+                                      com.dlab.domain.payment.entity.BillingItemType itemType,
+                                      int suppliedAmount, int discountAmount, int billedAmount,
+                                      boolean discountable) {
+
+        static BillingItemResponse from(com.dlab.domain.payment.entity.BillingItem i) {
+            return new BillingItemResponse(i.getId(), i.getItemType(),
+                    i.getSuppliedAmount(), i.getDiscountAmount(), i.getBilledAmount(),
+                    // 화면이 할인 칸을 열어도 되는지 — 독서실비는 false 다
+                    i.getItemType().isDiscountable());
         }
     }
 }

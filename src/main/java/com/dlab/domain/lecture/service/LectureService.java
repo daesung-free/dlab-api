@@ -41,6 +41,7 @@ public class LectureService {
     private final LectureAttendanceRepository attendanceRepository;
     private final AcademyRepository academyRepository;
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.facility.repository.SeatAssignmentRepository seatAssignmentRepository;
     private final com.dlab.domain.user.repository.TeacherRepository teacherRepository;
     private final com.dlab.domain.lecture.repository.LectureCategoryRepository categoryRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
@@ -455,13 +456,27 @@ public class LectureService {
                             ca.getClassMaster().getName()));
         }
 
+        // 좌석도 같은 이유로 한 번에 받는다 — 행마다 조회하면 쿼리가 인원수만큼 나간다
+        java.util.Map<Long, String> seatNos = new java.util.HashMap<>();
+        if (!enrollmentIds.isEmpty()) {
+            seatAssignmentRepository.findActiveByEnrollmentIds(enrollmentIds)
+                    .forEach(sa -> seatNos.put(sa.getEnrollment().getId(),
+                            sa.getSeat().getSeatCd()));
+        }
+
         return applications.stream()
-                .map(a -> new RosterEntry(a, classNames.get(a.getEnrollment().getId())))
+                .map(a -> new RosterEntry(a, classNames.get(a.getEnrollment().getId()),
+                        seatNos.get(a.getEnrollment().getId())))
                 .toList();
     }
 
-    /** @param className 고정반. 미배정이면 비어 있다 */
-    public record RosterEntry(LectureApplication application, String className) {
+    /**
+     * @param className 고정반. 미배정이면 비어 있다
+     * @param seatNo    독서실 좌석번호. ⚠️ <b>배정 전이면 비어 있다</b> — 「미배정」이라고
+     *                  쓰지 말 것이다. <b>좌석을 쓰지 않는 특강</b>도 있어서, 빈 값이
+     *                  곧 문제라는 뜻이 아니다
+     */
+    public record RosterEntry(LectureApplication application, String className, String seatNo) {
     }
 
     @Transactional(readOnly = true)

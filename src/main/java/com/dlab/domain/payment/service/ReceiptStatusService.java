@@ -44,6 +44,7 @@ public class ReceiptStatusService {
 
     private final BillingRepository billingRepository;
     private final com.dlab.domain.payment.repository.PaymentTransactionRepository transactionRepository;
+    private final com.dlab.domain.payment.repository.BillingItemRepository itemRepository;
     private final ExcelExporter excelExporter;
 
     /**
@@ -87,11 +88,18 @@ public class ReceiptStatusService {
                         : transactionRepository.findActiveByBillingIds(billingIds).stream()
                                 .collect(Collectors.groupingBy(t -> t.getBilling().getId()));
 
+        // 하위 항목도 같은 방식이다 — 교습비·독서실비를 두 줄로 펼치는 데 쓴다(아래 Row 참고)
+        Map<Long, List<com.dlab.domain.payment.entity.BillingItem>> itemsByBilling =
+                billingIds.isEmpty() ? Map.of()
+                        : itemRepository.findByBillingIds(billingIds).stream()
+                                .collect(Collectors.groupingBy(i -> i.getBilling().getId()));
+
         return raw.stream()
                 .map(r -> {
                     Billing b = (Billing) r[0];
                     return Row.of(b, ((Number) r[1]).intValue(),
-                            paymentsByBilling.getOrDefault(b.getId(), List.of()));
+                            paymentsByBilling.getOrDefault(b.getId(), List.of()),
+                            itemsByBilling.getOrDefault(b.getId(), List.of()));
                 })
                 .filter(row -> types == null || types.isEmpty()
                         || types.contains(row.billing().getBillingType()))
@@ -213,12 +221,28 @@ public class ReceiptStatusService {
      * @param payments 살아 있는 수납 거래. <b>언제 무엇으로 냈는지</b>는 청구 한 줄로는
      *                 알 수 없어 함께 내린다 — 화면 상단의 결제수단별 집계가 이 값을 쓴다
      */
+    /**
+     * @param items 청구 하위 항목.
+     *
+     *     <h2>★ 왜 수납현황이 이걸 들고 있어야 하는가</h2>
+     *     <b>통합 매출장이 보는 쿼리가 이것</b>이고, 한 청구(750,000)가 교습비·독서실비로
+     *     나뉘어 있다. 합계 한 줄만 보여주면 할인 건에서 <b>데스크가 독서실비도 깎인 줄 안다</b> —
+     *     할인은 교습비에만 붙는다(독서실비는 규정상 할인이 없다).
+     *
+     *     <p>⚠️ <b>청구 목록({@code /admin/billings})으로 이어 붙일 수 없다.</b> 이 행에
+     *     {@code enrollmentId} 가 없어 학생별 조회로 잇지 못하고, 연도 전체를 한 번 더
+     *     받아야 해서 지점이 크면 전송량이 두 배가 된다.
+     *
+     *     <p>항목이 없는 청구(급식·특강)는 <b>빈 목록</b>이고 그게 정상이다.
+     */
     public record Row(Billing billing, int received,
-                      List<com.dlab.domain.payment.entity.PaymentTransaction> payments) {
+                      List<com.dlab.domain.payment.entity.PaymentTransaction> payments,
+                      List<com.dlab.domain.payment.entity.BillingItem> items) {
 
         static Row of(Billing billing, int received,
-                      List<com.dlab.domain.payment.entity.PaymentTransaction> payments) {
-            return new Row(billing, received, payments);
+                      List<com.dlab.domain.payment.entity.PaymentTransaction> payments,
+                      List<com.dlab.domain.payment.entity.BillingItem> items) {
+            return new Row(billing, received, payments, items);
         }
 
         /** 과납이어도 음수로 내려가지 않는다 — 미납액 합계가 줄어들면 안 된다. */

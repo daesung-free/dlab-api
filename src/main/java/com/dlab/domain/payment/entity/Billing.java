@@ -195,6 +195,11 @@ public class Billing extends BaseEntity {
      * 이유는 <b>돈을 돌려준 기록</b>이 남아야 하기 때문이다 — 청구만 지우면 환불했는지
      * 안 했는지 알 수 없다.
      */
+    /** 취소된 청구인가. <b>취소된 청구는 「없는 청구」로 취급해야 하는 자리가 있다</b> — 아래 참고. */
+    public boolean isCancelled() {
+        return status == BillingStatus.CANCELLED;
+    }
+
     public void cancel() {
         if (receivedAmount() > 0) {
             throw new BusinessException(ErrorCode.BILLING_HAS_PAYMENT,

@@ -16,6 +16,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class BillingService {
 
     private final BillingRepository billingRepository;
+    private final com.dlab.domain.payment.repository.BillingItemRepository itemRepository;
     private final PaymentTransactionRepository transactionRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final Clock clock;
@@ -47,6 +50,27 @@ public class BillingService {
     public List<Billing> findByAcademy(AuthPrincipal me, Long academyId, short year) {
         Long resolved = me.requireAcademyScope(academyId);
         return billingRepository.findByAcademyAndYear(resolved, year);
+    }
+
+    /**
+     * 청구 여럿의 <b>하위 항목</b>을 청구 ID 로 묶어 읽는다.
+     *
+     * <p>★ <b>항목을 행마다 꺼내지 말 것.</b> {@code Billing.items} 는 lazy 라
+     * 목록에서 그렇게 하면 쿼리가 청구 수만큼 나간다(수납현황이 거래를 ID 로 모아
+     * 한 번에 읽는 것과 같은 이유다).
+     *
+     * <p>항목이 <b>없는 청구가 정상</b>이다 — 급식·특강처럼 나눌 것이 없는 청구다.
+     * 그때는 청구 금액이 곧 단일 항목이므로 화면은 빈 목록을 그대로 두면 된다.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, List<com.dlab.domain.payment.entity.BillingItem>> itemsOf(
+            List<Billing> billings) {
+        if (billings.isEmpty()) {
+            return Map.of();
+        }
+        return itemRepository.findByBillingIds(billings.stream().map(Billing::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(i -> i.getBilling().getId()));
     }
 
     /** 단건 조회. 수납 기록 뒤 갱신된 값을 돌려줄 때 쓴다. */
