@@ -236,6 +236,38 @@ class MealBillingTest {
     }
 
     @Test
+    @DisplayName("★★ 청구를 취소하면 다시 발행할 수 있다 — 안 그러면 그 급식비가 영구 미청구로 굳는다")
+    void canReissueAfterBillingCancelled() {
+        MealOrder o = order(2, 3);
+        Billing first = mealBillingService.issue(admin, o.getId(), null);
+        em.flush();
+
+        // 데스크가 잘못 발행해 취소했다. 주문에는 그 청구가 아직 붙어 있다
+        first.cancel();
+        em.flush();
+
+        // isBilled() 로 판정하면 여기서 BILLING_ALREADY_ISSUED 가 나고,
+        // 그 학생 급식비는 다시 청구할 방법이 없다
+        Billing again = mealBillingService.issue(admin, o.getId(), null);
+
+        assertThat(again.getId()).isNotEqualTo(first.getId());
+        assertThat(again.getBilledAmount()).isEqualTo(first.getBilledAmount());
+    }
+
+    @Test
+    @DisplayName("취소된 청구가 붙은 주문은 일괄에서도 발행 대상이다")
+    void batchReissuesCancelledBilling() {
+        MealOrder o = order(2);
+        mealBillingService.issue(admin, o.getId(), null).cancel();
+        em.flush();
+
+        var outcome = mealBillingService.issueMonth(admin, academy.getId(), MONTH, null);
+
+        assertThat(outcome.issued()).hasSize(1);
+        assertThat(outcome.skipped()).isEmpty();
+    }
+
+    @Test
     @DisplayName("전부 취소된 주문은 「신청 내역이 없다」로 건너뛴다 — 단가 미등록과 섞이면 안 된다")
     void batchSkipsFullyCanceledWithOwnReason() {
         MealOrder o = order(2, 3);

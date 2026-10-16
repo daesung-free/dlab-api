@@ -419,11 +419,22 @@ public class AdminMealController {
      * @param refundableAmount 발행 후 취소된 만큼의 환불 대상 금액. 청구 전이면 0
      * @param paymentMethods 수납 수단. <b>미수납이면 빈 목록</b>이고, 분납이면 여러 개다
      */
+    /**
+     * @param amount        신청 금액. ★ <b>단가가 등록되지 않은 끼니가 있으면 {@code null}</b> 이다 —
+     *                      0 으로 내리면 화면이 「무료」로 읽고, 정작 손을 써야 하는
+     *                      <b>단가 미등록</b> 이 발행을 누를 때까지 안 보인다
+     * @param billingStatus 붙어 있는 청구의 상태. ★ <b>{@code CANCELLED} 면 「취소됨 · 재발행
+     *                      가능」</b> 이다 — {@code billingId} 는 <b>이력</b>이라 취소된 청구도
+     *                      그대로 보이는데, 상태가 없으면 화면이 그것을 「발행됨」으로 읽어
+     *                      <b>발행 버튼이 왜 살아 있는지</b> 알 수 없다
+     */
     public record OrderResponse(Long id, String orderNo, String studentNo, String studentName,
                                 String className, String targetMonth, MealOrderStatus status,
                                 int activeCount, Integer amount, Integer billedAmount,
                                 int refundableAmount, List<String> paymentMethods,
-                                Long billingId, List<MealItemResponse> items, Instant createdAt) {
+                                Long billingId,
+                                com.dlab.domain.payment.entity.BillingStatus billingStatus,
+                                List<MealItemResponse> items, Instant createdAt) {
 
         static OrderResponse from(MealOrder o, MealOrderListEnricher.Extras extras) {
             return new OrderResponse(o.getId(),
@@ -433,11 +444,13 @@ public class AdminMealController {
                     extras.className(o),
                     o.month().toString(), o.getStatus(),
                     o.activeItems().size(),
-                    o.totalAmount(),
+                    // ★ 단가 미등록이면 0 이 아니라 null 이다 — 0 은 「무료」로 읽힌다
+                    o.hasUnpricedItem() ? null : o.totalAmount(),
                     o.isBilled() ? o.getBilling().getBilledAmount() : null,
                     o.refundableAmount(),
                     extras.paymentMethods(o),
                     o.isBilled() ? o.getBilling().getId() : null,
+                    o.isBilled() ? o.getBilling().getStatus() : null,
                     o.getItems().stream().map(MealItemResponse::from).toList(),
                     o.getCreatedAt());
         }
