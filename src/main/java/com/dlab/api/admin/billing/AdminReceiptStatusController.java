@@ -133,6 +133,17 @@ public class AdminReceiptStatusController {
      *                 결제수단이 "지금 실제로 결제된 수단"과 어긋난다
      */
     /**
+     * @param wholeMonth     월 전체 청구인가. ★ 「대상월」 열을 이걸로 가른다 —
+     *                       {@code true} 면 {@code 2026-11}, 아니면
+     *                       {@code 2026-11 (11/15~11/30)}. <b>전부 괄호가 붙으면
+     *                       중도입학 건이 눈에 안 띈다.</b>
+     * @param serviceFrom    대상 기간 시작일. ⚠️ <b>일할 청구인데 시작일을 받지 못했으면
+     *                       {@code null}</b> 이다 — {@code remainingDays} 가 교습일수
+     *                       기준이라(설·추석 제외) <b>말일에서 역산하면 어긋난다.</b>
+     *                       그때는 괄호 없이 월만 적는다 — <b>추측한 기간은 영수증처럼 보인다.</b>
+     * @param discountSource 할인 근거(장학명) 스냅샷 — 「장학」 열에 그대로 쓴다
+     *                       (예: {@code 수능 100%}). <b>수기 할인이면 {@code null}</b> 이다.
+     *                       나중에 장학이 취소돼도 과거 청구의 근거는 남는다
      * @param items 청구 하위 항목 — <b>행을 펼쳐 교습비·독서실비 두 줄</b>로 보여주는 데 쓴다.
      *
      *     <p>★ <b>합계 한 줄만 보여주면 할인 건에서 데스크가 독서실비도 깎인 줄 안다.</b>
@@ -146,6 +157,8 @@ public class AdminReceiptStatusController {
     public record RowView(Long billingId, String studentNo, String studentName,
                           String name, String billingType, String serviceMonth,
                           short year,
+                          LocalDate serviceFrom, LocalDate serviceTo, boolean wholeMonth,
+                          String discountSource,
                           int billedAmount, int receivedAmount, int unpaid,
                           LocalDate dueDate, String status,
                           List<PaymentView> payments,
@@ -160,6 +173,8 @@ public class AdminReceiptStatusController {
                     b.getServiceMonth() == null ? null
                             : "%d-%02d".formatted(b.getServiceYear(), b.getServiceMonth()),
                     b.getYear(),
+                    b.getServiceFrom(), b.getServiceTo(), b.coversWholeMonth(),
+                    b.getDiscountSource(),
                     b.getBilledAmount(), row.received(), row.unpaid(),
                     b.getDueDate(), b.getStatus().name(),
                     row.payments().stream().map(PaymentView::from).toList(),

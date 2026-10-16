@@ -49,6 +49,14 @@ public final class DailyFeeCalculator {
 
     private static final Rounding DEFAULT_ROUNDING = Rounding.FLOOR;
 
+    /**
+     * 지금 쓰는 절사 방식. <b>화면이 「원 단위 버림」을 문구로 적을 수 있게</b> 열어 둔다 —
+     * 데스크가 실제 정산과 대조할 때 어느 쪽으로 깎였는지 알아야 한다.
+     */
+    public static Rounding defaultRounding() {
+        return DEFAULT_ROUNDING;
+    }
+
     private DailyFeeCalculator() {
     }
 

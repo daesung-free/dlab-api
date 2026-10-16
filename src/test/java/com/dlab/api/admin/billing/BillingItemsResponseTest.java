@@ -127,6 +127,11 @@ class BillingItemsResponseTest {
         var view = AdminReceiptStatusController.RowView.from(rows.get(0));
 
         assertThat(view.billedAmount()).isEqualTo(420_000);          // 750,000 − 330,000
+
+        // ★ 「장학」 열과 「대상월」 열이 이 네 칸으로 그려진다 — 둘 다 통합 매출장 요구다
+        assertThat(view.wholeMonth()).isTrue();
+        assertThat(view.serviceFrom()).isEqualTo(java.time.LocalDate.of(YEAR, 3, 1));
+        assertThat(view.serviceTo()).isEqualTo(java.time.LocalDate.of(YEAR, 3, 31));
         assertThat(view.items())
                 .extracting(i -> i.itemType().name(), i -> i.discountAmount(),
                         i -> i.billedAmount(), i -> i.discountable())
@@ -134,5 +139,40 @@ class BillingItemsResponseTest {
                         // ★ 할인은 교습비에만 붙는다. 합계만 보면 독서실비도 깎인 줄 읽는다
                         Tuple.tuple("TUITION", 330_000, 330_000, true),
                         Tuple.tuple("STUDY_ROOM", 0, 90_000, false));
+    }
+
+    @Test
+    @DisplayName("★ 일할 청구인데 시작일을 모르면 기간이 비고 wholeMonth 가 true 다 — 화면이 괄호를 안 붙인다")
+    void proratedWithoutStartDateLooksLikeWholeMonthToTheScreen() {
+        // 시작일 없이 일할로 발행한다
+        tuitionBillingService.issueMonthly(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, 0, 12, null);
+        em.flush();
+        em.clear();
+
+        var rows = receiptStatusService.find(admin, academy.getId(), YEAR,
+                null, null, (com.dlab.domain.payment.entity.BillingType) null, false);
+        var view = AdminReceiptStatusController.RowView.from(rows.get(0));
+
+        // ★ 기간을 모르므로 비어 있고, wholeMonth 는 true 로 떨어진다 —
+        //   화면은 괄호 없이 「2097-03」만 적는다. 추측한 기간을 적으면 영수증처럼 보인다
+        assertThat(view.serviceFrom()).isNull();
+        assertThat(view.serviceTo()).isNull();
+        assertThat(view.wholeMonth()).isTrue();
+    }
+
+    @Test
+    @DisplayName("할인 근거가 「장학」 열로 내려온다 — 수기 할인이면 비어 있다")
+    void discountSourceIsExposedForScholarshipColumn() {
+        tuitionBillingService.issueMonthly(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, 50, null, null, "수능 100%", null);
+        em.flush();
+        em.clear();
+
+        var rows = receiptStatusService.find(admin, academy.getId(), YEAR,
+                null, null, (com.dlab.domain.payment.entity.BillingType) null, false);
+        var view = AdminReceiptStatusController.RowView.from(rows.get(0));
+
+        assertThat(view.discountSource()).isEqualTo("수능 100%");
     }
 }
