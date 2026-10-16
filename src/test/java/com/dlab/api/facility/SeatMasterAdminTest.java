@@ -442,6 +442,76 @@ class SeatMasterAdminTest {
         assertThat(assignedToA).isZero();
     }
 
+    @Test
+    @DisplayName("★ 구역 초기화 — seatIds 없이 부르면 그 구역 좌석이 전부 지워진다")
+    void resetAreaDeletesEverySeat() throws Exception {
+        Long areaId = createArea("A", "자습실A");
+        createGrid(areaId, 2, 5, "A-");
+        em.flush();
+
+        mvc.perform(delete("/api/v1/admin/seats/masters")
+                        .header("Authorization", token())
+                        .param("studyAreaId", String.valueOf(areaId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(10));
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/v1/admin/seats/masters")
+                        .header("Authorization", token())
+                        .param("studyAreaId", String.valueOf(areaId)))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
+    @Test
+    @DisplayName("고른 좌석만 지운다")
+    void deleteOnlySelectedSeats() throws Exception {
+        Long areaId = createArea("A", "자습실A");
+        String grid = createGrid(areaId, 1, 3, "A-");
+        em.flush();
+
+        mvc.perform(delete("/api/v1/admin/seats/masters")
+                        .header("Authorization", token())
+                        .param("studyAreaId", String.valueOf(areaId))
+                        .param("seatIds", String.valueOf(seatIdAt(grid, 0)),
+                                String.valueOf(seatIdAt(grid, 2))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(2));
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/v1/admin/seats/masters")
+                        .header("Authorization", token())
+                        .param("studyAreaId", String.valueOf(areaId)))
+                .andExpect(jsonPath("$.data.length()").value(1));
+    }
+
+    @Test
+    @DisplayName("★★ 배정된 좌석이 섞이면 하나도 지우지 않는다 — 절반만 지워진 배치도가 더 나쁘다")
+    void occupiedSeatBlocksWholeDelete() throws Exception {
+        Long areaId = createArea("A", "자습실A");
+        String grid = createGrid(areaId, 1, 3, "A-");
+        assign(seatIdAt(grid, 1), enrollmentA);
+        em.flush();
+
+        mvc.perform(delete("/api/v1/admin/seats/masters")
+                        .header("Authorization", token())
+                        .param("studyAreaId", String.valueOf(areaId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("SEAT_ALREADY_OCCUPIED"))
+                // ★ 어느 자리가 걸렸는지 알려준다 — 안 알려주면 92석 중 하나를 찾아야 한다
+                .andExpect(jsonPath("$.error.message").value(org.hamcrest.Matchers
+                        .containsString("A-02")));
+        em.flush();
+        em.clear();
+
+        // 배정 안 된 두 자리도 그대로 남아 있다
+        mvc.perform(get("/api/v1/admin/seats/masters")
+                        .header("Authorization", token())
+                        .param("studyAreaId", String.valueOf(areaId)))
+                .andExpect(jsonPath("$.data.length()").value(3));
+    }
+
     private Long firstSeatId(String gridResponse) {
         return seatIdAt(gridResponse, 0);
     }

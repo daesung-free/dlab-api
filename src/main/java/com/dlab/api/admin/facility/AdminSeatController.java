@@ -212,6 +212,20 @@ public class AdminSeatController {
      *
      * <p>배정 이력이 이 행을 참조하므로 물리 삭제하지 않는다. 배정 중인 좌석은 거부한다.
      */
+    /**
+     * 좌석 일괄 삭제 · 구역 초기화 — <b>전부-아니면-전무</b>.
+     *
+     * <p>{@code seatIds}를 비우면 <b>그 구역 전체</b>다. 배정된 좌석이 하나라도 섞이면
+     * <b>아무것도 지우지 않고</b> 그 좌석번호를 전부 모아 돌려준다 — 일부만 지우고
+     * 성공으로 돌려주면 「지운 줄 알았는데 남아 있는」 상태가 된다.
+     */
+    @DeleteMapping("/masters")
+    public ApiResponse<Integer> deleteSeats(@CurrentAccount AuthPrincipal me,
+                                            @RequestParam Long studyAreaId,
+                                            @RequestParam(required = false) List<Long> seatIds) {
+        return ApiResponse.success(seatMasterAdminService.deleteAll(me, studyAreaId, seatIds));
+    }
+
     @DeleteMapping("/masters/{seatId}")
     public ApiResponse<Void> deleteSeat(@CurrentAccount AuthPrincipal me,
                                         @PathVariable Long seatId) {

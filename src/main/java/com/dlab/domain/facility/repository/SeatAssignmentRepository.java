@@ -42,6 +42,18 @@ public interface SeatAssignmentRepository extends JpaRepository<SeatAssignment, 
             """)
     Optional<SeatAssignment> findActiveBySeatId(Long seatId);
 
+    /**
+     * 여러 좌석의 현재 사용자. <b>일괄 삭제가 배정된 좌석을 한 번에 걸러내는 데 쓴다.</b>
+     *
+     * <p>좌석마다 {@code findActiveBySeatId}를 부르면 92석 초기화에 쿼리가 92번 나간다.
+     */
+    @Query("""
+            SELECT a FROM SeatAssignment a
+            JOIN FETCH a.seat s
+            WHERE s.id IN :seatIds AND a.releasedAt IS NULL AND a.deleted = false
+            """)
+    List<SeatAssignment> findActiveBySeatIds(Collection<Long> seatIds);
+
     /** 구역별 현재 배정 현황. 좌석배치도 렌더링용. */
     @Query("""
             SELECT a FROM SeatAssignment a
