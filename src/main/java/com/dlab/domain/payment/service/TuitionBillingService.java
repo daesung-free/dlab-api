@@ -46,6 +46,7 @@ public class TuitionBillingService {
     private final BillingRepository billingRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final TuitionPricingService pricingService;
+    private final org.springframework.context.ApplicationContext applicationContext;
 
     /**
      * 한 달치 교습비 청구.
@@ -58,9 +59,95 @@ public class TuitionBillingService {
     public Billing issueMonthly(AuthPrincipal me, Long enrollmentId, YearMonth month,
                                 SeatType seatType, int discountRate, Integer remainingDays,
                                 LocalDate dueDate) {
+        return issueMonthly(me, enrollmentId, month, seatType, discountRate, remainingDays,
+                dueDate, null, null);
+    }
+
+    /**
+     * 할인 근거·대상 기간까지 받는다 (1016 피드백 2-5 · 2-6).
+     *
+     * @param discountSource 할인 근거(장학명). <b>발행 시점 스냅샷으로 박힌다</b> —
+     *                       나중에 장학이 취소돼도 과거 청구의 근거는 남아야 한다.
+     *                       수기 할인이면 비운다
+     * @param serviceFrom    일할 청구의 <b>시작일</b>. ⚠️ <b>비우면 기간을 저장하지 않는다</b> —
+     *                       {@code remainingDays} 는 교습일수 기준이라(설·추석 제외)
+     *                       말일에서 역산하면 어긋난다. 추측값보다 빈 값이 정직하다.
+     *                       월 전체 청구는 이 값과 무관하게 1일~말일이 들어간다
+     */
+    @Transactional
+    public Billing issueMonthly(AuthPrincipal me, Long enrollmentId, YearMonth month,
+                                SeatType seatType, int discountRate, Integer remainingDays,
+                                LocalDate dueDate, String discountSource,
+                                LocalDate serviceFrom) {
 
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
-        return issue(enrollment, month, seatType, discountRate, remainingDays, dueDate);
+        return issue(enrollment, month, seatType, discountRate, remainingDays, dueDate,
+                discountSource, serviceFrom);
+    }
+
+    /**
+     * 여러 학생에게 한 번에 (1016 피드백 2-1).
+     *
+     * <h2>★★ 한 건이 막혀도 나머지는 발행한다</h2>
+     * 매월 수백 명이라 전체 롤백으로 만들면 <b>한 명이 중복 청구라는 이유로 전부 막힌다.</b>
+     * 그리고 <b>왜 빠졌는지</b>를 건별로 돌려준다 — 건수만 주면 데스크가
+     * 수백 명 중 누가 안 됐는지 찾을 방법이 없다(급식비 일괄 발행과 같은 모양이다).
+     *
+     * <p>⚠️ <b>건마다 트랜잭션을 분리한다.</b> 한 트랜잭션 안에서 예외를 잡으면
+     * JPA 세션이 이미 롤백 표시가 되어 <b>뒤따르는 저장이 전부 실패한다</b> —
+     * 「한 건만 실패」가 「그 뒤 전부 실패」가 된다.
+     */
+    public BulkResult issueMonthlyBulk(AuthPrincipal me, YearMonth month, LocalDate dueDate,
+                                       List<BulkTarget> targets) {
+        List<Billing> issued = new ArrayList<>();
+        List<BulkFailure> failed = new ArrayList<>();
+
+        for (BulkTarget t : targets) {
+            try {
+                issued.add(self().issueMonthly(me, t.enrollmentId(), month, t.seatType(),
+                        t.discountRateOrZero(), t.remainingDays(), dueDate,
+                        t.discountSource(), t.serviceFrom()));
+            } catch (BusinessException e) {
+                // 검증 실패라 그 건은 아무것도 쓰지 않았다 — 다음 학생에 영향이 없다
+                failed.add(new BulkFailure(t.enrollmentId(), e.getMessage()));
+            }
+        }
+
+        log.info("교습비 일괄 청구: {}, 대상={}건, 발행={}건, 실패={}건",
+                month, targets.size(), issued.size(), failed.size());
+        return new BulkResult(issued, failed);
+    }
+
+    /**
+     * 자기 자신의 프록시 — <b>건별 트랜잭션 분리를 위해 필요하다.</b>
+     *
+     * <p>같은 빈 안에서 {@code this.issueMonthly(...)} 로 부르면 {@code @Transactional}
+     * 이 적용되지 않아(프록시를 거치지 않는다) 전부 한 트랜잭션에 묶인다. 그러면
+     * 중복 하나가 세션을 rollback-only 로 만들고 <b>그 뒤 전부 실패한다.</b>
+     */
+    private TuitionBillingService self() {
+        return applicationContext.getBean(TuitionBillingService.class);
+    }
+
+    /**
+     * 일괄 대상 한 명.
+     *
+     * <p>할인율은 <b>학생마다 다르다</b> — 장학이 걸린 학생이 섞여 있다.
+     */
+    public record BulkTarget(Long enrollmentId, SeatType seatType, Integer discountRate,
+                             Integer remainingDays, String discountSource,
+                             LocalDate serviceFrom) {
+
+        public int discountRateOrZero() {
+            return discountRate == null ? 0 : discountRate;
+        }
+    }
+
+    /** @param failed <b>비어 있어야 정상</b>이다. 사유별로 데스크가 할 일이 다르다 */
+    public record BulkResult(List<Billing> issued, List<BulkFailure> failed) {
+    }
+
+    public record BulkFailure(Long enrollmentId, String reason) {
     }
 
     /**
@@ -91,7 +178,9 @@ public class TuitionBillingService {
 
         int days = remainingDays != null ? remainingDays
                 : suggestRemainingDays(enrollment.getAcademy().getId(), admissionDate);
-        issued.add(issue(enrollment, month, seatType, discountRate, days, dueDate));
+        // ★ 입학일이 곧 대상 기간 시작일이다 — 여기서는 역산할 필요가 없다
+        issued.add(issue(enrollment, month, seatType, discountRate, days, dueDate,
+                null, admissionDate));
 
         // ★ 1개월 미만으로 결제됐으므로 다음 달분을 함께 받는다(규정)
         issued.add(issue(enrollment, month.plusMonths(1), seatType, discountRate, null, dueDate));
@@ -128,6 +217,13 @@ public class TuitionBillingService {
 
     private Billing issue(StudentEnrollment enrollment, YearMonth month, SeatType seatType,
                           int discountRate, Integer remainingDays, LocalDate dueDate) {
+        return issue(enrollment, month, seatType, discountRate, remainingDays, dueDate,
+                null, null);
+    }
+
+    private Billing issue(StudentEnrollment enrollment, YearMonth month, SeatType seatType,
+                          int discountRate, Integer remainingDays, LocalDate dueDate,
+                          String discountSource, LocalDate serviceFrom) {
 
         short year = (short) month.getYear();
         short monthValue = (short) month.getMonthValue();
@@ -158,6 +254,16 @@ public class TuitionBillingService {
                 enrollment, "%d년 %d월 교습비".formatted(year, monthValue),
                 BillingType.TUITION, totalSupplied, totalDiscount, dueDate));
         billing.assignServicePeriod(year, monthValue);
+        if (discountSource != null && !discountSource.isBlank()) {
+            billing.assignDiscountSource(discountSource);
+        }
+        // ★ 월 전체면 1일~말일이 확정이다. 일할인데 시작일을 모르면 비워 둔다 —
+        //   remainingDays 로 역산하면 설·추석이 든 달에서 어긋난다
+        if (days == teachingDays) {
+            billing.assignServiceDates(month.atDay(1), month.atEndOfMonth());
+        } else if (serviceFrom != null) {
+            billing.assignServiceDates(serviceFrom, month.atEndOfMonth());
+        }
 
         // 교습비와 독서실비를 항목으로 나눠 둔다 — 환불 산식이 다르다
         billing.addItem(BillingItemType.TUITION, supplied.tuition(),
