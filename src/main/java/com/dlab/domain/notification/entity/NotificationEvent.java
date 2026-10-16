@@ -7,6 +7,24 @@ package com.dlab.domain.notification.entity;
 public enum NotificationEvent {
     /** 등원 기준시각까지 태깅 기록이 없는 무단 미등원 */
     MISSING_ATTENDANCE,
+
+    // ── 출결 태깅 알림 (디랩 1016 문구 1~5번) ────────────────────────────────
+    // 학부모에게만 간다 — "○○ 학생이 등원했습니다"를 학생 본인에게 보낼 이유가 없다.
+    //
+    // ★ 지각(LATE)도 등원 알림으로 나간다. 지각 전용 문구가 없는데 여기서 안 보내면,
+    //   미등원 알림(기준시각)을 이미 받은 학부모가 자녀를 **결석으로 알고 끝낸다**.
+    //   「지각 안내가 빠진 것이 맞는지」는 디랩 회신 대기고, 그때 문구가 따로 생기면
+    //   이벤트를 하나 더 두면 된다.
+    /** 등원 태깅 — 지각 포함 */
+    ATTENDANCE_CHECK_IN,
+    /** 하원 태깅 */
+    ATTENDANCE_CHECK_OUT,
+    /** 외출 태깅 — 사유 외출 포함 */
+    ATTENDANCE_OUTING,
+    /** 외출 복귀 태깅 */
+    ATTENDANCE_RETURN,
+    /** 조퇴 태깅 */
+    ATTENDANCE_EARLY_LEAVE,
     /** 승인 요청 접수 — 학부모와 담당선생님에게 동시 발송 */
     APPROVAL_REQUEST_CREATED,
     /** 타임아웃 전 학부모 승인 */
