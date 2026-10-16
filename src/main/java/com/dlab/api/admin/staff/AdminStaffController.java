@@ -107,6 +107,24 @@ public class AdminStaffController {
                 roleNames(request.roles())));
     }
 
+    /**
+     * 외부 강사 등록 — <b>계정 없이 사람만</b> 만든다 (1016 피드백 2-13).
+     *
+     * <p>특강 담당으로 세울 수 있지만 ⚠️ <b>담임으로는 지정되지 않는다.</b>
+     * 담임은 곧 방화벽 승인 에스컬레이션 대상이라, 로그인하지 못하는 사람이 담임이면
+     * <b>학부모가 응답하지 않을 때 넘길 사람이 없어 신청이 멈춘다.</b>
+     *
+     * <p>응답의 {@code external} 이 {@code true} 이고 {@code loginId}·{@code roles} 가
+     * 비어 있다 — 화면은 담당 강사 드롭다운에는 띄우고 <b>담임 후보에서는 빼야 한다.</b>
+     */
+    @PostMapping("/teachers/external")
+    public ApiResponse<StaffResponse> createExternalTeacher(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody StaffRequests.CreateExternalTeacher request) {
+        return ApiResponse.success(StaffResponse.from(staffAccountService.createExternalTeacher(
+                request.academyId(), request.name(), request.phone(), request.affiliation(), me)));
+    }
+
     /** 행정선생님 등록. */
     @PostMapping("/employees")
     public ApiResponse<StaffCreated> createEmployee(@CurrentAccount AuthPrincipal me,

@@ -30,7 +30,9 @@ public record StaffResponse(
         String loginId,
         Set<String> roles,
         boolean locked,
-        boolean mustChangePassword
+        boolean mustChangePassword,
+        boolean external,
+        String affiliation
 ) {
 
     /** 담당선생님(사감) — 반 담임·승인 에스컬레이션 대상이 될 수 있다. */
@@ -46,7 +48,10 @@ public record StaffResponse(
                 account == null ? null : account.getLoginId(),
                 roles,
                 account != null && account.isLocked(),
-                account != null && account.isMustChangePassword());
+                account != null && account.isMustChangePassword(),
+                // ★ 외부 강사는 계정이 없어 loginId·roles 가 비어 있다. 그것만으로는
+                //   「계정 미발급 내부 강사」와 구분되지 않아 화면이 담임 후보로 띄운다
+                t.isExternal(), t.getAffiliation());
     }
 
     /** 행정 — 행정선생님 포함. 학생 가입 승인 주체다. */
@@ -62,6 +67,8 @@ public record StaffResponse(
                 account == null ? null : account.getLoginId(),
                 roles,
                 account != null && account.isLocked(),
-                account != null && account.isMustChangePassword());
+                account != null && account.isMustChangePassword(),
+                // 행정은 외부 개념이 없다 — 외부 강사는 teacher 쪽에만 있다
+                false, null);
     }
 }

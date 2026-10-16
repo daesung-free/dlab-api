@@ -52,6 +52,26 @@ public class Teacher extends BaseEntity {
     @Column(name = "resigned_date")
     private LocalDate resignedDate;
 
+    /**
+     * 외부 강사인가 (1016 피드백 2-13).
+     *
+     * <h2>★ 강사 마스터를 따로 두지 않는 이유</h2>
+     * 테이블을 새로 만들면 특강·시간표·출석부가 <b>두 종류의 강사를 각각 다뤄야</b> 해서
+     * 분기가 전부 두 벌이 된다.
+     *
+     * <h2>⚠️⚠️ 외부 강사는 담임이 될 수 없다</h2>
+     * <b>로그인 계정이 없다</b>(계정 없이 이 행만 만든다). 그런데 담임은 곧
+     * <b>방화벽 승인 에스컬레이션 대상</b>이라({@code approval_request.escalation_teacher_id}),
+     * 로그인하지 못하는 사람이 담임이면 <b>학부모가 응답하지 않을 때 넘길 사람이 없어
+     * 신청이 그대로 멈춘다.</b> 그래서 담임 지정 경로에서 막는다.
+     */
+    @Column(nullable = false)
+    private boolean external = false;
+
+    /** 소속(외부 강사). 내부 강사는 비어 있다. */
+    @Column(length = 100)
+    private String affiliation;
+
     /** 이름 정정. {@code null}이면 바꾸지 않는다. */
     public void rename(String name) {
         if (name != null && !name.isBlank()) {
@@ -84,6 +104,19 @@ public class Teacher extends BaseEntity {
 
     public boolean isResigned() {
         return resignedDate != null;
+    }
+
+    /**
+     * 외부 강사 — <b>로그인 계정 없이</b> 이 행만 만든다.
+     *
+     * <p>특강 담당으로 세울 수 있지만 <b>담임으로는 지정되지 않는다</b>(위 참고).
+     */
+    public static Teacher external(Academy academy, String name, String phone,
+                                   String affiliation) {
+        Teacher teacher = new Teacher(academy, name, phone);
+        teacher.external = true;
+        teacher.affiliation = affiliation;
+        return teacher;
     }
 
     public Teacher(Academy academy, String name, String phone) {

@@ -492,6 +492,13 @@ public class ClassService {
         if (!teacher.getAcademy().getId().equals(academyId)) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "다른 지점 선생님은 담임으로 지정할 수 없습니다.");
         }
+        // ★★ 외부 강사는 로그인 계정이 없다. 담임은 곧 방화벽 승인 에스컬레이션 대상이라
+        //    (ApprovalService.resolveEscalationTarget), 로그인 못 하는 사람이 담임이면
+        //    학부모가 응답하지 않을 때 넘길 사람이 없어 신청이 그대로 멈춘다
+        if (teacher.isExternal()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "외부 강사는 담임으로 지정할 수 없습니다. 승인 요청을 넘겨받을 계정이 없습니다.");
+        }
         return teacher;
     }
 }

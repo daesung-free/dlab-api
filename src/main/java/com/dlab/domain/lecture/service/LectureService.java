@@ -210,6 +210,16 @@ public class LectureService {
             lecture.changeCategory(categoryId.isCleared() ? null
                     : resolveCategory(categoryId.value(), lecture.getAcademy().getId()));
         }
+        // ★★ 접수가 열린 특강의 담당 강사를 비울 수 없다.
+        //    OPEN 검증이 changeStatus 에만 있어서, 강사를 지정해 열어 둔 뒤 여기서
+        //    비우면 「담당 미지정인 채로 학생에게 열려 있는」 특강이 만들어졌다 —
+        //    화면은 담당 강사를 필수로 표시하는데 그 상태가 실제로 생겼다(대구 3건 중 2건).
+        if (teacherId != null && teacherId.isCleared()
+                && lecture.getStatus().acceptsApplication()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "접수가 열린 특강은 담당 강사를 비울 수 없습니다. "
+                            + "다른 강사로 바꾸거나 접수를 먼저 닫아 주세요.");
+        }
         if (teacherId != null) {
             lecture.changeTeacher(teacherId.isCleared() ? null
                     : teacherRepository.findById(teacherId.value())

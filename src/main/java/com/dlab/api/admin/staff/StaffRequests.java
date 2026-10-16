@@ -20,6 +20,20 @@ public final class StaffRequests {
             @NotEmpty(message = "역할은 하나 이상 필요합니다.") Set<Role> roles) {
     }
 
+    /**
+     * 외부 강사 등록 — <b>로그인 아이디·역할을 받지 않는다</b> (1016 피드백 2-13).
+     *
+     * <p>★ 계정을 만들지 않기 때문이다. 특강 한 건을 맡는 외부 강사에게 계정을 주면
+     * <b>그 지점 학생 정보에 접근할 수 있는 계정이 외부에 생기고</b>, 특강이 끝난 뒤
+     * 지우는 절차가 운영에 없다.
+     */
+    public record CreateExternalTeacher(
+            @NotNull(message = "지점은 필수입니다.") Long academyId,
+            @NotBlank(message = "이름은 필수입니다.") @Size(max = 20) String name,
+            @Size(max = 20) String phone,
+            @Size(max = 100) String affiliation) {
+    }
+
     /** 직원(행정) 등록. */
     public record CreateEmployee(
             @NotNull(message = "지점은 필수입니다.") Long academyId,
