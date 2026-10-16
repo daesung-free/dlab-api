@@ -148,6 +148,27 @@ public class AdminSurveyController {
     }
 
     /**
+     * 문항 <b>정의</b> 조회 — 수정 화면이 「읽어서 → 고쳐서 → 교체」 하는 데 쓴다.
+     *
+     * <p>★★ <b>집계({@code /results})로 읽으면 안 된다.</b> 집계에는
+     * {@code required}·{@code minValue}·{@code maxValue}·조건부·합산이 없어서,
+     * 그걸로 읽어 교체하면 <b>제목 한 글자만 고쳐도 그 설정들이 사라진다</b> —
+     * 오류가 나지 않으므로 아무도 모른다.
+     *
+     * <p>응답은 <b>교체 요청과 칸이 같다</b>. 읽은 것을 그대로 되돌려 보내면
+     * 바뀌는 것이 없어야 한다.
+     *
+     * <p>⚠️ 집계의 {@code min}·{@code max} 는 <b>응답 통계</b>다. 설정값은 여기의
+     * {@code minValue}·{@code maxValue} 이고 <b>이름이 겹치니 섞지 말 것</b>.
+     */
+    @GetMapping("/{surveyId}/questions")
+    public ApiResponse<List<AdminSurveyResponses.QuestionSetting>> questions(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long surveyId) {
+        return ApiResponse.success(surveyService.questionSettings(me, surveyId).stream()
+                .map(AdminSurveyResponses.QuestionSetting::from).toList());
+    }
+
+    /**
      * 문항 교체.
      *
      * <p>★★ <b>제출이 하나라도 있으면 400 이다.</b> 고치면 이미 동의한 학생의 동의 내용이

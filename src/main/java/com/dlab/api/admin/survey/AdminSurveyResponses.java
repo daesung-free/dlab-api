@@ -80,6 +80,30 @@ public final class AdminSurveyResponses {
     }
 
     /**
+     * 문항 <b>정의</b> 한 줄 — 교체 요청({@code AdminSurveyQuestion})과 칸이 같다.
+     *
+     * <p>★ <b>번호는 「순서」(1부터)다</b> — DB 의 {@code seq} 가 아니다. 교체가
+     * soft delete 라 {@code seq} 는 이어지는데 요청의 번호는 배열 순서라, {@code seq} 를
+     * 그대로 쓰면 되돌려 보낼 때 엉뚱한 문항을 가리킨다.
+     *
+     * <p>⚠️ {@code minValue}·{@code maxValue} 는 <b>설정</b>이다. 집계
+     * ({@code SurveyResultResponse})의 {@code min}·{@code max}(응답 통계)와 다르다.
+     */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "SurveyQuestionSettingResponse")
+    public record QuestionSetting(Long questionId, SurveyQuestionType type, String title,
+                                  boolean required, BigDecimal minValue, BigDecimal maxValue,
+                                  List<String> options,
+                                  Integer showIfQuestionIndex, Integer showIfOptionIndex,
+                                  List<Integer> sumOfIndexes) {
+
+        static QuestionSetting from(SurveyService.QuestionSetting q) {
+            return new QuestionSetting(q.questionId(), q.type(), q.title(), q.required(),
+                    q.minValue(), q.maxValue(), q.options(),
+                    q.showIfQuestionIndex(), q.showIfOptionIndex(), q.sumOfIndexes());
+        }
+    }
+
+    /**
      * 제출자.
      *
      * <p>익명 설문에서도 <b>제출 여부</b>는 알 수 있다 — 미제출자 독려에 필요하다.
