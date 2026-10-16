@@ -190,6 +190,42 @@ public class AdminSurveyController {
      *
      * @return 이번에 새로 발송된 수
      */
+    /**
+     * 독촉 발송 전 집계 — <b>확인 모달용</b> (F-4.6).
+     *
+     * <p>★★ <b>문자는 건당 과금이고 되돌릴 수 없다.</b> 전 지점 설문이면 수천 건이다 —
+     * 「○○명에게 보냅니다」를 <b>누르기 전에</b> 보여줘야 한다.
+     *
+     * <p>⚠️ {@code remindable} 이 {@code false} 면 <b>범위로 돌리는 설문</b>이라
+     * 미응답자를 알 수 없다. 그때 발송을 부르면 400 이다 — 버튼을 비활성으로 두는 편이 낫다.
+     */
+    @GetMapping("/{surveyId}/remind-preview")
+    public ApiResponse<RemindPreview> remindPreview(@CurrentAccount AuthPrincipal me,
+                                                    @PathVariable Long surveyId) {
+        return ApiResponse.success(RemindPreview.from(
+                surveyService.remindPreview(me, surveyId)));
+    }
+
+    /**
+     * 미응답자 독촉 발송 (F-4.6).
+     *
+     * <p>★ <b>같은 날 두 번 눌러도 두 번 가지 않는다</b> — 중복 방지 키에 날짜가 들어간다.
+     * 며칠에 걸쳐 여러 번 보내는 것은 정상이다.
+     *
+     * <p>⚠️ 대상자를 지정하지 않은 설문(범위로 돌리는 일반 설문)은 <b>400 으로 거절</b>한다.
+     * 0건을 보내고 성공을 돌려주면 데스크는 보냈다고 알고 끝내는데 아무에게도 가지 않는다.
+     */
+    /*
+     * 권한은 SecurityConfig 의 바닥선(POST /admin/** = WRITABLE_ADMIN_ROLES)을 그대로 쓴다.
+     * 그 파일에 "여기에 역할별 규칙을 더 얹지 말 것 — 매트릭스 수령 후 permission 테이블로
+     * 간다"고 적혀 있고, 이 컨트롤러도 클래스 권한을 두지 않았다.
+     */
+    @PostMapping("/{surveyId}/remind")
+    public ApiResponse<SentCount> remind(@CurrentAccount AuthPrincipal me,
+                                         @PathVariable Long surveyId) {
+        return ApiResponse.success(new SentCount(surveyService.remindPending(me, surveyId)));
+    }
+
     @PostMapping("/{surveyId}/targets")
     public ApiResponse<SentCount> assignTargets(
             @CurrentAccount AuthPrincipal me, @PathVariable Long surveyId,
@@ -217,5 +253,20 @@ public class AdminSurveyController {
 
         return ApiResponse.success(surveyService.participants(me, surveyId).stream()
                 .map(AdminSurveyResponses.Participant::from).toList());
+    }
+
+    /**
+     * @param remindable 독촉을 보낼 수 있는가. <b>대상자를 지정하지 않은 설문은 false</b> —
+     *                   범위로 돌리면 누가 응답하지 않았는지 서버가 알 수 없다
+     * @param pendingCount 미응답 수 — <b>실제로 나갈 건수</b>다. 모달에 이 숫자를 띄운다
+     */
+    public record RemindPreview(int targetCount, int submittedCount, int pendingCount,
+                                boolean remindable) {
+
+        static RemindPreview from(
+                com.dlab.domain.survey.service.SurveyNotifier.Preview p) {
+            return new RemindPreview(p.targetCount(), p.submittedCount(), p.pendingCount(),
+                    p.remindable());
+        }
     }
 }
