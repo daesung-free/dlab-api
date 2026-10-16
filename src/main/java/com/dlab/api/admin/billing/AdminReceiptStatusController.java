@@ -132,12 +132,24 @@ public class AdminReceiptStatusController {
      * @param payments 살아 있는 수납 거래. <b>취소분은 빠진다</b> — 취소까지 세면 화면의
      *                 결제수단이 "지금 실제로 결제된 수단"과 어긋난다
      */
+    /**
+     * @param items 청구 하위 항목 — <b>행을 펼쳐 교습비·독서실비 두 줄</b>로 보여주는 데 쓴다.
+     *
+     *     <p>★ <b>합계 한 줄만 보여주면 할인 건에서 데스크가 독서실비도 깎인 줄 안다.</b>
+     *     할인은 교습비에만 붙는다(독서실비는 규정상 할인이 없고, 항목의
+     *     {@code discountable} 이 그걸 알려준다). 그리고 <b>항목별 정가</b>가 있어야
+     *     퇴원 시 환불 차감(정상가 기준)을 되짚을 수 있다.
+     *
+     *     <p>급식·특강처럼 나눌 것이 없는 청구는 <b>빈 목록</b>이고 그게 정상이다 —
+     *     그때는 청구 금액이 곧 단일 항목이다.
+     */
     public record RowView(Long billingId, String studentNo, String studentName,
                           String name, String billingType, String serviceMonth,
                           short year,
                           int billedAmount, int receivedAmount, int unpaid,
                           LocalDate dueDate, String status,
-                          List<PaymentView> payments) {
+                          List<PaymentView> payments,
+                          List<AdminBillingController.BillingItemResponse> items) {
 
         static RowView from(ReceiptStatusService.Row row) {
             Billing b = row.billing();
@@ -150,7 +162,9 @@ public class AdminReceiptStatusController {
                     b.getYear(),
                     b.getBilledAmount(), row.received(), row.unpaid(),
                     b.getDueDate(), b.getStatus().name(),
-                    row.payments().stream().map(PaymentView::from).toList());
+                    row.payments().stream().map(PaymentView::from).toList(),
+                    row.items().stream()
+                            .map(AdminBillingController.BillingItemResponse::from).toList());
         }
     }
 

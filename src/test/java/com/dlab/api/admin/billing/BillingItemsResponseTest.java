@@ -46,6 +46,7 @@ class BillingItemsResponseTest {
 
     @Autowired TuitionBillingService tuitionBillingService;
     @Autowired BillingService billingService;
+    @Autowired com.dlab.domain.payment.service.ReceiptStatusService receiptStatusService;
     @Autowired EntityManager em;
 
     @MockitoBean
@@ -53,12 +54,13 @@ class BillingItemsResponseTest {
 
     static final short YEAR = 2099;
 
+    Academy academy;
     StudentEnrollment enrollment;
     AuthPrincipal admin;
 
     @BeforeEach
     void setUp() {
-        Academy academy = new Academy("BI1", "항목응답테스트", LocalTime.of(9, 0));
+        academy = new Academy("BI1", "항목응답테스트", LocalTime.of(9, 0));
         em.persist(academy);
         Student student = new Student("BI-0001", "항목학생", "010-0000-0001");
         em.persist(student);
@@ -109,5 +111,28 @@ class BillingItemsResponseTest {
         var row = AdminBillingController.BillingResponse.from(billings.get(0), items);
 
         assertThat(row.items()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("★★ 통합 매출장(수납현황)이 항목을 함께 내린다 — 화면이 보는 쿼리는 이쪽이다")
+    void receiptStatusRowCarriesItems() {
+        // 50% 할인 — 할인이 교습비에만 붙는 것이 이 응답에서 보여야 한다
+        tuitionBillingService.issueMonthly(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, 50, null, null);
+        em.flush();
+        em.clear();
+
+        var rows = receiptStatusService.find(admin, academy.getId(), YEAR,
+                null, null, (com.dlab.domain.payment.entity.BillingType) null, false);
+        var view = AdminReceiptStatusController.RowView.from(rows.get(0));
+
+        assertThat(view.billedAmount()).isEqualTo(420_000);          // 750,000 − 330,000
+        assertThat(view.items())
+                .extracting(i -> i.itemType().name(), i -> i.discountAmount(),
+                        i -> i.billedAmount(), i -> i.discountable())
+                .containsExactly(
+                        // ★ 할인은 교습비에만 붙는다. 합계만 보면 독서실비도 깎인 줄 읽는다
+                        Tuple.tuple("TUITION", 330_000, 330_000, true),
+                        Tuple.tuple("STUDY_ROOM", 0, 90_000, false));
     }
 }
