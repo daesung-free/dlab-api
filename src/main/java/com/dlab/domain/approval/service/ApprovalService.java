@@ -269,6 +269,9 @@ public class ApprovalService {
 
     private Map<String, String> reminderVariables(ApprovalRequest request) {
         Map<String, String> variables = new LinkedHashMap<>();
+        // 이양톡 문구에는 아직 승인항목이 없다. 그래도 **싣기는 한다** —
+        // 변수가 더 있는 것은 무해하고, 나중에 문구에 넣더라도 코드를 다시 안 고친다
+        variables.put("requestType", request.getApprovalItem().getRequestType().displayName());
         variables.put("requestedAt", TIME_FORMAT.format(request.getRequestedAt()));
         variables.put("timeoutMinutes", String.valueOf(request.getTimeoutMinutes()));
         return variables;
@@ -524,6 +527,10 @@ public class ApprovalService {
 
     private Map<String, String> resolvedVariables(ApprovalRequest request) {
         Map<String, String> variables = new LinkedHashMap<>();
+        // ★ 승인 결과톡에도 **무엇이 승인됐는지**를 싣는다. 접수톡에만 있으면 학부모는
+        //   「승인되었습니다」만 받고 **와이파이인지 외출인지 모른다** — 신청이 여러 건
+        //   걸려 있으면 어느 것이 처리됐는지도 알 수 없다
+        variables.put("requestType", request.getApprovalItem().getRequestType().displayName());
         variables.put("resolvedAt", TIME_FORMAT.format(request.getResolvedAt()));
         variables.put("timeoutMinutes", String.valueOf(request.getTimeoutMinutes()));
         return variables;
