@@ -54,6 +54,11 @@ public class HomeroomOverrideService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
                     "다른 지점 선생님에게는 맡길 수 없습니다.");
         }
+        // ★★ 외부 강사는 계정이 없어 승인을 넘겨받을 수 없다 — 반 담임과 같은 이유다
+        if (teacher.isExternal()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "외부 강사에게는 맡길 수 없습니다. 승인 요청을 넘겨받을 계정이 없습니다.");
+        }
         enrollment.overrideHomeroom(teacher, reason.trim(), Instant.now(clock));
         log.info("담임 예외 지정: enrollmentId={}, teacherId={}, 사유={}", enrollmentId, teacherId, reason);
         return enrollment;
