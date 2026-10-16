@@ -70,6 +70,8 @@ public class ReadinessService {
      */
     private final java.util.Optional<com.dlab.integration.aligo.AligoProperties> aligoProperties;
     private final java.util.Optional<com.dlab.integration.aligo.AligoClient> aligoClient;
+    private final java.util.Optional<com.dlab.integration.aligo.AligoAlimtalkClient>
+            alimtalkClient;
 
     @Transactional(readOnly = true)
     public Report check(short year) {
