@@ -6,7 +6,7 @@ import com.dlab.domain.notification.service.NotificationSender;
 import com.dlab.domain.user.entity.Account;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(prefix = "aligo", name = "api-key")
+@ConditionalOnExpression("'${aligo.api-key:}' != ''")
 @RequiredArgsConstructor
 public class AligoNotificationSender implements NotificationSender {
 

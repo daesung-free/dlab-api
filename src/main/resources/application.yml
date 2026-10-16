@@ -150,6 +150,10 @@ kcp:
 # ⚠️ 값은 .env 에만 둔다(§8). 커밋 금지.
 # ─────────────────────────────────────────────────────────────
 aligo:
+  # ⚠️ 값이 비어 있으면 연동이 꺼진 것으로 본다 — 판정은 각 빈의 @ConditionalOnExpression
+  #    에 있다. @ConditionalOnProperty 로 바꾸지 말 것: 그건 **키가 있는가**로만 보므로
+  #    빈 문자열에도 통과해, 키 없는 환경에서 실제 발송기가 올라오고 목업이 물러난다
+  #    → 인증번호가 아무에게도 안 가는데 API 는 200 을 준다.
   api-key: ${ALIGO_API_KEY:}
   user-id: ${ALIGO_USER_ID:}
   sender-key: ${ALIGO_SENDER_KEY:}

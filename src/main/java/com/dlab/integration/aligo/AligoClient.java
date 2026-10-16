@@ -3,7 +3,7 @@ package com.dlab.integration.aligo;
 import java.time.Duration;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -31,7 +31,7 @@ import org.springframework.web.client.RestClient;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(prefix = "aligo", name = "api-key")
+@ConditionalOnExpression("'${aligo.api-key:}' != ''")
 public class AligoClient {
 
     private static final String BASE_URL = "https://apis.aligo.in";
@@ -42,6 +42,15 @@ public class AligoClient {
     private final AligoProperties properties;
     private final RestClient restClient;
 
+    /**
+     * ★★ {@code @Autowired}가 없으면 기동이 안 된다 — 생성자가 둘이라 Spring 이 고르지
+     * 못하고 <b>기본 생성자를 찾다가 {@code NoSuchMethodException}</b> 으로 터진다.
+     *
+     * <p>⚠️ <b>테스트로는 안 잡힌다.</b> 테스트는 아래 이음새로 객체를 직접 만들어 이 경로를
+     * 타지 않고, 빈 자체도 {@code aligo.api-key}가 없으면 만들어지지 않는다 — 실제로
+     * 「빌드·테스트 통과, 기동 실패」가 났다. 그래서 {@code AligoWiringTest}가 빈 생성을 본다.
+     */
+    @org.springframework.beans.factory.annotation.Autowired
     public AligoClient(AligoProperties properties) {
         this(properties, RestClient.builder().requestFactory(factory()));
     }

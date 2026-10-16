@@ -3,7 +3,7 @@ package com.dlab.integration.aligo;
 import com.dlab.common.verification.SmsSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component("realSmsSender")
-@ConditionalOnProperty(prefix = "aligo", name = "api-key")
+@ConditionalOnExpression("'${aligo.api-key:}' != ''")
 @RequiredArgsConstructor
 public class AligoSmsSender implements SmsSender {
 
