@@ -54,9 +54,29 @@ public class Academy extends BaseEntity {
     @Column(name = "dlab_cd", length = 2)
     private String dlabCd;
 
-    /** 등원 기준시각(지점 공통, 학생별 아님). 이 시각에 미등원 감지 배치가 돈다. */
+    /**
+     * 등원 기준시각(지점 공통, 학생별 아님). <b>이 시각에 미등원 감지 배치가 돈다.</b>
+     *
+     * <p>⚠️ <b>지각 판정에는 쓰지 않는다</b> — 그쪽은 {@link #lateAfter} 다. 전에는 이 한 칸이
+     * 둘을 같이 했는데, 디랩이 준 시각이 달라(지각 07:50 / 결석 08:20) 나눴다.
+     */
     @Column(name = "attendance_deadline", nullable = false)
     private LocalTime attendanceDeadline;
+
+    /**
+     * 지각 판정 기준시각 — <b>이 시각 이후 첫 태깅이 지각이다</b> (디랩 1019).
+     *
+     * <p>★ {@link #attendanceDeadline} 과 <b>다른 축</b>이다. 한 칸으로 두면 기준시각이
+     * 08:20 인 지점에서 07:55 에 온 학생이 <b>출결상 정상 등원인데 학부모에게는 지각
+     * 알림이 간다.</b>
+     *
+     * <p>★★ <b>비어 있으면 {@link #attendanceDeadline} 을 쓴다</b>({@link #lateAfterOrDeadline}).
+     * 07:50 을 기본값으로 박으면 <b>값이 안 들어온 지점에서 08시에 오는 학생이 전부 지각으로
+     * 찍힌다</b> — 디랩이 준 07:50·08:20 은 아직 한 건도 들어오지 않았고 11개 지점이 전부
+     * 09:00 이다. 모르면 추측값을 쓰지 않고 <b>기존 동작을 유지</b>한다.
+     */
+    @Column(name = "late_after")
+    private LocalTime lateAfter;
 
     /**
      * 모의고사 자료의 학교코드({@code 99700}~{@code 99711}).
@@ -76,6 +96,34 @@ public class Academy extends BaseEntity {
         this.acadNm = acadNm;
         this.attendanceDeadline = attendanceDeadline;
         this.active = true;
+    }
+
+    /**
+     * 지각 기준시각 변경.
+     *
+     * <p>★ {@code updateInfo} 와 따로 둔다 — 등원 기준시각은 <b>미등원 배치</b>가,
+     * 이 값은 <b>지각 판정</b>이 쓴다. 한 화면에서 같이 받더라도 서로 다른 값이므로
+     * 한쪽을 고치며 다른 쪽을 덮어쓰지 않게 메서드를 가른다.
+     */
+    public void changeLateAfter(LocalTime lateAfter) {
+        if (lateAfter != null) {
+            this.lateAfter = lateAfter;
+        }
+    }
+
+    /** 지각 기준을 비워 등원 기준시각으로 되돌린다. */
+    public void clearLateAfter() {
+        this.lateAfter = null;
+    }
+
+    /**
+     * 지각 판정에 쓸 기준시각 — <b>판정부는 반드시 이걸로 읽는다.</b>
+     *
+     * <p>지각 기준이 비어 있으면 등원 기준시각으로 떨어진다. 그래야 값이 안 들어온 지점이
+     * <b>지금과 똑같이 동작</b>한다.
+     */
+    public LocalTime lateAfterOrDeadline() {
+        return lateAfter != null ? lateAfter : attendanceDeadline;
     }
 
     /** 로그·알림에서 쓰는 표시용 이름. */

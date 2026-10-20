@@ -87,15 +87,21 @@ public class AttendanceNotifier {
     /**
      * 태깅 이벤트 → 알림 이벤트.
      *
-     * <p>★ <b>지각도 등원이다.</b> 지각 전용 문구가 없는데 여기서 빼면, 기준시각에 미등원
-     * 알림을 받은 학부모가 자녀를 <b>결석으로 알고 끝낸다</b>.
+     * <p>★ <b>지각은 따로 나간다</b>(디랩 1019). 1016 에는 등원에 합쳐 두었다 —
+     * 지각 전용 문구가 없는데 빼면 기준시각에 미등원 알림을 받은 학부모가 자녀를
+     * <b>결석으로 알고 끝내기</b> 때문이었다. 이제 전용 문구가 있으므로 그 전제가 사라졌다.
+     *
+     * <p>⚠️ <b>사유지각도 지각 알림이 나간다.</b> 원장이 지각이고(화면만 등원으로 뜬다)
+     * 1019 문구에 조건이 없다 — 학부모가 승인한 건에도 「지각 등원」이 간다.
+     * 가르게 되면 {@code case LATE} 를 사유 여부로 나누면 된다.
      *
      * <p>★ <b>사유 외출도 외출이다.</b> 사유 제출 여부는 벌점·집계의 구분이고, 학부모에게는
      * 「나갔다」는 사실이 같다.
      */
     private static NotificationEvent eventOf(AttendanceEventType type) {
         return switch (type) {
-            case CHECK_IN, LATE -> NotificationEvent.ATTENDANCE_CHECK_IN;
+            case CHECK_IN -> NotificationEvent.ATTENDANCE_CHECK_IN;
+            case LATE -> NotificationEvent.ATTENDANCE_LATE;
             case CHECK_OUT -> NotificationEvent.ATTENDANCE_CHECK_OUT;
             case OUTING, EXCUSED_OUTING -> NotificationEvent.ATTENDANCE_OUTING;
             case RETURN -> NotificationEvent.ATTENDANCE_RETURN;

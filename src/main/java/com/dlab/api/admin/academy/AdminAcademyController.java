@@ -71,7 +71,7 @@ public class AdminAcademyController {
                                                @Valid @RequestBody AcademyUpdateRequest request) {
         return ApiResponse.success(AcademyResponse.from(academyService.update(
                 me, academyId, request.acadNm(), request.fullNm(),
-                request.attendanceDeadline())));
+                request.attendanceDeadline(), request.lateAfter())));
     }
 
     /**
@@ -87,12 +87,23 @@ public class AdminAcademyController {
                 AcademyResponse.from(academyService.changeActive(me, academyId, active)));
     }
 
-    /** @param attendanceDeadline 등원 기준 시각. 이 시각 이후 첫 태깅이 지각이다 */
+    /**
+     * @param attendanceDeadline 등원 기준 시각 — <b>미등원 감지 배치가 이 시각에 돈다</b>
+     * @param lateAfter          지각 기준 시각 — <b>이 시각 이후 첫 태깅이 지각이다</b>.
+     *
+     *     ★ 두 값은 <b>다른 축</b>이다(디랩: 지각 07:50 / 결석 08:20). 화면에서 한 칸으로
+     *     묶지 말 것 — 같은 값으로 두면 기준시각이 08:20 인 지점에서 07:55 에 온 학생이
+     *     <b>출결상 정상 등원인데 학부모에게는 지각 알림이 간다.</b>
+     *
+     *     <p>비우면 기존 값을 유지한다 — 등원 기준시각만 고치려는 화면이 지각 값을
+     *     덮어쓰지 않게 한다.
+     */
     public record AcademyUpdateRequest(
             @NotBlank(message = "지점명은 필수입니다.") @Size(max = 100) String acadNm,
             @Size(max = 100) String fullNm,
             @NotNull(message = "등원 기준 시각은 필수입니다.")
-            @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime attendanceDeadline) {
+            @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime attendanceDeadline,
+            @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime lateAfter) {
     }
 
     /**
@@ -106,12 +117,13 @@ public class AdminAcademyController {
             String fullNm,
             String storeCode,
             LocalTime attendanceDeadline,
+            LocalTime lateAfter,
             boolean active) {
 
         public static AcademyResponse from(Academy a) {
             return new AcademyResponse(a.getId(), a.getAcadCd(), a.getAcadNm(),
                     a.getFullNmOrFallback(), a.getStoreCode(),
-                    a.getAttendanceDeadline(), a.isActive());
+                    a.getAttendanceDeadline(), a.getLateAfter(), a.isActive());
         }
     }
 }

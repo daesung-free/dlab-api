@@ -100,10 +100,10 @@ class AdminAcademyTest {
     }
 
     @Test
-    @DisplayName("★ 등원 기준 시각을 고칠 수 있다 — 지각 판정 기준이다")
+    @DisplayName("★ 등원 기준 시각을 고칠 수 있다 — 미등원 감지 배치가 이 시각에 돈다")
     void canUpdateAttendanceDeadline() {
         academyService.update(bundangAdmin, bundang.getId(), "분당", "DLab 분당",
-                LocalTime.of(8, 30));
+                LocalTime.of(8, 30), null);
         em.flush();
         em.clear();
 
@@ -112,10 +112,37 @@ class AdminAcademyTest {
     }
 
     @Test
+    @DisplayName("★★ 지각 기준은 등원 기준과 다른 칸이다 — 한쪽을 고쳐도 다른 쪽이 안 바뀐다")
+    void lateAfterIsSeparateFromDeadline() {
+        // 등원 기준시각만 고친다(지각 값은 비워 보낸다)
+        academyService.update(bundangAdmin, bundang.getId(), "분당", null,
+                LocalTime.of(8, 20), null);
+        em.flush();
+        em.clear();
+
+        Academy after = academyRepository.findById(bundang.getId()).orElseThrow();
+        assertThat(after.getAttendanceDeadline()).isEqualTo(LocalTime.of(8, 20));
+        // ★★ 지각 기준이 비어 있으면 등원 기준시각으로 떨어진다. 07:50 을 기본값으로 박으면
+        //    값이 안 들어온 지점에서 08시에 오는 학생이 전부 지각으로 찍힌다
+        assertThat(after.getLateAfter()).isNull();
+        assertThat(after.lateAfterOrDeadline()).isEqualTo(LocalTime.of(8, 20));
+
+        // 지각 기준만 고친다
+        academyService.update(bundangAdmin, bundang.getId(), "분당", null,
+                LocalTime.of(8, 20), LocalTime.of(7, 40));
+        em.flush();
+        em.clear();
+
+        Academy again = academyRepository.findById(bundang.getId()).orElseThrow();
+        assertThat(again.getLateAfter()).isEqualTo(LocalTime.of(7, 40));
+        assertThat(again.getAttendanceDeadline()).isEqualTo(LocalTime.of(8, 20));
+    }
+
+    @Test
     @DisplayName("★★ 지점코드·연동코드는 수정 대상이 아니다 — 키오스크가 이 값으로 인증한다")
     void codesAreNotUpdatable() {
         academyService.update(bundangAdmin, bundang.getId(), "이름바꿈", "풀네임바꿈",
-                LocalTime.of(9, 0));
+                LocalTime.of(9, 0), null);
         em.flush();
         em.clear();
 
@@ -129,7 +156,7 @@ class AdminAcademyTest {
     @DisplayName("★ 다른 지점은 못 고친다")
     void cannotUpdateOtherAcademy() {
         assertThatThrownBy(() -> academyService.update(bundangAdmin, ilsan.getId(),
-                "일산", null, LocalTime.of(9, 0)))
+                "일산", null, LocalTime.of(9, 0), null))
                 .isInstanceOf(BusinessException.class);
     }
 

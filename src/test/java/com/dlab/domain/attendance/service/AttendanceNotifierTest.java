@@ -115,15 +115,32 @@ class AttendanceNotifierTest {
     }
 
     @Test
-    @DisplayName("★★ 지각도 등원 알림으로 나간다 — 안 보내면 미등원 알림 받은 학부모가 결석으로 안다")
-    void lateIsNotifiedAsCheckIn() {
+    @DisplayName("★★ 지각은 지각 알림으로 따로 나간다 (1019 회신) — 등원 알림에 합쳐 두지 않는다")
+    void lateIsNotifiedAsItsOwnEvent() {
+        // ⚠️ 전에는 「지각도 등원 알림으로 나간다」를 못박아 뒀다. 지각 전용 문구가 없어서였고,
+        //    빼면 미등원 알림을 받은 학부모가 자녀를 결석으로 알고 끝내기 때문이었다.
+        //    1019 에 전용 문구가 왔으므로 그 전제가 사라졌다 — 단정을 뒤집는다.
         withGuardians(father);
 
         notifier.notifyTagged(minji, tagging(AttendanceEventType.LATE, 8L, LocalTime.of(9, 30)));
 
         Assertions.assertThat(captured()).singleElement()
                 .extracting(NotificationCommand::event)
-                .isEqualTo(NotificationEvent.ATTENDANCE_CHECK_IN);
+                .isEqualTo(NotificationEvent.ATTENDANCE_LATE);
+    }
+
+    @Test
+    @DisplayName("★ 정시 등원과 지각이 서로 섞이지 않는다 — 한 쪽만 고치면 다른 쪽이 조용히 따라간다")
+    void checkInAndLateDoNotBleedIntoEachOther() {
+        withGuardians(father);
+
+        notifier.notifyTagged(minji, tagging(AttendanceEventType.CHECK_IN, 9L, LocalTime.of(7, 40)));
+        notifier.notifyTagged(minji, tagging(AttendanceEventType.LATE, 10L, LocalTime.of(8, 10)));
+
+        Assertions.assertThat(captured())
+                .extracting(NotificationCommand::event)
+                .containsExactly(NotificationEvent.ATTENDANCE_CHECK_IN,
+                        NotificationEvent.ATTENDANCE_LATE);
     }
 
     @Test

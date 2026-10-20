@@ -63,7 +63,7 @@ public class AcademyService {
      */
     @Transactional
     public Academy update(AuthPrincipal me, Long academyId, String acadNm, String fullNm,
-                          LocalTime attendanceDeadline) {
+                          LocalTime attendanceDeadline, LocalTime lateAfter) {
 
         Academy academy = requireAccessible(me, academyId);
         if (!me.hasRole(Role.SUPER_ADMIN) && !me.hasRole(Role.BRANCH_ADMIN)) {
@@ -71,13 +71,22 @@ public class AcademyService {
                     "지점 정보는 지점관리자 이상만 수정할 수 있습니다.");
         }
 
-        LocalTime before = academy.getAttendanceDeadline();
+        LocalTime beforeDeadline = academy.getAttendanceDeadline();
+        LocalTime beforeLate = academy.getLateAfter();
         academy.updateInfo(acadNm, fullNm, attendanceDeadline);
+        // 비우면 유지한다 — 등원 기준시각만 고치는 화면이 지각 값을 덮어쓰지 않게 한다
+        academy.changeLateAfter(lateAfter);
 
-        if (!before.equals(attendanceDeadline)) {
-            // 지각 판정 기준이 바뀌었다. 이 시점부터 판정이 달라진다
+        if (!beforeDeadline.equals(attendanceDeadline)) {
+            // 미등원 감지 배치가 도는 시각이 바뀌었다
             log.info("등원 기준 시각 변경: 지점={}, {} → {}, 처리자={}",
-                    academy.getAcadCd(), before, attendanceDeadline, me.accountId());
+                    academy.getAcadCd(), beforeDeadline, attendanceDeadline, me.accountId());
+        }
+        // ★ beforeLate 는 null 일 수 있다 — 지각 기준을 안 넣은 지점이 정상 상태다
+        if (!java.util.Objects.equals(beforeLate, academy.getLateAfter())) {
+            // ★ 지각 판정이 이 시점부터 달라진다. 이미 확정된 과거 출결은 저장값이라 그대로다
+            log.info("지각 기준 시각 변경: 지점={}, {} → {}, 처리자={}",
+                    academy.getAcadCd(), beforeLate, academy.getLateAfter(), me.accountId());
         }
         return academy;
     }
