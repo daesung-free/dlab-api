@@ -267,6 +267,50 @@ public class KcpBuyLinkClient {
     }
 
     /**
+     * 가상계좌 <b>말소</b> — 입금 전에 더 들어오지 못하게 닫는다 (디랩 10/12 회신 ①).
+     *
+     * <h2>★★ 안 닫으면 취소된 청구로 돈이 들어온다</h2>
+     * 가상계좌는 발급해 두면 <b>기한까지 계속 입금을 받는다.</b> 청구를 취소했는데 계좌를
+     * 그대로 두면 학부모가 그 번호로 입금하고, 그 돈은 <b>어디에 붙일지 모르는 입금</b>이
+     * 된다 — 회신 원문도 <i>"입금 전 취소 시 가상계좌 즉시 말소. 그 계좌로 더 입금되지
+     * 않게 합니다"</i> 다.
+     *
+     * <p>★ <b>전체 취소({@code STSC})를 쓴다.</b> 아직 입금이 없어 쪼갤 금액이 없다 —
+     * 환불(부분취소)과 다른 경우다.
+     *
+     * <p>⚠️ <b>이미 입금된 계좌에 쓰지 말 것.</b> 그때는 말소가 아니라 환불이다
+     * ({@code cancelPayment}). 호출부가 입금 여부를 먼저 본다.
+     */
+    public VbankClosed closeVbank(VbankCloseCommand command) {
+        require();
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("site_cd", command.siteCd());
+        body.put("kcp_cert_info", certificate());
+        body.put("kcp_sign_data",
+                signData(command.siteCd() + "^" + command.tno() + "^" + CANCEL_ALL));
+        body.put("mod_type", CANCEL_ALL);
+        body.put("mod_gubn", "MG01");
+        body.put("mod_value", command.tno());
+        body.put("mod_desc", command.reason() == null ? "가상계좌 말소" : command.reason());
+
+        JsonNode response = post(CANCEL_PATH, body);
+        String code = text(response, "res_cd");
+        if (!"0000".equals(code)) {
+            throw new BusinessException(ErrorCode.PG_REQUEST_FAILED,
+                    "가상계좌 말소 실패: %s (%s)".formatted(text(response, "res_msg"), code));
+        }
+        return new VbankClosed(text(response, "tno"));
+    }
+
+    /** @param tno 발급 시 받은 거래번호 */
+    public record VbankCloseCommand(String siteCd, String tno, String reason) {
+    }
+
+    public record VbankClosed(String tno) {
+    }
+
+    /**
      * @param tno 취소할 <b>거래번호</b>. 주문번호가 아니다
      */
     public record PaymentCancelCommand(String siteCd, String tno, int amount, String reason) {
