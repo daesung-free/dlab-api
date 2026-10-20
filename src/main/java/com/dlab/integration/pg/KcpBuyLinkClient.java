@@ -246,14 +246,17 @@ public class KcpBuyLinkClient {
                     "취소 금액이 0 이하입니다. 추가 징수는 취소로 처리할 수 없습니다.");
         }
 
+        // ★ 가상계좌 사용중지와 같은 엔드포인트(/gw/mod/v1/cancel)이고 같은 모양이다 —
+        //   tno 를 독립 필드로 보낸다. mod_value·mod_gubn 은 현금영수증 전용이다.
+        //   ⚠️ 카드 부분취소는 규격서를 받지 못해 가상계좌 규격에서 유추했다.
+        //      실호출로 검증되지 않았다 — 운영 인증서가 오면 가장 먼저 확인할 것.
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("site_cd", command.siteCd());
+        body.put("tno", command.tno());
         body.put("kcp_cert_info", certificate());
         body.put("kcp_sign_data",
                 signData(command.siteCd() + "^" + command.tno() + "^" + CANCEL_PARTIAL));
         body.put("mod_type", CANCEL_PARTIAL);
-        body.put("mod_gubn", "MG01");
-        body.put("mod_value", command.tno());
         body.put("mod_mny", String.valueOf(command.amount()));
         body.put("mod_desc", command.reason() == null ? "환불" : command.reason());
 
@@ -284,14 +287,17 @@ public class KcpBuyLinkClient {
     public VbankClosed closeVbank(VbankCloseCommand command) {
         require();
 
+        // ★★ tno 를 독립 필드로 보낸다. mod_value 에 넣으면 KCP 가 거래를 못 찾아
+        //    「RC57 원거래 없음」으로 거절한다 — 실제로 그렇게 당했다.
+        //    mod_value·mod_gubn 은 **현금영수증 취소 전용** 모양이다(그 가이드가 명시).
+        //    가상계좌 사용중지는 tno 를 쓴다(가상계좌 HUB 가이드 3장).
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("site_cd", command.siteCd());
+        body.put("tno", command.tno());
         body.put("kcp_cert_info", certificate());
         body.put("kcp_sign_data",
                 signData(command.siteCd() + "^" + command.tno() + "^" + CANCEL_ALL));
         body.put("mod_type", CANCEL_ALL);
-        body.put("mod_gubn", "MG01");
-        body.put("mod_value", command.tno());
         body.put("mod_desc", command.reason() == null ? "가상계좌 말소" : command.reason());
 
         JsonNode response = post(CANCEL_PATH, body);

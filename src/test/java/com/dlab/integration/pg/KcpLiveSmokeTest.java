@@ -85,4 +85,25 @@ class KcpLiveSmokeTest {
         assertThat(issued.account()).isNotBlank();
         assertThat(issued.tno()).isNotBlank();
     }
+
+    @Test
+    @EnabledIf("certificateExists")
+    @DisplayName("★★ 가상계좌 발급 → 말소 왕복 — 목 테스트가 잡지 못하는 전문 모양을 여기서 잡는다")
+    void issuesAndClosesVbank() {
+        // ★ 이 테스트가 실제로 버그를 잡았다(2026-10-20).
+        //   말소 전문에 tno 를 독립 필드로 넣지 않고 mod_value 에 넣었더니
+        //   KCP 가 「RC57 원거래 없음」으로 거절했다. 목으로 대체한 테스트 4건은
+        //   전부 통과했다 — 전문 모양은 실호출만이 검증한다.
+        var issued = client().issueVbank(new KcpBuyLinkClient.VbankCommand(
+                TEST_SITE_CD, "TESTC-" + System.currentTimeMillis(), 1000,
+                "말소 대상", "홍길동", "01012341234", "BK26",
+                java.time.LocalDateTime.now().plusDays(7)
+                        .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))));
+
+        var closed = client().closeVbank(new KcpBuyLinkClient.VbankCloseCommand(
+                TEST_SITE_CD, issued.tno(), "테스트 말소"));
+
+        System.out.println("말소: tno " + closed.tno());
+        assertThat(closed.tno()).isNotBlank();
+    }
 }
