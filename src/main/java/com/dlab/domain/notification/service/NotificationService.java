@@ -66,17 +66,22 @@ public class NotificationService {
         //   성공으로 두면 학부모가 못 받은 것을 아무도 모른다.
         List<String> missing = missingVariables(template, command.variables());
 
-        NotificationLog notificationLog = new NotificationLog(
-                command.academy(),
-                command.year(),
-                command.event(),
-                template.getChannel(),
-                command.recipient(),
-                command.student(),
-                render(template.getTitleTemplate(), command.variables()),
-                render(template.getBodyTemplate(), command.variables()),
-                command.variables(),
-                command.dedupKey());
+        // ★ 계정 수신자와 번호 수신자를 한 테이블에 남긴다 — 이력이 갈라지면
+        //   「왜 안 갔나」에 답할 수 없다
+        NotificationLog notificationLog = command.recipient() != null
+                ? new NotificationLog(
+                        command.academy(), command.year(), command.event(),
+                        template.getChannel(), command.recipient(), command.student(),
+                        render(template.getTitleTemplate(), command.variables()),
+                        render(template.getBodyTemplate(), command.variables()),
+                        command.variables(), command.dedupKey())
+                : NotificationLog.toPhone(
+                        command.academy(), command.year(), command.event(),
+                        template.getChannel(), command.recipientPhone(),
+                        command.recipientName(), command.student(),
+                        render(template.getTitleTemplate(), command.variables()),
+                        render(template.getBodyTemplate(), command.variables()),
+                        command.variables(), command.dedupKey());
 
         try {
             logRepository.save(notificationLog);

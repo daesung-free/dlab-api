@@ -3,7 +3,6 @@ package com.dlab.integration.aligo;
 import com.dlab.domain.notification.entity.NotificationChannel;
 import com.dlab.domain.notification.entity.NotificationLog;
 import com.dlab.domain.notification.service.NotificationSender;
-import com.dlab.domain.user.entity.Account;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -42,10 +41,11 @@ public class AligoNotificationSender implements NotificationSender {
 
     @Override
     public void send(NotificationLog log) {
-        String phone = phoneOf(log.getRecipient());
+        // ★ 엔티티가 풀어 준 번호를 쓴다. 계정에서만 꺼내면 계정 없는 수신자
+        //   (입학 대기자·급식업체)에게 보내는 이력이 조용히 실패한다
+        String phone = log.resolvedPhone();
         if (phone == null || phone.isBlank()) {
-            throw new AligoException(0, "수신자 전화번호가 없습니다: accountId="
-                    + log.getRecipient().getId());
+            throw new AligoException(0, "수신자 전화번호가 없습니다: logId=" + log.getId());
         }
 
         String body = log.getBody();
@@ -53,19 +53,4 @@ public class AligoNotificationSender implements NotificationSender {
         client.send(phone, log.getTitle(), body, AligoClient.MessageType.of(body));
     }
 
-    private static String phoneOf(Account account) {
-        if (account.getStudent() != null) {
-            return account.getStudent().getPhone();
-        }
-        if (account.getGuardian() != null) {
-            return account.getGuardian().getPhone();
-        }
-        if (account.getEmployee() != null) {
-            return account.getEmployee().getPhone();
-        }
-        if (account.getTeacher() != null) {
-            return account.getTeacher().getPhone();
-        }
-        return null;
-    }
 }
