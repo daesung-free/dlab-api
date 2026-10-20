@@ -42,11 +42,17 @@ public class KcpBuyLinkClient {
     private static final String VBANK_PATH = "/gw/hub/v1/payment";
     /** 취소 전용 경로다. 발급 경로로 보내면 받지 않는다 */
     private static final String CANCEL_PATH = "/gw/mod/v1/cancel";
-    /**
-     * 전체 취소. 부분 취소({@code STPC})는 쓰지 않는다 — 수납을 부분 취소하는 흐름이
-     * 없어서, 만들어 두면 금액이 어긋난 채 신고될 여지만 생긴다.
-     */
+    /** 전체 취소. 현금영수증 취소가 이것을 쓴다 — 금액을 쪼갤 일이 없다. */
     private static final String CANCEL_ALL = "STSC";
+    /**
+     * 부분 취소.
+     *
+     * <p>★ <b>환불이 부분 취소다.</b> 전에는 "수납을 부분 취소하는 흐름이 없다"고 보고
+     * 쓰지 않았는데, 교습비 환불은 <b>이용기간 구간으로 일부만</b> 돌려준다(0820 규정) —
+     * 750,000 을 받고 375,000 만 돌려주는 것이 정상이다. 전체 취소로 걸면
+     * <b>학생이 쓴 기간까지 돌려주게 된다.</b>
+     */
+    private static final String CANCEL_PARTIAL = "STPC";
     /** 가상계좌 거래 구분. KCP 고정값이라 바꾸면 거절된다 */
     private static final String VBANK_TXTYPE = "41100000";
     /** 원화. KCP 규격값이다 */
@@ -220,6 +226,53 @@ public class KcpBuyLinkClient {
                     "현금영수증 취소 실패: %s (%s)".formatted(text(response, "res_msg"), code));
         }
         return new CashReceiptCanceled(text(response, "cash_no"), text(response, "receipt_no"));
+    }
+
+    /**
+     * 결제 취소 — <b>부분 취소</b>다 (환불).
+     *
+     * <p>★ 금액을 함께 보낸다({@code mod_mny}). 교습비 환불은 구간 계산으로 일부만
+     * 돌려주므로 전체 취소로 걸면 <b>학생이 쓴 기간까지 돌려주게 된다.</b>
+     *
+     * <p>취소 대상은 주문번호가 아니라 <b>거래번호({@code tno})</b>다 — 현금영수증이
+     * {@code cash_no} 를 쓰는 것과 같은 구조다.
+     *
+     * @param amount 돌려줄 금액. <b>0 이하면 부르지 말 것</b> — 추가 징수는 취소가 아니다
+     */
+    public PaymentCanceled cancelPayment(PaymentCancelCommand command) {
+        require();
+        if (command.amount() <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "취소 금액이 0 이하입니다. 추가 징수는 취소로 처리할 수 없습니다.");
+        }
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("site_cd", command.siteCd());
+        body.put("kcp_cert_info", certificate());
+        body.put("kcp_sign_data",
+                signData(command.siteCd() + "^" + command.tno() + "^" + CANCEL_PARTIAL));
+        body.put("mod_type", CANCEL_PARTIAL);
+        body.put("mod_gubn", "MG01");
+        body.put("mod_value", command.tno());
+        body.put("mod_mny", String.valueOf(command.amount()));
+        body.put("mod_desc", command.reason() == null ? "환불" : command.reason());
+
+        JsonNode response = post(CANCEL_PATH, body);
+        String code = text(response, "res_cd");
+        if (!"0000".equals(code)) {
+            throw new BusinessException(ErrorCode.PG_REQUEST_FAILED,
+                    "결제 취소 실패: %s (%s)".formatted(text(response, "res_msg"), code));
+        }
+        return new PaymentCanceled(text(response, "tno"), text(response, "mod_mny"));
+    }
+
+    /**
+     * @param tno 취소할 <b>거래번호</b>. 주문번호가 아니다
+     */
+    public record PaymentCancelCommand(String siteCd, String tno, int amount, String reason) {
+    }
+
+    public record PaymentCanceled(String tno, String canceledAmount) {
     }
 
     /**
