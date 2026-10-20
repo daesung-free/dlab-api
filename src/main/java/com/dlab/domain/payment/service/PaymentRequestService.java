@@ -119,6 +119,56 @@ public class PaymentRequestService {
     }
 
     /**
+     * 가상계좌 <b>말소</b> — 입금 전에 더 들어오지 못하게 닫는다 (디랩 10/12 회신 ①).
+     *
+     * <h2>★★ 안 닫으면 취소된 청구로 돈이 들어온다</h2>
+     * 가상계좌는 발급해 두면 <b>기한까지 계속 입금을 받는다.</b> 청구를 취소했는데 계좌를
+     * 그대로 두면 학부모가 그 번호로 입금하고, 그 돈은 <b>어디에 붙일지 모르는 입금</b>이
+     * 된다. 회신 원문: <i>"입금 전 취소 시 가상계좌 즉시 말소. 그 계좌로 더 입금되지
+     * 않게 합니다."</i>
+     *
+     * <h2>⚠️ 이미 입금된 건은 말소가 아니라 환불이다</h2>
+     * 입금이 확정된({@code PAID}) 건을 말소로 처리하면 <b>돈은 우리에게 있는데 거래가
+     * 사라진다.</b> 그때는 {@code RefundService} 로 가야 하므로 여기서 막는다.
+     *
+     * <p>★ <b>PG 말소가 실패하면 우리 상태도 바꾸지 않는다.</b> 우리만 취소로 두면
+     * <b>계좌는 살아 있는데 화면에는 닫힌 것으로</b > 보여, 그 뒤 들어온 입금을 아무도
+     * 예상하지 못한다.
+     */
+    @Transactional
+    public PaymentRequest closeVbank(AuthPrincipal me, Long requestId) {
+        PaymentRequest request = requestRepository.findById(requestId)
+                .filter(r -> !r.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "결제 요청을 찾을 수 없습니다."));
+        if (!me.canAccessAcademy(request.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        if (request.getPayMethod() != PayMethod.VCNT) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "가상계좌 요청이 아닙니다. (수단: %s)".formatted(request.getPayMethod()));
+        }
+        if (request.isPaid()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "이미 입금된 가상계좌입니다. 말소가 아니라 환불로 처리해야 합니다.");
+        }
+        if (request.getStatus() == PaymentRequestStatus.CANCELED) {
+            return request;   // 두 번 눌러도 안전하다
+        }
+        if (request.getTno() == null || request.getTno().isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "발급되지 않은 가상계좌입니다.");
+        }
+
+        client.closeVbank(new KcpBuyLinkClient.VbankCloseCommand(
+                request.getPgSite().getSiteCd(), request.getTno(), "청구 취소"));
+        // ★ PG 가 받아들인 뒤에만 우리 상태를 바꾼다 — 위 참고
+        request.markCanceled();
+        log.info("가상계좌 말소: requestId={}, orderNo={}", requestId, request.getOrderNo());
+        return request;
+    }
+
+    /**
      * 가상계좌 입금 통보.
      *
      * <p>바이링크와 같은 경로로 확정한다 — 다른 것은 <b>입금자명</b>이 따로 온다는 것뿐이다.
