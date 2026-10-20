@@ -1,6 +1,7 @@
 package com.dlab.api.app.notice;
 
 import com.dlab.common.response.ApiResponse;
+import com.dlab.domain.notice.service.NoticeAttachments;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.notice.entity.Notice;
@@ -35,6 +36,7 @@ public class AppNoticeController {
 
     private final NoticeService noticeService;
     private final AppScopeResolver scopeResolver;
+    private final com.dlab.domain.notice.service.NoticeAttachments noticeAttachments;
 
     /**
      * 공지 목록.
@@ -79,8 +81,10 @@ public class AppNoticeController {
             @RequestParam(required = false) Long studentId) {
 
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
-        return ApiResponse.success(
-                AppNoticeResponse.from(noticeService.readOne(enrollmentId, id)));
+        var notice = noticeService.readOne(enrollmentId, id);
+        // ★ 상세에만 싣는다. 목록에 넣으면 공지 20건마다 첨부 조회가 따라붙는다
+        return ApiResponse.success(AppNoticeResponse.from(notice,
+                noticeAttachments.of(notice.getId())));
     }
 
     /**
@@ -102,6 +106,14 @@ public class AppNoticeController {
      * 앱 표시용. <b>작성자 정보는 내리지 않는다</b> — 학생·학부모에게 필요 없고,
      * 담당선생님 id가 앱으로 새어나갈 이유가 없다.
      */
+    /**
+     * @param attachments 첨부(공지 이미지). <b>상세에만 실린다</b> — 목록에 넣으면
+     *                    공지 수만큼 조회가 따라붙는다.
+     *
+     *     <p>★ 디랩 1019 확정 — <b>공지는 이미지와 텍스트를 함께</b> 작성·업로드하고,
+     *     알림톡 「안내문 보기」 버튼이 그 공지를 연다. 세로로 긴 안내문 이미지가
+     *     올라오므로 화면은 가로를 꽉 채우고 비율을 유지한다.
+     */
     public record AppNoticeResponse(
             Long id,
             NoticeScope scope,
@@ -109,15 +121,28 @@ public class AppNoticeController {
             String content,
             boolean pinned,
             boolean banner,
-            Instant postedAt) {
+            Instant postedAt,
+            java.util.List<NoticeAttachments.View> attachments) {
 
+        /**
+         * 목록·배너용 — <b>첨부를 싣지 않는다.</b>
+         *
+         * <p>★ 목록에 넣으면 공지 수만큼 첨부 조회가 따라붙는다. 화면은 상세에서
+         * 이미지를 보여주므로 목록에는 필요하지 않다.
+         */
         public static AppNoticeResponse from(Notice n) {
+            return from(n, java.util.List.of());
+        }
+
+        public static AppNoticeResponse from(Notice n,
+                                             java.util.List<NoticeAttachments.View> attachments) {
             return new AppNoticeResponse(
                     n.getId(), n.getScope(), n.getTitle(), n.getContent(),
                     n.isPinned(), n.isBanner(),
                     // 예약 발행분은 발행 시각이 곧 게시일이다. 작성 시각을 내리면
                     // 미리 써둔 공지가 "며칠 전에 올라온 글"로 보인다
-                    n.getPublishedAt() != null ? n.getPublishedAt() : n.getCreatedAt());
+                    n.getPublishedAt() != null ? n.getPublishedAt() : n.getCreatedAt(),
+                    attachments);
         }
     }
 }

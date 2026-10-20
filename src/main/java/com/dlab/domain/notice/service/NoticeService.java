@@ -77,6 +77,28 @@ public class NoticeService {
                 : noticeRepository.findForAdmin(academyId, targetYear);
     }
 
+    /**
+     * 관리자 상세 조회 — 수정 화면이 기존 내용·첨부를 불러오는 데 쓴다.
+     *
+     * <h2>★ 조회는 작성 권한을 보지 않는다</h2>
+     * <b>조회는 관리자 전체 공유, 작성은 역할별 제한</b>이다(전체공지=행정, 반공지=담당선생님).
+     * 여기서 {@code requireWritable} 을 쓰면 <b>담당선생님이 전체공지 상세를 못 본다</b> —
+     * 목록에는 보이는데 눌렀을 때만 막히는 모양이 된다.
+     *
+     * <p>지점 범위만 본다 — 다른 지점 공지는 목록에도 안 나온다.
+     */
+    @Transactional(readOnly = true)
+    public Notice findOneForAdmin(AuthPrincipal me, Long id) {
+        Notice notice = noticeRepository.findById(id)
+                .filter(n -> !n.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOTICE_NOT_FOUND));
+        if (notice.getAcademy() != null
+                && !me.canAccessAcademy(notice.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        return notice;
+    }
+
     @Transactional
     public Notice createForAll(AuthPrincipal me, String title, String content) {
         Author author = requireAuthor(me);
