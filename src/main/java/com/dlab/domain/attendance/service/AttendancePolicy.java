@@ -73,7 +73,9 @@ public class AttendancePolicy {
      * @param today       그날 태깅 이력(시간순). 비어 있으면 첫 태깅이다
      * @param periods     그날 요일 구분의 교시 전체(시작시각 순). 비어 있으면 시간표가 없다
      * @param at          태깅 시각
-     * @param lateAfter   지각 판정 기준 시각(지점 공통 {@code attendance_deadline})
+     * @param lateAfter   지각 판정 기준 시각(지점별 {@code academy.late_after}).
+     *                    ⚠️ <b>{@code attendance_deadline} 이 아니다</b> — 그쪽은 미등원
+     *                    배치가 쓰고 값이 다르다(지각 07:50 / 결석 08:20)
      * @param excused     그날 승인된 사유신청 종류
      */
     public AttendanceDecision decide(List<AttendanceEventType> today,

@@ -164,7 +164,9 @@ public class KioskAttendanceService {
                 history,
                 periods,
                 at.toLocalTime(),
-                enrollment.getAcademy().getAttendanceDeadline(),
+                // ★ 지각 판정은 late_after 다. attendance_deadline 은 미등원 배치 몫이다 —
+                //   두 값이 다르므로(지각 07:50 / 결석 08:20) 섞으면 정상 등원이 지각으로 찍힌다
+                enrollment.getAcademy().lateAfterOrDeadline(),
                 excusedOptions(enrollment.getId(), at, history));
     }
 
