@@ -301,4 +301,91 @@ class AdminPenaltyBoardTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // 일괄 취소 · 수정 (디랩 1021 피드백 2-7 · 2-8)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 일괄 취소 — 한 건이 실패해도 나머지는 취소된다")
+    void bulkRevokeKeepsGoingOnFailure() {
+        var granted = penaltyService.grantManually(
+                admin, List.of(minji.getId(), seojun.getId()), late, null, null);
+        em.flush();
+        var ids = granted.stream().map(PenaltyPoint::getId).toList();
+
+        // 하나를 먼저 취소해 둔다 — 일괄에서 그 건이 실패한다
+        penaltyService.revoke(admin, ids.get(0));
+        em.flush();
+
+        var result = penaltyService.revokeAll(admin,
+                List.of(ids.get(0), ids.get(1), 999_999L));
+        em.flush();
+
+        // ★ 20건을 체크했는데 하나가 걸려 전부 되돌아가면 담당자는 어느 것이
+        //   걸렸는지 모르는 채 다시 20건을 고르게 된다
+        assertThat(result.revoked()).containsExactly(ids.get(1));
+        assertThat(result.failed()).containsOnlyKeys(ids.get(0), 999_999L);
+        // ⚠️ 사유가 함께 와야 한다 — 「2건 실패」만 보여주면 담당자가 할 일이 없다
+        assertThat(result.failed().values()).allSatisfy(m -> assertThat(m).isNotBlank());
+    }
+
+    @Test
+    @DisplayName("★ 빈 목록으로 부르면 아무것도 안 바뀐다")
+    void bulkRevokeWithEmptyList() {
+        var result = penaltyService.revokeAll(admin, List.of());
+        assertThat(result.revoked()).isEmpty();
+        assertThat(result.failed()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("★ 일자·사유를 고친다 — 취소 후 재입력이 유일한 길이었다")
+    void modifyChangesDateAndReason() {
+        var granted = penaltyService.grantManually(
+                admin, List.of(minji.getId()), late, "원래 사유", null);
+        em.flush();
+        Long id = granted.get(0).getId();
+
+        var target = java.time.LocalDate.now(clock).minusDays(3);
+        penaltyService.modify(admin, id, target, "고친 사유");
+        em.flush();
+        em.clear();
+
+        var after = em.find(PenaltyPoint.class, id);
+        assertThat(after.getReason()).isEqualTo("고친 사유");
+        assertThat(after.getOccurredAt().atZone(clock.getZone()).toLocalDate())
+                .isEqualTo(target);
+    }
+
+    @Test
+    @DisplayName("★ 비워 보낸 항목은 바꾸지 않는다")
+    void modifyKeepsOmittedFields() {
+        var granted = penaltyService.grantManually(
+                admin, List.of(minji.getId()), late, "원래 사유", null);
+        em.flush();
+        Long id = granted.get(0).getId();
+        var before = em.find(PenaltyPoint.class, id).getOccurredAt();
+
+        penaltyService.modify(admin, id, null, "사유만 고침");
+        em.flush();
+        em.clear();
+
+        var after = em.find(PenaltyPoint.class, id);
+        assertThat(after.getReason()).isEqualTo("사유만 고침");
+        assertThat(after.getOccurredAt()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("★★ 점수와 항목은 수정 경로에 없다 — 부여 시점 값이 흔들리면 안 된다")
+    void modifyCannotTouchPointsOrItem() throws Exception {
+        // 점수는 부여 시점의 항목 점수를 복사해 둔 값이다 — 항목 점수를 나중에 바꿔도
+        // 과거 이력이 소급해서 바뀌지 않게 하기 위해서다. 수정 메서드가 그걸 열면
+        // 그 보장이 사라진다. 시그니처로 못박는다.
+        var modify = PenaltyPoint.class.getMethod(
+                "modify", java.time.Instant.class, String.class);
+        assertThat(modify.getParameterCount())
+                .as("modify 가 점수·항목을 받으면 안 된다 — 항목을 바꿔야 하면 "
+                        + "취소 후 재입력이 맞다(멱등키도 그 조합으로 잡혀 있다)")
+                .isEqualTo(2);
+    }
 }

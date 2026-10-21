@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class PenaltyService {
 
     private final PenaltyPointRepository pointRepository;
@@ -91,6 +92,72 @@ public class PenaltyService {
                         "상벌점 내역을 찾을 수 없습니다."));
         validateAccessible(principal, point.getEnrollment());
         point.markDeleted();
+    }
+
+    /**
+     * 일괄 취소 (디랩 1021 피드백 2-7).
+     *
+     * <p>디랩 원문: <i>"체크 박스 체크 후에 <b>일괄 취소</b>가 가능하면 좋을 것 같습니다."</i>
+     * 화면에 버튼은 있었는데 서버가 하나씩만 받았다.
+     *
+     * <h2>★ 한 건이 실패해도 나머지는 취소한다</h2>
+     * 20건을 체크했는데 하나가 이미 취소된 건이라 전부 되돌아가면, 담당자는
+     * <b>어느 것이 걸렸는지 모르는 채 다시 20건을 고르게</b> 된다.
+     *
+     * @return 취소한 id 와 실패한 id·사유
+     */
+    @Transactional
+    public BulkRevokeResult revokeAll(AuthPrincipal principal, List<Long> penaltyPointIds) {
+        List<Long> revoked = new java.util.ArrayList<>();
+        java.util.Map<Long, String> failed = new java.util.LinkedHashMap<>();
+
+        for (Long id : penaltyPointIds) {
+            try {
+                revoke(principal, id);
+                revoked.add(id);
+            } catch (BusinessException e) {
+                // ★ 한 건의 실패가 나머지를 되돌리지 않게 한다.
+                //   revoke 는 같은 트랜잭션이라 예외가 롤백 표시를 남기지 않는 BusinessException
+                //   만 잡는다 — 그 밖의 예외는 그대로 올려 전체를 되돌린다
+                failed.put(id, e.getMessage());
+            }
+        }
+        log.info("상벌점 일괄 취소: 요청={}, 취소={}, 실패={}, 처리자={}",
+                penaltyPointIds.size(), revoked.size(), failed.size(), principal.accountId());
+        return new BulkRevokeResult(revoked, failed);
+    }
+
+    /**
+     * @param failed id → 사유. ★ <b>화면에 사유를 그대로 보여줄 것</b> —
+     *               「3건 실패」만 보여주면 담당자가 할 수 있는 일이 없다
+     */
+    public record BulkRevokeResult(List<Long> revoked, java.util.Map<Long, String> failed) {
+    }
+
+    /**
+     * 일자·사유 수정 (디랩 1021 피드백 2-8).
+     *
+     * <p>★ <b>점수와 항목은 바꿀 수 없다</b>({@link PenaltyPoint#modify}).
+     *
+     * <p>⚠️ 일자를 바꾸면 그날 누적이 달라진다. 수정 이력은 {@code @Audited("상벌점")} 이
+     * 자동으로 남긴다 — {@code occurredAt}·{@code reason} 에 {@code @AuditLabel} 이 달려 있어
+     * 화면에 「발생 시각」·「사유」로 보인다.
+     */
+    @Transactional
+    public PenaltyPoint modify(AuthPrincipal principal, Long penaltyPointId,
+                               java.time.LocalDate occurredOn, String reason) {
+        PenaltyPoint point = pointRepository.findById(penaltyPointId)
+                .filter(p -> !p.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "상벌점 내역을 찾을 수 없습니다."));
+        validateAccessible(principal, point.getEnrollment());
+
+        java.time.Instant at = occurredOn == null ? null
+                : occurredOn.atStartOfDay(clock.getZone()).toInstant();
+        point.modify(at, reason);
+        log.info("상벌점 수정: id={}, 일자={}, 처리자={}",
+                penaltyPointId, occurredOn, principal.accountId());
+        return point;
     }
 
     @Transactional(readOnly = true)
