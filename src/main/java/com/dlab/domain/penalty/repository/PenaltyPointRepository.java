@@ -10,6 +10,17 @@ public interface PenaltyPointRepository extends JpaRepository<PenaltyPoint, Long
 
     boolean existsByIdempotencyKeyAndDeletedFalse(String idempotencyKey);
 
+    /**
+     * 자동부여 건을 멱등키로 찾는다 — <b>정정으로 취소할 때</b> 쓴다
+     * (디랩 1021 피드백 2-1).
+     *
+     * <p>★ 「지각 → 결석」으로 고치면 <b>지각 벌점을 거둬야 한다.</b> 그 건을 찾는
+     * 유일한 길이 멱등키({@code 학생:일자:규칙})다 — 사유 문자열로 찾으면 수기 부여분까지
+     * 걸린다.
+     */
+    java.util.Optional<com.dlab.domain.penalty.entity.PenaltyPoint>
+            findByIdempotencyKeyAndDeletedFalse(String idempotencyKey);
+
     /** 이 등록 건에 상벌점 이력이 있는가 — 학생 삭제를 막는 근거다. */
     boolean existsByEnrollmentIdAndDeletedFalse(Long enrollmentId);
 
