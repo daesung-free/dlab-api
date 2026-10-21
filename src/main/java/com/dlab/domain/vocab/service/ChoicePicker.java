@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * 객관식 보기 추출 (v2 6.1).
@@ -47,12 +48,16 @@ public final class ChoicePicker {
     /**
      * @param answer    정답 단어
      * @param sameUnit  같은 유닛의 단어들(정답 포함 가능 — 걸러낸다)
-     * @param allWords  전체 단어. 2·3단계에서 쓴다
+     * @param allWords  전체 단어 공급자. ★ <b>2·3단계에 들어갈 때만 호출된다</b> —
+     *                  1단계에서 보기가 다 차면 전체 단어(2,000건)를 읽지 않는다.
+     *                  v1 9장이 2,500명 동시 접속을 요구하므로 매 문항마다 전체를 읽으면
+     *                  그만큼 배로 늘어난다
      * @param size      보기 수(정답 1 + 오답 size-1)
      * @param random    섞기용. ★ 테스트가 고정 시드를 넣는다
      */
     public static Choices pick(VocabWord answer, Collection<VocabWord> sameUnit,
-                               Collection<VocabWord> allWords, int size, Random random) {
+                               Supplier<Collection<VocabWord>> allWords,
+                               int size, Random random) {
         String answerText = firstMeaning(answer);
         // ★★ 정답과 같은 뜻을 가진 단어는 오답에서 제외한다 — 정답이 둘이 된다
         Set<String> blocked = new LinkedHashSet<>();
@@ -64,13 +69,14 @@ public final class ChoicePicker {
 
         // 1) 같은 유닛 · 같은 품사
         collect(wrong, need, sameUnit, answer, blocked, true);
-        // 2) 다른 유닛 · 같은 품사
+        // 2) 다른 유닛 · 같은 품사. ★ 여기서야 전체 단어를 읽는다
         if (wrong.size() < need) {
-            collect(wrong, need, allWords, answer, blocked, true);
-        }
-        // 3) 품사를 풀고 전체. ⚠️ c·p 는 전체에도 적어 여기까지 온다
-        if (wrong.size() < need) {
-            collect(wrong, need, allWords, answer, blocked, false);
+            var all = allWords.get();
+            collect(wrong, need, all, answer, blocked, true);
+            // 3) 품사를 풀고 전체. ⚠️ c·p 는 전체에도 적어 여기까지 온다
+            if (wrong.size() < need) {
+                collect(wrong, need, all, answer, blocked, false);
+            }
         }
 
         List<String> texts = new ArrayList<>(wrong);
