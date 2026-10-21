@@ -77,6 +77,15 @@ public class AttendanceModification extends BaseEntity {
     @Column(name = "added_at")
     private Instant addedAt;
 
+    /** 삭제한 태깅의 이벤트. {@link #addedEvent} 와 별도 칸이다 — 추가와 구분해야 한다 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "removed_event", length = 20)
+    private AttendanceEventType removedEvent;
+
+    /** 삭제한 <b>태깅의 기록 시각</b>. 언제 지웠는가가 아니다 */
+    @Column(name = "removed_at")
+    private Instant removedAt;
+
     /** 정정 사유. 필수다 — 없으면 이력이 감사 자료가 되지 못한다. */
     @Column(nullable = false, length = 200)
     private String reason;
@@ -102,6 +111,24 @@ public class AttendanceModification extends BaseEntity {
         modification.beforeExcused = beforeExcused;
         modification.afterStatus = afterStatus;
         modification.afterExcused = afterExcused;
+        return modification;
+    }
+
+    /**
+     * 태깅 <b>삭제</b> 이력 (디랩 1021 피드백 2-1).
+     *
+     * <p>★ {@code addedEvent} 를 재사용하지 않는다 — 추가와 삭제가 구분되지 않는다.
+     *
+     * @param at 지운 <b>태깅의 기록 시각</b>이다. 언제 지웠는가는 {@code createdAt} 이다
+     */
+    public static AttendanceModification ofTaggingRemoved(
+            StudentEnrollment enrollment, LocalDate attendanceDate,
+            AttendanceEventType event, Instant at, String reason) {
+
+        AttendanceModification modification =
+                new AttendanceModification(enrollment, attendanceDate, reason);
+        modification.removedEvent = event;
+        modification.removedAt = at;
         return modification;
     }
 

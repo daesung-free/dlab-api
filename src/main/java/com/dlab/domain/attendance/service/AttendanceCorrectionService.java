@@ -100,6 +100,62 @@ public class AttendanceCorrectionService {
     }
 
     /**
+     * 태깅 <b>삭제</b> (디랩 1021 피드백 2-1).
+     *
+     * <p>디랩 원문: <i>"실수로 처리된 항목은 삭제도 필요할것 같습니다."</i>
+     * 지금까지 정정은 <b>추가와 덮어쓰기뿐</b>이라 잘못 넣은 태깅이 계속 쌓였다.
+     *
+     * <h2>★★ 사람이 넣은 행만 지운다 — 키오스크 태깅은 지우지 않는다</h2>
+     * 이 클래스 주석의 원칙(<i>"원장은 고치지 않는다 — 사람이 값을 바꾸면 '이 학생이
+     * 정말 왔었나'를 확인할 방법이 없어진다"</i>)은 <b>키오스크 태깅에 대한 것이다.</b>
+     * {@code MANUAL} 행은 애초에 사실 기록이 아니라 <b>사람의 입력</b>이고, 오타를
+     * 영구 보존할 이유가 없다.
+     *
+     * <h2>★ 조퇴 취소가 이 경로다</h2>
+     * 조퇴는 하루의 종료 경계라 그 뒤 복귀로 재실이 다시 열리지 않는다
+     * ({@code StudyTimeCalculator}). 조퇴 뒤 다시 들어온 학생은 <b>조퇴를 지워야</b>
+     * 맞고, 그 경로가 없으면 담당자가 할 수 있는 일이 없었다.
+     *
+     * <h2>★ 수정 API 를 따로 만들지 않는다</h2>
+     * 「삭제 후 재입력」으로 충분하다. 수정을 따로 두면 <b>이력이 두 갈래가 된다</b> —
+     * 같은 태깅에 대해 「고쳤다」와 「지우고 넣었다」가 섞여 되짚기 어려워진다.
+     */
+    @Transactional
+    public void deleteTagging(AuthPrincipal me, Long enrollmentId, Long taggingId, String reason) {
+        StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
+        requireReason(reason);
+
+        AttendanceTaggingLog tagging = taggingLogRepository.findById(taggingId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND, "태깅 기록이 없습니다."));
+
+        // ★ 다른 학생의 태깅 id 를 넣어도 지워지지 않게 한다 — 지점 권한만 보면 통과한다
+        if (!tagging.getEnrollment().getId().equals(enrollmentId)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "그 학생의 태깅 기록이 아닙니다.");
+        }
+        if (tagging.isDeleted()) {
+            return;   // 두 번 눌러도 안전하다
+        }
+        // ★★ 키오스크 태깅은 사실 기록이라 지우지 않는다. 잘못 찍힌 건은 상태 정정으로 간다
+        if (tagging.getSource() != AttendanceSource.MANUAL) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "키오스크로 찍힌 태깅은 지울 수 없습니다. 상태 정정을 쓰세요 — "
+                            + "원장을 지우면 그 학생이 정말 왔었는지 확인할 방법이 없어집니다.");
+        }
+
+        tagging.markDeleted();
+        modificationRepository.save(AttendanceModification.ofTaggingRemoved(
+                enrollment, tagging.getAttendanceDate(),
+                tagging.getEventType(), tagging.getRecordedAt(), reason));
+
+        // ★ 지운 뒤 다시 판정한다. 안 하면 그날 상태·순공시간에 옛 값이 그대로 남는다
+        confirmService.confirmSingle(enrollment, tagging.getAttendanceDate());
+
+        log.info("출결 태깅 삭제: enrollmentId={}, taggingId={}, 이벤트={}, 처리자={}",
+                enrollmentId, taggingId, tagging.getEventType(), me.accountId());
+    }
+
+    /**
      * 하원·외출·조퇴는 <b>등원 뒤</b>여야 한다 (2026-10-13 피드백 4-2 반영).
      *
      * <h2>★ 등원이 없으면 거절한다</h2>

@@ -310,4 +310,119 @@ class AttendanceCorrectionTest {
                 ilsanAdmin, minji.getId(), day, DailyStatus.PRESENT, false, "정정"))
                 .isInstanceOf(BusinessException.class);
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // 태깅 삭제 (디랩 1021 피드백 2-1)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 지운 태깅은 순공시간에서 빠진다 — 지웠는데 숫자가 그대로면 지운 의미가 없다")
+    void deletedTaggingIsExcludedFromStudyTime() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        // 사람이 하원을 잘못 넣었다 (10:00) — 순공이 1시간으로 잡힌다
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.CHECK_OUT, LocalTime.of(10, 0), "하원 누락");
+        em.flush();
+        em.clear();
+        assertThat(confirmed().getStudyMinutes()).isEqualTo(60);
+
+        Long wrongId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .stream()
+                .filter(l -> l.getSource() == AttendanceSource.MANUAL)
+                .findFirst().orElseThrow().getId();
+
+        correctionService.deleteTagging(admin, minji.getId(), wrongId, "시각을 잘못 넣었다");
+        em.flush();
+        em.clear();
+
+        // ★★ null 로 돌아간다 — 「언제 갔는지 모른다」다.
+        //    하원을 지웠으니 등원만 남고, 그때는 서버가 추정하지 않는다(10/13 피드백 4-2).
+        //    13시간 같은 숫자가 찍히면 그게 버그다 — 지운 뒤 더 큰 값이 나오면 안 된다
+        assertThat(confirmed().getStudyMinutes()).isNull();
+        // 원장에서도 빠진다
+        assertThat(taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day))
+                .extracting(AttendanceTaggingLog::getEventType)
+                .containsExactly(AttendanceEventType.CHECK_IN);
+    }
+
+    @Test
+    @DisplayName("★★ 키오스크 태깅은 지울 수 없다 — 그 학생이 정말 왔었는지 확인할 방법이 없어진다")
+    void kioskTaggingCannotBeDeleted() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        Long kioskId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .get(0).getId();
+
+        assertThatThrownBy(() ->
+                correctionService.deleteTagging(admin, minji.getId(), kioskId, "지우고 싶다"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("키오스크");
+    }
+
+    @Test
+    @DisplayName("★ 조퇴를 지우면 하루가 다시 열린다 — 조퇴 취소 경로다")
+    void deletingEarlyLeaveReopensTheDay() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.EARLY_LEAVE, LocalTime.of(10, 0), "조퇴");
+        em.flush();
+        em.clear();
+        assertThat(confirmed().getStudyMinutes()).isEqualTo(60);
+
+        Long earlyLeaveId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .stream()
+                .filter(l -> l.getEventType() == AttendanceEventType.EARLY_LEAVE)
+                .findFirst().orElseThrow().getId();
+
+        correctionService.deleteTagging(admin, minji.getId(), earlyLeaveId, "복귀해서 조퇴 취소");
+        em.flush();
+        em.clear();
+
+        // ★ 조퇴가 없어지면 등원만 남아 「모른다」로 돌아간다.
+        //   조퇴를 취소한 학생은 하원을 다시 넣어야 순공이 계산된다 — 그게 정직한 표현이다
+        assertThat(confirmed().getStudyMinutes()).isNull();
+    }
+
+    @Test
+    @DisplayName("★ 두 번 눌러도 안전하다")
+    void deleteIsIdempotent() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.CHECK_OUT, LocalTime.of(10, 0), "하원 누락");
+        em.flush();
+        Long id = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .stream().filter(l -> l.getSource() == AttendanceSource.MANUAL)
+                .findFirst().orElseThrow().getId();
+
+        correctionService.deleteTagging(admin, minji.getId(), id, "오입력");
+        correctionService.deleteTagging(admin, minji.getId(), id, "오입력");
+        em.flush();
+    }
+
+    @Test
+    @DisplayName("★ 다른 학생의 태깅 id 로는 지워지지 않는다 — 지점 권한만 보면 통과한다")
+    void cannotDeleteAnotherStudentsTagging() {
+        Student other = new Student("DL-2", "박서준", "010-1111-1111");
+        em.persist(other);
+        StudentEnrollment seojun = new StudentEnrollment(other, bundang, (short) 2026,
+                "2026-0002", null, GradeType.HIGH3);
+        em.persist(seojun);
+        em.persist(new AttendanceTaggingLog(bundang, seojun, AttendanceEventType.CHECK_IN,
+                AttendanceSource.MANUAL,
+                day.atTime(9, 0).atZone(clock.getZone()).toInstant(), day));
+        em.flush();
+
+        Long othersId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(seojun.getId(), day)
+                .get(0).getId();
+
+        assertThatThrownBy(() ->
+                correctionService.deleteTagging(admin, minji.getId(), othersId, "실수"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("그 학생의 태깅");
+    }
 }
