@@ -30,6 +30,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -260,6 +261,33 @@ public class AdminAttendanceController {
         correctionService.addTagging(me, enrollmentId, request.date(),
                 request.eventType(), request.at(), request.reason());
         return ApiResponse.success(null);
+    }
+
+    /**
+     * 태깅 <b>삭제</b> (디랩 1021 피드백 2-1).
+     *
+     * <p>⚠️ <b>사람이 넣은 태깅({@code MANUAL})만 지워진다.</b> 키오스크로 찍힌 행은
+     * 400 이고, 그건 상태 정정으로 간다 — 원장을 지우면 그 학생이 정말 왔었는지
+     * 확인할 방법이 없어진다.
+     *
+     * <p>★ <b>조퇴 취소가 이 경로다.</b> 조퇴 뒤 다시 들어온 학생은 조퇴를 지워야 한다.
+     *
+     * <p>지운 뒤 그날 상태와 순공시간을 <b>서버가 다시 계산한다.</b>
+     * 두 번 눌러도 안전하다.
+     */
+    @DeleteMapping("/{enrollmentId}/taggings/{taggingId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN')")
+    public ApiResponse<Void> deleteTagging(@CurrentAccount AuthPrincipal me,
+                                           @PathVariable Long enrollmentId,
+                                           @PathVariable Long taggingId,
+                                           @Valid @RequestBody DeleteTaggingRequest request) {
+        correctionService.deleteTagging(me, enrollmentId, taggingId, request.reason());
+        return ApiResponse.success(null);
+    }
+
+    /** @param reason 필수. 없으면 이력이 감사 자료가 되지 못한다 */
+    public record DeleteTaggingRequest(
+            @NotBlank(message = "삭제 사유는 필수입니다.") @Size(max = 200) String reason) {
     }
 
     /**
