@@ -22,7 +22,9 @@ import java.util.Locale;
  *       ({@link AttendanceEventType#getCode()}, {@code S·T·A·D·N·C·R})
  *       <b>+ {@code ABSENT}</b>. ★ 결석은 태깅 이벤트가 아니다 — 아무도 찍지 않은 것을
  *       일자 확정 배치가 판정해 넣는다. 그래서 코드표에 없는데도 유효하다.
- *       시드에 {@code "A"}와 {@code "ABSENT"}가 섞여 보이는 이유이고, <b>둘 다 맞다.</b></li>
+ *       시드에 {@code "A"}와 {@code "ABSENT"}가 섞여 보이는 이유이고, <b>둘 다 맞다.</b>
+ *       <b>+ {@link #LATE_RETURN}</b> 도 같은 부류다 — 단말은 「복귀」만 보내고 예정
+ *       시각과 비교하는 것은 서버다.</li>
  *   <li>{@link PenaltyTriggerType#DAILY_ROUTINE} — {@link RoutineResultStatus} 이름</li>
  *   <li>{@link PenaltyTriggerType#REGULAR_SCHEDULE} — {@code NOT_RECOGNIZED} 하나뿐</li>
  * </ul>
@@ -34,6 +36,25 @@ public final class TriggerCondition {
 
     /** 결석. 태깅이 아니라 일자 확정 배치가 넣는 값이다. */
     public static final String ABSENT = "ABSENT";
+
+    /**
+     * 지각 복귀 — <b>사유 외출의 복귀 예정 시각보다 늦게</b> 복귀했다 (디랩 1021 피드백 3-2).
+     *
+     * <p>디랩 원문: <i>"학생이 정해진 복귀시간보다 늦게 복귀하였을때, <b>지각복귀 벌점이
+     * 2점</b>입니다."</i>
+     *
+     * <h2>★ 복귀 태깅 코드({@code R})와 따로 둔다</h2>
+     * {@code R} 로 규칙을 만들면 <b>제시간에 복귀한 학생도 전부 걸린다.</b> 복귀는 정상
+     * 행동이고 벌점은 <b>늦은 복귀에만</b> 붙는다.
+     *
+     * <h2>★ 결석({@link #ABSENT})과 같은 부류다</h2>
+     * 태깅 코드가 아니라 <b>서버가 판정해 넣는 값</b>이다 — 단말은 「복귀」만 보내고,
+     * 예정 시각과 비교하는 것은 우리다.
+     *
+     * <p>⚠️ <b>좌석 장시간 미복귀와 다른 것이다.</b> 저쪽은 자리를 비운 것이고 이쪽은
+     * 건물 밖 외출이다(1020 좌석 문의의 미복귀 벌점과 섞지 말 것).
+     */
+    public static final String LATE_RETURN = "LATE_RETURN";
 
     /** 정기일정 미인정. 이 트리거의 유일한 조건값이다. */
     public static final String NOT_RECOGNIZED = "NOT_RECOGNIZED";
@@ -54,6 +75,7 @@ public final class TriggerCondition {
                                 .map(e -> new Option(e.getCode(), label(e)))
                                 .toList());
                 options.add(new Option(ABSENT, "결석(미태깅)"));
+                options.add(new Option(LATE_RETURN, "지각 복귀(예정 시각 초과)"));
                 yield List.copyOf(options);
             }
             case DAILY_ROUTINE -> Arrays.stream(RoutineResultStatus.values())
