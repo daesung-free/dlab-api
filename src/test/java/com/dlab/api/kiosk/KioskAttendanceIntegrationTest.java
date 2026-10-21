@@ -1,6 +1,10 @@
 package com.dlab.api.kiosk;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,6 +14,8 @@ import com.dlab.domain.approval.entity.ApprovalRequest;
 import com.dlab.domain.approval.entity.ApprovalStatus;
 import com.dlab.domain.approval.entity.ApproverType;
 import com.dlab.domain.approval.entity.RequestType;
+import static org.mockito.ArgumentMatchers.eq;
+
 import com.dlab.domain.attendance.entity.AbsenceReason;
 import com.dlab.domain.attendance.entity.AbsenceReasonType;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
@@ -97,6 +103,19 @@ class KioskAttendanceIntegrationTest {
      */
     @MockitoBean
     com.dlab.domain.attendance.service.AttendanceNotifier attendanceNotifier;
+
+    /**
+     * ★ 목이 아니라 <b>스파이</b>다 — 실제 엔진이 돌되 호출을 셀 수 있다.
+     *
+     * <p>엔진이 {@code REQUIRES_NEW}라 이 트랜잭션에서 만든 규칙을 못 읽는다. 그래서
+     * 부여 결과가 아니라 <b>어떤 조건값으로 불렸는가</b>를 본다
+     * ({@code PenaltyTriggerWiringTest} 와 같은 방식).
+     *
+     * <p>⚠️ 목으로 두면 <b>자동부여 0건이라 「안 걸린다」가 그냥 통과</b>한다 —
+     * 오늘 그 거짓 통과를 한 번 겪었다.
+     */
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    com.dlab.domain.penalty.service.PenaltyRuleEngine penaltyRuleEngine;
 
     MockMvc mvc;
     String token;
@@ -213,7 +232,7 @@ class KioskAttendanceIntegrationTest {
         var captor = org.mockito.ArgumentCaptor
                 .forClass(com.dlab.domain.attendance.entity.AttendanceTaggingLog.class);
         org.mockito.Mockito.verify(attendanceNotifier)
-                .notifyTagged(org.mockito.ArgumentMatchers.any(), captor.capture());
+                .notifyTagged(any(), captor.capture());
 
         // ★ 넘기는 것은 **저장이 끝난 원장 행**이다 — id가 중복 방지 키에 들어가므로
         //   저장 전에 부르면 키가 전부 같아져 학부모가 첫 알림만 받는다
@@ -594,5 +613,87 @@ class KioskAttendanceIntegrationTest {
 
         // 다시 조퇴할 수 있다 (키오스크 커밋 9dda934 "조퇴후 재등원 후 다시 조퇴 대응")
         tag(retryAt).andExpect(jsonPath("$.data[0].code").value(128));
+    }
+
+    // ── 지각 복귀 벌점 (디랩 1021 피드백 3-2) ──────────────────
+
+    /**
+     * 외출 → 복귀를 한 번에.
+     *
+     * @param plannedReturn 복귀 예정 시각. ★ {@code AbsenceReason.endTime} 이 그 값이다
+     * @param actualReturn  실제 복귀 태깅 시각
+     */
+    private void outAndReturn(java.time.LocalTime out, java.time.LocalTime plannedReturn,
+                              java.time.LocalTime actualReturn) throws Exception {
+        ApprovalItem item = new ApprovalItem(bundang, (short) 2026,
+                RequestType.ABSENCE_REASON, ApproverType.TEACHER, null, null);
+        em.persist(item);
+        ApprovalRequest approval = new ApprovalRequest(bundang, item, minji, null,
+                com.dlab.domain.approval.entity.ApproverType.PARENT, Instant.now(clock));
+        ReflectionTestUtils.setField(approval, "status", ApprovalStatus.APPROVED);
+        em.persist(approval);
+
+        AbsenceReason reason = new AbsenceReason(bundang, minji, today,
+                AbsenceReasonType.OUTING, "사유", out, plannedReturn);
+        reason.linkApproval(approval);
+        em.persist(reason);
+        em.flush();
+
+        tag(fmt(java.time.LocalTime.of(8, 0)), null);      // 등원
+        tag(fmt(out), "N");                                 // 사유 외출
+        tag(fmt(actualReturn), null);                       // 복귀
+    }
+
+    @Test
+    @DisplayName("★★ 예정보다 늦게 복귀하면 지각 복귀 조건으로 한 번 더 부른다 (1021 3-2)")
+    void lateReturnTriggersItsOwnCondition() throws Exception {
+        outAndReturn(java.time.LocalTime.of(12, 0),
+                java.time.LocalTime.of(13, 0),      // 1시 복귀 약속
+                java.time.LocalTime.of(13, 30));    // 1시 반에 왔다
+
+        verify(penaltyRuleEngine).apply(any(),
+                eq(com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                eq(com.dlab.domain.penalty.entity.TriggerCondition.LATE_RETURN),
+                eq(today));
+    }
+
+    @Test
+    @DisplayName("★★ 제시간에 복귀하면 부르지 않는다 — R 로 규칙을 만들면 전원이 걸린다")
+    void onTimeReturnDoesNotTrigger() throws Exception {
+        outAndReturn(java.time.LocalTime.of(12, 0),
+                java.time.LocalTime.of(13, 0),
+                java.time.LocalTime.of(12, 50));    // 10분 일찍 왔다
+
+        verify(penaltyRuleEngine, never()).apply(any(),
+                any(),
+                eq(com.dlab.domain.penalty.entity.TriggerCondition.LATE_RETURN),
+                any());
+    }
+
+    @Test
+    @DisplayName("★ 복귀 태깅 자체는 그대로 R 로도 부른다 — 두 조건값이 따로 산다")
+    void returnStillTriggersItsOwnCode() throws Exception {
+        outAndReturn(java.time.LocalTime.of(12, 0),
+                java.time.LocalTime.of(13, 0),
+                java.time.LocalTime.of(13, 30));
+
+        verify(penaltyRuleEngine).apply(any(),
+                eq(com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                eq(com.dlab.domain.attendance.entity.AttendanceEventType.RETURN.getCode()),
+                eq(today));
+    }
+
+    @Test
+    @DisplayName("★★ 외출 신청이 없으면 지각 복귀가 아니다 — 비교할 예정 시각이 없다")
+    void returnWithoutRequestIsNotLateReturn() throws Exception {
+        // 신청 없이 나갔다 들어온다(무단 외출) — 그건 다른 건이다
+        tag(fmt(java.time.LocalTime.of(8, 0)), null);
+        tag(fmt(java.time.LocalTime.of(12, 0)), "D");
+        tag(fmt(java.time.LocalTime.of(13, 30)), null);
+
+        verify(penaltyRuleEngine, never()).apply(any(),
+                any(),
+                eq(com.dlab.domain.penalty.entity.TriggerCondition.LATE_RETURN),
+                any());
     }
 }
