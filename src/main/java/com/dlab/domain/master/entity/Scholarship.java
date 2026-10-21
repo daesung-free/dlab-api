@@ -1,5 +1,7 @@
 package com.dlab.domain.master.entity;
 
+import com.dlab.domain.audit.AuditLabel;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -17,6 +19,7 @@ import java.math.BigDecimal;
  * 금액 계산에 {@code double}을 쓰면 반올림 오차가 청구서에 그대로 나간다.
  */
 @Getter
+@Audited("장학")
 @Entity
 @Table(name = "scholarship")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -35,9 +38,11 @@ public class Scholarship extends BaseEntity {
     private StudentEnrollment enrollment;
 
     @Column(name = "scholarship_type", nullable = false, length = 20)
+    @AuditLabel("장학 종류")
     private String scholarshipType;
 
     @Column(name = "discount_rate", nullable = false, precision = 5, scale = 2)
+    @AuditLabel("할인율")
     private BigDecimal discountRate;
 
     public Scholarship(Academy academy, StudentEnrollment enrollment,

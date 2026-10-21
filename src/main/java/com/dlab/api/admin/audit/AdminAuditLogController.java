@@ -82,6 +82,44 @@ public class AdminAuditLogController {
         return ApiResponse.from(page.map(a -> AuditLogResponse.of(a, names, targets)));
     }
 
+    /**
+     * 업무영역 목록 — 조회 필터 드롭다운.
+     *
+     * <h2>★★ 왜 서버가 내리는가</h2>
+     * 디랩 지적의 뒷문장이 핵심이었다 — <i>"업무영역에 없는 경우 <b>변경이력에도 확인이
+     * 안되는 것</b> 같습니다."</i> 화면이 목록을 들고 있으면 <b>서버에 {@code @Audited} 를
+     * 새로 붙여도 드롭다운에 안 나타나고, 그러면 그 기록은 쌓이는데 아무도 볼 수 없다.</b>
+     *
+     * <p>★ {@code @Audited} 가 붙은 엔티티를 훑어 그 한국어 이름을 그대로 내린다 —
+     * <b>목록이 실제와 어긋날 수 없다.</b> 라벨을 서버로 옮긴 것과 같은 이유다.
+     *
+     * <p>⚠️ 수동 기록(계정)은 애너테이션이 없어 여기에 직접 더한다. 그 값은
+     * {@code StaffAccountService.AUDIT_ACCOUNT} 와 <b>같은 문자열이어야 한다</b> —
+     * 다르면 그 영역을 골라도 0건이 나온다.
+     */
+    @GetMapping("/areas")
+    public ApiResponse<List<String>> areas() {
+        var scanner = new org.springframework.context.annotation.
+                ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new org.springframework.core.type.filter.AnnotationTypeFilter(
+                com.dlab.domain.audit.Audited.class));
+
+        var names = new java.util.TreeSet<String>();
+        for (var candidate : scanner.findCandidateComponents("com.dlab.domain")) {
+            try {
+                Class<?> type = Class.forName(candidate.getBeanClassName());
+                var audited = type.getAnnotation(com.dlab.domain.audit.Audited.class);
+                names.add(audited == null || audited.value().isBlank()
+                        ? type.getSimpleName() : audited.value());
+            } catch (ClassNotFoundException ignored) {
+                // 스캔된 클래스를 못 불러오면 그 영역만 빠진다 — 목록 전체를 막지 않는다
+            }
+        }
+        // 수동 기록분. 애너테이션이 닿지 않는다
+        names.add(com.dlab.domain.user.service.StaffAccountService.AUDIT_ACCOUNT);
+        return ApiResponse.success(List.copyOf(names));
+    }
+
     /** 한 건이 어떻게 바뀌어 왔나 — 학생 상세에서 "이 기록의 이력". */
     @GetMapping("/entities/{entityType}/{entityId}")
     public ApiResponse<List<AuditLogResponse>> history(@PathVariable String entityType,

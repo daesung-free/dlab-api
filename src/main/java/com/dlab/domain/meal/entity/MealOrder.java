@@ -1,5 +1,7 @@
 package com.dlab.domain.meal.entity;
 
+import com.dlab.domain.audit.AuditLabel;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -32,6 +34,7 @@ import lombok.NoArgsConstructor;
  * <b>결제가 붙을 자리가 주문</b>이다. 취소는 항목 단위다.
  */
 @Getter
+@Audited("급식 신청")
 @Entity
 @Table(name = "meal_order")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -51,10 +54,12 @@ public class MealOrder extends BaseEntity {
 
     /** 대상 월. 그 달 <b>1일</b>로 저장한다 — 범위 조회가 쉽다. */
     @Column(name = "target_month", nullable = false)
+    @AuditLabel("대상 월")
     private LocalDate targetMonth;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @AuditLabel("신청 상태")
     private MealOrderStatus status = MealOrderStatus.PENDING;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -146,6 +151,7 @@ public class MealOrder extends BaseEntity {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "billing_id")
+    @AuditLabel("연결 청구")
     private com.dlab.domain.payment.entity.Billing billing;
 
     public void assignBilling(com.dlab.domain.payment.entity.Billing billing) {
