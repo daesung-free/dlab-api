@@ -140,6 +140,43 @@ public class AdminLectureController {
     }
 
     /**
+     * 회차 수정 (디랩 1021 답변 Q1 의 예외 요청).
+     *
+     * <p>디랩 원문: <i>"주1회 수요일 수업이었는데 … <b>2회차 수업을 목요일에 한다</b>던지
+     * … <b>수동으로 설정</b>할 수 있을까요?"</i>
+     *
+     * <p>★ <b>출석 기록이 있어도 날짜를 바꾼다</b> — 보강이라 같은 수업이다.
+     * 삭제와 다르다(삭제는 그날 누가 왔는지가 사라져 400 이다).
+     */
+    @PutMapping("/sessions/{sessionId}")
+    public ApiResponse<LectureResponse.Session> updateSession(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long sessionId,
+            @Valid @RequestBody LectureRequests.UpdateSession request) {
+        return ApiResponse.success(LectureResponse.Session.from(lectureService.updateSession(
+                sessionId, request.sessionDate(), request.startTime(), request.endTime(),
+                request.room(), request.fee(), me)));
+    }
+
+    /**
+     * 수강 대상·대기 상한 (디랩 1021 답변 Q2·Q3).
+     *
+     * <p>★ <b>대상을 통째로 바꾼다</b> — 부분 수정을 두면 「비움」과 「안 보냄」이
+     * 구분되지 않는다. 두 축 모두 비우면 제한 없음이다.
+     *
+     * <p>★ 신청 시 <b>자격을 실제로 검사한다</b> — 표시만 하면 고3 대상 특강에 고1이
+     * 신청한다.
+     */
+    @PutMapping("/{lectureId}/targets")
+    public ApiResponse<LectureResponse.LectureDetail> changeTargets(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long lectureId,
+            @Valid @RequestBody LectureRequests.ChangeTargets request) {
+        return ApiResponse.success(LectureResponse.LectureDetail.from(lectureService.changeTargets(
+                lectureId, request.tracks(), request.grades(), request.waitlistCapacity(), me)));
+    }
+
+    /**
      * 회차 삭제.
      *
      * <p>개설 폼이 기간·요일로 회차를 한 번에 만드는 구조라 날짜를 잘못 넣으면

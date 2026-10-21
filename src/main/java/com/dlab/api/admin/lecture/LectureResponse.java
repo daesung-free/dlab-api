@@ -24,7 +24,12 @@ public final class LectureResponse {
                          LocalDate startDate, LocalDate endDate, int fee,
                          Long teacherId, String teacherName,
                          Long categoryId, String categoryName,
-                         Long confirmedCount, Long waitlistedCount) {
+                         Long confirmedCount, Long waitlistedCount,
+                         // ★ 대상이 비어 있으면 「제한 없음」이다 — 화면이 「전체」로 표시하면 된다.
+                         //   「전체」를 값으로 되돌려 보내지 말 것(저장이 두 가지로 갈린다)
+                         java.util.Set<String> targetTracks,
+                         java.util.Set<String> targetGrades,
+                         Integer waitlistCapacity) {
 
         public static LectureDetail from(Lecture l) {
             return of(l, null, null);
@@ -39,7 +44,14 @@ public final class LectureResponse {
                     l.getTeacher() == null ? null : l.getTeacher().getName(),
                     l.getCategory() == null ? null : l.getCategory().getId(),
                     l.getCategory() == null ? null : l.getCategory().getName(),
-                    confirmed, waitlisted);
+                    confirmed, waitlisted,
+                    l.getTargetTracks().stream().map(Enum::name)
+                            .collect(java.util.stream.Collectors.toCollection(
+                                    java.util.LinkedHashSet::new)),
+                    l.getTargetGrades().stream().map(Enum::name)
+                            .collect(java.util.stream.Collectors.toCollection(
+                                    java.util.LinkedHashSet::new)),
+                    l.getWaitlistCapacity());
         }
 
         public static LectureDetail withHeadcount(Lecture l, LectureService.Headcount h) {
@@ -47,12 +59,17 @@ public final class LectureResponse {
         }
     }
 
+    /**
+     * @param fee 그 회차 수강료. ★ {@code null} 은 <b>미설정</b>이다 —
+     *            화면에서 0원으로 표시하지 말 것. 「0원 무료」와 구분되지 않는다
+     */
     public record Session(Long id, short sessionNo, LocalDate sessionDate,
-                         LocalTime startTime, LocalTime endTime, String room) {
+                         LocalTime startTime, LocalTime endTime, String room,
+                         Integer fee) {
 
         public static Session from(LectureSession s) {
             return new Session(s.getId(), s.getSessionNo(), s.getSessionDate(),
-                    s.getStartTime(), s.getEndTime(), s.getRoom());
+                    s.getStartTime(), s.getEndTime(), s.getRoom(), s.getFee());
         }
     }
 

@@ -127,6 +127,48 @@ public final class LectureRequests {
             @Size(max = 50) String room) {
     }
 
+    /**
+     * 회차 수정 (디랩 1021 답변 Q1 의 예외 요청).
+     *
+     * <p>★ <b>비워 보낸 항목은 바꾸지 않는다.</b> 날짜만 옮기는 경우가 대부분이다.
+     *
+     * <p>⚠️ <b>번호는 바꿀 수 없다</b> — 이미 안내된 「3회차」가 다른 날을 가리키게 된다.
+     *
+     * @param fee 그 회차 수강료. 비우면 유지, 명시하면 교체
+     */
+    public record UpdateSession(
+            @com.fasterxml.jackson.annotation.JsonFormat(shape =
+                    com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
+                    pattern = "yyyy-MM-dd") java.time.LocalDate sessionDate,
+            @com.fasterxml.jackson.annotation.JsonFormat(shape =
+                    com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
+                    pattern = "HH:mm") java.time.LocalTime startTime,
+            @com.fasterxml.jackson.annotation.JsonFormat(shape =
+                    com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
+                    pattern = "HH:mm") java.time.LocalTime endTime,
+            @jakarta.validation.constraints.Size(max = 50) String room,
+            @jakarta.validation.constraints.PositiveOrZero(message = "수강료는 0 이상이어야 합니다.")
+            Integer fee) {
+    }
+
+    /**
+     * 수강 대상·대기 상한 (디랩 1021 답변 Q2·Q3).
+     *
+     * <h2>★★ 두 축 모두 비우면 제한 없음이다</h2>
+     * 「전체」를 값으로 보내지 말 것 — 「전체」와 「인문+자연 둘 다」가 같은 뜻인데
+     * 데이터가 두 가지로 갈린다.
+     *
+     * <p>⚠️ 학년에 {@code STAFF} 를 보내도 저장되지 않는다 — 직원은 학년이 아니다.
+     *
+     * @param waitlistCapacity 대기 상한. 비우면 유지, {@code null} 로 두면 무제한이다
+     */
+    public record ChangeTargets(
+            java.util.Set<com.dlab.domain.user.entity.TrackType> tracks,
+            java.util.Set<com.dlab.domain.user.entity.GradeType> grades,
+            @jakarta.validation.constraints.PositiveOrZero(
+                    message = "대기 상한은 0 이상이어야 합니다.") Integer waitlistCapacity) {
+    }
+
     public record MarkAttendance(
             @NotNull(message = "신청 ID는 필수입니다.") Long applicationId,
             @NotNull(message = "출석 상태는 필수입니다.") LectureAttendanceStatus status,
