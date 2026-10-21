@@ -47,6 +47,7 @@ class VocabImportTest {
     @Autowired VocabMeaningRepository meaningRepository;
     @Autowired VocabPhraseRepository phraseRepository;
     @Autowired EntityManager em;
+    @Autowired com.dlab.domain.vocab.service.VocabWordService wordService;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
@@ -196,5 +197,89 @@ class VocabImportTest {
         assertThat(errors).anyMatch(e -> e.contains("beneath") && e.contains("품사"));
         assertThat(errors).anyMatch(e -> e.contains("allow") && e.contains("해석"));
         assertThat(wordRepository.countByDeletedFalse()).isEqualTo(2_000);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 단어 관리 (v2 착수 순서 3)
+    // ─────────────────────────────────────────────────────────────
+
+    /** 적재 없이 단어 하나를 직접 만든다 — 원고 파일이 없는 CI 에서도 돈다. */
+    private com.dlab.domain.vocab.entity.VocabWord word(String seq, String raw) {
+        var w = new com.dlab.domain.vocab.entity.VocabWord((short) 1, seq, "financial", raw);
+        em.persist(w);
+        for (String t : com.dlab.domain.vocab.service.MeaningSplitter.split(raw)) {
+            em.persist(new VocabMeaning(w, t, VocabMeaning.Origin.SPLIT));
+        }
+        em.flush();
+        return w;
+    }
+
+    @Test
+    @DisplayName("★★ 뜻을 고쳐도 관리자가 넣은 인정 표현은 남는다 — 지우면 복구할 방법이 없다")
+    void modifyingMeaningKeepsManualEntries() {
+        var w = word("9001", "재정의, 금융의");
+        wordService.addMeaning(w.getId(), "돈에 관한");
+        em.flush();
+
+        wordService.modify(w.getId(), null, null, null, "재정의, 금전의",
+                null, null, null, null, null, null, null);
+        em.flush();
+        em.clear();
+
+        var texts = meaningRepository.findByWordIdAndDeletedFalse(w.getId()).stream()
+                .map(VocabMeaning::getText).toList();
+        // ★ 관리자가 학생 오답을 보고 넣은 것이라 살아남아야 한다
+        assertThat(texts).contains("돈에 관한");
+        // 새 뜻에서 파생된 후보가 들어오고 옛 SPLIT 은 빠진다
+        assertThat(texts).contains("재정의", "금전의").doesNotContain("금융의");
+    }
+
+    @Test
+    @DisplayName("★ 같은 인정 표현을 두 번 넣으면 400 — 「넣었는데 안 들어갔다」로 보이면 안 된다")
+    void duplicateManualMeaningIsRejected() {
+        var w = word("9002", "경제");
+        wordService.addMeaning(w.getId(), "돈 문제");
+        em.flush();
+
+        assertThatThrownBy(() -> wordService.addMeaning(w.getId(), "돈 문제"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("이미 등록된");
+    }
+
+    @Test
+    @DisplayName("★ 인정 표현도 학생 답과 같은 규칙으로 다듬어 저장한다")
+    void manualMeaningIsNormalized() {
+        var w = word("9003", "경제");
+        var saved = wordService.addMeaning(w.getId(), "  돈 문제.  ");
+        em.flush();
+
+        assertThat(saved.getText()).isEqualTo("돈 문제");
+    }
+
+    @Test
+    @DisplayName("★ 다른 단어의 인정 표현 id 로는 지워지지 않는다")
+    void cannotRemoveAnotherWordsMeaning() {
+        var a = word("9004", "경제");
+        var b = word("9005", "재정의");
+        var mine = wordService.addMeaning(b.getId(), "내 것");
+        em.flush();
+
+        assertThatThrownBy(() -> wordService.removeMeaning(a.getId(), mine.getId()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("그 단어의");
+    }
+
+    @Test
+    @DisplayName("★ 출제에서 빼도 단어를 지우지 않는다 — 지난 응시가 이 단어를 가리킨다")
+    void deactivateKeepsTheRow() {
+        var w = word("9006", "경제");
+
+        wordService.changeActive(w.getId(), false);
+        em.flush();
+        em.clear();
+
+        var after = wordRepository.findBySeqNoAndDeletedFalse("9006").orElseThrow();
+        assertThat(after.isActive()).isFalse();
+        assertThat(after.isDeleted()).isFalse();
     }
 }
