@@ -276,6 +276,56 @@ public class LectureService {
     }
 
     /**
+     * 회차 수정 (디랩 1021 답변 Q1 의 예외 요청).
+     *
+     * <p>디랩 원문: <i>"주1회 수요일 수업이었는데 모의고사 또는 개인 사유로 <b>2회차 수업을
+     * 목요일에 한다</b>던지 … <b>수동으로 설정</b>할 수 있을까요?"</i>
+     *
+     * <h2>★ 출석 기록이 있어도 날짜를 바꾼다</h2>
+     * 삭제와 다르다 — 삭제는 <b>그날 누가 왔는지가 사라지므로</b> 막지만, 날짜 변경은
+     * <b>보강이라 같은 수업</b>이다. 출석을 그대로 두고 날짜만 옮긴다.
+     *
+     * <h2>★ 번호는 바꿀 수 없다</h2>
+     * 이미 안내된 「3회차」가 다른 날을 가리키게 된다 — 삭제 때 재번호를 안 하는 것과
+     * 같은 이유다. 비워 보낸 항목은 바꾸지 않는다.
+     */
+    @Transactional
+    public LectureSession updateSession(Long sessionId, LocalDate date, LocalTime start,
+                                        LocalTime end, String room, Integer fee,
+                                        AuthPrincipal principal) {
+        LectureSession session = sessionRepository.findById(sessionId)
+                .filter(x -> !x.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.LECTURE_SESSION_NOT_FOUND));
+        require(session.getLecture().getId(), principal);
+
+        session.update(date, start, end, room, fee);
+        log.info("특강 회차 수정: sessionId={}, lectureId={}, 일자={}",
+                sessionId, session.getLecture().getId(), session.getSessionDate());
+        return session;
+    }
+
+    /**
+     * 수강 대상·대기 상한 설정 (디랩 1021 답변 Q2·Q3).
+     *
+     * <p>★ 대상은 <b>통째로</b> 바꾼다 — 부분 수정을 두면 「비움」과 「안 보냄」이
+     * 구분되지 않는다. 두 축 모두 비면 제한 없음이다.
+     */
+    @Transactional
+    public Lecture changeTargets(Long lectureId,
+                                 java.util.Set<com.dlab.domain.user.entity.TrackType> tracks,
+                                 java.util.Set<com.dlab.domain.user.entity.GradeType> grades,
+                                 Integer waitlistCapacity, AuthPrincipal principal) {
+        Lecture lecture = require(lectureId, principal);
+        lecture.changeTargets(tracks, grades);
+        if (waitlistCapacity != null) {
+            // ⚠️ 이미 대기 중인 인원보다 작게 잡으면 그 사람들을 어떻게 할지가 정해지지 않는다.
+            //    내리는 것 자체는 막지 않되(모집을 줄일 수 있다) 기존 대기자는 그대로 둔다
+            lecture.changeWaitlistCapacity(waitlistCapacity);
+        }
+        return lecture;
+    }
+
+    /**
      * 회차 삭제.
      *
      * <p><b>날짜를 잘못 넣으면 되돌릴 방법이 없었다.</b> 개설 폼이 기간·요일로 회차를
@@ -378,11 +428,30 @@ public class LectureService {
             throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
         }
 
+        // ★★ 자격을 실제로 검사한다 (디랩 1021 답변 Q2). 표시만 하면 고3 대상 특강에
+        //    고1이 신청한다. 두 축은 AND 다 — 「인문계열 고3」이면 둘 다 맞아야 한다
+        if (!lecture.eligible(enrollment.getTrack(), enrollment.getGrade())) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "수강 대상이 아닙니다.");
+        }
+
         long confirmed = applicationRepository.countByLectureIdAndStatus(
                 lectureId, ApplicationStatus.APPLIED);
-        ApplicationStatus status = lecture.hasCapacity() && confirmed >= lecture.getCapacity()
-                ? ApplicationStatus.WAITLISTED
-                : ApplicationStatus.APPLIED;
+        boolean full = lecture.hasCapacity() && confirmed >= lecture.getCapacity();
+
+        if (full) {
+            // ★ 정원이 차면 그 자리에서 대기로 넘긴다 — 별도 화면으로 보내지 않는다.
+            //   상한을 넘으면 거절하고 ⚠️ 오류 문구에 현재 인원을 넣는다.
+            //   「가득 찼습니다」만 보여주면 몇 명 기다리는지 몰라 다시 눌러 본다
+            long waitlisted = applicationRepository.countByLectureIdAndStatus(
+                    lectureId, ApplicationStatus.WAITLISTED);
+            if (lecture.waitlistFull(waitlisted)) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "대기자가 가득 찼습니다(%d/%d)."
+                                .formatted(waitlisted, lecture.getWaitlistCapacity()));
+            }
+        }
+        ApplicationStatus status = full ? ApplicationStatus.WAITLISTED : ApplicationStatus.APPLIED;
 
         return applicationRepository.save(
                 new LectureApplication(lecture, enrollment, status, now));
