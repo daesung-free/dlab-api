@@ -314,13 +314,16 @@ public class LectureService {
     public Lecture changeTargets(Long lectureId,
                                  java.util.Set<com.dlab.domain.user.entity.TrackType> tracks,
                                  java.util.Set<com.dlab.domain.user.entity.GradeType> grades,
-                                 Integer waitlistCapacity, AuthPrincipal principal) {
+                                 Patch<Integer> waitlistCapacity, AuthPrincipal principal) {
         Lecture lecture = require(lectureId, principal);
         lecture.changeTargets(tracks, grades);
+        // ★ Patch 라 「안 보냄」(null)과 「비워 달라」(Patch(null))가 구분된다.
+        //   평범한 Integer 로 받았더니 비우는 요청이 아무 일도 하지 않았다 —
+        //   담당자는 대기 상한을 풀었다고 알고 넘어간다.
         if (waitlistCapacity != null) {
             // ⚠️ 이미 대기 중인 인원보다 작게 잡으면 그 사람들을 어떻게 할지가 정해지지 않는다.
             //    내리는 것 자체는 막지 않되(모집을 줄일 수 있다) 기존 대기자는 그대로 둔다
-            lecture.changeWaitlistCapacity(waitlistCapacity);
+            lecture.changeWaitlistCapacity(waitlistCapacity.value());
         }
         return lecture;
     }

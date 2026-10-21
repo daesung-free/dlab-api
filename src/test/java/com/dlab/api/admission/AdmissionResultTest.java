@@ -60,7 +60,7 @@ class AdmissionResultTest {
     private AdmissionResult add(AdmissionType type, String university,
                                 AdmissionResultStatus result) {
         return service.create(admin, enrollment.getId(), type, university, "컴퓨터공학과",
-                "학생부종합", result, AdmissionSource.STAFF, null);
+                "학생부종합", null, null, result, AdmissionSource.STAFF, null);
     }
 
     @Test
@@ -129,11 +129,11 @@ class AdmissionResultTest {
     @DisplayName("★ 고치면 입력 주체가 직원이 된다 — 학생이 적어낸 값과 구분해야 한다")
     void updateMarksStaffSource() {
         AdmissionResult row = service.create(admin, enrollment.getId(), AdmissionType.EARLY,
-                "학생이적은대학", "학과", null, null, AdmissionSource.STUDENT, null);
+                "학생이적은대학", "학과", null, null, null, null, AdmissionSource.STUDENT, null);
         em.flush();
         assertThat(row.getSource()).isEqualTo(AdmissionSource.STUDENT);
 
-        service.update(admin, row.getId(), null, null, null, null,
+        service.update(admin, row.getId(), null, null, null, null, null, null,
                 AdmissionResultStatus.PASSED, null);
 
         assertThat(row.getSource()).isEqualTo(AdmissionSource.STAFF);
@@ -149,7 +149,7 @@ class AdmissionResultTest {
         em.flush();
 
         assertThatThrownBy(() -> service.update(admin, early.getId(), AdmissionType.REGULAR,
-                null, null, null, null, null))
+                null, null, null, null, null, null, null))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("정시는 3개");
     }

@@ -93,11 +93,11 @@ class AdminWebGapsTest {
         StudentEnrollment b = enroll("DL-A2", "이대기", "0002");
         em.flush();
         admissionResultService.create(admin, a.getId(), AdmissionType.EARLY, "가나대", "국문",
-                null, AdmissionResultStatus.PASSED, AdmissionSource.STAFF, null);
+                null, null, null, AdmissionResultStatus.PASSED, AdmissionSource.STAFF, null);
         admissionResultService.create(admin, a.getId(), AdmissionType.REGULAR, "다라대", "철학",
-                null, AdmissionResultStatus.PENDING, AdmissionSource.STAFF, null);
+                null, null, null, AdmissionResultStatus.PENDING, AdmissionSource.STAFF, null);
         admissionResultService.create(admin, b.getId(), AdmissionType.EARLY, "가나대", "사학",
-                null, AdmissionResultStatus.FAILED, AdmissionSource.STAFF, null);
+                null, null, null, AdmissionResultStatus.FAILED, AdmissionSource.STAFF, null);
         em.flush();
 
         assertThat(admissionResultService.search(admin, null, year, null, null, null,

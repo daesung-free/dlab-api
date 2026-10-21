@@ -122,10 +122,12 @@ class AdminAcademyTest {
 
         Academy after = academyRepository.findById(bundang.getId()).orElseThrow();
         assertThat(after.getAttendanceDeadline()).isEqualTo(LocalTime.of(8, 20));
-        // ★★ 지각 기준이 비어 있으면 등원 기준시각으로 떨어진다. 07:50 을 기본값으로 박으면
-        //    값이 안 들어온 지점에서 08시에 오는 학생이 전부 지각으로 찍힌다
-        assertThat(after.getLateAfter()).isNull();
-        assertThat(after.lateAfterOrDeadline()).isEqualTo(LocalTime.of(8, 20));
+        // ★★ 지각 기준이 비어 있으면 확정값 07:50 을 쓴다 — 등원 기준시각으로
+        //    떨어뜨리지 않는다(2026-10-21 디랩 확정: 전 지점 공통 07:50).
+        //    떨어뜨리면 그 지점에서 07:55 에 온 학생이 정상 등원으로 찍혀
+        //    지각 알림이 아예 나가지 않는다. 오류도 안 난다
+        assertThat(after.lateAfterOrDeadline())
+                .isEqualTo(com.dlab.domain.user.entity.Academy.DEFAULT_LATE_AFTER);
 
         // 지각 기준만 고친다
         academyService.update(bundangAdmin, bundang.getId(), "분당", null,
