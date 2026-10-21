@@ -138,9 +138,35 @@ public class AuditEntityListener {
         return null;
     }
 
-    /** 사람이 읽을 변경 목록. {@link AuditTrail}이 만든다. */
-    public record Change(String field, String before, String after) {
+    /**
+     * 사람이 읽을 변경 목록. {@link AuditTrail}이 만든다.
+     *
+     * <h2>★★ 라벨을 「쓸 때」 박는다 — 읽을 때 풀지 않는다</h2>
+     * {@code audit_log.entity_type} 에는 {@link Audited} 의 <b>한국어 이름</b>이 저장되므로
+     * 읽는 시점에는 <b>어느 클래스였는지 되짚을 수 없다.</b> 쓸 때는 엔티티 클래스가 손에
+     * 있으니 {@link AuditLabel} 을 그 자리에서 읽어 박는다.
+     *
+     * <p>★ 그래서 <b>같은 칸 이름이 영역마다 다른 뜻인 문제가 구조적으로 사라진다.</b>
+     * 화면이 사전 하나로 덮던 때는 청구의 {@code status}(발행 전 → 취소)가
+     * <b>「계정 상태: 승인 대기 → CANCELLED」로 보였다</b> — 칸 이름도 값도 틀린
+     * <b>그럴듯한 한국어 거짓말</b>이고, 영어로 보이는 것보다 나쁘다(영어는 「모른다」가
+     * 드러나는데 틀린 한국어는 담당자가 믿는다).
+     *
+     * @param label       필드 한국어 이름. {@link AuditLabel} 이 없으면 {@code null} —
+     *                    ★ 그때는 화면이 {@code field} 를 그대로 보여준다. 숨기지 않는다:
+     *                    <i>"모르는 코드는 그대로 보인다 — 숨기면 무슨 일이 있었는지
+     *                    아예 사라진다."</i>
+     * @param beforeLabel 값의 한국어 이름(enum {@code displayName()}). 없으면 {@code null}
+     */
+    public record Change(String field, String label,
+                         String before, String after,
+                         String beforeLabel, String afterLabel) {
 
+        public Change(String field, String before, String after) {
+            this(field, null, before, after, null, null);
+        }
+
+        /** 수동 기록용 — 라벨 없이. 가능하면 {@link #labeled} 를 쓸 것. */
         public static List<Change> of(String... fieldBeforeAfter) {
             List<Change> changes = new ArrayList<>();
             for (int i = 0; i + 2 < fieldBeforeAfter.length; i += 3) {
@@ -148,6 +174,25 @@ public class AuditEntityListener {
                         fieldBeforeAfter[i + 1], fieldBeforeAfter[i + 2]));
             }
             return changes;
+        }
+
+        /**
+         * 수동 기록 한 건 — <b>라벨을 함께 넣는다.</b>
+         *
+         * <p>엔티티 변경이 아니라 서비스가 직접 남기는 건(계정 상태·역할·임시 비밀번호
+         * 등)은 {@link AuditLabel} 이 닿지 않는다. 그런 자리는 여기로 라벨을 준다 —
+         * 안 주면 화면에 {@code temporaryPassword} 가 그대로 보인다.
+         */
+        public static Change labeled(String field, String label,
+                                     String before, String after) {
+            return new Change(field, label, before, after, null, null);
+        }
+
+        /** 값 라벨까지. */
+        public static Change labeled(String field, String label,
+                                     String before, String after,
+                                     String beforeLabel, String afterLabel) {
+            return new Change(field, label, before, after, beforeLabel, afterLabel);
         }
     }
 }

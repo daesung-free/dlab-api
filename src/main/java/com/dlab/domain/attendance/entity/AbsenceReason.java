@@ -1,5 +1,6 @@
 package com.dlab.domain.attendance.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
@@ -44,6 +45,7 @@ public class AbsenceReason extends BaseEntity {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id")
+    @AuditLabel("구분")
     private AbsenceReasonCategory category;
 
     public void changeCategory(AbsenceReasonCategory category) {
@@ -55,16 +57,20 @@ public class AbsenceReason extends BaseEntity {
     private StudentEnrollment enrollment;
 
     @Column(name = "attendance_date", nullable = false)
+    @AuditLabel("대상 일자")
     private LocalDate attendanceDate;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "reason_type", nullable = false, length = 20)
+    @AuditLabel("사유 종류")
     private AbsenceReasonType reasonType;
 
     @Column(name = "reason_text", nullable = false, length = 500)
+    @AuditLabel("사유 내용")
     private String reasonText;
 
     @Column(name = "submitted_at", nullable = false)
+    @AuditLabel("제출 시각")
     private Instant submittedAt = Instant.now();
 
     /**
@@ -75,14 +81,17 @@ public class AbsenceReason extends BaseEntity {
      * 보므로 일자만으로는 계산이 안 된다.
      */
     @Column(name = "start_time")
+    @AuditLabel("시작 시각")
     private java.time.LocalTime startTime;
 
     /** 외출 종료 시각. 조퇴는 복귀가 없어 {@code null}이다. */
     @Column(name = "end_time")
+    @AuditLabel("종료 시각")
     private java.time.LocalTime endTime;
 
     /** 당일 자정. */
     @Column(name = "deadline_at")
+    @AuditLabel("제출 기한")
     private Instant deadlineAt;
 
     @ManyToOne(fetch = FetchType.LAZY)

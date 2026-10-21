@@ -1,5 +1,6 @@
 package com.dlab.domain.user.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -39,38 +40,47 @@ public class Student extends BaseEntity {
      * 추가 검증 로직을 임의로 만들지 말 것.
      */
     @Column(name = "unique_code", nullable = false, unique = true, length = 20)
+    @AuditLabel("학생 고유ID")
     private String uniqueCode;
 
     @Column(nullable = false, length = 20)
+    @AuditLabel("이름")
     private String name;
 
     /** ★ 값은 감사 로그에 남기지 않는다 — 바뀐 사실만 남는다. */
     @com.dlab.domain.audit.AuditMasked
     @Column(length = 20)
+    @AuditLabel("연락처")
     private String phone;
 
     /** 암호화 여부 미정 — 동명이인 구분 조회조건으로 쓰이면 인덱스를 못 탄다. */
     @com.dlab.domain.audit.AuditMasked
     @Column(name = "birth_date")
+    @AuditLabel("생년월일")
     private LocalDate birthDate;
 
     @Column(length = 1)
+    @AuditLabel("성별")
     private String gender;
 
     @Column(name = "school_name", length = 64)
+    @AuditLabel("출신학교")
     private String schoolName;
 
     /** ★ 민감 필드. 전화·생년월일과 같은 등급으로 다룬다(마스킹·상위 관리자 전용). */
     @com.dlab.domain.audit.AuditMasked
     @Column(length = 200)
+    @AuditLabel("주소")
     private String address;
 
     /** 영문명(선택). 성적표·증명서 영문 표기용이다. */
     @Column(name = "english_name", length = 100)
+    @AuditLabel("영문 이름")
     private String englishName;
 
     /** 고교 졸업연도(선택). N수 차수와 따로 받는다 — 차수는 학원이 세는 값이고 이건 서류 값이다. */
     @Column(name = "graduation_year")
+    @AuditLabel("졸업연도")
     private Short graduationYear;
 
     @Column(name = "search_name_normalized", length = 20)
