@@ -41,7 +41,7 @@ class ChoicePickerTest {
                 word(4, "eager", "a", "열망하는"),
                 word(5, "run", "v", "달리다"));
 
-        var choices = ChoicePicker.pick(answer, pool, pool, 4, FIXED);
+        var choices = ChoicePicker.pick(answer, pool, () -> pool, 4, FIXED);
 
         assertThat(choices.texts()).hasSize(4);
         assertThat(choices.texts()).contains("재정의");
@@ -62,7 +62,7 @@ class ChoicePickerTest {
                 word(11, "within", "p", "안에"),
                 word(12, "beyond", "p", "넘어"));
 
-        var choices = ChoicePicker.pick(answer, sameUnit, all, 4, FIXED);
+        var choices = ChoicePicker.pick(answer, sameUnit, () -> all, 4, FIXED);
 
         assertThat(choices.texts()).hasSize(4);
         // 다른 유닛의 전치사로 채운다
@@ -79,7 +79,7 @@ class ChoicePickerTest {
                 word(3, "book", "n", "책"),
                 word(4, "brave", "a", "용감한"));
 
-        var choices = ChoicePicker.pick(answer, all, all, 4, FIXED);
+        var choices = ChoicePicker.pick(answer, all, () -> all, 4, FIXED);
 
         // ★ 품사를 풀어서라도 4개를 채운다 — 보기가 2개인 문항을 내면 안 된다
         assertThat(choices.texts()).hasSize(4);
@@ -95,7 +95,7 @@ class ChoicePickerTest {
                 word(3, "book", "n", "책"),
                 word(4, "brave", "a", "용감한"));
 
-        var choices = ChoicePicker.pick(answer, all, all, 4, FIXED);
+        var choices = ChoicePicker.pick(answer, all, () -> all, 4, FIXED);
 
         assertThat(choices.texts()).hasSize(4);
     }
@@ -111,7 +111,7 @@ class ChoicePickerTest {
                 word(4, "calm", "a", "차분한"),
                 word(5, "eager", "a", "열망하는"));
 
-        var choices = ChoicePicker.pick(answer, all, all, 4, FIXED);
+        var choices = ChoicePicker.pick(answer, all, () -> all, 4, FIXED);
 
         assertThat(choices.texts()).doesNotContain("경제");
         assertThat(choices.texts()).hasSize(4);
@@ -127,7 +127,7 @@ class ChoicePickerTest {
                 word(3, "calm", "a", "차분한"),
                 word(4, "eager", "a", "열망하는"));
 
-        var choices = ChoicePicker.pick(answer, all, all, 4, FIXED);
+        var choices = ChoicePicker.pick(answer, all, () -> all, 4, FIXED);
 
         assertThat(choices.texts()).doesNotContain("용감한");
     }
@@ -141,7 +141,7 @@ class ChoicePickerTest {
                 word(3, "desk", "n", "책상"),
                 word(4, "chair", "n", "의자"));
 
-        var choices = ChoicePicker.pick(answer, all, all, 4, FIXED);
+        var choices = ChoicePicker.pick(answer, all, () -> all, 4, FIXED);
 
         assertThat(choices.texts()).contains("기업")
                 .doesNotContain("기업, 회사; 확고한, 단단한");
@@ -158,8 +158,49 @@ class ChoicePickerTest {
 
         var positions = new java.util.HashSet<Integer>();
         for (int i = 0; i < 40; i++) {
-            positions.add(ChoicePicker.pick(answer, all, all, 4, new Random(i)).answerIndex());
+            positions.add(ChoicePicker.pick(answer, all, () -> all, 4, new Random(i)).answerIndex());
         }
         assertThat(positions).hasSizeGreaterThan(1);
+    }
+
+    @Test
+    @DisplayName("★★ 1단계에서 보기가 다 차면 전체 단어를 읽지 않는다 — 2,500명 동시 접속의 관건")
+    void doesNotLoadAllWordsWhenFirstStageSuffices() {
+        var answer = word(1, "financial", "a", "재정의");
+        var sameUnit = List.of(answer,
+                word(2, "brave", "a", "용감한"),
+                word(3, "calm", "a", "차분한"),
+                word(4, "eager", "a", "열망하는"));
+
+        var loaded = new java.util.concurrent.atomic.AtomicInteger();
+        var choices = ChoicePicker.pick(answer, sameUnit, () -> {
+            loaded.incrementAndGet();
+            return sameUnit;
+        }, 4, FIXED);
+
+        assertThat(choices.texts()).hasSize(4);
+        assertThat(loaded.get())
+                .as("★ 같은 유닛에서 다 찼으면 전체 단어(2,000건)를 읽을 이유가 없다")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("★ 폴백에 들어가도 전체 단어를 한 번만 읽는다 — 2·3단계가 따로 읽으면 두 번이다")
+    void loadsAllWordsOnceWhenFallbackNeeded() {
+        var answer = word(1, "and", "c", "그리고");
+        var sameUnit = List.of(answer);
+        var all = List.of(answer,
+                word(2, "run", "v", "달리다"),
+                word(3, "book", "n", "책"),
+                word(4, "brave", "a", "용감한"));
+
+        var loaded = new java.util.concurrent.atomic.AtomicInteger();
+        var choices = ChoicePicker.pick(answer, sameUnit, () -> {
+            loaded.incrementAndGet();
+            return all;
+        }, 4, FIXED);
+
+        assertThat(choices.texts()).hasSize(4);
+        assertThat(loaded.get()).isEqualTo(1);
     }
 }

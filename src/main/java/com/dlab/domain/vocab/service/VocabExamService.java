@@ -22,7 +22,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Collection;
 import java.util.Random;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -113,7 +116,26 @@ public class VocabExamService {
                 round.getAcademy(), round.getYear(), round, enrollment,
                 Instant.now(clock), (short) count, retry));
 
-        List<VocabWord> allWords = wordRepository.findByDeletedFalse();
+        // ★★ 보기 추출에 필요한 것을 문항마다 조회하지 않는다 (v1 9장 — 2,500명 동시 접속)
+        //
+        //   ① 같은 유닛 단어는 **이미 읽은 pool** 을 유닛별로 묶어 쓴다. 문항마다
+        //      findByUnitNo 를 부르면 문항 수만큼 쿼리가 난다(실측: 문항당 +1).
+        //   ② 전체 단어는 **폴백에 들어갈 때만** 읽는다. 1단계에서 보기가 다 차면
+        //      2,000건을 아예 읽지 않는다 — 그리고 한 번 읽으면 그 응시 안에서 재사용한다.
+        Map<Short, List<VocabWord>> byUnit = pool.stream()
+                .collect(Collectors.groupingBy(VocabWord::getUnitNo));
+        var allWords = new Supplier<Collection<VocabWord>>() {
+            private Collection<VocabWord> cached;
+
+            @Override
+            public Collection<VocabWord> get() {
+                if (cached == null) {
+                    cached = wordRepository.findByDeletedFalse();
+                }
+                return cached;
+            }
+        };
+
         int mcCount = Math.round(count * config.getMultipleChoiceRate() / 100f);
 
         short seq = 1;
@@ -121,8 +143,7 @@ public class VocabExamService {
             boolean multipleChoice = seq <= mcCount;
             List<String> choices = List.of();
             if (multipleChoice) {
-                var sameUnit = wordRepository
-                        .findByUnitNoAndDeletedFalseOrderBySeqNoAsc(word.getUnitNo());
+                var sameUnit = byUnit.getOrDefault(word.getUnitNo(), List.of());
                 choices = ChoicePicker.pick(word, sameUnit, allWords,
                         config.getChoiceCount(), random).texts();
             }
@@ -203,12 +224,22 @@ public class VocabExamService {
             throw new BusinessException(ErrorCode.VOCAB_ANSWER_MISMATCH);
         }
 
+        // ★★ 정답 후보를 단어마다 조회하지 않는다 — 한 번에 읽어 묶는다.
+        //   제출은 시험이 끝나는 순간 한꺼번에 몰리는 호출이라 start 보다 더 위험하다
+        //   (실측: 문항당 +1 → 문항 20개면 쿼리 20개가 더 난다).
+        var wordIds = answers.stream().map(a -> a.getWord().getId()).distinct().toList();
+        Map<Long, List<String>> candidates = meaningRepository
+                .findByWordIdInAndDeletedFalse(wordIds).stream()
+                .collect(Collectors.groupingBy(m -> m.getWord().getId(),
+                        Collectors.mapping(VocabMeaning::getText, Collectors.toList())));
+
         int correct = 0;
         for (VocabAnswer answer : answers) {
             String raw = given.get(answer.getSeqNo());
             boolean ok = answer.getType() == VocabAnswer.Type.MC
                     ? VocabGrader.isCorrectChoice(raw, correctTextOf(answer))
-                    : VocabGrader.isCorrect(raw, candidatesOf(answer.getWord()));
+                    : VocabGrader.isCorrect(raw, candidates.getOrDefault(
+                            answer.getWord().getId(), List.of()));
             // ★ 빈 답도 그대로 남긴다 — 관리자가 오답을 보고 인정 표현을 넓히는 근거다
             answer.grade(raw, ok);
             if (ok) {
@@ -252,12 +283,6 @@ public class VocabExamService {
     private String correctTextOf(VocabAnswer answer) {
         var split = MeaningSplitter.split(answer.getWord().getMeaningRaw());
         return split.isEmpty() ? "" : split.get(0);
-    }
-
-    /** 주관식 정답 후보 — {@code SPLIT} + {@code MANUAL}(관리자 인정 표현)이다. */
-    private List<String> candidatesOf(VocabWord word) {
-        return meaningRepository.findByWordIdAndDeletedFalse(word.getId())
-                .stream().map(VocabMeaning::getText).toList();
     }
 
     private List<Question> questionsOf(VocabAttempt attempt) {
