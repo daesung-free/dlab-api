@@ -118,6 +118,65 @@ public class VocabWord extends BaseEntity {
         this.etymology = etymology;
     }
 
+    /**
+     * 관리자 수정 (v2 착수 순서 3).
+     *
+     * <h2>★ 원고 오류를 채우는 자리다</h2>
+     * 적재 때 오류로 띄운 2건(품사 빈 칸 · 예문 해석 빈 칸)을 여기서 채운다 —
+     * <b>파서가 추정해 넣지 않기 때문이다.</b>
+     *
+     * <h2>⚠️ 번호(seq_no)는 바꿀 수 없다</h2>
+     * 원고와 대조하는 유일한 키이고, 재업로드가 그 값으로 덮어쓴다. 바꾸면
+     * <b>다음 업로드에서 같은 단어가 두 벌로 들어간다.</b>
+     *
+     * <p>⚠️ <b>뜻({@code meaningRaw})을 바꾸면 정답 후보를 다시 만들어야 한다.</b>
+     * 부르는 쪽이 책임진다 — 여기서 하면 엔티티가 리포지토리를 알아야 한다.
+     *
+     * <p>비워 보낸 항목은 바꾸지 않는다.
+     */
+    public void modify(String word, String pronunciation, String pos, String meaningRaw,
+                       String exampleEn, String exampleKo, String synonym, String antonym,
+                       String derivative, String etymology, String source) {
+        if (word != null) {
+            this.word = word;
+        }
+        if (pronunciation != null) {
+            this.pronunciation = pronunciation;
+        }
+        if (pos != null) {
+            this.pos = pos;
+        }
+        if (meaningRaw != null) {
+            this.meaningRaw = meaningRaw;
+        }
+        if (exampleEn != null) {
+            this.exampleEn = exampleEn;
+        }
+        if (exampleKo != null) {
+            this.exampleKo = exampleKo;
+        }
+        if (synonym != null) {
+            this.synonym = synonym;
+        }
+        if (antonym != null) {
+            this.antonym = antonym;
+        }
+        if (derivative != null) {
+            this.derivative = derivative;
+        }
+        if (etymology != null) {
+            this.etymology = etymology;
+        }
+        if (source != null) {
+            this.source = source;
+        }
+    }
+
+    /** 출제에서 빼거나 되살린다 — 지우지 않는다(지난 응시 기록이 이 단어를 가리킨다). */
+    public void changeActive(boolean active) {
+        this.active = active;
+    }
+
     /** 보기 추출용 대표 품사 — {@code v; n} → {@code v} (v2 6.1). */
     public String primaryPos() {
         if (pos == null || pos.isBlank()) {
