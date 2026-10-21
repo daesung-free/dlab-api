@@ -12,6 +12,9 @@ public interface VocabAttemptRepository extends JpaRepository<VocabAttempt, Long
     List<VocabAttempt> findByRoundIdAndEnrollmentIdAndDeletedFalseOrderByStartedAtAsc(
             Long roundId, Long enrollmentId);
 
+    /** 결과 조회(v1 7장) — 그 회차의 전 학생 응시. */
+    List<VocabAttempt> findByRoundIdAndDeletedFalse(Long roundId);
+
     /**
      * 대표 점수용 — <b>최초</b> 제출 건이다(v1 Q5).
      *
