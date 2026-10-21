@@ -58,7 +58,7 @@ public class AdminUniversityController {
     public ApiResponse<List<UniversityView>> search(@RequestParam Integer year,
                                                     @RequestParam(required = false) String keyword) {
         return ApiResponse.success(
-                universityRepository.search(year.shortValue(), blankToNull(keyword)).stream()
+                universityRepository.search(year.shortValue(), blankToEmpty(keyword)).stream()
                         .map(UniversityView::from).toList());
     }
 
@@ -76,7 +76,7 @@ public class AdminUniversityController {
             @RequestParam Integer year,
             @RequestParam(required = false) String keyword) {
         return ApiResponse.success(departmentRepository
-                .search(year.shortValue(), universityCode, blankToNull(keyword)).stream()
+                .search(year.shortValue(), universityCode, blankToEmpty(keyword)).stream()
                 .map(DepartmentView::from).toList());
     }
 
@@ -103,8 +103,14 @@ public class AdminUniversityController {
                 importService.importMaster(year.shortValue(), file.getInputStream()));
     }
 
-    private static String blankToNull(String value) {
-        return value == null || value.isBlank() ? null : value;
+    /**
+     * ⚠️ <b>{@code null} 이 아니라 빈 문자열로 바꾼다.</b>
+     *
+     * <p>null 을 LIKE 바인드로 넘기면 PostgreSQL 이 타입을 {@code bytea} 로 추론해
+     * <b>키워드를 안 넣은 호출에서만</b> 500 이 난다(실제로 그렇게 당했다).
+     */
+    private static String blankToEmpty(String value) {
+        return value == null || value.isBlank() ? "" : value.trim();
     }
 
     public record UniversityView(String code, String name) {

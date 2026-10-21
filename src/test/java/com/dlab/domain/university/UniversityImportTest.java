@@ -196,4 +196,32 @@ class UniversityImportTest {
     static boolean masterFileExists() {
         return java.nio.file.Files.exists(MASTER_FILE);
     }
+
+    @Test
+    @DisplayName("★★ 키워드를 안 넣어도 검색이 된다 — null 바인드가 LIKE 에서 500 을 냈다")
+    void searchWithoutKeyword() {
+        importService.importMaster(YEAR, excel(List.<String[]>of(
+                new String[]{"001", "서울대", "1", "인문", "0694", "인문계열"},
+                new String[]{"002", "연세대", "1", "인문", "0695", "인문학부"})));
+        em.flush();
+
+        // ⚠️ 여기가 500 이었다. :keyword IS NULL OR ... LIKE 로 짰더니 PostgreSQL 이
+        //    null 바인드의 타입을 bytea 로 추론해 varchar ~~ bytea 로 거절했다.
+        //    키워드를 안 넣은 호출 — 즉 화면 첫 진입 — 에서만 났다
+        assertThat(universityRepository.search(YEAR, "")).hasSize(2);
+        assertThat(universityRepository.search(YEAR, "연세"))
+                .extracting(com.dlab.domain.university.entity.University::getName)
+                .containsExactly("연세대");
+        assertThat(departmentRepository.search(YEAR, "001", "")).hasSize(1);
+        assertThat(departmentRepository.search(YEAR, "001", "인문")).hasSize(1);
+        // 다른 대학의 학과는 안 나온다
+        assertThat(departmentRepository.search(YEAR, "001", "학부")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("★ 적재 전에도 빈 목록이다 — 연도 파일이 아직 안 온 연도를 조회할 수 있다")
+    void searchBeforeImportIsEmpty() {
+        assertThat(universityRepository.search((short) 2099, "")).isEmpty();
+        assertThat(departmentRepository.search((short) 2099, "001", "")).isEmpty();
+    }
 }
