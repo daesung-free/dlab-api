@@ -51,6 +51,43 @@ public interface PenaltyPointRepository extends JpaRepository<PenaltyPoint, Long
             @Param("enrollmentIds") java.util.Collection<Long> enrollmentIds);
 
     /**
+     * 학생 단위 누적 집계 (디랩 1021 피드백 2-5).
+     *
+     * <p>디랩 원문: <i>"전체 재원생의 현재 누적 상벌점 점수가 조회되면 좋을 것 같습니다.
+     * <b>누적상점이 가장높은학생 순</b>으로 정렬되거나 <b>누적 벌점이 가장 높은학생 순</b>으로
+     * 정렬되는 데이터가 필요합니다"</i>
+     *
+     * <h2>★★ 상점 합과 벌점 합을 따로 낸다</h2>
+     * 합계만 내면 <b>「상점 169 · 벌점 −152 · 합 17」인 학생과 「상점 0 · 벌점 0」인 학생이
+     * 같아 보인다.</b> 디랩이 둘을 각각 정렬하고 싶다고 한 이유다.
+     *
+     * <p>벌점은 음수로 저장된다(시드 주석: <i>"통계가 부호로 상점·벌점을 가른다"</i>) —
+     * 그래서 <b>부호로 가르고 벌점은 절댓값</b>으로 낸다. 화면에 음수를 내보내면
+     * 「벌점 높은 순」이 뒤집힌다.
+     *
+     * <p>⚠️ <b>기간을 걸지 않는다 — 누적이다.</b> 제적 기준 40점이 누적이고, 기간 합계만
+     * 보이면 임계에 가까운 학생이 드러나지 않는다.
+     *
+     * <p>⚠️ 상벌점이 <b>한 건도 없는 학생은 이 결과에 안 나온다</b>(그룹이 안 생긴다) —
+     * 부르는 쪽이 재원생 목록과 합쳐 0으로 채운다. 안 하면 「상벌점 없는 학생」이
+     * 목록에서 사라진다.
+     *
+     * @return {@code [enrollmentId, 상점합(양수), 벌점합(절댓값), 순합계]}
+     */
+    @Query("""
+            SELECT p.enrollment.id,
+                   COALESCE(SUM(CASE WHEN p.points > 0 THEN p.points ELSE 0 END), 0),
+                   COALESCE(SUM(CASE WHEN p.points < 0 THEN -p.points ELSE 0 END), 0),
+                   COALESCE(SUM(p.points), 0)
+            FROM PenaltyPoint p
+            WHERE p.deleted = false
+              AND p.enrollment.id IN :enrollmentIds
+            GROUP BY p.enrollment.id
+            """)
+    List<Object[]> aggregateByEnrollments(
+            @Param("enrollmentIds") java.util.Collection<Long> enrollmentIds);
+
+    /**
      * 지점 전체의 기간 내 상벌점. 키오스크 {@code getPointStdList}가 쓴다.
      *
      * <p><b>학생 단건 조회가 아니다</b> — 키오스크가 지점 전체를 한 번 받아

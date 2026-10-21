@@ -83,6 +83,89 @@ public class PenaltyService {
         return pointRepository.saveAll(granted);
     }
 
+    /**
+     * 학생 단위 누적 집계 (디랩 1021 피드백 2-5).
+     *
+     * <p>디랩 원문: <i>"전체 재원생의 현재 누적 상벌점 점수가 조회되면 좋을 것 같습니다.
+     * <b>누적상점이 가장높은학생 순</b>으로 정렬되거나 <b>누적 벌점이 가장 높은학생 순</b>으로
+     * 정렬되는 데이터가 필요합니다"</i>
+     *
+     * <h2>★★ 재원생 전체를 내린다 — 상벌점이 없는 학생도 0으로</h2>
+     * 집계 쿼리는 상벌점이 <b>한 건이라도 있는 학생만</b> 돌려준다(그룹이 안 생긴다).
+     * 그것만 내리면 <b>「상벌점 없는 학생」이 목록에서 사라지고</b>, 화면은 그걸
+     * 「조회가 안 된다」로 읽는다. 재원생 목록을 기준으로 두고 0을 채운다.
+     *
+     * <h2>★ 상점 합과 벌점 합을 따로 낸다</h2>
+     * 합계만 내면 <b>「상점 169 · 벌점 152 · 합 17」인 학생과 「상점 0 · 벌점 0」인 학생이
+     * 같아 보인다.</b> 벌점은 음수로 저장되므로 <b>절댓값</b>으로 내린다 — 음수를 내보내면
+     * 「벌점 높은 순」 정렬이 뒤집힌다.
+     *
+     * <p>⚠️ <b>기간을 걸지 않는다 — 누적이다.</b> 제적 기준 40점이 누적이라 기간 합계로는
+     * 임계에 가까운 학생이 드러나지 않는다.
+     *
+     * <p>정렬은 부르는 쪽(컨트롤러)이 고른다 — 쿼리에서 정렬하면 0으로 채운 학생이
+     * 섞이지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public List<StudentPenaltySummary> summaryByStudent(AuthPrincipal principal,
+                                                        Long requestedAcademyId,
+                                                        short year) {
+        Long academyId = principal.resolveAcademyScope(requestedAcademyId);
+        if (academyId == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "지점을 지정해야 합니다.");
+        }
+        List<StudentEnrollment> enrollments =
+                enrollmentRepository.findCurrentByAcademyAndYear(academyId, year);
+        if (enrollments.isEmpty()) {
+            return List.of();
+        }
+        var ids = enrollments.stream().map(StudentEnrollment::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        // ★ 세 번만 조회한다 — 행마다 부르면 재원생 수만큼 쿼리가 나간다
+        java.util.Map<Long, int[]> aggregates = new java.util.HashMap<>();
+        for (Object[] row : pointRepository.aggregateByEnrollments(ids)) {
+            aggregates.put((Long) row[0], new int[]{
+                    ((Number) row[1]).intValue(),
+                    ((Number) row[2]).intValue(),
+                    ((Number) row[3]).intValue()});
+        }
+        java.util.Map<Long, String> classes = classAssignmentRepository
+                .findActiveFixedByEnrollmentIds(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        a -> a.getEnrollment().getId(),
+                        a -> a.getClassMaster().getName(), (x, y) -> x));
+        java.util.Map<Long, String> seats = new java.util.HashMap<>();
+        for (var assignment : seatAssignmentRepository.findActiveByEnrollmentIds(ids)) {
+            seats.put(assignment.getEnrollment().getId(), assignment.getSeat().getSeatCd());
+        }
+
+        List<StudentPenaltySummary> result = new java.util.ArrayList<>();
+        for (StudentEnrollment e : enrollments) {
+            int[] agg = aggregates.getOrDefault(e.getId(), new int[]{0, 0, 0});
+            result.add(new StudentPenaltySummary(
+                    e.getId(), e.getStudentNo(), e.getStudent().getName(),
+                    classes.get(e.getId()), seats.get(e.getId()),
+                    e.getEnrollmentStatus(), agg[0], agg[1], agg[2]));
+        }
+        return result;
+    }
+
+    /**
+     * @param merit    상점 합 (양수)
+     * @param demerit  벌점 합 — ★ <b>절댓값</b>이다. 저장은 음수지만 화면이 음수를 받으면
+     *                 「벌점 높은 순」 정렬이 뒤집힌다
+     * @param total    순합계(상점 − 벌점). ⚠️ <b>제적 기준 40점은 벌점 누적</b>이라
+     *                 이 값이 아니라 {@code demerit} 을 본다
+     */
+    public record StudentPenaltySummary(
+            Long enrollmentId, String studentNo, String studentName,
+            String className, String seatCd,
+            com.dlab.domain.user.entity.EnrollmentStatus enrollmentStatus,
+            int merit, int demerit, int total) {
+    }
+
     /** soft delete. 부여를 취소해도 이력은 남겨야 이의 제기 대응이 된다. */
     @Transactional
     public void revoke(AuthPrincipal principal, Long penaltyPointId) {
