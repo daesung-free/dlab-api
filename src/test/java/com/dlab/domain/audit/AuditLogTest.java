@@ -35,6 +35,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class AuditLogTest {
 
     @Autowired NoticeService noticeService;
+    @Autowired com.dlab.api.admin.audit.AdminAuditLogController auditLogController;
     @Autowired AuditLogRepository auditLogRepository;
     @Autowired TransactionTemplate tx;
     @Autowired com.dlab.domain.user.repository.AcademyRepository academyRepository;
@@ -141,5 +142,75 @@ class AuditLogTest {
     private Notice createNotice() {
         return tx.execute(status ->
                 noticeService.createForBranch(admin, academy.getId(), "제목", "본문"));
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 조회 기간 (디랩 1021 피드백 4-3)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("★ 1년까지는 조회된다 — 디랩이 「적어도 당해」를 요청했다")
+    void oneYearIsQueryable() {
+        var today = java.time.LocalDate.now();
+
+        org.assertj.core.api.Assertions.assertThatCode(() ->
+                auditLogController.search(admin, null,
+                        today.minusYears(1).plusDays(1), today,
+                        null, null, null,
+                        org.springframework.data.domain.PageRequest.of(0, 10)))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("★★ 1년을 넘는 조회는 막는다 — from=2000-01-01 한 줄로 전 기간을 훑는다")
+    void beyondRetentionWindowIsRejected() {
+        var today = java.time.LocalDate.now();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                auditLogController.search(admin, null,
+                        java.time.LocalDate.of(2000, 1, 1), today,
+                        null, null, null,
+                        org.springframework.data.domain.PageRequest.of(0, 10)))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class)
+                .hasMessageContaining("1년");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("종료일이 시작일보다 빠르면 막는다 — 0건을 「기록이 없다」로 읽는다")
+    void reversedRangeIsRejected() {
+        var today = java.time.LocalDate.now();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                auditLogController.search(admin, null, today, today.minusDays(3),
+                        null, null, null,
+                        org.springframework.data.domain.PageRequest.of(0, 10)))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class)
+                .hasMessageContaining("종료일");
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("★★ 1년이 지난 행을 지우지 않는다 — 감사 로그는 분쟁의 근거다")
+    void oldRowsAreNotDeleted() throws Exception {
+        // 삭제·보관 배치가 없어야 한다. 있으면 조회 창(1년)과 섞여
+        // "조회가 안 되는 것"과 "지워진 것"이 구분되지 않는다.
+        // ⚠️ 1년 보관이 개인정보 처리방침과 맞는지는 회신 대기 항목이다(Q5).
+        var scanner = new org.springframework.context.annotation
+                .ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new org.springframework.core.type.filter.AnnotationTypeFilter(
+                org.springframework.stereotype.Component.class));
+
+        var deleters = new java.util.ArrayList<String>();
+        for (var c : scanner.findCandidateComponents("com.dlab.domain.audit")) {
+            Class<?> type = Class.forName(c.getBeanClassName());
+            for (var m : type.getDeclaredMethods()) {
+                if (m.isAnnotationPresent(org.springframework.scheduling.annotation.Scheduled.class)) {
+                    deleters.add(type.getSimpleName() + "." + m.getName());
+                }
+            }
+        }
+        org.assertj.core.api.Assertions.assertThat(deleters)
+                .as("감사 로그에 스케줄 삭제가 생겼다 — 보관 정책(Q5)이 확정되기 전에는 "
+                        + "지우지 않는다. 조회 창만 1년이다")
+                .isEmpty();
     }
 }
