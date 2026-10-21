@@ -150,6 +150,19 @@ class KioskAttendanceIntegrationTest {
     }
 
     /** {@code con_gn} 없이 태깅. */
+    /**
+     * 태깅.
+     *
+     * <h2>★ 왜 07:30 인가 — 지각 기준이 07:50 이다</h2>
+     * 디랩이 2026-10-21 에 <b>지각 기준 07:50 을 전 지점 공통</b>으로 확정했다.
+     * 종전 테스트는 08:30 에 찍고 {@code att_gn = S}(정상 등원)를 기대했는데, 그때는
+     * {@code late_after} 가 비어 있어 <b>등원 마감(09:00)으로 떨어졌기 때문</b>이다.
+     *
+     * <p>확정값을 넣으면 08:30 은 <b>지각이 맞다</b>. 그래서 기대값을 A 로 바꾸는 대신
+     * <b>시각을 07:30 으로 당겼다</b> — 이 테스트들이 보는 것은 지각 판정이 아니라
+     * <b>정상 등원 경로</b>(최상위 필드·중복억제·2-phase)이고, 전부 지각으로 바꾸면
+     * 정상 등원 경로를 아무도 보지 않게 된다. 지각은 {@code AttendanceLateTest} 가 본다.
+     */
     private ResultActions tag(String time) throws Exception {
         return tag(time, null);
     }
@@ -181,7 +194,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 등원 — att_gn·hak_no·std_nm이 전부 최상위다 (data 안이 아니다)")
     void checkInPutsEverythingAtTopLevel() throws Exception {
-        tag("08:30:00")
+        tag("07:30:00")
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.att_gn").value("S"))
                 .andExpect(jsonPath("$.hak_no").value("2026-0001"))
@@ -195,7 +208,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 태깅이 학부모 알림으로 이어진다 — 부르는 곳이 없으면 템플릿만 있고 아무 일도 안 난다")
     void taggingTriggersGuardianNotification() throws Exception {
-        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:30:00").andExpect(jsonPath("$.att_gn").value("S"));
 
         var captor = org.mockito.ArgumentCaptor
                 .forClass(com.dlab.domain.attendance.entity.AttendanceTaggingLog.class);
@@ -217,7 +230,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("마지막 교시 종료 후 태깅은 하원(T)")
     void checkOutAfterLastPeriod() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
         tag("22:00:00").andExpect(jsonPath("$.att_gn").value("T"));
     }
 
@@ -255,7 +268,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 분기 코드는 data 내부에 실리고 최상위는 0이다 (뒤바뀌면 키오스크가 분기를 놓친다)")
     void branchCodeGoesInsideDataWhileTopLevelStaysZero() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("15:00:00")
                 .andExpect(jsonPath("$.code").value(0))          // ← 최상위는 성공
@@ -270,7 +283,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 사유신청이 없으면 130 — 승인 없이 나갈 수 없다")
     void leavingWithoutApprovalIsRejected() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("15:00:00")
                 .andExpect(jsonPath("$.code").value(130))
@@ -284,7 +297,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 121은 최상위에 실린다 (data 내부면 키오스크가 조퇴 차단을 못 본다)")
     void code121GoesToTopLevel() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00", "C").andExpect(jsonPath("$.att_gn").value("C"));
 
         tag("16:00:00")
@@ -304,7 +317,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 승인된 사유신청이 있으면 선택지 코드가 뜬다 — 자동으로 조퇴시키지 않는다")
     void approvedReasonBecomesPromptNotAutoAction() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("15:00:00")
                 .andExpect(jsonPath("$.code").value(0))
@@ -319,7 +332,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 선택지 → con_gn 실어 재호출하면 처리된다 (서버는 사이 상태를 안 든다)")
     void statelessTwoPhaseRoundTrip() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00").andExpect(jsonPath("$.data[0].code").value(128));
 
         tag("15:00:30", "C").andExpect(jsonPath("$.att_gn").value("C"));
@@ -330,7 +343,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 승인 없는 사유조퇴(C)는 130 — 없으면 키오스크에서 아무나 눌러 조퇴가 된다")
     void excusedActionsRequireApproval() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("15:00:00", "C")
                 .andExpect(jsonPath("$.code").value(130))
@@ -348,10 +361,10 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 1분 내 재태깅은 원장에 안 남고 직전 결과를 그대로 돌려준다 (규격서 3.14)")
     void duplicateWithinOneMinuteReplaysFirstResult() throws Exception {
-        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:30:00").andExpect(jsonPath("$.att_gn").value("S"));
 
-        tag("08:30:20").andExpect(jsonPath("$.att_gn").value("S"));
-        tag("08:30:59").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:30:20").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:30:59").andExpect(jsonPath("$.att_gn").value("S"));
 
         assertThat(logCount()).isEqualTo(1);
     }
@@ -359,10 +372,10 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 학생이 고른 요청(con_gn)은 중복억제 창을 타지 않는다 — 2-phase 2차가 삼켜진다")
     void explicitActionBypassesDedupWindow() throws Exception {
-        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:30:00").andExpect(jsonPath("$.att_gn").value("S"));
 
         // 8초 뒤 2차 호출. 창 안이지만 학생이 화면에서 고른 것이라 처리돼야 한다
-        tag("08:30:08", "D").andExpect(jsonPath("$.att_gn").value("D"));
+        tag("07:30:08", "D").andExpect(jsonPath("$.att_gn").value("D"));
 
         assertThat(logCount()).isEqualTo(2);
     }
@@ -370,7 +383,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 외출 중에는 중복억제 창을 적용하지 않는다 — 키오스크가 복귀(R)를 기대한다")
     void dedupWindowDoesNotBlockReturn() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00", "D").andExpect(jsonPath("$.att_gn").value("D"));
 
         // 25초 만에 복귀 — 창 안이지만 R로 처리돼야 한다.
@@ -383,8 +396,8 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("1분이 지나면 다시 판정한다")
     void afterDedupWindowItDecidesAgain() throws Exception {
-        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
-        tag("08:31:01").andExpect(jsonPath("$.code").value(130));
+        tag("07:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:31:01").andExpect(jsonPath("$.code").value(130));
     }
 
     // ── 조퇴 해제 ────────────────────────────────────────────
@@ -393,7 +406,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ setReAttendProc — 조퇴 기록을 지우지 않고 외출로 정정한 뒤 복귀를 덧붙인다")
     void reAttendCorrectsInsteadOfDeleting() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00", "C").andExpect(jsonPath("$.att_gn").value("C"));
 
         mvc.perform(post("/kiosk/setReAttendProc")
@@ -421,7 +434,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("조퇴 상태가 아닌데 해제 요청하면 거부")
     void reAttendWithoutEarlyLeaveIsRejected() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
 
         mvc.perform(post("/kiosk/setReAttendProc")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -488,7 +501,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 예정 30분 전부터 뜬다 — 그 전엔 130이다")
     void promptAppearsOnlyFromThirtyMinutesBefore() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
-        tag("08:30:00");
+        tag("07:30:00");
 
         // 15:59 — 아직 이르다. 여기서 뜨면 실수로 눌러 이른 조퇴가 기록된다
         tag("15:59:00").andExpect(jsonPath("$.code").value(130));
@@ -500,7 +513,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 예정 시각이 지나도 계속 뜬다 — 늦게 나가는 건 정상이다")
     void promptStaysAfterScheduledTime() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("18:00:00").andExpect(jsonPath("$.data[0].code").value(128));
     }
@@ -509,7 +522,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 외출도 같은 규칙이다")
     void outingFollowsTheSameWindow() throws Exception {
         submitApprovedReason(AbsenceReasonType.OUTING, java.time.LocalTime.of(13, 0));
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("12:29:00").andExpect(jsonPath("$.code").value(130));
         tag("12:30:00").andExpect(jsonPath("$.data[0].code").value(129));
@@ -519,7 +532,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 창 밖에서는 con_gn을 실어도 거부된다 — 화면을 우회할 수 없다")
     void explicitActionOutsideWindowIsRejected() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("10:00:00", "C").andExpect(jsonPath("$.code").value(130));
     }
@@ -528,7 +541,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("시각이 없는 사유는 통과시킨다 — 종일 사유이거나 이관된 과거 데이터다")
     void reasonWithoutStartTimeIsAlwaysUsable() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("10:00:00").andExpect(jsonPath("$.data[0].code").value(128));
     }
@@ -537,7 +550,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 오늘 이미 외출했으면 다시 안 띄운다 — 신청 1건으로 여러 번 나갈 수 없다")
     void outingCanBeUsedOnlyOncePerDay() throws Exception {
         submitApprovedReason(AbsenceReasonType.OUTING, java.time.LocalTime.of(13, 0));
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("13:00:00").andExpect(jsonPath("$.data[0].code").value(129));
         tag("13:01:00", "N").andExpect(jsonPath("$.att_gn").value("N"));
@@ -551,7 +564,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 조퇴는 하루 한 번 — 재등원 전에는 다시 안 뜬다")
     void earlyLeaveCannotBeReusedWhileStillLeft() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(15, 0));
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00", "C").andExpect(jsonPath("$.att_gn").value("C"));
 
         // 조퇴 상태에서 재태깅은 121로 막힌다(선택지 이전 단계)

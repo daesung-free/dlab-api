@@ -109,7 +109,8 @@ public class AdminAdmissionResultController {
                                           @Valid @RequestBody SaveResult request) {
         return ApiResponse.success(ResultView.from(resultService.create(
                 me, enrollmentId, request.admissionType(), request.universityName(),
-                request.departmentName(), request.trackName(), request.result(),
+                request.departmentName(), request.trackName(),
+                request.universityCode(), request.departmentCode(), request.result(),
                 AdmissionSource.STAFF, request.memo())));
     }
 
@@ -125,7 +126,8 @@ public class AdminAdmissionResultController {
                                           @RequestBody UpdateResult request) {
         return ApiResponse.success(ResultView.from(resultService.update(
                 me, resultId, request.admissionType(), request.universityName(),
-                request.departmentName(), request.trackName(), request.result(),
+                request.departmentName(), request.trackName(),
+                request.universityCode(), request.departmentCode(), request.result(),
                 request.memo())));
     }
 
@@ -174,34 +176,57 @@ public class AdminAdmissionResultController {
     /**
      * @param result 비우면 {@code PENDING}(발표 전)이다 — 불합격과 구분된다
      */
+    /**
+     * @param universityCode 마스터에서 고른 경우의 대학코드 (디랩 1021 피드백 6-1).
+     *                       ★ <b>비어도 된다</b> — 디랩이 *"이후 없는 대학/학과 추가 입력"*
+     *                       을 요청했으므로 <b>목록에 없는 대학을 손으로 넣는 경로가 남아야</b>
+     *                       한다. 코드가 있으면 마스터 기준, 없으면 손으로 넣은 값이고
+     *                       화면이 그걸로 「미등록」을 가른다.
+     * @param departmentCode 학과코드. ★ <b>대학코드와 함께 봐야 유일하다</b> —
+     *                       학과코드 503개가 여러 대학에서 쓰인다
+     */
     public record SaveResult(
             @NotNull(message = "수시·정시 구분은 필수입니다.") AdmissionType admissionType,
             @NotBlank(message = "대학명은 필수입니다.") @Size(max = 100) String universityName,
             @NotBlank(message = "학과명은 필수입니다.") @Size(max = 100) String departmentName,
             @Size(max = 100) String trackName,
+            @Size(max = 10) String universityCode,
+            @Size(max = 10) String departmentCode,
             AdmissionResultStatus result,
             @Size(max = 500) String memo) {
     }
 
+    /** 코드 두 칸은 {@link SaveResult} 와 같은 규약이다 — 비면 손으로 넣은 값이다. */
     public record UpdateResult(AdmissionType admissionType,
                                @Size(max = 100) String universityName,
                                @Size(max = 100) String departmentName,
                                @Size(max = 100) String trackName,
+                               @Size(max = 10) String universityCode,
+                               @Size(max = 10) String departmentCode,
                                AdmissionResultStatus result,
                                @Size(max = 500) String memo) {
     }
 
     /** @param source 학생이 적어낸 값인지 직원이 확인한 값인지 */
+    /**
+     * @param universityCode ★ <b>{@code null} 이면 손으로 넣은 값이다</b> — 화면이 이 값으로
+     *                       「미등록」을 가른다. 기존에 쌓인 자유 입력은 전부 {@code null}
+     *                       이고, <b>이름이 같아도 코드를 채우지 않았다</b>:
+     *                       「서울대」·「서울대학교」·「서울대(관악)」 중 어느 것이 그 학생의
+     *                       지원인지 서버가 단정할 수 없다. 정리는 사람이 한다
+     */
     public record ResultView(Long id, Long enrollmentId, String studentName, String studentNo,
                              AdmissionType admissionType, String universityName,
                              String departmentName, String trackName,
+                             String universityCode, String departmentCode,
                              AdmissionResultStatus result, AdmissionSource source, String memo) {
 
         static ResultView from(AdmissionResult r) {
             return new ResultView(r.getId(), r.getEnrollment().getId(),
                     r.getEnrollment().getStudent().getName(), r.getEnrollment().getStudentNo(),
                     r.getAdmissionType(), r.getUniversityName(), r.getDepartmentName(),
-                    r.getTrackName(), r.getResult(), r.getSource(), r.getMemo());
+                    r.getTrackName(), r.getUniversityCode(), r.getDepartmentCode(),
+                    r.getResult(), r.getSource(), r.getMemo());
         }
     }
 }

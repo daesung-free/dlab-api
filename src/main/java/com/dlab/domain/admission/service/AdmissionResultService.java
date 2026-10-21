@@ -84,6 +84,7 @@ public class AdmissionResultService {
     @Transactional
     public AdmissionResult create(AuthPrincipal me, Long enrollmentId, AdmissionType type,
                                   String universityName, String departmentName, String trackName,
+                                  String universityCode, String departmentCode,
                                   AdmissionResultStatus result, AdmissionSource source,
                                   String memo) {
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
@@ -94,13 +95,19 @@ public class AdmissionResultService {
                     "%s는 %d개까지 등록합니다. 지우고 다시 넣어 주세요."
                             .formatted(type.displayName(), type.limit()));
         }
-        return resultRepository.save(new AdmissionResult(enrollment, type,
+        AdmissionResult saved = resultRepository.save(new AdmissionResult(enrollment, type,
                 universityName, departmentName, trackName, result, source, memo));
+        // ★ 마스터에서 고른 경우만 코드가 온다. 비면 손으로 넣은 값이고, 화면이 그걸로
+        //   「미등록」을 가른다 — 디랩이 "없는 대학/학과 추가 입력"을 요청했으므로
+        //   코드 없이도 저장돼야 한다(이름 칸은 계속 필수다)
+        saved.linkMaster(universityCode, departmentCode);
+        return saved;
     }
 
     @Transactional
     public AdmissionResult update(AuthPrincipal me, Long resultId, AdmissionType type,
                                   String universityName, String departmentName, String trackName,
+                                  String universityCode, String departmentCode,
                                   AdmissionResultStatus result, String memo) {
         AdmissionResult target = require(me, resultId);
         // 수시 ↔ 정시로 옮기면 옮겨 가는 쪽 정원을 넘을 수 있다
@@ -110,6 +117,10 @@ public class AdmissionResultService {
                     "%s는 %d개까지 등록합니다.".formatted(type.displayName(), type.limit()));
         }
         target.update(type, universityName, departmentName, trackName, result, memo);
+        // 비워 보낸 항목은 바꾸지 않는다 — 코드도 같은 규약이다
+        if (universityCode != null || departmentCode != null) {
+            target.linkMaster(universityCode, departmentCode);
+        }
         return target;
     }
 

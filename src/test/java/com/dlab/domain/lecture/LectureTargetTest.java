@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.security.AuthPrincipal;
+import com.dlab.common.web.Patch;
 import com.dlab.common.security.Role;
 import com.dlab.domain.lecture.entity.ApplicationStatus;
 import com.dlab.domain.lecture.entity.Lecture;
@@ -160,7 +161,7 @@ class LectureTargetTest {
         lectureService.update(lecture.getId(), null, null,
                 null, com.dlab.common.web.Patch.of(1),
                 null, null, null, null, null, null, null, admin);
-        lectureService.changeTargets(lecture.getId(), null, null, 1, admin);
+        lectureService.changeTargets(lecture.getId(), null, null, Patch.of(1), admin);
         em.flush();
 
         var first = student("006", GradeType.HIGH3, null);
@@ -198,5 +199,36 @@ class LectureTargetTest {
 
         assertThatCode(() -> lectureService.apply(lecture.getId(), third.getId()))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("★★ 대기 상한을 비우는 요청이 실제로 비운다 — null 을 보내도 그대로 남던 버그")
+    void waitlistCapacityCanBeCleared() {
+        // 프론트 제보: {"waitlistCapacity": null} 을 보내도 200 이 오고 상한이 그대로 남았다.
+        // 담당자는 「풀었다」고 알고 넘어간다. 0 은 「대기를 안 받는다」라 대신 쓸 수도 없다.
+        lectureService.changeTargets(lecture.getId(), null, null, Patch.of(5), admin);
+        em.flush();
+        assertThat(em.find(Lecture.class, lecture.getId()).getWaitlistCapacity()).isEqualTo(5);
+
+        // ★ 비워 달라 — Patch(null)
+        lectureService.changeTargets(lecture.getId(), null, null, Patch.of(null), admin);
+        em.flush();
+        em.clear();
+        assertThat(em.find(Lecture.class, lecture.getId()).getWaitlistCapacity()).isNull();
+    }
+
+    @Test
+    @DisplayName("★ 안 보내면 유지된다 — 「안 보냄」과 「비워 달라」가 구분돼야 한다")
+    void omittedWaitlistCapacityIsKept() {
+        lectureService.changeTargets(lecture.getId(), null, null, Patch.of(5), admin);
+        em.flush();
+
+        // 키 생략 = null Patch 자체가 안 옴
+        lectureService.changeTargets(lecture.getId(),
+                Set.of(TrackType.SCIENCE), null, null, admin);
+        em.flush();
+        em.clear();
+
+        assertThat(em.find(Lecture.class, lecture.getId()).getWaitlistCapacity()).isEqualTo(5);
     }
 }

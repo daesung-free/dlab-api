@@ -70,11 +70,21 @@ public class Academy extends BaseEntity {
      * 08:20 인 지점에서 07:55 에 온 학생이 <b>출결상 정상 등원인데 학부모에게는 지각
      * 알림이 간다.</b>
      *
-     * <p>★★ <b>비어 있으면 {@link #attendanceDeadline} 을 쓴다</b>({@link #lateAfterOrDeadline}).
-     * 07:50 을 기본값으로 박으면 <b>값이 안 들어온 지점에서 08시에 오는 학생이 전부 지각으로
-     * 찍힌다</b> — 디랩이 준 07:50·08:20 은 아직 한 건도 들어오지 않았고 11개 지점이 전부
-     * 09:00 이다. 모르면 추측값을 쓰지 않고 <b>기존 동작을 유지</b>한다.
+     * <p>★★ <b>전 지점 공통 07:50 이다</b> (디랩 2026-10-21 확정:
+     * <i>"지각 기준시각(07시50분)은 전 지점 공통 입니다"</i>).
+     *
+     * <p>⚠️ <b>그래도 지점별 칸으로 둔다.</b> 지금은 공통이지만 갈릴 수 있고, 그때 칸이
+     * 없으면 마이그레이션을 다시 써야 한다. 값만 채운다({@code V20261021220000}).
+     *
+     * <p>★ 비어 있을 때 {@link #attendanceDeadline} 으로 떨어지던 동작을 <b>없앴다.</b>
+     * 그때는 07:50 이 추측값이었으므로 기존 동작을 유지하는 것이 맞았지만, 지금은
+     * 디랩이 준 확정값이다 — 폴백을 두면 값이 빈 지점에서 지각 기준이 09:00 이 되어
+     * <b>07:55 에 온 학생이 「정상 등원」으로 찍히고 학부모는 지각 알림을 못 받는다.</b>
+     * 오류가 나지 않고 조용히 틀린다.
      */
+    /** 지각 기준 확정값 (디랩 2026-10-21, 전 지점 공통) */
+    public static final LocalTime DEFAULT_LATE_AFTER = LocalTime.of(7, 50);
+
     @Column(name = "late_after")
     private LocalTime lateAfter;
 
@@ -119,11 +129,12 @@ public class Academy extends BaseEntity {
     /**
      * 지각 판정에 쓸 기준시각 — <b>판정부는 반드시 이걸로 읽는다.</b>
      *
-     * <p>지각 기준이 비어 있으면 등원 기준시각으로 떨어진다. 그래야 값이 안 들어온 지점이
-     * <b>지금과 똑같이 동작</b>한다.
+     * <p>★ 비어 있으면 <b>확정값 07:50</b> 을 쓴다 — 등원 기준시각으로 떨어뜨리지 않는다.
+     * 떨어뜨리면 그 지점에서 07:55 에 온 학생이 정상 등원으로 찍혀 <b>지각 알림이 아예
+     * 나가지 않는다.</b>
      */
     public LocalTime lateAfterOrDeadline() {
-        return lateAfter != null ? lateAfter : attendanceDeadline;
+        return lateAfter != null ? lateAfter : DEFAULT_LATE_AFTER;
     }
 
     /** 로그·알림에서 쓰는 표시용 이름. */
