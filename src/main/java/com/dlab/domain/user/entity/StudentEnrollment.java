@@ -1,5 +1,6 @@
 package com.dlab.domain.user.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
@@ -45,6 +46,7 @@ public class StudentEnrollment extends BaseEntity {
 
     /** 학번. 매년 초기화되므로 PK·외부연동 키로 쓰지 말 것. */
     @Column(name = "student_no", length = 20)
+    @AuditLabel("학번")
     private String studentNo;
 
     /**
@@ -54,10 +56,12 @@ public class StudentEnrollment extends BaseEntity {
      * 빠뜨리면 퇴원생 카드로 태깅이 통과한다.
      */
     @Column(name = "rfid_no", length = 10)
+    @AuditLabel("카드번호")
     private String rfidNo;
 
     /** 현재 유효한 등록 건 플래그 (레거시 STAT_GB='T' 대응). */
     @Column(name = "is_current", nullable = false)
+    @AuditLabel("현재 등록")
     private boolean current = true;
 
     /**
@@ -70,16 +74,20 @@ public class StudentEnrollment extends BaseEntity {
      * 학번은 절대 변경 불가"* 라고 명시했고, 과거 회차 성적이 이미 그 번호로 들어와 있다.
      */
     @Column(name = "exam_student_no", length = 10)
+    @AuditLabel("모의고사 수험번호")
     private String examStudentNo;
 
     /** 채번 당시의 반 번호. 반이 바뀌어도 그대로 둔다 — 그 번호를 만든 근거다 */
     @Column(name = "exam_class_no")
+    @AuditLabel("모의고사 반번호")
     private Short examClassNo;
 
     @Column(name = "exam_seq")
+    @AuditLabel("모의고사 순번")
     private Short examSeq;
 
     @Column(name = "exam_no_fixed_at")
+    @AuditLabel("모의고사 번호 확정 시각")
     private java.time.Instant examNoFixedAt;
 
     /**
@@ -90,20 +98,25 @@ public class StudentEnrollment extends BaseEntity {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "homeroom_override_teacher_id")
+    @AuditLabel("담임 직접지정")
     private Teacher homeroomOverride;
 
     @Column(name = "homeroom_override_reason", length = 200)
+    @AuditLabel("담임 지정 사유")
     private String homeroomOverrideReason;
 
     @Column(name = "homeroom_override_at")
+    @AuditLabel("담임 지정 시각")
     private java.time.Instant homeroomOverrideAt;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
+    @AuditLabel("학년")
     private GradeType grade;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 10)
+    @AuditLabel("계열")
     private TrackType track;
 
     /**
@@ -117,6 +130,7 @@ public class StudentEnrollment extends BaseEntity {
      * 현역과 구분되지 않는다.
      */
     @Column(name = "retake_count")
+    @AuditLabel("재수 횟수")
     private Short retakeCount;
 
     public void changeRetakeCount(Short retakeCount) {
@@ -126,12 +140,15 @@ public class StudentEnrollment extends BaseEntity {
     /** 재원 상태. 가입 승인 상태(account.status)와 별개다. */
     @Enumerated(EnumType.STRING)
     @Column(name = "enrollment_status", nullable = false, length = 20)
+    @AuditLabel("재원 상태")
     private EnrollmentStatus enrollmentStatus = EnrollmentStatus.ENROLLED;
 
     @Column(name = "admission_date")
+    @AuditLabel("입학일")
     private LocalDate admissionDate;
 
     @Column(name = "withdrawal_date")
+    @AuditLabel("퇴원일")
     private LocalDate withdrawalDate;
 
     public StudentEnrollment(Student student, Academy academy, short year,

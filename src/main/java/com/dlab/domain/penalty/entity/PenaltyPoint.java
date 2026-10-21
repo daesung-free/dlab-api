@@ -1,5 +1,6 @@
 package com.dlab.domain.penalty.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
@@ -42,19 +43,24 @@ public class PenaltyPoint extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "penalty_item_id", nullable = false)
+    @AuditLabel("상벌점 항목")
     private PenaltyItem penaltyItem;
 
     @Column(nullable = false)
+    @AuditLabel("점수")
     private int points;
 
     @Column(length = 500)
+    @AuditLabel("사유")
     private String reason;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @AuditLabel("부여 경로")
     private PenaltySource source;
 
     @Column(name = "occurred_at", nullable = false)
+    @AuditLabel("발생 시각")
     private Instant occurredAt = Instant.now();
 
     /** 자동 부여 중복 방지 키. 수기 부여는 null. */

@@ -1,5 +1,6 @@
 package com.dlab.domain.user.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.common.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -34,6 +35,7 @@ public class ClassMaster extends BaseEntity {
     private short year;
 
     @Column(nullable = false, length = 50)
+    @AuditLabel("반 이름")
     private String name;
 
     @Enumerated(EnumType.STRING)
@@ -48,11 +50,13 @@ public class ClassMaster extends BaseEntity {
      * 화면은 이 값과 현재 인원으로 충원율을 그린다.
      */
     @Column(name = "capacity")
+    @AuditLabel("정원")
     private Short capacity;
 
     /** 담임 = 담당선생님(사감). 미지정일 수 있다. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "homeroom_teacher_id")
+    @AuditLabel("담임")
     private Teacher homeroomTeacher;
 
     /**
@@ -61,6 +65,7 @@ public class ClassMaster extends BaseEntity {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "course_type_id")
+    @AuditLabel("과정")
     private com.dlab.domain.master.entity.CourseType courseType;
 
     /**
@@ -74,6 +79,7 @@ public class ClassMaster extends BaseEntity {
      * 없는 편이 낫다 — 번호가 겹치면 남의 성적이 들어간다.
      */
     @Column(name = "exam_class_no")
+    @AuditLabel("모의고사 반번호")
     private Short examClassNo;
 
     public void changeExamClassNo(Short examClassNo) {
@@ -83,6 +89,7 @@ public class ClassMaster extends BaseEntity {
     /** 강의실. 없으면 비어 있다 — 반마다 하나다. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "room_id")
+    @AuditLabel("강의실")
     private com.dlab.domain.master.entity.RoomMaster room;
 
     public ClassMaster(Academy academy, short year, String name, ClassType classType, Teacher homeroomTeacher) {

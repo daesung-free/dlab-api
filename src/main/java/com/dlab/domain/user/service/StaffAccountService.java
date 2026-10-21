@@ -346,8 +346,9 @@ public class StaffAccountService {
         }
         account.approve();
         auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
-                AuditEntityListener.Change.of("status",
-                        AccountStatus.PENDING.name(), AccountStatus.ACTIVE.name()));
+                List.of(AuditEntityListener.Change.labeled("status", "계정 상태",
+                        AccountStatus.PENDING.name(), AccountStatus.ACTIVE.name(),
+                        "승인 대기", "활성")));
         return account;
     }
 
@@ -391,7 +392,8 @@ public class StaffAccountService {
         loginAttemptStore.clear(account.getLoginId());
         if (wasLocked) {
             auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
-                    AuditEntityListener.Change.of("locked", "true", "false"));
+                    List.of(AuditEntityListener.Change.labeled("locked", "계정 잠금",
+                            "true", "false", "잠김", "풀림")));
         }
         return account;
     }
@@ -421,7 +423,9 @@ public class StaffAccountService {
         loginAttemptStore.clear(account.getLoginId());
         refreshTokenStore.delete(accountId);
         auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
-                AuditEntityListener.Change.of("temporaryPassword", null, "reissued"));
+                List.of(AuditEntityListener.Change.labeled(
+                        "temporaryPassword", "임시 비밀번호",
+                        null, "reissued", null, "재발급")));
         return temporary;
     }
 
@@ -473,8 +477,10 @@ public class StaffAccountService {
         grantRoles(accountId, roles);
 
         auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, targetAcademyId,
-                AuditEntityListener.Change.of("roles", joinRoles(before),
-                        joinRoles(roles.stream().map(Role::name).collect(Collectors.toSet()))));
+                List.of(AuditEntityListener.Change.labeled("roles", "권한",
+                        joinRoles(before),
+                        joinRoles(roles.stream().map(Role::name)
+                                .collect(Collectors.toSet())))));
     }
 
     /** 화면에 그대로 찍히는 값이라 순서를 고정한다 — 안 그러면 같은 역할 집합이 매번 달라 보인다. */

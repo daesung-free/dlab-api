@@ -1,5 +1,6 @@
 package com.dlab.domain.payment.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
@@ -51,24 +52,30 @@ public class Billing extends BaseEntity {
 
     /** 키오스크 {@code rcv_nm}. */
     @Column(nullable = false, length = 100)
+    @AuditLabel("청구 표시명")
     private String name;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "billing_type", nullable = false, length = 20)
+    @AuditLabel("청구 종류")
     private BillingType billingType;
 
     /** 정가. 키오스크 {@code supp_amt}. */
     @Column(name = "supplied_amount", nullable = false)
+    @AuditLabel("정상가")
     private int suppliedAmount;
 
     @Column(name = "discount_amount", nullable = false)
+    @AuditLabel("할인액")
     private int discountAmount;
 
     /** 정가 − 할인. 미납 계산의 기준이다. */
     @Column(name = "billed_amount", nullable = false)
+    @AuditLabel("청구액")
     private int billedAmount;
 
     @Column(name = "due_date")
+    @AuditLabel("납부기한")
     private LocalDate dueDate;
 
     /**
@@ -80,9 +87,11 @@ public class Billing extends BaseEntity {
      * <p>급식·특강은 달 단위가 아니라 비어 있을 수 있다.
      */
     @Column(name = "service_year")
+    @AuditLabel("대상 연도")
     private Short serviceYear;
 
     @Column(name = "service_month")
+    @AuditLabel("대상 월")
     private Short serviceMonth;
 
     /**
@@ -97,9 +106,11 @@ public class Billing extends BaseEntity {
      * 역산하면 어긋난다. 추측값을 넣으면 화면이 그것을 사실로 읽는다.
      */
     @Column(name = "service_from")
+    @AuditLabel("대상기간 시작")
     private java.time.LocalDate serviceFrom;
 
     @Column(name = "service_to")
+    @AuditLabel("대상기간 종료")
     private java.time.LocalDate serviceTo;
 
     /**
@@ -112,10 +123,12 @@ public class Billing extends BaseEntity {
      * <p>손으로 넣은 할인이면 비어 있다 — <b>「장학 근거가 없다」는 뜻</b>이다.
      */
     @Column(name = "discount_source", length = 100)
+    @AuditLabel("할인 근거")
     private String discountSource;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @AuditLabel("수납 상태")
     private BillingStatus status = BillingStatus.PENDING;
 
     @OneToMany(mappedBy = "billing", cascade = CascadeType.ALL, orphanRemoval = true)
