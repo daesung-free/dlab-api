@@ -145,6 +145,125 @@ public class AdminPenaltyController {
         return ApiResponse.success(null);
     }
 
+    /**
+     * 학생 단위 누적 집계 (디랩 1021 피드백 2-5).
+     *
+     * <p>디랩 원문: <i>"전체 재원생의 현재 누적 상벌점 점수가 조회되면 좋을 것 같습니다.
+     * <b>누적상점이 가장높은학생 순</b>으로 정렬되거나 <b>누적 벌점이 가장 높은학생 순</b>으로
+     * 정렬되는 데이터가 필요합니다"</i>
+     *
+     * <h2>★★ 상점 합과 벌점 합이 따로 온다</h2>
+     * 합계만 보면 <b>「상점 169 · 벌점 152 · 합 17」인 학생과 「상점 0 · 벌점 0」인 학생이
+     * 같아 보인다.</b> {@code demerit} 은 <b>절댓값</b>이다(저장은 음수다).
+     *
+     * <p>★ <b>제적 기준 40점은 {@code demerit} 을 본다</b> — {@code total}(순합계)이 아니다.
+     * 상점으로 벌점을 덮어 임계가 가려지면 안 된다. 임계 근처를 눈에 띄게 할 것.
+     *
+     * <p>⚠️ <b>상벌점이 없는 학생도 0으로 온다.</b> 집계만 내리면 그 학생들이 목록에서
+     * 사라지고 화면은 그걸 「조회가 안 된다」로 읽는다.
+     *
+     * @param sort {@code demerit}(기본) · {@code merit} · {@code total} · {@code studentNo} ·
+     *             {@code className}. 허용값 밖은 기본으로 떨어진다 —
+     *             임의 문자열로 서버가 500 을 내지 않게 한다
+     */
+    @GetMapping("/students")
+    public ApiResponse<List<PenaltyService.StudentPenaltySummary>> byStudentSummary(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam Integer year,
+            @RequestParam(required = false, defaultValue = "demerit") String sort) {
+
+        var rows = new java.util.ArrayList<>(
+                penaltyService.summaryByStudent(me, academyId, year.shortValue()));
+
+        java.util.Comparator<PenaltyService.StudentPenaltySummary> comparator = switch (sort) {
+            case "merit" -> java.util.Comparator
+                    .comparingInt(PenaltyService.StudentPenaltySummary::merit).reversed();
+            case "total" -> java.util.Comparator
+                    .comparingInt(PenaltyService.StudentPenaltySummary::total).reversed();
+            case "studentNo" -> java.util.Comparator
+                    .comparing(PenaltyService.StudentPenaltySummary::studentNo,
+                            java.util.Comparator.nullsLast(String::compareTo));
+            case "className" -> java.util.Comparator
+                    .comparing(PenaltyService.StudentPenaltySummary::className,
+                            java.util.Comparator.nullsLast(String::compareTo));
+            // ★ 기본은 벌점 높은 순이다 — 담당자가 이 화면을 여는 이유가 그것이다
+            default -> java.util.Comparator
+                    .comparingInt(PenaltyService.StudentPenaltySummary::demerit).reversed();
+        };
+        // 같은 점수면 학번 순 — 안 그러면 새로고침마다 순서가 달라 보인다
+        rows.sort(comparator.thenComparing(
+                PenaltyService.StudentPenaltySummary::studentNo,
+                java.util.Comparator.nullsLast(String::compareTo)));
+        return ApiResponse.success(rows);
+    }
+
+    /**
+     * 일괄 취소 (디랩 1021 피드백 2-7).
+     *
+     * <p>디랩 원문: <i>"체크 박스 체크 후에 <b>일괄 취소</b>가 가능하면 좋을 것 같습니다."</i>
+     * 화면에 버튼은 있었는데 서버가 하나씩만 받았다.
+     *
+     * <p>★ <b>한 건이 실패해도 나머지는 취소한다.</b> 20건을 체크했는데 하나가 이미 취소된
+     * 건이라 전부 되돌아가면, 담당자는 <b>어느 것이 걸렸는지 모르는 채 다시 20건을 고르게</b>
+     * 된다.
+     *
+     * <p>⚠️ 응답의 {@code failed} 에 <b>사유가 함께 온다 — 화면에 그대로 보여줄 것.</b>
+     * 「3건 실패」만 보여주면 담당자가 할 수 있는 일이 없다.
+     */
+    @PostMapping("/revoke")
+    public ApiResponse<PenaltyService.BulkRevokeResult> revokeAll(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody BulkRevokeRequest request) {
+        return ApiResponse.success(penaltyService.revokeAll(me, request.penaltyPointIds()));
+    }
+
+    /**
+     * 일자·사유 수정 (디랩 1021 피드백 2-8).
+     *
+     * <p>디랩 원문: <i>"잘못 입력된 내용은 취소(삭제) 후 새로 입력하는 방법 밖에는 없는 것
+     * 같습니다. <b>(특히 일자, 사유 수정 필요)</b>"</i>
+     *
+     * <h2>★★ 점수와 항목은 바꿀 수 없다</h2>
+     * 점수는 <b>부여 시점의 항목 점수를 복사해 둔 값</b>이다 — 항목 점수를 나중에 바꿔도
+     * 과거 이력이 소급해서 바뀌지 않게 하기 위해서다. 여기서 열면 그 보장이 사라진다.
+     * 항목을 바꿔야 하면 <b>취소 후 재입력</b>이 맞다 — 「지각」을 「무단결석」으로 고치는
+     * 것은 다른 사건이고, 멱등키도 그 조합으로 잡혀 있다.
+     *
+     * <p>⚠️ <b>일자를 바꾸면 그날의 누적 집계가 달라진다.</b> 화면이 목록을 다시 받아야 한다.
+     *
+     * <p>수정 이력은 {@code @Audited("상벌점")} 이 자동으로 남긴다 — 「발생 시각」·「사유」로
+     * 보인다. 비워 보낸 항목은 바꾸지 않는다.
+     */
+    @PatchMapping("/{penaltyPointId}")
+    public ApiResponse<Void> modify(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long penaltyPointId,
+            @Valid @RequestBody ModifyRequest request) {
+        penaltyService.modify(me, penaltyPointId, request.occurredOn(), request.reason());
+        // ★ 수정된 행을 돌려주지 않는다 — 그 응답에는 누적 점수·반·좌석이 빠져 있고
+        //   일자를 바꾸면 그날 누적이 달라져 목록을 어차피 다시 받아야 한다.
+        //   반쪽 행을 돌려주면 화면이 그걸 믿고 갱신을 건너뛴다
+        return ApiResponse.success(null);
+    }
+
+    /** @param penaltyPointIds 취소할 내역. 빈 목록은 400 — 눌렀는데 아무 일도 안 나면 혼란스럽다 */
+    public record BulkRevokeRequest(
+            @jakarta.validation.constraints.NotEmpty(message = "취소할 내역을 선택해 주세요.")
+            List<Long> penaltyPointIds) {
+    }
+
+    /**
+     * @param occurredOn 발생 일자. 비우면 유지
+     * @param reason     사유. 비우면 유지
+     */
+    public record ModifyRequest(
+            @org.springframework.format.annotation.DateTimeFormat(
+                    iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate occurredOn,
+            @jakarta.validation.constraints.Size(max = 200) String reason) {
+    }
+
     /** 학생별 내역. 상세 화면·앱 Daily Report가 함께 쓴다. */
     @GetMapping("/students/{enrollmentId}")
     public ApiResponse<StudentPenaltyResponse> byStudent(@CurrentAccount AuthPrincipal me,

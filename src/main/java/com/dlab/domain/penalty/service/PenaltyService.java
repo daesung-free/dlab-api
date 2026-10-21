@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 @RequiredArgsConstructor
+@lombok.extern.slf4j.Slf4j
 public class PenaltyService {
 
     private final PenaltyPointRepository pointRepository;
@@ -82,6 +83,89 @@ public class PenaltyService {
         return pointRepository.saveAll(granted);
     }
 
+    /**
+     * 학생 단위 누적 집계 (디랩 1021 피드백 2-5).
+     *
+     * <p>디랩 원문: <i>"전체 재원생의 현재 누적 상벌점 점수가 조회되면 좋을 것 같습니다.
+     * <b>누적상점이 가장높은학생 순</b>으로 정렬되거나 <b>누적 벌점이 가장 높은학생 순</b>으로
+     * 정렬되는 데이터가 필요합니다"</i>
+     *
+     * <h2>★★ 재원생 전체를 내린다 — 상벌점이 없는 학생도 0으로</h2>
+     * 집계 쿼리는 상벌점이 <b>한 건이라도 있는 학생만</b> 돌려준다(그룹이 안 생긴다).
+     * 그것만 내리면 <b>「상벌점 없는 학생」이 목록에서 사라지고</b>, 화면은 그걸
+     * 「조회가 안 된다」로 읽는다. 재원생 목록을 기준으로 두고 0을 채운다.
+     *
+     * <h2>★ 상점 합과 벌점 합을 따로 낸다</h2>
+     * 합계만 내면 <b>「상점 169 · 벌점 152 · 합 17」인 학생과 「상점 0 · 벌점 0」인 학생이
+     * 같아 보인다.</b> 벌점은 음수로 저장되므로 <b>절댓값</b>으로 내린다 — 음수를 내보내면
+     * 「벌점 높은 순」 정렬이 뒤집힌다.
+     *
+     * <p>⚠️ <b>기간을 걸지 않는다 — 누적이다.</b> 제적 기준 40점이 누적이라 기간 합계로는
+     * 임계에 가까운 학생이 드러나지 않는다.
+     *
+     * <p>정렬은 부르는 쪽(컨트롤러)이 고른다 — 쿼리에서 정렬하면 0으로 채운 학생이
+     * 섞이지 않는다.
+     */
+    @Transactional(readOnly = true)
+    public List<StudentPenaltySummary> summaryByStudent(AuthPrincipal principal,
+                                                        Long requestedAcademyId,
+                                                        short year) {
+        Long academyId = principal.resolveAcademyScope(requestedAcademyId);
+        if (academyId == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "지점을 지정해야 합니다.");
+        }
+        List<StudentEnrollment> enrollments =
+                enrollmentRepository.findCurrentByAcademyAndYear(academyId, year);
+        if (enrollments.isEmpty()) {
+            return List.of();
+        }
+        var ids = enrollments.stream().map(StudentEnrollment::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        // ★ 세 번만 조회한다 — 행마다 부르면 재원생 수만큼 쿼리가 나간다
+        java.util.Map<Long, int[]> aggregates = new java.util.HashMap<>();
+        for (Object[] row : pointRepository.aggregateByEnrollments(ids)) {
+            aggregates.put((Long) row[0], new int[]{
+                    ((Number) row[1]).intValue(),
+                    ((Number) row[2]).intValue(),
+                    ((Number) row[3]).intValue()});
+        }
+        java.util.Map<Long, String> classes = classAssignmentRepository
+                .findActiveFixedByEnrollmentIds(ids).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        a -> a.getEnrollment().getId(),
+                        a -> a.getClassMaster().getName(), (x, y) -> x));
+        java.util.Map<Long, String> seats = new java.util.HashMap<>();
+        for (var assignment : seatAssignmentRepository.findActiveByEnrollmentIds(ids)) {
+            seats.put(assignment.getEnrollment().getId(), assignment.getSeat().getSeatCd());
+        }
+
+        List<StudentPenaltySummary> result = new java.util.ArrayList<>();
+        for (StudentEnrollment e : enrollments) {
+            int[] agg = aggregates.getOrDefault(e.getId(), new int[]{0, 0, 0});
+            result.add(new StudentPenaltySummary(
+                    e.getId(), e.getStudentNo(), e.getStudent().getName(),
+                    classes.get(e.getId()), seats.get(e.getId()),
+                    e.getEnrollmentStatus(), agg[0], agg[1], agg[2]));
+        }
+        return result;
+    }
+
+    /**
+     * @param merit    상점 합 (양수)
+     * @param demerit  벌점 합 — ★ <b>절댓값</b>이다. 저장은 음수지만 화면이 음수를 받으면
+     *                 「벌점 높은 순」 정렬이 뒤집힌다
+     * @param total    순합계(상점 − 벌점). ⚠️ <b>제적 기준 40점은 벌점 누적</b>이라
+     *                 이 값이 아니라 {@code demerit} 을 본다
+     */
+    public record StudentPenaltySummary(
+            Long enrollmentId, String studentNo, String studentName,
+            String className, String seatCd,
+            com.dlab.domain.user.entity.EnrollmentStatus enrollmentStatus,
+            int merit, int demerit, int total) {
+    }
+
     /** soft delete. 부여를 취소해도 이력은 남겨야 이의 제기 대응이 된다. */
     @Transactional
     public void revoke(AuthPrincipal principal, Long penaltyPointId) {
@@ -91,6 +175,72 @@ public class PenaltyService {
                         "상벌점 내역을 찾을 수 없습니다."));
         validateAccessible(principal, point.getEnrollment());
         point.markDeleted();
+    }
+
+    /**
+     * 일괄 취소 (디랩 1021 피드백 2-7).
+     *
+     * <p>디랩 원문: <i>"체크 박스 체크 후에 <b>일괄 취소</b>가 가능하면 좋을 것 같습니다."</i>
+     * 화면에 버튼은 있었는데 서버가 하나씩만 받았다.
+     *
+     * <h2>★ 한 건이 실패해도 나머지는 취소한다</h2>
+     * 20건을 체크했는데 하나가 이미 취소된 건이라 전부 되돌아가면, 담당자는
+     * <b>어느 것이 걸렸는지 모르는 채 다시 20건을 고르게</b> 된다.
+     *
+     * @return 취소한 id 와 실패한 id·사유
+     */
+    @Transactional
+    public BulkRevokeResult revokeAll(AuthPrincipal principal, List<Long> penaltyPointIds) {
+        List<Long> revoked = new java.util.ArrayList<>();
+        java.util.Map<Long, String> failed = new java.util.LinkedHashMap<>();
+
+        for (Long id : penaltyPointIds) {
+            try {
+                revoke(principal, id);
+                revoked.add(id);
+            } catch (BusinessException e) {
+                // ★ 한 건의 실패가 나머지를 되돌리지 않게 한다.
+                //   revoke 는 같은 트랜잭션이라 예외가 롤백 표시를 남기지 않는 BusinessException
+                //   만 잡는다 — 그 밖의 예외는 그대로 올려 전체를 되돌린다
+                failed.put(id, e.getMessage());
+            }
+        }
+        log.info("상벌점 일괄 취소: 요청={}, 취소={}, 실패={}, 처리자={}",
+                penaltyPointIds.size(), revoked.size(), failed.size(), principal.accountId());
+        return new BulkRevokeResult(revoked, failed);
+    }
+
+    /**
+     * @param failed id → 사유. ★ <b>화면에 사유를 그대로 보여줄 것</b> —
+     *               「3건 실패」만 보여주면 담당자가 할 수 있는 일이 없다
+     */
+    public record BulkRevokeResult(List<Long> revoked, java.util.Map<Long, String> failed) {
+    }
+
+    /**
+     * 일자·사유 수정 (디랩 1021 피드백 2-8).
+     *
+     * <p>★ <b>점수와 항목은 바꿀 수 없다</b>({@link PenaltyPoint#modify}).
+     *
+     * <p>⚠️ 일자를 바꾸면 그날 누적이 달라진다. 수정 이력은 {@code @Audited("상벌점")} 이
+     * 자동으로 남긴다 — {@code occurredAt}·{@code reason} 에 {@code @AuditLabel} 이 달려 있어
+     * 화면에 「발생 시각」·「사유」로 보인다.
+     */
+    @Transactional
+    public PenaltyPoint modify(AuthPrincipal principal, Long penaltyPointId,
+                               java.time.LocalDate occurredOn, String reason) {
+        PenaltyPoint point = pointRepository.findById(penaltyPointId)
+                .filter(p -> !p.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "상벌점 내역을 찾을 수 없습니다."));
+        validateAccessible(principal, point.getEnrollment());
+
+        java.time.Instant at = occurredOn == null ? null
+                : occurredOn.atStartOfDay(clock.getZone()).toInstant();
+        point.modify(at, reason);
+        log.info("상벌점 수정: id={}, 일자={}, 처리자={}",
+                penaltyPointId, occurredOn, principal.accountId());
+        return point;
     }
 
     @Transactional(readOnly = true)

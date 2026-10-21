@@ -301,4 +301,170 @@ class AdminPenaltyBoardTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // 일괄 취소 · 수정 (디랩 1021 피드백 2-7 · 2-8)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 일괄 취소 — 한 건이 실패해도 나머지는 취소된다")
+    void bulkRevokeKeepsGoingOnFailure() {
+        var granted = penaltyService.grantManually(
+                admin, List.of(minji.getId(), seojun.getId()), late, null, null);
+        em.flush();
+        var ids = granted.stream().map(PenaltyPoint::getId).toList();
+
+        // 하나를 먼저 취소해 둔다 — 일괄에서 그 건이 실패한다
+        penaltyService.revoke(admin, ids.get(0));
+        em.flush();
+
+        var result = penaltyService.revokeAll(admin,
+                List.of(ids.get(0), ids.get(1), 999_999L));
+        em.flush();
+
+        // ★ 20건을 체크했는데 하나가 걸려 전부 되돌아가면 담당자는 어느 것이
+        //   걸렸는지 모르는 채 다시 20건을 고르게 된다
+        assertThat(result.revoked()).containsExactly(ids.get(1));
+        assertThat(result.failed()).containsOnlyKeys(ids.get(0), 999_999L);
+        // ⚠️ 사유가 함께 와야 한다 — 「2건 실패」만 보여주면 담당자가 할 일이 없다
+        assertThat(result.failed().values()).allSatisfy(m -> assertThat(m).isNotBlank());
+    }
+
+    @Test
+    @DisplayName("★ 빈 목록으로 부르면 아무것도 안 바뀐다")
+    void bulkRevokeWithEmptyList() {
+        var result = penaltyService.revokeAll(admin, List.of());
+        assertThat(result.revoked()).isEmpty();
+        assertThat(result.failed()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("★ 일자·사유를 고친다 — 취소 후 재입력이 유일한 길이었다")
+    void modifyChangesDateAndReason() {
+        var granted = penaltyService.grantManually(
+                admin, List.of(minji.getId()), late, "원래 사유", null);
+        em.flush();
+        Long id = granted.get(0).getId();
+
+        var target = java.time.LocalDate.now(clock).minusDays(3);
+        penaltyService.modify(admin, id, target, "고친 사유");
+        em.flush();
+        em.clear();
+
+        var after = em.find(PenaltyPoint.class, id);
+        assertThat(after.getReason()).isEqualTo("고친 사유");
+        assertThat(after.getOccurredAt().atZone(clock.getZone()).toLocalDate())
+                .isEqualTo(target);
+    }
+
+    @Test
+    @DisplayName("★ 비워 보낸 항목은 바꾸지 않는다")
+    void modifyKeepsOmittedFields() {
+        var granted = penaltyService.grantManually(
+                admin, List.of(minji.getId()), late, "원래 사유", null);
+        em.flush();
+        Long id = granted.get(0).getId();
+        // ★★ before 를 DB 에서 읽는다 — flush 직후 em.find 는 영속성 컨텍스트의
+        //    Java Instant(나노초)를 돌려주는데, 뒤에서 비교하는 값은 DB 에서 다시 읽어
+        //    마이크로초로 잘린다. macOS 는 Instant.now() 가 마이크로초라 우연히 같고
+        //    CI(Linux)는 나노초라 달라진다 — 실제로 CI 에서만 깨졌다.
+        em.clear();
+        var before = em.find(PenaltyPoint.class, id).getOccurredAt();
+
+        penaltyService.modify(admin, id, null, "사유만 고침");
+        em.flush();
+        em.clear();
+
+        var after = em.find(PenaltyPoint.class, id);
+        assertThat(after.getReason()).isEqualTo("사유만 고침");
+        assertThat(after.getOccurredAt()).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("★★ 점수와 항목은 수정 경로에 없다 — 부여 시점 값이 흔들리면 안 된다")
+    void modifyCannotTouchPointsOrItem() throws Exception {
+        // 점수는 부여 시점의 항목 점수를 복사해 둔 값이다 — 항목 점수를 나중에 바꿔도
+        // 과거 이력이 소급해서 바뀌지 않게 하기 위해서다. 수정 메서드가 그걸 열면
+        // 그 보장이 사라진다. 시그니처로 못박는다.
+        var modify = PenaltyPoint.class.getMethod(
+                "modify", java.time.Instant.class, String.class);
+        assertThat(modify.getParameterCount())
+                .as("modify 가 점수·항목을 받으면 안 된다 — 항목을 바꿔야 하면 "
+                        + "취소 후 재입력이 맞다(멱등키도 그 조합으로 잡혀 있다)")
+                .isEqualTo(2);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 학생 단위 누적 집계 (디랩 1021 피드백 2-5)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 상벌점이 없는 학생도 0으로 나온다 — 집계만 내리면 목록에서 사라진다")
+    void summaryIncludesStudentsWithoutPoints() {
+        // 민지에게만 준다. 서준은 한 건도 없다
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
+        em.flush();
+
+        var rows = penaltyService.summaryByStudent(admin, bundang.getId(), minji.getYear());
+
+        // ★ 집계 쿼리는 그룹이 안 생겨 서준을 안 돌려준다 — 재원생 기준으로 채워야 한다
+        assertThat(rows).extracting(
+                        PenaltyService.StudentPenaltySummary::enrollmentId)
+                .contains(minji.getId(), seojun.getId());
+        var seojunRow = rows.stream()
+                .filter(r -> r.enrollmentId().equals(seojun.getId()))
+                .findFirst().orElseThrow();
+        assertThat(seojunRow.merit()).isZero();
+        assertThat(seojunRow.demerit()).isZero();
+        assertThat(seojunRow.total()).isZero();
+    }
+
+    @Test
+    @DisplayName("★★ 상점 합과 벌점 합이 따로 온다 — 합계만 내면 169/152 와 0/0 이 같아 보인다")
+    void summarySplitsMeritAndDemerit() {
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null, null);
+        penaltyService.grantManually(admin, List.of(minji.getId()), perfect, null, null);
+        em.flush();
+
+        var row = penaltyService.summaryByStudent(admin, bundang.getId(), minji.getYear()).stream()
+                .filter(r -> r.enrollmentId().equals(minji.getId()))
+                .findFirst().orElseThrow();
+
+        // ★ 벌점은 음수로 저장되지만 절댓값으로 온다 — 음수를 내보내면
+        //   「벌점 높은 순」 정렬이 뒤집힌다
+        assertThat(row.demerit()).isPositive();
+        assertThat(row.merit()).isPositive();
+        assertThat(row.total()).isEqualTo(row.merit() - row.demerit());
+    }
+
+    @Test
+    @DisplayName("★ 취소한 건은 집계에서 빠진다")
+    void revokedPointsAreExcludedFromSummary() {
+        var granted = penaltyService.grantManually(
+                admin, List.of(minji.getId()), late, null, null);
+        em.flush();
+        penaltyService.revoke(admin, granted.get(0).getId());
+        em.flush();
+
+        var row = penaltyService.summaryByStudent(admin, bundang.getId(), minji.getYear()).stream()
+                .filter(r -> r.enrollmentId().equals(minji.getId()))
+                .findFirst().orElseThrow();
+        assertThat(row.demerit()).isZero();
+    }
+
+    @Test
+    @DisplayName("★ 기간을 걸지 않는다 — 제적 기준 40점이 누적이다")
+    void summaryIsCumulativeNotPeriodic() {
+        // 한참 전 날짜로 부여한다. 기간 필터가 있으면 이 건이 빠진다
+        penaltyService.grantManually(admin, List.of(minji.getId()), late, null,
+                java.time.LocalDate.now(clock).minusMonths(8));
+        em.flush();
+
+        var row = penaltyService.summaryByStudent(admin, bundang.getId(), minji.getYear()).stream()
+                .filter(r -> r.enrollmentId().equals(minji.getId()))
+                .findFirst().orElseThrow();
+        assertThat(row.demerit())
+                .as("8개월 전 벌점이 빠지면 임계(40점)에 가까운 학생이 드러나지 않는다")
+                .isPositive();
+    }
 }

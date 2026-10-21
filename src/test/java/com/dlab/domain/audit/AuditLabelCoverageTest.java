@@ -93,4 +93,45 @@ class AuditLabelCoverageTest {
                         + "SKIPPED 에 적을 것 — 라벨이 없으면 화면에 서버 필드명이 그대로 보인다")
                 .isEmpty();
     }
+
+    @Test
+    @DisplayName("★★ 업무영역 목록에 출결·장학·급식이 들어 있다 — 없으면 기록이 쌓여도 볼 수 없다")
+    void auditAreasCoverTheNewOnes() {
+        var scanner = new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AnnotationTypeFilter(Audited.class));
+
+        List<String> areas = new ArrayList<>();
+        for (var candidate : scanner.findCandidateComponents("com.dlab.domain")) {
+            try {
+                Class<?> type = Class.forName(candidate.getBeanClassName());
+                Audited audited = type.getAnnotation(Audited.class);
+                areas.add(audited == null || audited.value().isBlank()
+                        ? type.getSimpleName() : audited.value());
+            } catch (ClassNotFoundException ignored) {
+                // 목록 전체를 막지 않는다
+            }
+        }
+
+        // 디랩 1021 피드백 4-1: "출결변경, 장학, 급식 등 업무영역 추가가 필요할 것 같습니다.
+        //   업무영역에 없는 경우 변경이력에도 확인이 안되는 것 같습니다."
+        assertThat(areas).contains("출결 정정", "장학", "급식 신청");
+    }
+
+    @Test
+    @DisplayName("★★ 출결은 한 군데만 기록한다 — 두 군데면 같은 사건이 두 줄로 보인다")
+    void attendanceIsAuditedInOnePlaceOnly() throws Exception {
+        // correctStatus 는 AttendanceModification 을 넣고 AttendanceDailyStatus 를 고친다.
+        // 둘 다 @Audited 면 한 번의 정정이 감사 로그에 두 줄로 남는다.
+        // 정정 이력 전용 테이블인 AttendanceModification 쪽을 고른다.
+        Class<?> modification = Class.forName(
+                "com.dlab.domain.attendance.entity.AttendanceModification");
+        Class<?> dailyStatus = Class.forName(
+                "com.dlab.domain.attendance.entity.AttendanceDailyStatus");
+
+        assertThat(modification.isAnnotationPresent(Audited.class))
+                .as("출결 정정 이력이 감사 대상이어야 한다").isTrue();
+        assertThat(dailyStatus.isAnnotationPresent(Audited.class))
+                .as("AttendanceDailyStatus 에도 붙이면 같은 정정이 두 줄로 남는다")
+                .isFalse();
+    }
 }
