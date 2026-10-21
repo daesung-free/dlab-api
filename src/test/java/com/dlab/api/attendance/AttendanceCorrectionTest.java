@@ -51,6 +51,14 @@ class AttendanceCorrectionTest {
     @Autowired AttendanceBoardService boardService;
     @Autowired DailyAttendanceConfirmService confirmService;
     @Autowired AttendanceTaggingLogRepository taggingLogRepository;
+    /**
+     * ★ 스파이다 — 실제 엔진이 돌면서 호출도 기록된다.
+     *
+     * <p>{@code apply} 가 {@code REQUIRES_NEW} 라 이 테스트의 트랜잭션에서 넣은 규칙이
+     * 보이지 않는다. 그래서 <b>부여 결과가 아니라 호출</b>을 본다.
+     */
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    com.dlab.domain.penalty.service.PenaltyRuleEngine penaltyRuleEngine;
     @Autowired AttendanceDailyStatusRepository dailyStatusRepository;
     @Autowired EntityManager em;
     @Autowired Clock clock;
@@ -424,5 +432,106 @@ class AttendanceCorrectionTest {
                 correctionService.deleteTagging(admin, minji.getId(), othersId, "실수"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("그 학생의 태깅");
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 출결 정정 ↔ 벌점 연동 (디랩 1021 피드백 2-1)
+    //
+    // ★★ 엔진을 스파이로 둬 「부르는가」를 본다 — 실제 부여 결과를 보지 않는다.
+    //    PenaltyRuleEngine.apply 가 REQUIRES_NEW 라, @Transactional 테스트에서
+    //    em.persist 로 넣은 규칙은 **커밋되지 않아 새 트랜잭션에서 안 보인다.**
+    //    그래서 부여 결과로 검증하면 늘 0건이 나오고, 그걸 「연동이 안 된다」로
+    //    읽거나 — 더 나쁘게 — 기대값을 0 으로 맞춰 **거짓 통과**를 만든다.
+    //    실제로 처음 쓴 테스트 5건 중 1건이 그렇게 통과했다.
+    //
+    //    엔진 자체의 부여·멱등·취소 동작은 PenaltyRuleEngineTest 가 본다.
+    //    여기서 빠져 있던 것은 **정정 경로가 엔진을 부르지 않는다**는 것이었다.
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 관리자가 지각 태깅을 넣으면 엔진을 부른다 — 디랩이 본 그대로 안 부르고 있었다")
+    void manualTaggingTriggersEngine() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.LATE, LocalTime.of(9, 30), "늦게 온 것 확인");
+
+        // ⚠️ 지금까지 엔진은 키오스크 태깅과 일자 확정 배치에서만 돌았고,
+        //    그 배치는 결석만 부여한다 — 관리자 정정에서는 아무 일도 안 났다
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.argThat(e -> e.getId().equals(minji.getId())),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                org.mockito.ArgumentMatchers.eq(AttendanceEventType.LATE.getCode()),
+                org.mockito.ArgumentMatchers.eq(day));
+    }
+
+    @Test
+    @DisplayName("★★ 태깅을 지우면 그 이벤트의 자동 벌점 취소를 부른다")
+    void deletingTaggingRevokesPenalty() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.LATE, LocalTime.of(9, 30), "늦게 온 것 확인");
+        em.flush();
+
+        Long taggingId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .stream()
+                .filter(l -> l.getEventType() == AttendanceEventType.LATE)
+                .findFirst().orElseThrow().getId();
+
+        correctionService.deleteTagging(admin, minji.getId(), taggingId, "오입력");
+
+        // 지각 태깅을 지웠는데 지각 벌점이 남으면 왜 남았는지 알 수 없다
+        org.mockito.Mockito.verify(penaltyRuleEngine).revokeAuto(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                org.mockito.ArgumentMatchers.eq(AttendanceEventType.LATE.getCode()),
+                org.mockito.ArgumentMatchers.eq(day));
+    }
+
+    @Test
+    @DisplayName("★★ 무단결석 → 사유결석이면 취소를 부른다 — 상태는 ABSENT 그대로다")
+    void excusingAbsenceRevokesPenalty() {
+        correctionService.correctStatus(admin, minji.getId(), day,
+                DailyStatus.ABSENT, false, "무단결석 확인");
+        // 무단결석이 되면 부여를 부른다
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.TriggerCondition.ABSENT),
+                org.mockito.ArgumentMatchers.eq(day));
+
+        // ★ 사유가 늦게 승인됐다 — 상태는 그대로지만 벌점은 없어야 한다
+        correctionService.correctStatus(admin, minji.getId(), day,
+                DailyStatus.ABSENT, true, "사유 승인됨");
+
+        org.mockito.Mockito.verify(penaltyRuleEngine).revokeAuto(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.TriggerCondition.ABSENT),
+                org.mockito.ArgumentMatchers.eq(day));
+    }
+
+    @Test
+    @DisplayName("★ 상태가 벌점 여부를 바꾸지 않으면 엔진을 부르지 않는다 — 헛호출이 쌓이면 안 된다")
+    void noEngineCallWhenPenaltyStateUnchanged() {
+        // 정상 등원 → 조퇴. 둘 다 "결석 벌점 대상이 아니다" 라 결석 처리가 바뀌지 않는다
+        correctionService.correctStatus(admin, minji.getId(), day,
+                DailyStatus.PRESENT, false, "정상");
+        correctionService.correctStatus(admin, minji.getId(), day,
+                DailyStatus.EARLY_LEAVE, false, "조퇴");
+
+        org.mockito.Mockito.verify(penaltyRuleEngine, org.mockito.Mockito.never())
+                .apply(org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.eq(
+                                com.dlab.domain.penalty.entity.TriggerCondition.ABSENT),
+                        org.mockito.ArgumentMatchers.any());
     }
 }
