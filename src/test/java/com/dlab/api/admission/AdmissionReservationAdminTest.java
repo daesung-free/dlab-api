@@ -98,9 +98,12 @@ class AdmissionReservationAdminTest {
 
     @Test
     @org.springframework.security.test.context.support.WithMockUser(roles = "STAFF")
-    @DisplayName("값 목록을 아직 못 받은 그룹은 빈 배열이다 — 404가 아니다")
+    @DisplayName("값이 없는 그룹은 빈 배열이다 — 404가 아니다")
     void unknownGroupIsEmpty() {
-        assertThat(codeController.codes(admin, "ACAD").data()).isEmpty();
+        // ⚠️ ACAD 를 쓰지 말 것. V20261022_1700 이 디랩에서 받은 24건을 넣어
+        //    ACAD·ADMI·EXAM·FIND 는 더 이상 비어 있지 않다. 「없는 그룹」을 확인하려면
+        //    실제로 없는 이름을 써야 한다 — 그게 이 테스트가 지키려던 것이다.
+        assertThat(codeController.codes(admin, "NOPE").data()).isEmpty();
     }
 
     @Test
