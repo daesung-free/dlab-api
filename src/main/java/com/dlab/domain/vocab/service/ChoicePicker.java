@@ -1,5 +1,6 @@
 package com.dlab.domain.vocab.service;
 
+import com.dlab.domain.vocab.entity.VocabPhrase;
 import com.dlab.domain.vocab.entity.VocabWord;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -85,6 +86,72 @@ public final class ChoicePicker {
         return new Choices(List.copyOf(texts), texts.indexOf(answerText));
     }
 
+    /**
+     * Part 3 문항의 보기 (업체 확정 2026-10-22 — Part 3 를 시험 범위에 넣는다).
+     *
+     * <h2>★ 표제어와 섞지 않는다</h2>
+     * 구동사 문제의 보기에 단어 뜻이 섞이면 <b>길이만 봐도 답이 보인다</b>(구동사 뜻은
+     * 「~을 처리하다」처럼 서술형이다). 그래서 오답도 Part 3 에서만 뽑는다.
+     *
+     * <h2>품사 대신 종류(kind)로 묶는다</h2>
+     * Part 3 에는 품사가 없다. 대신 구동사·숙어·혼동어휘라는 종류가 있고, 종류가 섞이면
+     * 같은 이유로 답이 쉬워진다 — 표제어의 품사 폴백과 같은 3단계를 쓴다.
+     *
+     * <pre>
+     * 1) 같은 유닛 · 같은 종류
+     * 2) 모자라면 다른 유닛 · 같은 종류   ★ 여기서야 전체를 읽는다
+     * 3) 그래도 모자라면 종류를 풀고 전체
+     * </pre>
+     *
+     * <p>⚠️ 유닛당 6개뿐이라 <b>1단계만으로는 보기 4개를 겨우 채운다</b>(정답 1 + 오답 3
+     * = 4 ≤ 6). 뜻이 겹치거나 비어 있으면 바로 모자라므로 폴백이 표제어보다 더 자주 돈다.
+     */
+    public static Choices pickPhrase(VocabPhrase answer, Collection<VocabPhrase> sameUnit,
+                                     Supplier<Collection<VocabPhrase>> allPhrases,
+                                     int size, Random random) {
+        String answerText = firstMeaning(answer.getMeaning());
+        Set<String> blocked = new LinkedHashSet<>();
+        blocked.add(answerText);
+
+        List<String> wrong = new ArrayList<>();
+        int need = Math.max(0, size - 1);
+
+        collectPhrases(wrong, need, sameUnit, answer, blocked, true);
+        if (wrong.size() < need) {
+            var all = allPhrases.get();
+            collectPhrases(wrong, need, all, answer, blocked, true);
+            if (wrong.size() < need) {
+                collectPhrases(wrong, need, all, answer, blocked, false);
+            }
+        }
+
+        List<String> texts = new ArrayList<>(wrong);
+        texts.add(answerText);
+        java.util.Collections.shuffle(texts, random);
+        return new Choices(List.copyOf(texts), texts.indexOf(answerText));
+    }
+
+    private static void collectPhrases(List<String> into, int need,
+                                       Collection<VocabPhrase> pool, VocabPhrase answer,
+                                       Set<String> blocked, boolean sameKind) {
+        for (VocabPhrase candidate : pool) {
+            if (into.size() >= need) {
+                return;
+            }
+            if (candidate.getId() != null && candidate.getId().equals(answer.getId())) {
+                continue;
+            }
+            if (sameKind && candidate.getKind() != answer.getKind()) {
+                continue;
+            }
+            String text = firstMeaning(candidate.getMeaning());
+            if (text.isBlank() || blocked.contains(text) || into.contains(text)) {
+                continue;
+            }
+            into.add(text);
+        }
+    }
+
     private static void collect(List<String> into, int need, Collection<VocabWord> pool,
                                 VocabWord answer, Set<String> blocked, boolean samePos) {
         String pos = answer.primaryPos();
@@ -119,7 +186,12 @@ public final class ChoicePicker {
      * 않고, <b>품사가 다른 뜻이 한 보기에 섞인다.</b> 쪼갠 첫 후보를 쓴다.
      */
     private static String firstMeaning(VocabWord word) {
-        var split = MeaningSplitter.split(word.getMeaningRaw());
+        return firstMeaning(word.getMeaningRaw());
+    }
+
+    /** 원고 뜻 한 칸의 첫 후보. Part 3 는 {@code vocab_phrase.meaning} 이 그 칸이다 */
+    static String firstMeaning(String meaningRaw) {
+        var split = MeaningSplitter.split(meaningRaw);
         return split.isEmpty() ? "" : split.get(0);
     }
 

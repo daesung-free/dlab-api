@@ -12,5 +12,8 @@ public interface VocabPhraseRepository extends JpaRepository<VocabPhrase, Long> 
 
     List<VocabPhrase> findByUnitNoAndDeletedFalse(Short unitNo);
 
+    /** ★ 객관식 보기 폴백에서만 쓴다 — 300건이라 1단계에서 차면 읽지 않는다 */
+    List<VocabPhrase> findByDeletedFalse();
+
     long countByDeletedFalse();
 }

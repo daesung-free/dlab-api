@@ -22,12 +22,17 @@ public final class AdminVocabScheduleResponse {
             Short questionCount,
             Short weeklyQuestionCap,
             Short choiceCount,
-            Short multipleChoiceRate) {
+            Short multipleChoiceRate,
+            @Schema(description = "Part 3(구동사·숙어·혼동어휘) 출제 여부")
+            boolean includePhrase,
+            @Schema(description = "결과 화면 발음·예문·유의어 노출 여부")
+            boolean showWordDetail) {
 
         public static Config from(VocabScheduleConfig c) {
             return new Config(c.getAcademy().getId(), c.getAcademy().getName(), c.getYear(),
                     c.getStartDate(), c.getQuestionCount(), c.getWeeklyQuestionCap(),
-                    c.getChoiceCount(), c.getMultipleChoiceRate());
+                    c.getChoiceCount(), c.getMultipleChoiceRate(),
+                    c.isIncludePhrase(), c.isShowWordDetail());
         }
     }
 

@@ -72,7 +72,7 @@ class VocabResultBoardTest {
         em.persist(academy);
 
         var config = new VocabScheduleConfig(academy, year, START);
-        config.modify(null, (short) 4, (short) 8, (short) 4, (short) 0);   // 전부 주관식
+        config.modify(null, (short) 4, (short) 8, (short) 4, (short) 0, false, true);   // 전부 주관식
         em.persist(config);
 
         for (int i = 1; i <= 8; i++) {

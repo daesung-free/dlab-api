@@ -75,7 +75,8 @@ public class AdminVocabScheduleController {
         return ApiResponse.success(AdminVocabScheduleResponse.Config.from(
                 scheduleService.saveConfig(scope, yearOf(year), request.startDate(),
                         request.questionCount(), request.weeklyQuestionCap(),
-                        request.choiceCount(), request.multipleChoiceRate())));
+                        request.choiceCount(), request.multipleChoiceRate(),
+                        request.includePhrase(), request.showWordDetail())));
     }
 
     /** 시험 없는 날 목록. */
