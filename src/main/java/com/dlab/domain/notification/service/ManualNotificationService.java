@@ -150,6 +150,16 @@ public class ManualNotificationService {
 
         Map<Long, String> classNames = classNames(candidates);
 
+        // ★★ 공통 안내는 한 사람에게 한 통만 보낸다.
+        //
+        // 「11월 급식 신청이 10월 28일에 마감됩니다」 는 학생마다 다르지 않아, 자녀가
+        // 둘인 학부모는 **똑같은 문장을 두 통** 받는다. 알림톡은 건당 과금이고 학부모에게는
+        // 같은 안내가 반복되는 것으로 보인다.
+        //
+        // ⚠️ 학생 개인에 관한 알림에는 걸지 않는다 — 출결·미납은 자녀마다 내용이 달라
+        // **두 통이 맞다.** 거기서 묶으면 한 자녀의 알림이 사라진다.
+        Set<Long> alreadyReceiving = template.isStudentSpecific() ? null : new HashSet<>();
+
         for (StudentEnrollment enrollment : candidates) {
             // ⚠️ 다른 지점이 섞여 들어오는 경로는 SELECTED 다. 조용히 빼지 않고 드러낸다 —
             //    담당자가 명단을 만든 근거(엑셀·검색)가 잘못됐다는 뜻이다
@@ -169,6 +179,12 @@ public class ManualNotificationService {
                 continue;
             }
             for (Receiver receiver : receivers) {
+                // 공통 안내에서 이미 받는 사람이면 건너뛴다. ★ blocked 에 넣지 않는다 —
+                // 「빠진 사람」이 아니라 「이미 받는 사람」이고, 섞으면 담당자가
+                // 안 간 줄로 읽는다
+                if (alreadyReceiving != null && !alreadyReceiving.add(receiver.accountId())) {
+                    continue;
+                }
                 if (receiver.phone() == null || receiver.phone().isBlank()) {
                     blocked.add(block(enrollment, ManualBlockReason.NO_PHONE));
                     continue;

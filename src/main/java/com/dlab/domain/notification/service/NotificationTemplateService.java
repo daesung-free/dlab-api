@@ -109,7 +109,11 @@ public class NotificationTemplateService {
         if (contentConfirmed && isBlank(body)) {
             throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_BODY_EMPTY);
         }
-        if (contentConfirmed && !body.contains(STUDENT_NAME_PLACEHOLDER)) {
+        // ★ 공통 안내는 이 조건을 걸지 않는다. 마감일·등록기간은 학생마다 다르지 않아
+        //   「누구 얘기지」가 생기지 않고, 이름을 넣으면 문장이 어색해진다.
+        //   ⚠️ 기본값이 student_specific = TRUE 라 **새 템플릿은 자동으로 규칙을 따른다.**
+        if (contentConfirmed && template.isStudentSpecific()
+                && !body.contains(STUDENT_NAME_PLACEHOLDER)) {
             throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_CONTENT_EMPTY,
                     "본문에 %s 을(를) 넣어야 합니다 — 다자녀 학부모가 누구 얘기인지 알 수 없습니다."
                             .formatted(STUDENT_NAME_PLACEHOLDER));

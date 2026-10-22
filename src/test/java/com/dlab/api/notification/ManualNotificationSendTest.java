@@ -54,6 +54,7 @@ class ManualNotificationSendTest {
     Long manualTemplateId;
     Long eventTemplateId;
     Long classId;
+    ClassMaster classMaster;
     Long enrollmentWithGuardian;
     Long enrollmentWithoutGuardian;
     Long otherAcademyEnrollment;
@@ -71,7 +72,7 @@ class ManualNotificationSendTest {
         createAdmin(otherAcademy, "MSOTHER", "BRANCH_ADMIN");
 
         short year = (short) LocalDate.now().getYear();
-        ClassMaster classMaster = new ClassMaster(academy, year, "1반", ClassType.FIXED, null);
+        classMaster = new ClassMaster(academy, year, "1반", ClassType.FIXED, null);
         em.persist(classMaster);
         classId = classMaster.getId();
 
@@ -84,7 +85,8 @@ class ManualNotificationSendTest {
 
         em.flush();
 
-        // 마이그레이션 seed — 등록비 미납만 문구에 학생명이 있어 확정돼 있다
+        // 마이그레이션 seed. ★ 급식 마감·등록기간은 student_specific = FALSE 라
+        //    학생명 없이도 확정돼 있다(V20261023090000) — 아래 공통 안내 테스트 참고
         manualTemplateId = templateId("TUITION_UNPAID_NOTICE");
         eventTemplateId = templateId("MISSING_ATTENDANCE");
     }
@@ -371,5 +373,97 @@ class ManualNotificationSendTest {
                                 {"templateId":%d,"scope":"SELECTED","enrollmentIds":[%d]}"""
                                 .formatted(manualTemplateId, enrollmentWithoutGuardian)))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  ★★ 공통 안내 — 학생명을 요구하지 않고, 한 사람에게 한 통만 간다
+    // ──────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 공통 안내는 학생명 없이도 발송 가능하다 — 그동안 막혀 있었다")
+    void commonNoticeIsSendableWithoutStudentName() throws Exception {
+        // 급식 마감 문구에는 학생명이 없다. 「모든 템플릿에 학생명 필수」 규칙에 걸려
+        // content_confirmed 를 올릴 수 없었고, 그래서 문구를 등록해도 보낼 수 없었다.
+        String body = mvc.perform(get("/api/v1/admin/notification-templates")
+                        .header("Authorization", token("MSBRANCH"))
+                        .param("manual", "true"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        var meal = objectMapper.readTree(body).path("data").valueStream()
+                .filter(n -> "MEAL_APPLY_DEADLINE".equals(n.path("event").asString()))
+                .findFirst().orElseThrow();
+
+        assertThat(meal.path("bodyTemplate").asString()).doesNotContain("studentName");
+        assertThat(meal.path("studentSpecific").asBoolean())
+                .as("공통 안내로 표시돼야 한다 — 화면이 이 값으로 「받는 사람」을 설명한다")
+                .isFalse();
+        assertThat(meal.path("contentConfirmed").asBoolean())
+                .as("학생명이 없어도 확정돼 있어야 한다 — 공통 안내다").isTrue();
+    }
+
+    @Test
+    @DisplayName("★★ 공통 안내는 학부모 한 명에게 한 통만 — 자녀가 둘이면 두 통이 가던 것")
+    void commonNoticeIsNotDuplicatedPerChild() throws Exception {
+        // 같은 학부모에게 자녀 둘을 연결한다
+        Student second = new Student("MS-TWIN", "둘째", "010-1234-7777");
+        em.persist(second);
+        StudentEnrollment twin = new StudentEnrollment(second, academy,
+                (short) LocalDate.now().getYear(), "MS-TWIN", null, GradeType.N_SU);
+        em.persist(twin);
+        em.persist(new ClassAssignment(academy, twin, classMaster, ClassType.FIXED));
+        // ★ 첫째의 학부모를 그대로 연결한다 — 계정이 하나다
+        ParentGuardian shared = em.createQuery("""
+                SELECT l.guardian FROM StudentGuardianLink l
+                 WHERE l.student.uniqueCode = :c
+                """, ParentGuardian.class).setParameter("c", "MS-A")
+                .getSingleResult();
+        em.persist(new StudentGuardianLink(second, shared, (short) 1));
+        em.flush();
+
+        long mealTemplate = templateId("MEAL_APPLY_DEADLINE");
+        String preview = preview("""
+                {"templateId":%d,"scope":"CLASS","classId":%d,
+                 "variables":{"월":"11","날짜":"10월 28일"}}"""
+                .formatted(mealTemplate, classId));
+
+        var recipients = objectMapper.readTree(preview).path("data").path("recipients");
+        long sharedCount = recipients.valueStream()
+                .filter(n -> n.path("receiverName").asString().equals(shared.getName()))
+                .count();
+
+        assertThat(sharedCount)
+                .as("같은 학부모에게 공통 안내가 두 통 가면 안 된다 — 건당 과금이고 "
+                        + "학부모에게는 같은 문장이 반복된다")
+                .isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("★ 학생 개인 알림은 자녀마다 보낸다 — 거기서 묶으면 한 자녀 알림이 사라진다")
+    void studentSpecificNoticeStillGoesPerChild() throws Exception {
+        Student second = new Student("MS-TWIN2", "둘째2", "010-1234-7778");
+        em.persist(second);
+        StudentEnrollment twin = new StudentEnrollment(second, academy,
+                (short) LocalDate.now().getYear(), "MS-TWIN2", null, GradeType.N_SU);
+        em.persist(twin);
+        em.persist(new ClassAssignment(academy, twin, classMaster, ClassType.FIXED));
+        ParentGuardian shared = em.createQuery("""
+                SELECT l.guardian FROM StudentGuardianLink l
+                 WHERE l.student.uniqueCode = :c
+                """, ParentGuardian.class).setParameter("c", "MS-A")
+                .getSingleResult();
+        em.persist(new StudentGuardianLink(second, shared, (short) 1));
+        em.flush();
+
+        // 등록비 미납은 자녀마다 금액·사실이 다르다 — 두 통이 맞다
+        String preview = preview(classScopeBody());
+        var recipients = objectMapper.readTree(preview).path("data").path("recipients");
+        long sharedCount = recipients.valueStream()
+                .filter(n -> n.path("receiverName").asString().equals(shared.getName()))
+                .count();
+
+        assertThat(sharedCount)
+                .as("학생 개인 알림은 자녀 수만큼 가야 한다")
+                .isEqualTo(2);
     }
 }

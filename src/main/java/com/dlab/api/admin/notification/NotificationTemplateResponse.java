@@ -18,6 +18,8 @@ public record NotificationTemplateResponse(
         boolean contentConfirmed, boolean active,
         String reviewStatus, String reviewNote, Instant reviewedAt,
         String kakaoTemplateCode, boolean sendable, boolean manual,
+        /** false 면 전원 공통 안내다 — 학생명을 요구하지 않고 수신자 중복도 제거된다 */
+        boolean studentSpecific,
         Instant updatedAt, Long updatedBy, String updatedByName) {
 
     public static NotificationTemplateResponse from(NotificationTemplate t) {
@@ -35,6 +37,7 @@ public record NotificationTemplateResponse(
                 t.isContentConfirmed(), t.isActive(),
                 t.getReviewStatus().name(), t.getReviewNote(), t.getReviewedAt(),
                 t.getKakaoTemplateCode(), t.isSendable(), t.isManual(),
+                t.isStudentSpecific(),
                 t.getUpdatedAt(), t.getUpdatedBy(), updatedByName);
     }
 }
