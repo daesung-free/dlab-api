@@ -288,12 +288,22 @@ class HomepageAdmissionTest {
     @Test
     @DisplayName("과목은 gm_cd·gm_nm·idx로 나간다(규격서 3.6)")
     void subjectRowShape() throws Exception {
+        // ★ 위치(data[0])가 아니라 **코드로 찾는다.**
+        //
+        //   전에는 data[0] 을 자기 행이라고 가정했는데, 과목 5종이 시드로 들어오면서
+        //   깨졌다(V20261022_1200 — 운영에 과목이 0건이라 홈페이지 성적 입력이
+        //   과목을 못 그리던 것을 채웠다).
+        //
+        //   ⚠️ 그 가정은 원래 약했다 — **운영에도 데이터가 있으므로** 자기 행이 맨 앞에
+        //   온다는 보장이 없다. 조회가 idx 순이라 시드(1~5)가 앞서고 테스트 행(idx=1,
+        //   code=10)이 뒤로 간다.
         call("/dlab/getSubInfo", """
                 {"token":"%s"}""".formatted(token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].gm_cd").value("10"))
-                .andExpect(jsonPath("$.data[0].gm_nm").value("화법과작문"))
-                .andExpect(jsonPath("$.data[0].idx").value("1"));
+                .andExpect(jsonPath("$.data[?(@.gm_cd == '10')].gm_nm").value("화법과작문"))
+                .andExpect(jsonPath("$.data[?(@.gm_cd == '10')].idx").value("1"))
+                // ★ 시드된 과목도 같은 모양으로 나간다 — 이름이 다르면 홈페이지가 못 읽는다
+                .andExpect(jsonPath("$.data[?(@.gm_cd == '1')].gm_nm").value("국어"));
     }
 
     @Test
