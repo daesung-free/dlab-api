@@ -40,6 +40,17 @@ public class NotificationTemplateService {
         return templateRepository.findAllByDeletedFalseOrderByEventCode();
     }
 
+    /**
+     * 직원 수동 발송 대상 템플릿 (디랩 1016 「직원 발송」).
+     *
+     * <p><b>서버가 가린다</b> — 화면이 이벤트 이름으로 추측하면 템플릿이 늘 때마다
+     * 화면을 고쳐야 한다. 발송 불가({@code sendable = false})인 것도 그대로 담는다.
+     */
+    @Transactional(readOnly = true)
+    public List<NotificationTemplate> findManual() {
+        return templateRepository.findAllByManualTrueAndDeletedFalseOrderByEventCode();
+    }
+
     /** 심사 진행 중인 것만 — 카카오 심사는 리드타임이 길어 따로 본다(E-5). */
     @Transactional(readOnly = true)
     public List<NotificationTemplate> findInReview() {
