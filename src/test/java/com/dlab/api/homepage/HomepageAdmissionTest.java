@@ -78,8 +78,13 @@ class HomepageAdmissionTest {
 
         em.persist(new CommonCode(CommonCode.GRP_SUBJECT, "10", "화법과작문",
                 (short) 1, null, (short) 1));
-        em.persist(new CommonCode(CommonCode.GRP_EXAM, "1229", "윈터스쿨",
-                null, "2026", null, (short) 1));
+        // ⚠️ 코드를 「비어 있다」고 가정하지 말 것. V20261022_1700 이 디랩에서 받은
+        //    선택 항목 24건을 넣는데 그 안에 EXAM 1229·1230 이 있다 —
+        //    같은 (grp, code, academy=NULL) 로 넣으면 uq_common_code 가 터진다.
+        //    ★ 그래서 지점 전용 행으로 넣는다. 조회가 「공통 + 그 지점」을 합쳐
+        //    주는 것까지 같이 확인된다.
+        em.persist(new CommonCode(CommonCode.GRP_EXAM, "TEST-WS", "윈터스쿨",
+                null, "2026", bundang, (short) 99));
         em.flush();
 
         token = tokenService.issue("dsisa1", secretOf("test-secret"), "dlab").token();
@@ -357,9 +362,15 @@ class HomepageAdmissionTest {
                 {"token":"%s","acid":"F","grp3":"EXAM"}""".formatted(token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data[0].comm_cd").value("1229"))
-                .andExpect(jsonPath("$.data[0].comm_nm").value("윈터스쿨"))
-                .andExpect(jsonPath("$.data[0].att1").value("2026"));
+                // ⚠️ data[0] 으로 찾지 말 것 — 마이그레이션이 넣은 공통 항목이 앞에 온다.
+                //    운영에도 값이 있으므로 「내 행이 첫 줄」이라는 가정은 원래 약했다.
+                .andExpect(jsonPath("$.data[?(@.comm_cd == 'TEST-WS')].comm_nm")
+                        .value(org.hamcrest.Matchers.contains("윈터스쿨")))
+                .andExpect(jsonPath("$.data[?(@.comm_cd == 'TEST-WS')].att1")
+                        .value(org.hamcrest.Matchers.contains("2026")))
+                // ★ 공통 항목도 같이 내려온다 — 지점 전용만 보이면 조회가 반쪽이다
+                .andExpect(jsonPath("$.data[?(@.comm_cd == '1229')].comm_nm")
+                        .value(org.hamcrest.Matchers.contains("재학생")));
     }
 
     @Test
