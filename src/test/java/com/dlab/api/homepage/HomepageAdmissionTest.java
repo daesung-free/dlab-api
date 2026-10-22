@@ -78,8 +78,13 @@ class HomepageAdmissionTest {
 
         em.persist(new CommonCode(CommonCode.GRP_SUBJECT, "10", "화법과작문",
                 (short) 1, null, (short) 1));
-        em.persist(new CommonCode(CommonCode.GRP_EXAM, "1229", "윈터스쿨",
-                null, "2026", null, (short) 1));
+        // ⚠️ 코드를 「비어 있다」고 가정하지 말 것. V20261022_1700 이 디랩에서 받은
+        //    선택 항목 24건을 넣는데 그 안에 EXAM 1229·1230 이 있다 —
+        //    같은 (grp, code, academy=NULL) 로 넣으면 uq_common_code 가 터진다.
+        //    ★ 그래서 지점 전용 행으로 넣는다. 조회가 「공통 + 그 지점」을 합쳐
+        //    주는 것까지 같이 확인된다.
+        em.persist(new CommonCode(CommonCode.GRP_EXAM, "TEST-WS", "윈터스쿨",
+                null, "2026", bundang, (short) 99));
         em.flush();
 
         token = tokenService.issue("dsisa1", secretOf("test-secret"), "dlab").token();
@@ -182,6 +187,50 @@ class HomepageAdmissionTest {
     void academyCodeIsAlphabet() throws Exception {
         call("/dlab/setStdInfo", """
                 {"token":"%s","acid":"31","reg_yyyy":"2026","rsv_nm":"홍길동",
+                 "std_tel":"01012345678","par_tel":"01098765432","std_grade":"N"}"""
+                .formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(901));
+    }
+
+    @Test
+    @DisplayName("★★ std_grade 가 두 글자면 901 + 이유다 — 130 으로 나가면 원인을 못 찾는다")
+    void gradeCodeMustBeSingleCharacter() throws Exception {
+        // ⚠️ 2026-10-22 연동 확인에서 실제로 막혔다. 규격서 샘플이 "N수" 로 적혀 있었고
+        //    std_grade 가 VARCHAR(1) 이라 DB 제약이 터져 **130 처리 중 오류**로 나갔다.
+        //    ★ 130 은 서버 내부 오류라 홈페이지가 어디를 고쳐야 하는지 알 수 없다.
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","reg_yyyy":"2027","rsv_nm":"홍길동",
+                 "std_tel":"01012345678","par_tel":"01098765432","std_grade":"N수"}"""
+                .formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(901))
+                // ★ 메시지에 코드표와 받은 값이 함께 들어간다 — 그래야 짚을 수 있다
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("한 글자")))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("N수")));
+    }
+
+    @Test
+    @DisplayName("★ 코드표에 없는 1자는 통과시킨다 — 학년 구분이 늘 수 있어 막으면 정상 접수가 거부된다")
+    void unknownSingleCharacterGradePasses() throws Exception {
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","reg_yyyy":"2027","rsv_nm":"홍길동",
+                 "std_tel":"01012345678","par_tel":"01098765432","std_grade":"4"}"""
+                .formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    @DisplayName("★★ reg_yyyy 를 비우면 901 이다 — 규격서가 「필수 4개」라고 적어 뒀던 항목이다")
+    void regYearIsEffectivelyRequired() throws Exception {
+        // ⚠️ 규격서가 필수를 acid·rsv_nm·std_tel·std_grade 4개로 적고
+        //    "나머지는 비워 보내셔도 됩니다" 라고 했는데 이 값은 비면 통과하지 않는다.
+        //    기수를 모르면 어느 해 접수인지 정해지지 않는다 — 규격서를 고쳤다.
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"홍길동",
                  "std_tel":"01012345678","par_tel":"01098765432","std_grade":"N"}"""
                 .formatted(token))
                 .andExpect(status().isOk())
@@ -313,9 +362,15 @@ class HomepageAdmissionTest {
                 {"token":"%s","acid":"F","grp3":"EXAM"}""".formatted(token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data[0].comm_cd").value("1229"))
-                .andExpect(jsonPath("$.data[0].comm_nm").value("윈터스쿨"))
-                .andExpect(jsonPath("$.data[0].att1").value("2026"));
+                // ⚠️ data[0] 으로 찾지 말 것 — 마이그레이션이 넣은 공통 항목이 앞에 온다.
+                //    운영에도 값이 있으므로 「내 행이 첫 줄」이라는 가정은 원래 약했다.
+                .andExpect(jsonPath("$.data[?(@.comm_cd == 'TEST-WS')].comm_nm")
+                        .value(org.hamcrest.Matchers.contains("윈터스쿨")))
+                .andExpect(jsonPath("$.data[?(@.comm_cd == 'TEST-WS')].att1")
+                        .value(org.hamcrest.Matchers.contains("2026")))
+                // ★ 공통 항목도 같이 내려온다 — 지점 전용만 보이면 조회가 반쪽이다
+                .andExpect(jsonPath("$.data[?(@.comm_cd == '1229')].comm_nm")
+                        .value(org.hamcrest.Matchers.contains("재학생")));
     }
 
     @Test

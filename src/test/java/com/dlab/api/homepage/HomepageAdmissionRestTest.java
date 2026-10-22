@@ -159,14 +159,20 @@ class HomepageAdmissionRestTest {
     }
 
     @Test
-    @DisplayName("선택 항목 값 목록을 내려준다 — 아직 비어 있는 것이 정상이다")
+    @DisplayName("★ 선택 항목 값 목록을 내려준다 — 디랩이 준 24건이 들어 있다")
     void codes() throws Exception {
+        // ⚠️ 전에는 「비어 있는 것이 정상」이었다. V20261022_1700 로 24건이 들어갔으므로
+        //    이제 비어 있으면 그게 사고다 — 홈페이지 드롭다운이 통째로 빈다.
         mvc.perform(get("/api/v1/homepage/codes")
                         .header("Authorization", KEY)
                         .param("group", "ACAD")
                         .param("academyCode", "F"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data.length()").value(9))
+                // ★ 디랩이 적어 준 순서대로 내려간다 — 코드 번호순이 아니다
+                .andExpect(jsonPath("$.data[0].name").value("잇올"))
+                .andExpect(jsonPath("$.data[5].name").value("기숙학원"));
     }
 }
