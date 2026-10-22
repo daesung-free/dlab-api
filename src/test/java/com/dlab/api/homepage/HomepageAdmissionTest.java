@@ -189,6 +189,50 @@ class HomepageAdmissionTest {
     }
 
     @Test
+    @DisplayName("★★ std_grade 가 두 글자면 901 + 이유다 — 130 으로 나가면 원인을 못 찾는다")
+    void gradeCodeMustBeSingleCharacter() throws Exception {
+        // ⚠️ 2026-10-22 연동 확인에서 실제로 막혔다. 규격서 샘플이 "N수" 로 적혀 있었고
+        //    std_grade 가 VARCHAR(1) 이라 DB 제약이 터져 **130 처리 중 오류**로 나갔다.
+        //    ★ 130 은 서버 내부 오류라 홈페이지가 어디를 고쳐야 하는지 알 수 없다.
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","reg_yyyy":"2027","rsv_nm":"홍길동",
+                 "std_tel":"01012345678","par_tel":"01098765432","std_grade":"N수"}"""
+                .formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(901))
+                // ★ 메시지에 코드표와 받은 값이 함께 들어간다 — 그래야 짚을 수 있다
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("한 글자")))
+                .andExpect(jsonPath("$.message").value(
+                        org.hamcrest.Matchers.containsString("N수")));
+    }
+
+    @Test
+    @DisplayName("★ 코드표에 없는 1자는 통과시킨다 — 학년 구분이 늘 수 있어 막으면 정상 접수가 거부된다")
+    void unknownSingleCharacterGradePasses() throws Exception {
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","reg_yyyy":"2027","rsv_nm":"홍길동",
+                 "std_tel":"01012345678","par_tel":"01098765432","std_grade":"4"}"""
+                .formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+    }
+
+    @Test
+    @DisplayName("★★ reg_yyyy 를 비우면 901 이다 — 규격서가 「필수 4개」라고 적어 뒀던 항목이다")
+    void regYearIsEffectivelyRequired() throws Exception {
+        // ⚠️ 규격서가 필수를 acid·rsv_nm·std_tel·std_grade 4개로 적고
+        //    "나머지는 비워 보내셔도 됩니다" 라고 했는데 이 값은 비면 통과하지 않는다.
+        //    기수를 모르면 어느 해 접수인지 정해지지 않는다 — 규격서를 고쳤다.
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"홍길동",
+                 "std_tel":"01012345678","par_tel":"01098765432","std_grade":"N"}"""
+                .formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(901));
+    }
+
+    @Test
     @DisplayName("조회는 배열이다 — 같은 사람이 여러 번 신청할 수 있다")
     void searchReturnsArray() throws Exception {
         saveOne();
