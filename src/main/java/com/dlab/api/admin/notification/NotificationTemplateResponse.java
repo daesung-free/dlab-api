@@ -7,6 +7,8 @@ import java.time.Instant;
 /**
  * 알림 템플릿 한 줄.
  *
+ * @param manual   직원이 때를 골라 보내는 템플릿인가. <b>{@code sendable} 과 다른 축이다</b> —
+ *                 수동 발송 대상이면서 심사 대기(= {@code sendable = false})인 상태가 실제로 있다
  * @param sendable 지금 실제로 발송되는가. <b>세 축(활성·문구확정·심사통과)이 모두 통과해야 한다</b> —
  *                 화면에서 이 값 하나만 보면 "왜 알림이 안 가지"를 바로 알 수 있다
  */
@@ -15,7 +17,7 @@ public record NotificationTemplateResponse(
         String titleTemplate, String bodyTemplate, String requiredVariables,
         boolean contentConfirmed, boolean active,
         String reviewStatus, String reviewNote, Instant reviewedAt,
-        String kakaoTemplateCode, boolean sendable,
+        String kakaoTemplateCode, boolean sendable, boolean manual,
         Instant updatedAt, Long updatedBy, String updatedByName) {
 
     public static NotificationTemplateResponse from(NotificationTemplate t) {
@@ -32,7 +34,7 @@ public record NotificationTemplateResponse(
                 t.getTitleTemplate(), t.getBodyTemplate(), t.getRequiredVariables(),
                 t.isContentConfirmed(), t.isActive(),
                 t.getReviewStatus().name(), t.getReviewNote(), t.getReviewedAt(),
-                t.getKakaoTemplateCode(), t.isSendable(),
+                t.getKakaoTemplateCode(), t.isSendable(), t.isManual(),
                 t.getUpdatedAt(), t.getUpdatedBy(), updatedByName);
     }
 }

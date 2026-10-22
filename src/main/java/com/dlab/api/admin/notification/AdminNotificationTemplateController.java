@@ -26,9 +26,35 @@ public class AdminNotificationTemplateController {
     private final NotificationTemplateService templateService;
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
 
-    /** 전체 목록 — 이벤트 순으로 나와 A-C3 매핑표처럼 읽힌다. */
+    /**
+     * 전체 목록 — 이벤트 순으로 나와 A-C3 매핑표처럼 읽힌다.
+     *
+     * <p>★ {@code manual=true} 면 <b>직원 수동 발송 대상만</b> 내린다(디랩 1016 「직원 발송」).
+     * 화면이 이벤트 이름으로 추측하면 템플릿이 늘 때마다 화면을 고쳐야 하므로
+     * <b>서버가 가린다.</b>
+     *
+     * <p>⚠️ {@code sendable = false} 인 것도 함께 담는다 — 빼면 담당자가 「급식 안내가
+     * 왜 없지」를 겪고, 고를 수 있게 두면 보냈는데 안 나간다. 화면이 <b>보여주되 고르지
+     * 못하게</b> 하는 것이 맞다.
+     *
+     * <p>★ 수동 발송 목록은 <b>발송을 실제로 하는 직원</b>이 봐야 하므로 역할을 넓힌다.
+     * 전체 목록(문구 관리용)은 종전대로 최상위 관리자만 본다 — 전 지점 공통 참조값이라
+     * 지점 담당자가 문구를 바꾸면 다른 지점 알림까지 함께 바뀐다.
+     */
     @GetMapping
-    public ApiResponse<List<NotificationTemplateResponse>> list() {
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+    public ApiResponse<List<NotificationTemplateResponse>> list(
+            @com.dlab.common.security.CurrentAccount
+            com.dlab.common.security.AuthPrincipal me,
+            @RequestParam(required = false) Boolean manual) {
+        if (Boolean.TRUE.equals(manual)) {
+            return ApiResponse.success(templateService.findManual().stream()
+                    .map(this::view).toList());
+        }
+        if (!me.hasRole(com.dlab.common.security.Role.SUPER_ADMIN)) {
+            throw new com.dlab.common.exception.BusinessException(
+                    com.dlab.common.exception.ErrorCode.FORBIDDEN);
+        }
         return ApiResponse.success(templateService.findAll().stream()
                 .map(this::view).toList());
     }

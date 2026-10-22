@@ -68,6 +68,19 @@ public class NotificationTemplate extends BaseEntity {
     @Column(nullable = false)
     private boolean active;
 
+    /**
+     * 직원이 발송 시점을 골라 보내는 템플릿인가 (디랩 1016 「직원 발송」 4종).
+     *
+     * <p><b>{@link #isSendable()}과 다른 축이다.</b> 이쪽은 "이벤트 트리거가 없는 문구인가",
+     * 그쪽은 "지금 실제로 나가는가"다. 합치면 <b>심사 대기 중인 수동 템플릿이 목록에서
+     * 사라져</b> 담당자가 「급식 안내가 왜 없지」를 겪는다.
+     *
+     * <p>★ <b>수동 발송 대상은 서버가 가린다.</b> 화면이 이벤트 이름으로 추측하면
+     * 템플릿이 늘 때마다 화면을 고쳐야 한다.
+     */
+    @Column(name = "manual", nullable = false)
+    private boolean manual;
+
     /** A-C3 매핑표의 수신자 축. */
     @Enumerated(EnumType.STRING)
     @Column(name = "recipient_type", nullable = false, length = 20)
