@@ -23,6 +23,20 @@ import org.springframework.context.annotation.Import;
  *   <li>{@code aligo.api-key}가 없어 <b>빈 자체가 안 만들어진다</b></li>
  * </ul>
  * 그래서 통과했다. <b>기동만이 이걸 잡는다</b> — CI 의 「Flyway 검증(빈 DB)」이 먼저 잡았다.
+ *
+ * <h2>⚠️⚠️ 같은 일이 2026-10-22 에 다시 났다 — 운영 크래시 루프</h2>
+ * {@link AligoAlimtalkClient} 가 나중에 같은 모양으로 추가됐는데 <b>이 테스트의
+ * {@code @Import} 에 들어가지 않았다.</b> 위 경고가 바로 윗줄에 적혀 있었는데도 그랬다.
+ *
+ * <p>★ <b>그래서 「새 빈을 여기 넣는 것」이 이 테스트의 유지 규칙이다.</b>
+ * {@code aligo.*} 나 {@code premium.*} 처럼 <b>키가 있을 때만 만들어지는 빈</b>을
+ * 추가하면 반드시 {@code @Import} 에 같이 넣을 것 — 넣지 않으면
+ * <b>로컬·CI 는 전부 통과하고 운영에서만 터진다.</b>
+ *
+ * <p>⚠️ 클래스패스를 훑어 자동으로 검사하는 방법을 시도했으나 <b>안 된다.</b>
+ * {@code ClassPathScanningCandidateComponentProvider} 가 {@code @Conditional} 을
+ * 평가해서 <b>바로 그 빈들을 스캔에서 제외</b>한다 — 검사하려는 대상이 조건 때문에
+ * 빠지는 것이고, <b>버그가 운영까지 간 것과 같은 이유</b>다.
  */
 class AligoWiringTest {
 
@@ -31,7 +45,8 @@ class AligoWiringTest {
 
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties(AligoProperties.class)
-    @Import({AligoClient.class, AligoSmsSender.class, AligoNotificationSender.class,
+    @Import({AligoClient.class, AligoAlimtalkClient.class,
+            AligoSmsSender.class, AligoNotificationSender.class,
             LoggingSmsSender.class})
     static class AligoBeans {
     }
@@ -47,6 +62,11 @@ class AligoWiringTest {
                 .run(context -> {
                     assertThat(context).hasNotFailed();
                     assertThat(context).hasSingleBean(AligoClient.class);
+                    // ★★ 알림톡도 같이 본다. 이 한 줄이 없어서 2026-10-22 운영 배포가
+                    //    크래시 루프로 실패했다 — AligoAlimtalkClient 가 AligoClient 와
+                    //    똑같이 생성자 둘인데 @Autowired 가 빠져 있었다.
+                    //    ⚠️ 아래 javadoc 의 함정이 **같은 패키지에서 두 번** 났다.
+                    assertThat(context).hasSingleBean(AligoAlimtalkClient.class);
                     assertThat(context).hasSingleBean(AligoNotificationSender.class);
                     // ★ 목업이 물러나고 실제 발송기가 SmsSender 자리를 차지한다
                     assertThat(context.getBean(SmsSender.class)).isInstanceOf(AligoSmsSender.class);

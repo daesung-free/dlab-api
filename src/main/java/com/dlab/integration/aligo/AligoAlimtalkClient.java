@@ -40,6 +40,15 @@ public class AligoAlimtalkClient {
     private final AligoProperties properties;
     private final RestClient restClient;
 
+    /**
+     * ★★ {@code @Autowired} 가 없으면 기동이 안 된다 — 생성자가 둘이라 Spring 이
+     * 고르지 못하고 <b>무인자 생성자를 찾다 「No default constructor found」로 터진다.</b>
+     *
+     * <p>⚠️ 이 빈은 {@code @ConditionalOnExpression} 이라 <b>키가 설정된 환경에서만</b>
+     * 만들어진다 — 로컬·CI 에는 키가 없어 빈이 아예 안 생기고, <b>운영에서만 터진다.</b>
+     * 실제로 2026-10-22 배포가 이것으로 실패했다(크래시 루프).
+     */
+    @org.springframework.beans.factory.annotation.Autowired
     public AligoAlimtalkClient(AligoProperties properties) {
         this(properties, RestClient.builder().requestFactory(factory()));
     }
