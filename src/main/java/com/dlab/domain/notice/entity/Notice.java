@@ -1,5 +1,6 @@
 package com.dlab.domain.notice.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
@@ -57,10 +58,12 @@ public class Notice extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @AuditLabel("공지 범위")
     private NoticeScope scope;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "class_master_id")
+    @AuditLabel("대상 반")
     private ClassMaster classMaster;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -68,30 +71,38 @@ public class Notice extends BaseEntity {
     private StudentEnrollment enrollment;
 
     @Column(nullable = false, length = 200)
+    @AuditLabel("제목")
     private String title;
 
     @Column(nullable = false, columnDefinition = "text")
+    @AuditLabel("본문")
     private String content;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "author_type", nullable = false, length = 20)
+    @AuditLabel("작성자 구분")
     private NoticeAuthorType authorType;
 
     @Column(name = "author_id", nullable = false)
+    @AuditLabel("작성자")
     private Long authorId;
 
     @Column(nullable = false)
+    @AuditLabel("상단 고정")
     private boolean pinned;
 
     /** 앱 홈 배너 노출(F-4.12-3). */
     @Column(nullable = false)
+    @AuditLabel("배너 노출")
     private boolean banner;
 
     /** 예약 발행. {@code null}이면 즉시 공개다. */
     @Column(name = "published_at")
+    @AuditLabel("게시 시각")
     private Instant publishedAt;
 
     @Column(name = "expires_at")
+    @AuditLabel("게시 종료")
     private Instant expiresAt;
 
     private Notice(Academy academy, short year, NoticeScope scope,

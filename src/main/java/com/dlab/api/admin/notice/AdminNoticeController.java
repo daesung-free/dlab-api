@@ -44,6 +44,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminNoticeController {
 
     private final NoticeService noticeService;
+    private final com.dlab.domain.notice.service.NoticeAttachments noticeAttachments;
 
     /**
      * 공지 목록. <b>조회는 관리자 전체 공유</b>이고 작성만 역할별로 갈린다.
@@ -64,6 +65,23 @@ public class AdminNoticeController {
     }
 
     /** 전 지점 공지 — <b>본사만.</b> */
+    /**
+     * 상세 조회 — <b>수정 화면이 기존 내용·첨부를 불러온다.</b>
+     *
+     * <p>★ <b>첨부는 상세에만 실린다</b>(목록에 넣으면 공지 수만큼 조회가 따라붙는다).
+     *
+     * <p>★ 조회는 작성 권한을 보지 않는다 — <b>조회는 관리자 전체 공유</b>이고
+     * 역할별 제한은 작성에만 있다. 목록에 보이는 공지를 눌렀을 때만 막히면 안 된다.
+     */
+    @GetMapping("/{id}")
+    public ApiResponse<NoticeResponse> readOne(@CurrentAccount AuthPrincipal me,
+                                               @PathVariable Long id) {
+        var notice = noticeService.findOneForAdmin(me, id);
+        return ApiResponse.success(NoticeResponse.of(notice,
+                noticeService.readCounts(java.util.List.of(id)).getOrDefault(id, 0L),
+                noticeAttachments.of(id)));
+    }
+
     @PostMapping("/all")
     public ApiResponse<NoticeResponse> createForAll(@CurrentAccount AuthPrincipal me,
                                                     @Valid @RequestBody ContentRequest request) {
@@ -211,13 +229,26 @@ public class AdminNoticeController {
             Instant expiresAt,
             Instant createdAt,
             /** 열람한 학생 수. 학부모 열람은 세지 않는다 — 학생이 봤는지가 기준이다 */
-            long readCount) {
+            long readCount,
+            /**
+             * 첨부(공지 이미지). <b>상세에서만 채워진다</b> — 목록·생성·수정 응답은 빈 목록이다.
+             *
+             * <p>★ 업로드는 {@code POST /admin/files/public?ownerType=NOTICE} 다.
+             * 저장 전에 올리고({@code ownerId} 없이) 저장 후 {@code PATCH /files/{id}/owner} 로
+             * 잇는 흐름을 그대로 쓴다 — 저장부터 강제하면 쓰다 만 공지가 쌓인다.
+             */
+            java.util.List<com.dlab.domain.notice.service.NoticeAttachments.View> attachments) {
 
         public static NoticeResponse from(Notice n) {
             return of(n, 0L);
         }
 
         public static NoticeResponse of(Notice n, long readCount) {
+            return of(n, readCount, java.util.List.of());
+        }
+
+        public static NoticeResponse of(Notice n, long readCount,
+                java.util.List<com.dlab.domain.notice.service.NoticeAttachments.View> attachments) {
             return new NoticeResponse(
                     n.getId(), n.getScope(),
                     n.getAcademy() == null ? null : n.getAcademy().getId(),
@@ -227,7 +258,8 @@ public class AdminNoticeController {
                     n.getTitle(), n.getContent(),
                     n.getAuthorType(), n.getAuthorId(),
                     n.isPinned(), n.isBanner(),
-                    n.getPublishedAt(), n.getExpiresAt(), n.getCreatedAt(), readCount);
+                    n.getPublishedAt(), n.getExpiresAt(), n.getCreatedAt(), readCount,
+                    attachments);
         }
     }
 }

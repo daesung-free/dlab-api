@@ -1,6 +1,10 @@
 package com.dlab.api.kiosk;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,6 +14,8 @@ import com.dlab.domain.approval.entity.ApprovalRequest;
 import com.dlab.domain.approval.entity.ApprovalStatus;
 import com.dlab.domain.approval.entity.ApproverType;
 import com.dlab.domain.approval.entity.RequestType;
+import static org.mockito.ArgumentMatchers.eq;
+
 import com.dlab.domain.attendance.entity.AbsenceReason;
 import com.dlab.domain.attendance.entity.AbsenceReasonType;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
@@ -90,6 +96,27 @@ class KioskAttendanceIntegrationTest {
     @MockitoBean
     com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
+    /**
+     * ★ 알림은 {@code REQUIRES_NEW}라 이 트랜잭션의 학생·지점을 못 본다 — 결과를 확인할 수
+     * 없으므로 <b>호출이 걸리는가</b>만 본다(상벌점 트리거와 같은 방식).
+     * 보내는 내용은 {@code AttendanceNotifierTest}가 검증한다.
+     */
+    @MockitoBean
+    com.dlab.domain.attendance.service.AttendanceNotifier attendanceNotifier;
+
+    /**
+     * ★ 목이 아니라 <b>스파이</b>다 — 실제 엔진이 돌되 호출을 셀 수 있다.
+     *
+     * <p>엔진이 {@code REQUIRES_NEW}라 이 트랜잭션에서 만든 규칙을 못 읽는다. 그래서
+     * 부여 결과가 아니라 <b>어떤 조건값으로 불렸는가</b>를 본다
+     * ({@code PenaltyTriggerWiringTest} 와 같은 방식).
+     *
+     * <p>⚠️ 목으로 두면 <b>자동부여 0건이라 「안 걸린다」가 그냥 통과</b>한다 —
+     * 오늘 그 거짓 통과를 한 번 겪었다.
+     */
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    com.dlab.domain.penalty.service.PenaltyRuleEngine penaltyRuleEngine;
+
     MockMvc mvc;
     String token;
     Academy bundang;
@@ -142,6 +169,19 @@ class KioskAttendanceIntegrationTest {
     }
 
     /** {@code con_gn} 없이 태깅. */
+    /**
+     * 태깅.
+     *
+     * <h2>★ 왜 07:30 인가 — 지각 기준이 07:50 이다</h2>
+     * 디랩이 2026-10-21 에 <b>지각 기준 07:50 을 전 지점 공통</b>으로 확정했다.
+     * 종전 테스트는 08:30 에 찍고 {@code att_gn = S}(정상 등원)를 기대했는데, 그때는
+     * {@code late_after} 가 비어 있어 <b>등원 마감(09:00)으로 떨어졌기 때문</b>이다.
+     *
+     * <p>확정값을 넣으면 08:30 은 <b>지각이 맞다</b>. 그래서 기대값을 A 로 바꾸는 대신
+     * <b>시각을 07:30 으로 당겼다</b> — 이 테스트들이 보는 것은 지각 판정이 아니라
+     * <b>정상 등원 경로</b>(최상위 필드·중복억제·2-phase)이고, 전부 지각으로 바꾸면
+     * 정상 등원 경로를 아무도 보지 않게 된다. 지각은 {@code AttendanceLateTest} 가 본다.
+     */
     private ResultActions tag(String time) throws Exception {
         return tag(time, null);
     }
@@ -173,7 +213,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 등원 — att_gn·hak_no·std_nm이 전부 최상위다 (data 안이 아니다)")
     void checkInPutsEverythingAtTopLevel() throws Exception {
-        tag("08:30:00")
+        tag("07:30:00")
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.att_gn").value("S"))
                 .andExpect(jsonPath("$.hak_no").value("2026-0001"))
@@ -185,6 +225,22 @@ class KioskAttendanceIntegrationTest {
     }
 
     @Test
+    @DisplayName("★ 태깅이 학부모 알림으로 이어진다 — 부르는 곳이 없으면 템플릿만 있고 아무 일도 안 난다")
+    void taggingTriggersGuardianNotification() throws Exception {
+        tag("07:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+
+        var captor = org.mockito.ArgumentCaptor
+                .forClass(com.dlab.domain.attendance.entity.AttendanceTaggingLog.class);
+        org.mockito.Mockito.verify(attendanceNotifier)
+                .notifyTagged(any(), captor.capture());
+
+        // ★ 넘기는 것은 **저장이 끝난 원장 행**이다 — id가 중복 방지 키에 들어가므로
+        //   저장 전에 부르면 키가 전부 같아져 학부모가 첫 알림만 받는다
+        assertThat(captor.getValue().getId()).isNotNull();
+        assertThat(captor.getValue().getEventType()).isEqualTo(AttendanceEventType.CHECK_IN);
+    }
+
+    @Test
     @DisplayName("기준 시각 이후 첫 태깅은 지각(A)")
     void lateAfterDeadline() throws Exception {
         tag("09:30:00").andExpect(jsonPath("$.att_gn").value("A"));
@@ -193,7 +249,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("마지막 교시 종료 후 태깅은 하원(T)")
     void checkOutAfterLastPeriod() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
         tag("22:00:00").andExpect(jsonPath("$.att_gn").value("T"));
     }
 
@@ -231,7 +287,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 분기 코드는 data 내부에 실리고 최상위는 0이다 (뒤바뀌면 키오스크가 분기를 놓친다)")
     void branchCodeGoesInsideDataWhileTopLevelStaysZero() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("15:00:00")
                 .andExpect(jsonPath("$.code").value(0))          // ← 최상위는 성공
@@ -246,7 +302,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 사유신청이 없으면 130 — 승인 없이 나갈 수 없다")
     void leavingWithoutApprovalIsRejected() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("15:00:00")
                 .andExpect(jsonPath("$.code").value(130))
@@ -260,7 +316,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 121은 최상위에 실린다 (data 내부면 키오스크가 조퇴 차단을 못 본다)")
     void code121GoesToTopLevel() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00", "C").andExpect(jsonPath("$.att_gn").value("C"));
 
         tag("16:00:00")
@@ -280,7 +336,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 승인된 사유신청이 있으면 선택지 코드가 뜬다 — 자동으로 조퇴시키지 않는다")
     void approvedReasonBecomesPromptNotAutoAction() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("15:00:00")
                 .andExpect(jsonPath("$.code").value(0))
@@ -295,7 +351,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 선택지 → con_gn 실어 재호출하면 처리된다 (서버는 사이 상태를 안 든다)")
     void statelessTwoPhaseRoundTrip() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00").andExpect(jsonPath("$.data[0].code").value(128));
 
         tag("15:00:30", "C").andExpect(jsonPath("$.att_gn").value("C"));
@@ -306,7 +362,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 승인 없는 사유조퇴(C)는 130 — 없으면 키오스크에서 아무나 눌러 조퇴가 된다")
     void excusedActionsRequireApproval() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("15:00:00", "C")
                 .andExpect(jsonPath("$.code").value(130))
@@ -324,10 +380,10 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 1분 내 재태깅은 원장에 안 남고 직전 결과를 그대로 돌려준다 (규격서 3.14)")
     void duplicateWithinOneMinuteReplaysFirstResult() throws Exception {
-        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:30:00").andExpect(jsonPath("$.att_gn").value("S"));
 
-        tag("08:30:20").andExpect(jsonPath("$.att_gn").value("S"));
-        tag("08:30:59").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:30:20").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:30:59").andExpect(jsonPath("$.att_gn").value("S"));
 
         assertThat(logCount()).isEqualTo(1);
     }
@@ -335,10 +391,10 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 학생이 고른 요청(con_gn)은 중복억제 창을 타지 않는다 — 2-phase 2차가 삼켜진다")
     void explicitActionBypassesDedupWindow() throws Exception {
-        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:30:00").andExpect(jsonPath("$.att_gn").value("S"));
 
         // 8초 뒤 2차 호출. 창 안이지만 학생이 화면에서 고른 것이라 처리돼야 한다
-        tag("08:30:08", "D").andExpect(jsonPath("$.att_gn").value("D"));
+        tag("07:30:08", "D").andExpect(jsonPath("$.att_gn").value("D"));
 
         assertThat(logCount()).isEqualTo(2);
     }
@@ -346,7 +402,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("★ 외출 중에는 중복억제 창을 적용하지 않는다 — 키오스크가 복귀(R)를 기대한다")
     void dedupWindowDoesNotBlockReturn() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00", "D").andExpect(jsonPath("$.att_gn").value("D"));
 
         // 25초 만에 복귀 — 창 안이지만 R로 처리돼야 한다.
@@ -359,8 +415,8 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("1분이 지나면 다시 판정한다")
     void afterDedupWindowItDecidesAgain() throws Exception {
-        tag("08:30:00").andExpect(jsonPath("$.att_gn").value("S"));
-        tag("08:31:01").andExpect(jsonPath("$.code").value(130));
+        tag("07:30:00").andExpect(jsonPath("$.att_gn").value("S"));
+        tag("07:31:01").andExpect(jsonPath("$.code").value(130));
     }
 
     // ── 조퇴 해제 ────────────────────────────────────────────
@@ -369,7 +425,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ setReAttendProc — 조퇴 기록을 지우지 않고 외출로 정정한 뒤 복귀를 덧붙인다")
     void reAttendCorrectsInsteadOfDeleting() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00", "C").andExpect(jsonPath("$.att_gn").value("C"));
 
         mvc.perform(post("/kiosk/setReAttendProc")
@@ -397,7 +453,7 @@ class KioskAttendanceIntegrationTest {
     @Test
     @DisplayName("조퇴 상태가 아닌데 해제 요청하면 거부")
     void reAttendWithoutEarlyLeaveIsRejected() throws Exception {
-        tag("08:30:00");
+        tag("07:30:00");
 
         mvc.perform(post("/kiosk/setReAttendProc")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -464,7 +520,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 예정 30분 전부터 뜬다 — 그 전엔 130이다")
     void promptAppearsOnlyFromThirtyMinutesBefore() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
-        tag("08:30:00");
+        tag("07:30:00");
 
         // 15:59 — 아직 이르다. 여기서 뜨면 실수로 눌러 이른 조퇴가 기록된다
         tag("15:59:00").andExpect(jsonPath("$.code").value(130));
@@ -476,7 +532,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 예정 시각이 지나도 계속 뜬다 — 늦게 나가는 건 정상이다")
     void promptStaysAfterScheduledTime() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("18:00:00").andExpect(jsonPath("$.data[0].code").value(128));
     }
@@ -485,7 +541,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 외출도 같은 규칙이다")
     void outingFollowsTheSameWindow() throws Exception {
         submitApprovedReason(AbsenceReasonType.OUTING, java.time.LocalTime.of(13, 0));
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("12:29:00").andExpect(jsonPath("$.code").value(130));
         tag("12:30:00").andExpect(jsonPath("$.data[0].code").value(129));
@@ -495,7 +551,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 창 밖에서는 con_gn을 실어도 거부된다 — 화면을 우회할 수 없다")
     void explicitActionOutsideWindowIsRejected() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(16, 30));
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("10:00:00", "C").andExpect(jsonPath("$.code").value(130));
     }
@@ -504,7 +560,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("시각이 없는 사유는 통과시킨다 — 종일 사유이거나 이관된 과거 데이터다")
     void reasonWithoutStartTimeIsAlwaysUsable() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE);
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("10:00:00").andExpect(jsonPath("$.data[0].code").value(128));
     }
@@ -513,7 +569,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 오늘 이미 외출했으면 다시 안 띄운다 — 신청 1건으로 여러 번 나갈 수 없다")
     void outingCanBeUsedOnlyOncePerDay() throws Exception {
         submitApprovedReason(AbsenceReasonType.OUTING, java.time.LocalTime.of(13, 0));
-        tag("08:30:00");
+        tag("07:30:00");
 
         tag("13:00:00").andExpect(jsonPath("$.data[0].code").value(129));
         tag("13:01:00", "N").andExpect(jsonPath("$.att_gn").value("N"));
@@ -527,7 +583,7 @@ class KioskAttendanceIntegrationTest {
     @DisplayName("★ 조퇴는 하루 한 번 — 재등원 전에는 다시 안 뜬다")
     void earlyLeaveCannotBeReusedWhileStillLeft() throws Exception {
         submitApprovedReason(AbsenceReasonType.EARLY_LEAVE, java.time.LocalTime.of(15, 0));
-        tag("08:30:00");
+        tag("07:30:00");
         tag("15:00:00", "C").andExpect(jsonPath("$.att_gn").value("C"));
 
         // 조퇴 상태에서 재태깅은 121로 막힌다(선택지 이전 단계)
@@ -557,5 +613,87 @@ class KioskAttendanceIntegrationTest {
 
         // 다시 조퇴할 수 있다 (키오스크 커밋 9dda934 "조퇴후 재등원 후 다시 조퇴 대응")
         tag(retryAt).andExpect(jsonPath("$.data[0].code").value(128));
+    }
+
+    // ── 지각 복귀 벌점 (디랩 1021 피드백 3-2) ──────────────────
+
+    /**
+     * 외출 → 복귀를 한 번에.
+     *
+     * @param plannedReturn 복귀 예정 시각. ★ {@code AbsenceReason.endTime} 이 그 값이다
+     * @param actualReturn  실제 복귀 태깅 시각
+     */
+    private void outAndReturn(java.time.LocalTime out, java.time.LocalTime plannedReturn,
+                              java.time.LocalTime actualReturn) throws Exception {
+        ApprovalItem item = new ApprovalItem(bundang, (short) 2026,
+                RequestType.ABSENCE_REASON, ApproverType.TEACHER, null, null);
+        em.persist(item);
+        ApprovalRequest approval = new ApprovalRequest(bundang, item, minji, null,
+                com.dlab.domain.approval.entity.ApproverType.PARENT, Instant.now(clock));
+        ReflectionTestUtils.setField(approval, "status", ApprovalStatus.APPROVED);
+        em.persist(approval);
+
+        AbsenceReason reason = new AbsenceReason(bundang, minji, today,
+                AbsenceReasonType.OUTING, "사유", out, plannedReturn);
+        reason.linkApproval(approval);
+        em.persist(reason);
+        em.flush();
+
+        tag(fmt(java.time.LocalTime.of(8, 0)), null);      // 등원
+        tag(fmt(out), "N");                                 // 사유 외출
+        tag(fmt(actualReturn), null);                       // 복귀
+    }
+
+    @Test
+    @DisplayName("★★ 예정보다 늦게 복귀하면 지각 복귀 조건으로 한 번 더 부른다 (1021 3-2)")
+    void lateReturnTriggersItsOwnCondition() throws Exception {
+        outAndReturn(java.time.LocalTime.of(12, 0),
+                java.time.LocalTime.of(13, 0),      // 1시 복귀 약속
+                java.time.LocalTime.of(13, 30));    // 1시 반에 왔다
+
+        verify(penaltyRuleEngine).apply(any(),
+                eq(com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                eq(com.dlab.domain.penalty.entity.TriggerCondition.LATE_RETURN),
+                eq(today));
+    }
+
+    @Test
+    @DisplayName("★★ 제시간에 복귀하면 부르지 않는다 — R 로 규칙을 만들면 전원이 걸린다")
+    void onTimeReturnDoesNotTrigger() throws Exception {
+        outAndReturn(java.time.LocalTime.of(12, 0),
+                java.time.LocalTime.of(13, 0),
+                java.time.LocalTime.of(12, 50));    // 10분 일찍 왔다
+
+        verify(penaltyRuleEngine, never()).apply(any(),
+                any(),
+                eq(com.dlab.domain.penalty.entity.TriggerCondition.LATE_RETURN),
+                any());
+    }
+
+    @Test
+    @DisplayName("★ 복귀 태깅 자체는 그대로 R 로도 부른다 — 두 조건값이 따로 산다")
+    void returnStillTriggersItsOwnCode() throws Exception {
+        outAndReturn(java.time.LocalTime.of(12, 0),
+                java.time.LocalTime.of(13, 0),
+                java.time.LocalTime.of(13, 30));
+
+        verify(penaltyRuleEngine).apply(any(),
+                eq(com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                eq(com.dlab.domain.attendance.entity.AttendanceEventType.RETURN.getCode()),
+                eq(today));
+    }
+
+    @Test
+    @DisplayName("★★ 외출 신청이 없으면 지각 복귀가 아니다 — 비교할 예정 시각이 없다")
+    void returnWithoutRequestIsNotLateReturn() throws Exception {
+        // 신청 없이 나갔다 들어온다(무단 외출) — 그건 다른 건이다
+        tag(fmt(java.time.LocalTime.of(8, 0)), null);
+        tag(fmt(java.time.LocalTime.of(12, 0)), "D");
+        tag(fmt(java.time.LocalTime.of(13, 30)), null);
+
+        verify(penaltyRuleEngine, never()).apply(any(),
+                any(),
+                eq(com.dlab.domain.penalty.entity.TriggerCondition.LATE_RETURN),
+                any());
     }
 }

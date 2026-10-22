@@ -18,6 +18,17 @@ public final class LectureRequests {
     private LectureRequests() {
     }
 
+    /**
+     * 특강 개설 — 이름·연도·유형·분류만 받는다.
+     *
+     * <h2>⚠️ 회차({@code sessions})를 여기서 받지 않는다 — {@code POST /lectures/full} 을 쓸 것</h2>
+     * 본문에 {@code sessions} 를 실어 보내면 <b>201 이 오고 그 데이터는 조용히 사라진다</b>
+     * (Jackson 이 모르는 필드를 버린다). 실제로 그렇게 헤맨 적이 있다.
+     *
+     * <p>{@code /full} 은 특강·회차·상태·노출을 <b>한 트랜잭션</b>으로 만든다 — 중간에
+     * 실패하면 아무것도 만들어지지 않는다. 따로 만들면 <b>특강은 생기고 회차 추가가
+     * 실패해 회차 0개인 특강이 남는다.</b>
+     */
     public record LectureCreate(
             @NotNull(message = "지점은 필수입니다.") Long academyId,
             @NotNull(message = "연도는 필수입니다.") Integer year,
@@ -125,6 +136,57 @@ public final class LectureRequests {
             LocalTime startTime,
             LocalTime endTime,
             @Size(max = 50) String room) {
+    }
+
+    /**
+     * 회차 수정 (디랩 1021 답변 Q1 의 예외 요청).
+     *
+     * <p>★ <b>비워 보낸 항목은 바꾸지 않는다.</b> 날짜만 옮기는 경우가 대부분이다.
+     *
+     * <p>⚠️ <b>번호는 바꿀 수 없다</b> — 이미 안내된 「3회차」가 다른 날을 가리키게 된다.
+     *
+     * @param fee 그 회차 수강료. 비우면 유지, 명시하면 교체
+     */
+    public record UpdateSession(
+            @com.fasterxml.jackson.annotation.JsonFormat(shape =
+                    com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
+                    pattern = "yyyy-MM-dd") java.time.LocalDate sessionDate,
+            @com.fasterxml.jackson.annotation.JsonFormat(shape =
+                    com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
+                    pattern = "HH:mm") java.time.LocalTime startTime,
+            @com.fasterxml.jackson.annotation.JsonFormat(shape =
+                    com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
+                    pattern = "HH:mm") java.time.LocalTime endTime,
+            @jakarta.validation.constraints.Size(max = 50) String room,
+            @jakarta.validation.constraints.PositiveOrZero(message = "수강료는 0 이상이어야 합니다.")
+            Integer fee) {
+    }
+
+    /**
+     * 수강 대상·대기 상한 (디랩 1021 답변 Q2·Q3).
+     *
+     * <h2>★★ 두 축 모두 비우면 제한 없음이다</h2>
+     * 「전체」를 값으로 보내지 말 것 — 「전체」와 「인문+자연 둘 다」가 같은 뜻인데
+     * 데이터가 두 가지로 갈린다.
+     *
+     * <p>⚠️ 학년에 {@code STAFF} 를 보내도 저장되지 않는다 — 직원은 학년이 아니다.
+     *
+     * @param waitlistCapacity 대기 상한. ★ {@link com.dlab.common.web.Patch} 다 —
+     *                         <b>「안 보냄」과 「비워 달라」가 구분돼야 한다.</b>
+     *                         평범한 {@code Integer} 로 받았더니 {@code null} 을 보내도
+     *                         200 이 오고 상한이 그대로 남았다(프론트 제보) — 담당자는
+     *                         <b>풀린 줄 알고</b> 넘어간다. 0 은 「대기를 안 받는다」라
+     *                         다른 뜻이어서 대신 쓸 수도 없다.
+     *                         <pre>
+     *                         키 생략                      유지
+     *                         "waitlistCapacity": 7        7 로 설정
+     *                         "waitlistCapacity": null     무제한으로 되돌림
+     *                         </pre>
+     */
+    public record ChangeTargets(
+            java.util.Set<com.dlab.domain.user.entity.TrackType> tracks,
+            java.util.Set<com.dlab.domain.user.entity.GradeType> grades,
+            com.dlab.common.web.Patch<Integer> waitlistCapacity) {
     }
 
     public record MarkAttendance(

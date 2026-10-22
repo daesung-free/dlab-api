@@ -54,6 +54,26 @@ public class AdmissionResult extends BaseEntity {
     @Column(name = "track_name", length = 100)
     private String trackName;
 
+    /**
+     * 마스터에서 고른 경우의 대학코드 (디랩 1021 피드백 6-1).
+     *
+     * <p>★ <b>{@link #universityName} 을 지우지 않았다.</b> 디랩이 *"이후 없는 대학/학과
+     * 추가 입력"* 을 요청했으므로 <b>목록에 없는 대학을 직접 넣는 경로가 남아야 한다.</b>
+     * 코드가 있으면 마스터 기준이고, {@code null} 이면 손으로 넣은 값이다.
+     */
+    @Column(name = "university_code", length = 10)
+    private String universityCode;
+
+    /** 마스터에서 고른 경우의 학과코드. ★ 대학코드와 함께 봐야 유일하다 */
+    @Column(name = "department_code", length = 10)
+    private String departmentCode;
+
+    /** 마스터에서 고른 값으로 표준화한다. 이름 칸은 마스터 값으로 함께 채운다. */
+    public void linkMaster(String universityCode, String departmentCode) {
+        this.universityCode = universityCode;
+        this.departmentCode = departmentCode;
+    }
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private AdmissionResultStatus result = AdmissionResultStatus.PENDING;

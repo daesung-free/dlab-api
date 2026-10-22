@@ -1,5 +1,6 @@
 package com.dlab.domain.grade.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
@@ -55,15 +56,19 @@ public class StudentGradeSubmission extends BaseEntity {
      * 잡지 않는다.</b> 해석은 상담 교사가 한다 — 양식에도 단위 표기가 없다.
      */
     @Column(name = "main_subject_average", precision = 5, scale = 2)
+    @AuditLabel("내신 주요교과평균")
     private BigDecimal mainSubjectAverage;
 
     @Column(name = "exam_skipped", nullable = false)
+    @AuditLabel("모의고사 미입력")
     private boolean examSkipped = false;
 
     @Column(name = "skip_reason", length = 200)
+    @AuditLabel("미입력 사유")
     private String skipReason;
 
     @Column(name = "submitted_at")
+    @AuditLabel("제출 시각")
     private Instant submittedAt;
 
     /**
@@ -76,9 +81,11 @@ public class StudentGradeSubmission extends BaseEntity {
      * <p>{@code null}이면 학생이 낸 그대로다.
      */
     @Column(name = "modified_by")
+    @AuditLabel("수정자")
     private Long modifiedBy;
 
     @Column(name = "modified_at")
+    @AuditLabel("수정 시각")
     private Instant modifiedAt;
 
     /** 직원이 고쳤음을 기록한다. 학생 본인 입력 경로에서는 부르지 않는다. */
@@ -88,6 +95,7 @@ public class StudentGradeSubmission extends BaseEntity {
     }
 
     @OneToMany(mappedBy = "submission", cascade = CascadeType.ALL, orphanRemoval = false)
+    @AuditLabel("성적 항목")
     private List<StudentExamScore> scores = new ArrayList<>();
 
     public StudentGradeSubmission(StudentEnrollment enrollment) {

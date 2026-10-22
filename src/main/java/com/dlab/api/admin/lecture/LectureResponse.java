@@ -24,7 +24,12 @@ public final class LectureResponse {
                          LocalDate startDate, LocalDate endDate, int fee,
                          Long teacherId, String teacherName,
                          Long categoryId, String categoryName,
-                         Long confirmedCount, Long waitlistedCount) {
+                         Long confirmedCount, Long waitlistedCount,
+                         // ★ 대상이 비어 있으면 「제한 없음」이다 — 화면이 「전체」로 표시하면 된다.
+                         //   「전체」를 값으로 되돌려 보내지 말 것(저장이 두 가지로 갈린다)
+                         java.util.Set<String> targetTracks,
+                         java.util.Set<String> targetGrades,
+                         Integer waitlistCapacity) {
 
         public static LectureDetail from(Lecture l) {
             return of(l, null, null);
@@ -39,7 +44,14 @@ public final class LectureResponse {
                     l.getTeacher() == null ? null : l.getTeacher().getName(),
                     l.getCategory() == null ? null : l.getCategory().getId(),
                     l.getCategory() == null ? null : l.getCategory().getName(),
-                    confirmed, waitlisted);
+                    confirmed, waitlisted,
+                    l.getTargetTracks().stream().map(Enum::name)
+                            .collect(java.util.stream.Collectors.toCollection(
+                                    java.util.LinkedHashSet::new)),
+                    l.getTargetGrades().stream().map(Enum::name)
+                            .collect(java.util.stream.Collectors.toCollection(
+                                    java.util.LinkedHashSet::new)),
+                    l.getWaitlistCapacity());
         }
 
         public static LectureDetail withHeadcount(Lecture l, LectureService.Headcount h) {
@@ -47,12 +59,17 @@ public final class LectureResponse {
         }
     }
 
+    /**
+     * @param fee 그 회차 수강료. ★ {@code null} 은 <b>미설정</b>이다 —
+     *            화면에서 0원으로 표시하지 말 것. 「0원 무료」와 구분되지 않는다
+     */
     public record Session(Long id, short sessionNo, LocalDate sessionDate,
-                         LocalTime startTime, LocalTime endTime, String room) {
+                         LocalTime startTime, LocalTime endTime, String room,
+                         Integer fee) {
 
         public static Session from(LectureSession s) {
             return new Session(s.getId(), s.getSessionNo(), s.getSessionDate(),
-                    s.getStartTime(), s.getEndTime(), s.getRoom());
+                    s.getStartTime(), s.getEndTime(), s.getRoom(), s.getFee());
         }
     }
 
@@ -71,21 +88,28 @@ public final class LectureResponse {
      * @param studentId    사람(student) id
      * @param enrollmentId 등록 건 id — 학생 상세·출결 등 다른 관리자 화면으로 넘어갈 때 쓴다
      */
+    /**
+     * @param grade  학년. 수강 대상 구분(N수생/고3/고2/고1)과 같은 축이다
+     * @param seatNo 독서실 좌석번호. ⚠️ <b>배정 전이면 {@code null}</b> 이다 —
+     *               화면에 <b>「미배정」으로 쓰지 말 것</b>. <b>좌석을 쓰지 않는 특강</b>도
+     *               있어서, 비어 있는 것이 곧 문제라는 뜻이 아니다
+     */
     public record RosterRow(Long applicationId, Long studentId, Long enrollmentId, String studentNo,
                             String studentName, String className, String phone,
+                            com.dlab.domain.user.entity.GradeType grade, String seatNo,
                             String status, boolean waitlisted,
                             Instant appliedAt, String memo, boolean masked) {
 
         public static RosterRow from(LectureApplication a) {
-            return of(a, null, false);
+            return of(a, null, null, false);
         }
 
         public static RosterRow of(com.dlab.domain.lecture.service.LectureService.RosterEntry e,
                                    boolean raw) {
-            return of(e.application(), e.className(), raw);
+            return of(e.application(), e.className(), e.seatNo(), raw);
         }
 
-        static RosterRow of(LectureApplication a, String className, boolean raw) {
+        static RosterRow of(LectureApplication a, String className, String seatNo, boolean raw) {
             String phone = a.getEnrollment().getStudent().getPhone();
             return new RosterRow(a.getId(),
                     a.getEnrollment().getStudent().getId(),
@@ -94,6 +118,7 @@ public final class LectureResponse {
                     a.getEnrollment().getStudent().getName(),
                     className,
                     raw ? phone : com.dlab.common.privacy.Masking.phone(phone),
+                    a.getEnrollment().getGrade(), seatNo,
                     a.getStatus().name(),
                     a.getStatus() == ApplicationStatus.WAITLISTED,
                     a.getAppliedAt(), a.getMemo(), !raw);

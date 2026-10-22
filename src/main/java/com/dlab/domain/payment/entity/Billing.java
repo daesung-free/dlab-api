@@ -1,5 +1,6 @@
 package com.dlab.domain.payment.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
@@ -51,24 +52,30 @@ public class Billing extends BaseEntity {
 
     /** 키오스크 {@code rcv_nm}. */
     @Column(nullable = false, length = 100)
+    @AuditLabel("청구 표시명")
     private String name;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "billing_type", nullable = false, length = 20)
+    @AuditLabel("청구 종류")
     private BillingType billingType;
 
     /** 정가. 키오스크 {@code supp_amt}. */
     @Column(name = "supplied_amount", nullable = false)
+    @AuditLabel("정상가")
     private int suppliedAmount;
 
     @Column(name = "discount_amount", nullable = false)
+    @AuditLabel("할인액")
     private int discountAmount;
 
     /** 정가 − 할인. 미납 계산의 기준이다. */
     @Column(name = "billed_amount", nullable = false)
+    @AuditLabel("청구액")
     private int billedAmount;
 
     @Column(name = "due_date")
+    @AuditLabel("납부기한")
     private LocalDate dueDate;
 
     /**
@@ -80,13 +87,48 @@ public class Billing extends BaseEntity {
      * <p>급식·특강은 달 단위가 아니라 비어 있을 수 있다.
      */
     @Column(name = "service_year")
+    @AuditLabel("대상 연도")
     private Short serviceYear;
 
     @Column(name = "service_month")
+    @AuditLabel("대상 월")
     private Short serviceMonth;
+
+    /**
+     * 대상 기간 — <b>표시용</b>이다 (1016 피드백 2-6).
+     *
+     * <p>⚠️ <b>{@code serviceYear}·{@code serviceMonth} 를 대체하지 않는다.</b>
+     * 환불 계산이 그 값으로 <b>그 달 교습일수</b>를 찾는다. 기간은 데스크가
+     * 「10/15~10/31」을 확인하기 위해 더한 것이다.
+     *
+     * <p>⚠️ <b>모르면 비워 둔다.</b> 중도 입학 일할 건의 시작일은 입학일이고,
+     * {@code remainingDays} 는 <b>교습일수 기준</b>이라(설·추석 제외) 말일에서
+     * 역산하면 어긋난다. 추측값을 넣으면 화면이 그것을 사실로 읽는다.
+     */
+    @Column(name = "service_from")
+    @AuditLabel("대상기간 시작")
+    private java.time.LocalDate serviceFrom;
+
+    @Column(name = "service_to")
+    @AuditLabel("대상기간 종료")
+    private java.time.LocalDate serviceTo;
+
+    /**
+     * 할인 근거 — <b>발행 시점의 장학명 스냅샷</b> (1016 피드백 2-5).
+     *
+     * <p>★ 장학을 FK 로 걸지 않는다. 나중에 그 장학이 취소·변경되면
+     * <b>과거 청구의 근거가 함께 흔들린다</b> — 상벌점이 부여 시점의 항목 점수를
+     * 복사해 두는 것과 같은 판단이다.
+     *
+     * <p>손으로 넣은 할인이면 비어 있다 — <b>「장학 근거가 없다」는 뜻</b>이다.
+     */
+    @Column(name = "discount_source", length = 100)
+    @AuditLabel("할인 근거")
+    private String discountSource;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @AuditLabel("수납 상태")
     private BillingStatus status = BillingStatus.PENDING;
 
     @OneToMany(mappedBy = "billing", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -120,6 +162,31 @@ public class Billing extends BaseEntity {
     public void assignServicePeriod(short serviceYear, int serviceMonth) {
         this.serviceYear = serviceYear;
         this.serviceMonth = (short) serviceMonth;
+    }
+
+    /** 대상 기간. <b>모르면 부르지 않는다</b> — 비어 있는 것이 「미상」의 정직한 표현이다. */
+    public void assignServiceDates(java.time.LocalDate from, java.time.LocalDate to) {
+        this.serviceFrom = from;
+        this.serviceTo = to;
+    }
+
+    /** 할인 근거(장학명). 수기 할인이면 부르지 않는다. */
+    public void assignDiscountSource(String discountSource) {
+        this.discountSource = discountSource;
+    }
+
+    /**
+     * 월 전체 청구인가 — 화면이 「대상월」 표기를 가르는 데 쓴다.
+     *
+     * <p>★ <b>전부 괄호가 붙으면 중도입학 건이 눈에 안 띈다.</b> 월 전체면
+     * {@code 2026-10}, 일할이면 {@code 2026-10 (10/15~10/31)} 로 적는다.
+     */
+    public boolean coversWholeMonth() {
+        if (serviceFrom == null || serviceTo == null || serviceMonth == null) {
+            return true;
+        }
+        java.time.YearMonth ym = java.time.YearMonth.of(serviceYear, serviceMonth);
+        return serviceFrom.equals(ym.atDay(1)) && serviceTo.equals(ym.atEndOfMonth());
     }
 
     /**
@@ -195,6 +262,11 @@ public class Billing extends BaseEntity {
      * 이유는 <b>돈을 돌려준 기록</b>이 남아야 하기 때문이다 — 청구만 지우면 환불했는지
      * 안 했는지 알 수 없다.
      */
+    /** 취소된 청구인가. <b>취소된 청구는 「없는 청구」로 취급해야 하는 자리가 있다</b> — 아래 참고. */
+    public boolean isCancelled() {
+        return status == BillingStatus.CANCELLED;
+    }
+
     public void cancel() {
         if (receivedAmount() > 0) {
             throw new BusinessException(ErrorCode.BILLING_HAS_PAYMENT,

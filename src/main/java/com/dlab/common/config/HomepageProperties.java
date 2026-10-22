@@ -67,8 +67,18 @@ public class HomepageProperties {
     @PostConstruct
     void warnIfMissing() {
         if (!isConfigured()) {
-            log.warn("⚠️ 홈페이지 입학예약 연동 자격증명이 비어 있다 — /dlab/** 인증이 전부 거부된다. "
-                    + "HOMEPAGE_CLIENT_ID·HOMEPAGE_SECRET 환경변수를 확인할 것");
+            // ⚠️ 변수명을 정확히 적는다. 전에 HOMEPAGE_CLIENT_ID 로 적혀 있었는데
+            //    실제 이름은 HOMEPAGE_INTEGRATION_CLIENT_ID 다(프로퍼티가
+            //    homepage.integration.client-id 이므로) — 틀린 이름을 보고 찾으면
+            //    "변수가 있는데 왜 안 먹지" 로 시간을 버린다.
+            log.warn("⚠️ 홈페이지 입학신청(A안) 자격증명이 비어 있다 — /dlab/** 인증이 전부 거부되고 "
+                    + "응답은 code 910「토큰이 만료되었습니다」로 나간다(토큰 없음과 구분되지 않는다). "
+                    + "HOMEPAGE_INTEGRATION_CLIENT_ID·HOMEPAGE_INTEGRATION_SECRET 를 확인할 것");
+        }
+        if (apiKey == null || apiKey.isBlank()) {
+            // B안도 같이 알려야 한다 — A안만 경고하면 "REST 쪽은 되는 줄" 알고 401 을 쫓는다
+            log.warn("⚠️ 홈페이지 입학신청(B안) API 키가 비어 있다 — /api/v1/homepage/** 가 전부 401 이다. "
+                    + "HOMEPAGE_INTEGRATION_API_KEY 를 확인할 것");
         }
     }
 }

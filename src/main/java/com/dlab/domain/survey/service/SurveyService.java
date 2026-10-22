@@ -64,6 +64,7 @@ public class SurveyService {
     private final com.dlab.common.excel.ExcelExporter excelExporter;
     private final SurveyResponseRepository responseRepository;
     private final SurveyParticipantRepository participantRepository;
+    private final SurveyNotifier surveyNotifier;
     private final AccountRepository accountRepository;
     private final AcademyRepository academyRepository;
     private final ClassMasterRepository classMasterRepository;
@@ -309,15 +310,94 @@ public class SurveyService {
         }
 
         survey.clearQuestions();
+        List<SurveyQuestion> built = new ArrayList<>();
         for (QuestionCommand q : questions) {
             var added = survey.addQuestion(q.type(), q.title(), q.required(),
                     q.minValue(), q.maxValue());
             if (q.options() != null) {
                 q.options().forEach(added::addOption);
             }
+            built.add(added);
+        }
+        // ★★ 개설과 똑같이 조건부·합산을 적용한다. 이게 빠져 있어서 교체 요청에
+        //    showIfQuestionIndex·sumOfIndexes 를 실어도 **조용히 버려졌다** —
+        //    가채점 설문을 고치면 「응시/미응시」 조건이 풀려 숨어야 할 문항이 전부 보였다.
+        //    오류가 안 나서 고친 사람은 끝까지 모른다
+        for (int i = 0; i < built.size(); i++) {
+            applyCondition(built, i, questions.get(i));
+            applySum(built, i, questions);
         }
         log.info("설문 문항 교체: id={}, 문항={}, 처리자={}", id, questions.size(), me.accountId());
         return survey;
+    }
+
+    /**
+     * 문항 <b>정의</b>를 읽는다 — 수정 화면이 「읽어서 → 고쳐서 → 교체」 하는 데 쓴다.
+     *
+     * <h2>★★ 집계({@link #results})로는 이걸 할 수 없다</h2>
+     * 집계는 {@code required}·{@code minValue}·{@code maxValue}·조건부·합산을 내리지 않는다.
+     * 그걸로 읽어서 교체하면 <b>제목 한 글자만 고쳐도 필수 여부와 숫자 범위가 풀리고
+     * 조건부 노출이 사라진다</b> — 오류가 안 나므로 아무도 모른다.
+     *
+     * <p>집계에 얹지 않고 따로 두는 이유는 둘이다. 집계의 {@code min}·{@code max} 는
+     * <b>응답 통계</b>라 설정값과 <b>이름이 겹치고</b>, 이 응답은 <b>교체 요청과 모양이
+     * 같아야</b> 왕복이 성립한다.
+     *
+     * <h2>★ 번호는 {@code seq} 가 아니라 「순서」다</h2>
+     * 교체는 soft delete 라 {@code seq} 가 이어진다({@code UNIQUE (survey_id, seq)} 때문에
+     * 1부터 다시 쓸 수 없다) — 두 번 교체한 설문은 첫 문항의 {@code seq} 가 3일 수 있다.
+     * 그런데 교체 요청의 번호는 <b>배열 순서(1부터)</b>다. 그래서 {@code seq} 를 그대로
+     * 내려주면 되돌려 보낼 때 <b>엉뚱한 문항을 가리킨다.</b>
+     */
+    @Transactional(readOnly = true)
+    public List<QuestionSetting> questionSettings(AuthPrincipal me, Long surveyId) {
+        Survey survey = requireReadable(me, surveyId);
+        List<SurveyQuestion> active = survey.activeQuestions();
+
+        Map<Short, Integer> positionBySeq = new java.util.HashMap<>();
+        for (int i = 0; i < active.size(); i++) {
+            positionBySeq.put(active.get(i).getSeq(), i + 1);
+        }
+
+        List<QuestionSetting> settings = new ArrayList<>();
+        for (SurveyQuestion q : active) {
+            Integer showIfQuestion = null;
+            Integer showIfOption = null;
+            if (q.isConditional()) {
+                showIfQuestion = positionBySeq.get(q.getShowIfQuestion().getSeq());
+                List<SurveyQuestionOption> controlOptions =
+                        q.getShowIfQuestion().activeOptions();
+                for (int i = 0; i < controlOptions.size(); i++) {
+                    if (controlOptions.get(i).getId().equals(q.getShowIfOption().getId())) {
+                        showIfOption = i + 1;
+                        break;
+                    }
+                }
+            }
+            settings.add(new QuestionSetting(q.getId(), q.getQuestionType(), q.getTitle(),
+                    q.isRequired(), q.getMinValue(), q.getMaxValue(),
+                    q.activeOptions().stream().map(SurveyQuestionOption::getLabel).toList(),
+                    showIfQuestion, showIfOption,
+                    q.sumOfSeqList().stream()
+                            .map(positionBySeq::get)
+                            .filter(java.util.Objects::nonNull)
+                            .toList()));
+        }
+        return settings;
+    }
+
+    /**
+     * 문항 정의 한 줄. <b>교체 요청({@code QuestionCommand})과 칸이 같다</b> —
+     * 읽은 것을 그대로 되돌려 보내면 바뀌는 것이 없어야 한다.
+     *
+     * @param showIfQuestionIndex 조건 문항의 <b>순서</b>(1부터). 조건이 없으면 {@code null}
+     * @param sumOfIndexes        합산 대상 문항들의 <b>순서</b>(1부터). 합산이 아니면 빈 목록
+     */
+    public record QuestionSetting(Long questionId, SurveyQuestionType type, String title,
+                                  boolean required, BigDecimal minValue, BigDecimal maxValue,
+                                  List<String> options,
+                                  Integer showIfQuestionIndex, Integer showIfOptionIndex,
+                                  List<Integer> sumOfIndexes) {
     }
 
     /**
@@ -338,18 +418,54 @@ public class SurveyService {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "대상 학생을 골라 주세요.");
         }
 
-        int sent = 0;
+        List<SurveyParticipant> added = new ArrayList<>();
         for (Long enrollmentId : enrollmentIds.stream().distinct().toList()) {
             if (participantRepository.isTarget(id, enrollmentId)) {
                 continue;
             }
             var enrollment = enrollmentRepository.findById(enrollmentId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.STUDENT_NOT_FOUND));
-            participantRepository.save(new SurveyParticipant(survey, enrollment));
-            sent++;
+            added.add(participantRepository.save(new SurveyParticipant(survey, enrollment)));
         }
-        log.info("설문 대상자 발송: id={}, 신규={}, 처리자={}", id, sent, me.accountId());
-        return sent;
+        // ★ 이번에 새로 만든 행에만 보낸다 — 이미 대상이던 학생에게 또 보내면
+        //   같은 설문 안내를 두 번 받는다(두 번 누르는 것이 실제로 있다)
+        surveyNotifier.notifyAssigned(survey, added);
+        log.info("설문 대상자 발송: id={}, 신규={}, 처리자={}", id, added.size(), me.accountId());
+        return added.size();
+    }
+
+    /**
+     * 미응답자 독촉 (F-4.6).
+     *
+     * <p>★★ <b>대상자 행이 없는 설문은 거절한다.</b> 범위로 돌리는 일반 설문은
+     * {@code SurveyParticipant} 행을 만들지 않아 <b>누가 아직 안 냈는지 알 수 없다.</b>
+     * 그때 0건을 보내고 성공을 돌려주면 데스크는 「독촉을 보냈다」고 알고 끝내는데
+     * <b>아무에게도 가지 않았다.</b>
+     *
+     * <p>⚠️ 문자는 <b>건당 과금</b>이고 되돌릴 수 없다 — 화면은 {@link #remindPreview} 로
+     * 건수를 확인받은 뒤 이걸 부른다.
+     *
+     * @return 발송을 시도한 수
+     */
+    @Transactional
+    public int remindPending(AuthPrincipal me, Long id) {
+        Survey survey = requireWritable(me, id);
+        List<SurveyParticipant> participants = participantRepository.findBySurvey(id);
+
+        surveyNotifier.requireRemindable(surveyNotifier.preview(participants));
+        return surveyNotifier.notifyPending(survey, participants);
+    }
+
+    /**
+     * 독촉 발송 전 집계 — <b>화면 확인 모달용</b>.
+     *
+     * <p>★ 「몇 명에게 가는가」를 누르기 전에 보여주지 않으면 전 지점 설문에서
+     * 수천 건이 한 번에 나간다.
+     */
+    @Transactional(readOnly = true)
+    public SurveyNotifier.Preview remindPreview(AuthPrincipal me, Long id) {
+        requireReadable(me, id);
+        return surveyNotifier.preview(participantRepository.findBySurvey(id));
     }
 
     /**

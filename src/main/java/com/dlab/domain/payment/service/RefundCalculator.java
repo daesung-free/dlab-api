@@ -45,8 +45,12 @@ public final class RefundCalculator {
     /**
      * 청구 한 건의 환불액.
      *
-     * @param usedDays 사용한 교습일수. {@code teachingDays}를 넘으면 그 값으로 맞춘다 —
-     *                 넘는 건 이미 다 쓴 것이고, 넘긴 만큼 더 차감할 근거가 없다
+     * @param usedDays <b>이용일수(경과일수)다 — 출석일수가 아니다.</b> 0820 규정이
+     *                 <i>"퇴원하는 달 <b>이용기간</b>의 1/3까지 2/3 환불"</i>로 쓰고, 학원법
+     *                 반환기준도 경과 비율이다. ⚠️ <b>「다닌 일수」로 읽으면 결석을 빼고
+     *                 넣게 되어 환불액이 틀린다</b> — 화면 라벨도 「이용일수」로 둬야 한다.
+     *                 {@code teachingDays}를 넘으면 그 값으로 맞춘다 — 넘는 건 이미 다 쓴
+     *                 것이고, 넘긴 만큼 더 차감할 근거가 없다
      */
     public static Result calculate(List<BillingItem> items, int teachingDays, int usedDays) {
         if (teachingDays <= 0) {

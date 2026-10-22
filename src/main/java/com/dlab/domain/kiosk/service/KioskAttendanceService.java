@@ -8,6 +8,7 @@ import com.dlab.domain.attendance.entity.AbsenceReasonType;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceSource;
 import com.dlab.domain.penalty.entity.PenaltyTriggerType;
+import com.dlab.domain.penalty.entity.TriggerCondition;
 import com.dlab.domain.penalty.service.PenaltyRuleEngine;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.attendance.repository.AbsenceReasonRepository;
@@ -75,6 +76,7 @@ public class KioskAttendanceService {
     private final AttendancePolicy attendancePolicy;
     private final PenaltyRuleEngine penaltyRuleEngine;
     private final com.dlab.domain.attendance.service.StaffAttendanceService staffAttendanceService;
+    private final com.dlab.domain.attendance.service.AttendanceNotifier attendanceNotifier;
     private final Clock clock;
 
     /**
@@ -129,7 +131,7 @@ public class KioskAttendanceService {
 
         // ★ 원장은 decision.event(), 응답은 decision.reportedAs()다.
         //   보통 같지만 사유지각은 갈린다 — 원장엔 지각, 화면엔 등원
-        taggingLogRepository.save(new AttendanceTaggingLog(
+        AttendanceTaggingLog tagging = taggingLogRepository.save(new AttendanceTaggingLog(
                 enrollment.getAcademy(), enrollment, decision.event(),
                 AttendanceSource.KIOSK_NFC, at.atZone(clock.getZone()).toInstant(), date));
 
@@ -139,6 +141,23 @@ public class KioskAttendanceService {
         //   롤백되면 학생이 등원한 사실 자체가 사라진다
         penaltyRuleEngine.apply(enrollment, PenaltyTriggerType.ATTENDANCE,
                 decision.event().getCode(), date);
+
+        // ★ 늦은 복귀는 별도 조건값으로 한 번 더 본다 (디랩 1021 피드백 3-2).
+        //   복귀 코드(R)로 규칙을 만들면 **제시간에 복귀한 학생도 전부 걸린다** —
+        //   복귀는 정상 행동이고 벌점은 늦은 복귀에만 붙는다
+        if (decision.event() == AttendanceEventType.RETURN
+                && isLateReturn(enrollment.getId(), date, at.toLocalTime())) {
+            penaltyRuleEngine.apply(enrollment, PenaltyTriggerType.ATTENDANCE,
+                    TriggerCondition.LATE_RETURN, date);
+        }
+
+        // ★ 원장 기준으로 학부모에게 알린다(디랩 1016 문구 1~5번). 사유지각은 원장이 지각이고
+        //   화면엔 등원인데, 둘 다 등원 알림으로 묶이므로 결과가 같다.
+        //
+        // ★ 맨 마지막에 둔다. REQUIRES_NEW 로 떼어 둬서 **알림은 즉시 커밋되는데** 태깅은
+        //   이 트랜잭션이 끝나야 확정된다 — 뒤에 실패할 일이 남아 있으면 「알림은 갔는데
+        //   태깅은 없는」 상태가 된다. 반대로 알림이 터져도 태깅은 남는다(예외를 삼킨다)
+        attendanceNotifier.notifyTagged(enrollment, tagging);
 
         return TagResult.accepted(enrollment, decision.reportedAs());
     }
@@ -155,7 +174,9 @@ public class KioskAttendanceService {
                 history,
                 periods,
                 at.toLocalTime(),
-                enrollment.getAcademy().getAttendanceDeadline(),
+                // ★ 지각 판정은 late_after 다. attendance_deadline 은 미등원 배치 몫이다 —
+                //   두 값이 다르므로(지각 07:50 / 결석 08:20) 섞으면 정상 등원이 지각으로 찍힌다
+                enrollment.getAcademy().lateAfterOrDeadline(),
                 excusedOptions(enrollment.getId(), at, history));
     }
 
@@ -219,9 +240,13 @@ public class KioskAttendanceService {
         }
 
         last.correctEventType(AttendanceEventType.OUTING);
-        taggingLogRepository.save(new AttendanceTaggingLog(
+        AttendanceTaggingLog tagging = taggingLogRepository.save(new AttendanceTaggingLog(
                 enrollment.getAcademy(), enrollment, AttendanceEventType.RETURN,
                 AttendanceSource.KIOSK_NFC, Instant.now(clock), date));
+
+        // 조퇴가 외출로 정정되고 복귀가 붙는 경로다. 학부모에게는 복귀 알림만 간다 —
+        // 「조퇴」가 이미 나갔으므로 정정 사실을 복귀로 덮는 셈이고, 그게 실제 상태다
+        attendanceNotifier.notifyTagged(enrollment, tagging);
 
         return enrollment;
     }
@@ -279,6 +304,39 @@ public class KioskAttendanceService {
             }
         }
         return new AttendancePolicy.ExcusedOptions(earlyLeave, outing, late);
+    }
+
+    /**
+     * 사유 외출의 <b>복귀 예정 시각보다 늦게</b> 복귀했는가 (디랩 1021 피드백 3-2).
+     *
+     * <p>디랩 원문: <i>"학생이 정해진 복귀시간보다 늦게 복귀하였을때, <b>지각복귀 벌점이
+     * 2점</b>입니다."</i>
+     *
+     * <h2>★ 예정 시각은 이미 받고 있다</h2>
+     * {@code AbsenceReason.endTime} 이 「외출 종료」다. 외출 신청은 시작·종료가 모두
+     * 필수라 서버가 거절하므로 <b>승인된 외출에는 언제나 값이 있다</b> — 앱 폼을 고칠
+     * 일이 없다.
+     *
+     * <h2>⚠️ 승인된 건만 본다</h2>
+     * 승인 대기 중인 신청으로 판정하면, 나중에 반려됐을 때 <b>근거 없는 벌점이 남는다</b>
+     * (멱등키로 들어가 취소 경로도 따로 필요해진다).
+     *
+     * <h2>⚠️ 외출 신청이 없으면 벌점이 없다</h2>
+     * 신청 없이 나간 것은 <b>무단 외출</b>이라 다른 건이고, 비교할 예정 시각 자체가 없다.
+     * 「지각 복귀」는 <b>약속한 시각을 넘긴 것</b>에만 붙는다.
+     *
+     * <p>⚠️ <b>좌석 장시간 미복귀와 다른 것이다</b> — 저쪽은 자리를 비운 것이고 이쪽은
+     * 건물 밖 외출이다.
+     */
+    private boolean isLateReturn(Long enrollmentId, LocalDate date, LocalTime returnedAt) {
+        return absenceReasonRepository
+                .findByEnrollmentIdAndAttendanceDate(enrollmentId, date).stream()
+                .filter(r -> r.getReasonType() == AbsenceReasonType.OUTING)
+                .filter(this::isApproved)
+                .map(AbsenceReason::getEndTime)
+                // 이관된 과거 데이터에 시각이 없을 수 있다 — 모르는 것을 늦었다고 보지 않는다
+                .filter(java.util.Objects::nonNull)
+                .anyMatch(returnedAt::isAfter);
     }
 
     /** 예정 시각 {@code -30분} 이후인가. */

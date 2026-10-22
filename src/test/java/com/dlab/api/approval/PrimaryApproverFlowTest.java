@@ -126,6 +126,58 @@ class PrimaryApproverFlowTest {
         assertThat(sent.getFailReason()).doesNotContain("변수 누락");
     }
 
+    @Test
+    @DisplayName("★★ 승인 결과 알림에도 승인항목이 실린다 — 접수톡에만 있으면 「무엇이」 승인됐는지 모른다")
+    void approvedNotificationCarriesRequestType() {
+        ApprovalRequest r = request();
+        approvalService.approve(r.getId(), teacherAccount.getId());
+        em.flush();
+        em.clear();
+
+        var sent = lastLog("APPROVAL_APPROVED_BEFORE_TIMEOUT");
+
+        // ★ 신청이 여러 건 걸려 있으면 「승인되었습니다」만으로는 어느 것인지 알 수 없다
+        assertThat(sent.getVariables()).containsEntry("requestType", "와이파이 해제");
+
+        // ★★ 이 변수는 required_variables 에도 들어가 있다 — 서비스가 안 채우면
+        //    예외가 아니라 **조용히 보류**된다. 그래서 사유를 본다
+        assertThat(sent.getFailReason()).doesNotContain("변수 누락");
+    }
+
+    @Test
+    @DisplayName("★★ 재요청톡은 비활성이라 나가지 않는다 — 그래도 재요청·이양 흐름은 그대로 돈다")
+    void reminderTemplateIsInactive() {
+        ApprovalRequest r = request();
+        rewind(r, TIMEOUT + 1);
+
+        assertThat(approvalService.sendReminders()).isEqualTo(1);
+        em.flush();
+        em.clear();
+
+        // ★ 발송은 막혔지만 **흐름은 살아 있다** — 이벤트·스케줄러를 지우면
+        //   「재요청 후 같은 대기시간을 한 번 더 준 뒤 이양」이 깨져서,
+        //   학부모가 알림을 보고 들어올 틈 없이 바로 이양된다
+        assertThat(em.find(ApprovalRequest.class, r.getId()).getReminderSentAt()).isNotNull();
+
+        var sent = lastLog("APPROVAL_REMINDER");
+        assertThat(sent.getStatus())
+                .isEqualTo(com.dlab.domain.notification.entity.NotificationStatus.SKIPPED);
+        assertThat(sent.getFailReason()).contains("비활성 템플릿");
+    }
+
+    private com.dlab.domain.notification.entity.NotificationLog lastLog(String eventCode) {
+        var logs = em.createQuery("""
+                        SELECT l FROM NotificationLog l
+                        WHERE l.eventCode = :event
+                        ORDER BY l.id DESC
+                        """, com.dlab.domain.notification.entity.NotificationLog.class)
+                .setParameter("event", com.dlab.domain.notification.entity.NotificationEvent
+                        .valueOf(eventCode))
+                .setMaxResults(1).getResultList();
+        assertThat(logs).as("%s 로그가 없다", eventCode).isNotEmpty();
+        return logs.get(0);
+    }
+
     private ApprovalRequest request() {
         ApprovalRequest r = approvalService.create(enrollment, RequestType.FIREWALL_UNLOCK);
         em.flush();

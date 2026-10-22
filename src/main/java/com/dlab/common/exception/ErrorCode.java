@@ -348,7 +348,23 @@ public enum ErrorCode {
     STUDENT_PROFILE_FORM_NOT_FOUND(HttpStatus.NOT_FOUND, "신상기록부 양식을 찾을 수 없습니다."),
     /** 지점 관리자가 공통 양식을 고치면 나머지 지점 화면이 같이 바뀐다(성적 양식과 같은 판단). */
     STUDENT_PROFILE_FORM_SCOPE_FORBIDDEN(HttpStatus.FORBIDDEN,
-            "전 지점 공통 신상기록부 양식은 본사만 다룰 수 있습니다.");
+            "전 지점 공통 신상기록부 양식은 본사만 다룰 수 있습니다."),
+
+    // ── D:VOCA 단어 시험 ──
+    /** 지점 시작일이 없으면 회차를 계산할 기준이 없다(v1 5.5). */
+    VOCAB_SCHEDULE_NOT_CONFIGURED(HttpStatus.NOT_FOUND, "단어 시험 일정이 설정되지 않았습니다."),
+    VOCAB_ROUND_NOT_FOUND(HttpStatus.NOT_FOUND, "단어 시험 회차를 찾을 수 없습니다."),
+    /** ★ 학생은 자기 지점에 공개된 회차만 응시한다(v1 9장 보안) — 서버가 검증한다. */
+    VOCAB_ROUND_FORBIDDEN(HttpStatus.FORBIDDEN, "응시할 수 없는 회차입니다."),
+    /** 범위에 출제할 단어가 없으면 0문항 시험이 만들어진다. */
+    VOCAB_NO_WORDS_IN_RANGE(HttpStatus.BAD_REQUEST, "출제할 단어가 없습니다."),
+    VOCAB_ATTEMPT_NOT_FOUND(HttpStatus.NOT_FOUND, "응시 기록을 찾을 수 없습니다."),
+    /** ★ 제출한 건을 다시 제출하면 점수가 덮인다 — 재응시는 새 응시로 시작한다. */
+    VOCAB_ATTEMPT_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "이미 제출한 응시입니다."),
+    /** 남의 응시를 제출·조회하면 점수가 섞인다. */
+    VOCAB_ATTEMPT_FORBIDDEN(HttpStatus.FORBIDDEN, "본인의 응시가 아닙니다."),
+    /** 문항 수가 안 맞으면 어느 문항이 빠졌는지 알 수 없어 채점이 어긋난다. */
+    VOCAB_ANSWER_MISMATCH(HttpStatus.BAD_REQUEST, "제출한 답안이 문항과 맞지 않습니다.");
 
     private final HttpStatus status;
     private final String message;

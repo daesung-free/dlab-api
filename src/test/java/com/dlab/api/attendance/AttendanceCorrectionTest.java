@@ -51,6 +51,14 @@ class AttendanceCorrectionTest {
     @Autowired AttendanceBoardService boardService;
     @Autowired DailyAttendanceConfirmService confirmService;
     @Autowired AttendanceTaggingLogRepository taggingLogRepository;
+    /**
+     * ★ 스파이다 — 실제 엔진이 돌면서 호출도 기록된다.
+     *
+     * <p>{@code apply} 가 {@code REQUIRES_NEW} 라 이 테스트의 트랜잭션에서 넣은 규칙이
+     * 보이지 않는다. 그래서 <b>부여 결과가 아니라 호출</b>을 본다.
+     */
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    com.dlab.domain.penalty.service.PenaltyRuleEngine penaltyRuleEngine;
     @Autowired AttendanceDailyStatusRepository dailyStatusRepository;
     @Autowired EntityManager em;
     @Autowired Clock clock;
@@ -309,5 +317,221 @@ class AttendanceCorrectionTest {
         assertThatThrownBy(() -> correctionService.correctStatus(
                 ilsanAdmin, minji.getId(), day, DailyStatus.PRESENT, false, "정정"))
                 .isInstanceOf(BusinessException.class);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 태깅 삭제 (디랩 1021 피드백 2-1)
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 지운 태깅은 순공시간에서 빠진다 — 지웠는데 숫자가 그대로면 지운 의미가 없다")
+    void deletedTaggingIsExcludedFromStudyTime() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        // 사람이 하원을 잘못 넣었다 (10:00) — 순공이 1시간으로 잡힌다
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.CHECK_OUT, LocalTime.of(10, 0), "하원 누락");
+        em.flush();
+        em.clear();
+        assertThat(confirmed().getStudyMinutes()).isEqualTo(60);
+
+        Long wrongId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .stream()
+                .filter(l -> l.getSource() == AttendanceSource.MANUAL)
+                .findFirst().orElseThrow().getId();
+
+        correctionService.deleteTagging(admin, minji.getId(), wrongId, "시각을 잘못 넣었다");
+        em.flush();
+        em.clear();
+
+        // ★★ null 로 돌아간다 — 「언제 갔는지 모른다」다.
+        //    하원을 지웠으니 등원만 남고, 그때는 서버가 추정하지 않는다(10/13 피드백 4-2).
+        //    13시간 같은 숫자가 찍히면 그게 버그다 — 지운 뒤 더 큰 값이 나오면 안 된다
+        assertThat(confirmed().getStudyMinutes()).isNull();
+        // 원장에서도 빠진다
+        assertThat(taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day))
+                .extracting(AttendanceTaggingLog::getEventType)
+                .containsExactly(AttendanceEventType.CHECK_IN);
+    }
+
+    @Test
+    @DisplayName("★★ 키오스크 태깅은 지울 수 없다 — 그 학생이 정말 왔었는지 확인할 방법이 없어진다")
+    void kioskTaggingCannotBeDeleted() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        Long kioskId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .get(0).getId();
+
+        assertThatThrownBy(() ->
+                correctionService.deleteTagging(admin, minji.getId(), kioskId, "지우고 싶다"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("키오스크");
+    }
+
+    @Test
+    @DisplayName("★ 조퇴를 지우면 하루가 다시 열린다 — 조퇴 취소 경로다")
+    void deletingEarlyLeaveReopensTheDay() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.EARLY_LEAVE, LocalTime.of(10, 0), "조퇴");
+        em.flush();
+        em.clear();
+        assertThat(confirmed().getStudyMinutes()).isEqualTo(60);
+
+        Long earlyLeaveId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .stream()
+                .filter(l -> l.getEventType() == AttendanceEventType.EARLY_LEAVE)
+                .findFirst().orElseThrow().getId();
+
+        correctionService.deleteTagging(admin, minji.getId(), earlyLeaveId, "복귀해서 조퇴 취소");
+        em.flush();
+        em.clear();
+
+        // ★ 조퇴가 없어지면 등원만 남아 「모른다」로 돌아간다.
+        //   조퇴를 취소한 학생은 하원을 다시 넣어야 순공이 계산된다 — 그게 정직한 표현이다
+        assertThat(confirmed().getStudyMinutes()).isNull();
+    }
+
+    @Test
+    @DisplayName("★ 두 번 눌러도 안전하다")
+    void deleteIsIdempotent() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.CHECK_OUT, LocalTime.of(10, 0), "하원 누락");
+        em.flush();
+        Long id = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .stream().filter(l -> l.getSource() == AttendanceSource.MANUAL)
+                .findFirst().orElseThrow().getId();
+
+        correctionService.deleteTagging(admin, minji.getId(), id, "오입력");
+        correctionService.deleteTagging(admin, minji.getId(), id, "오입력");
+        em.flush();
+    }
+
+    @Test
+    @DisplayName("★ 다른 학생의 태깅 id 로는 지워지지 않는다 — 지점 권한만 보면 통과한다")
+    void cannotDeleteAnotherStudentsTagging() {
+        Student other = new Student("DL-2", "박서준", "010-1111-1111");
+        em.persist(other);
+        StudentEnrollment seojun = new StudentEnrollment(other, bundang, (short) 2026,
+                "2026-0002", null, GradeType.HIGH3);
+        em.persist(seojun);
+        em.persist(new AttendanceTaggingLog(bundang, seojun, AttendanceEventType.CHECK_IN,
+                AttendanceSource.MANUAL,
+                day.atTime(9, 0).atZone(clock.getZone()).toInstant(), day));
+        em.flush();
+
+        Long othersId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(seojun.getId(), day)
+                .get(0).getId();
+
+        assertThatThrownBy(() ->
+                correctionService.deleteTagging(admin, minji.getId(), othersId, "실수"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("그 학생의 태깅");
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 출결 정정 ↔ 벌점 연동 (디랩 1021 피드백 2-1)
+    //
+    // ★★ 엔진을 스파이로 둬 「부르는가」를 본다 — 실제 부여 결과를 보지 않는다.
+    //    PenaltyRuleEngine.apply 가 REQUIRES_NEW 라, @Transactional 테스트에서
+    //    em.persist 로 넣은 규칙은 **커밋되지 않아 새 트랜잭션에서 안 보인다.**
+    //    그래서 부여 결과로 검증하면 늘 0건이 나오고, 그걸 「연동이 안 된다」로
+    //    읽거나 — 더 나쁘게 — 기대값을 0 으로 맞춰 **거짓 통과**를 만든다.
+    //    실제로 처음 쓴 테스트 5건 중 1건이 그렇게 통과했다.
+    //
+    //    엔진 자체의 부여·멱등·취소 동작은 PenaltyRuleEngineTest 가 본다.
+    //    여기서 빠져 있던 것은 **정정 경로가 엔진을 부르지 않는다**는 것이었다.
+    // ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 관리자가 지각 태깅을 넣으면 엔진을 부른다 — 디랩이 본 그대로 안 부르고 있었다")
+    void manualTaggingTriggersEngine() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.LATE, LocalTime.of(9, 30), "늦게 온 것 확인");
+
+        // ⚠️ 지금까지 엔진은 키오스크 태깅과 일자 확정 배치에서만 돌았고,
+        //    그 배치는 결석만 부여한다 — 관리자 정정에서는 아무 일도 안 났다
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.argThat(e -> e.getId().equals(minji.getId())),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                org.mockito.ArgumentMatchers.eq(AttendanceEventType.LATE.getCode()),
+                org.mockito.ArgumentMatchers.eq(day));
+    }
+
+    @Test
+    @DisplayName("★★ 태깅을 지우면 그 이벤트의 자동 벌점 취소를 부른다")
+    void deletingTaggingRevokesPenalty() {
+        kioskTag(AttendanceEventType.CHECK_IN, 9, 0);
+        correctionService.addTagging(admin, minji.getId(), day,
+                AttendanceEventType.LATE, LocalTime.of(9, 30), "늦게 온 것 확인");
+        em.flush();
+
+        Long taggingId = taggingLogRepository
+                .findByEnrollmentIdAndAttendanceDateOrderByRecordedAtAsc(minji.getId(), day)
+                .stream()
+                .filter(l -> l.getEventType() == AttendanceEventType.LATE)
+                .findFirst().orElseThrow().getId();
+
+        correctionService.deleteTagging(admin, minji.getId(), taggingId, "오입력");
+
+        // 지각 태깅을 지웠는데 지각 벌점이 남으면 왜 남았는지 알 수 없다
+        org.mockito.Mockito.verify(penaltyRuleEngine).revokeAuto(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                org.mockito.ArgumentMatchers.eq(AttendanceEventType.LATE.getCode()),
+                org.mockito.ArgumentMatchers.eq(day));
+    }
+
+    @Test
+    @DisplayName("★★ 무단결석 → 사유결석이면 취소를 부른다 — 상태는 ABSENT 그대로다")
+    void excusingAbsenceRevokesPenalty() {
+        correctionService.correctStatus(admin, minji.getId(), day,
+                DailyStatus.ABSENT, false, "무단결석 확인");
+        // 무단결석이 되면 부여를 부른다
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.TriggerCondition.ABSENT),
+                org.mockito.ArgumentMatchers.eq(day));
+
+        // ★ 사유가 늦게 승인됐다 — 상태는 그대로지만 벌점은 없어야 한다
+        correctionService.correctStatus(admin, minji.getId(), day,
+                DailyStatus.ABSENT, true, "사유 승인됨");
+
+        org.mockito.Mockito.verify(penaltyRuleEngine).revokeAuto(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.PenaltyTriggerType.ATTENDANCE),
+                org.mockito.ArgumentMatchers.eq(
+                        com.dlab.domain.penalty.entity.TriggerCondition.ABSENT),
+                org.mockito.ArgumentMatchers.eq(day));
+    }
+
+    @Test
+    @DisplayName("★ 상태가 벌점 여부를 바꾸지 않으면 엔진을 부르지 않는다 — 헛호출이 쌓이면 안 된다")
+    void noEngineCallWhenPenaltyStateUnchanged() {
+        // 정상 등원 → 조퇴. 둘 다 "결석 벌점 대상이 아니다" 라 결석 처리가 바뀌지 않는다
+        correctionService.correctStatus(admin, minji.getId(), day,
+                DailyStatus.PRESENT, false, "정상");
+        correctionService.correctStatus(admin, minji.getId(), day,
+                DailyStatus.EARLY_LEAVE, false, "조퇴");
+
+        org.mockito.Mockito.verify(penaltyRuleEngine, org.mockito.Mockito.never())
+                .apply(org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.eq(
+                                com.dlab.domain.penalty.entity.TriggerCondition.ABSENT),
+                        org.mockito.ArgumentMatchers.any());
     }
 }

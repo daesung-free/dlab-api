@@ -5,6 +5,7 @@ import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.attendance.entity.AttendanceTaggingLog;
 import com.dlab.domain.period.entity.PeriodMaster;
 import com.dlab.domain.period.entity.PeriodType;
+import lombok.extern.slf4j.Slf4j;
 import java.time.Duration;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -43,6 +44,7 @@ import org.springframework.stereotype.Component;
  * <b>둘 다 틀리지만 전자가 더 위험하다</b> — 랭킹 1위가 되기 때문이다.
  */
 @Component
+@Slf4j
 public class StudyTimeCalculator {
 
     /** 재실을 여는 이벤트. */
@@ -127,18 +129,37 @@ public class StudyTimeCalculator {
                                              LocalTime until) {
         List<Interval> result = new ArrayList<>();
         LocalTime openedAt = null;
+        /** 조퇴로 하루가 닫혔는가. 닫힌 뒤 태깅은 재실을 다시 열지 않는다 */
+        boolean closedForDay = false;
 
         List<AttendanceTaggingLog> sorted = dayLogs.stream()
                 .sorted(Comparator.comparing(AttendanceTaggingLog::getRecordedAt))
                 .toList();
 
-        for (AttendanceTaggingLog log : sorted) {
+        for (AttendanceTaggingLog tagging : sorted) {
             // ★ systemDefault()를 쓰면 안 된다 — 운영 서버(EC2/ECS)는 UTC라
             //   교시(KST 기준 시각)와 9시간 어긋나 순공시간이 통째로 틀어진다.
             //   로컬은 KST라 통과하고 CI·운영에서만 깨져서 알아채기 어렵다
-            LocalTime at = log.getRecordedAt().atZone(TimeConfig.KST).toLocalTime();
+            LocalTime at = tagging.getRecordedAt().atZone(TimeConfig.KST).toLocalTime();
 
-            if (OPENING.contains(log.getEventType())) {
+            // ★★ 조퇴는 하루의 종료 경계다 — 그 뒤 태깅으로 재실이 다시 열리면 안 된다.
+            //    「08:30 외출 → 08:30 조퇴 → 08:31 복귀」를 넣으면 조퇴가 버려지고
+            //    복귀가 재실을 다시 열어, 안 닫힌 구간이 마지막 교시까지 밀려
+            //    08:31 에 간 학생에게 순공 11시간 49분이 찍혔다(2026-10-16 한*주, 실제 발생).
+            //    조퇴 뒤에 다시 들어왔다면 조퇴가 취소돼야 맞다 — 계산기가 추측하지 않는다.
+            if (closedForDay) {
+                continue;
+            }
+
+            if (tagging.getEventType() == AttendanceEventType.EARLY_LEAVE) {
+                if (openedAt != null) {
+                    result.add(new Interval(openedAt, at));
+                    openedAt = null;
+                }
+                // ⚠️ 재실이 안 열린 상태로 조퇴가 와도 종료는 세운다. 열려 있지 않다고
+                //    버리면(종전 동작) 뒤따르는 복귀가 하루를 다시 열어 버린다
+                closedForDay = true;
+            } else if (OPENING.contains(tagging.getEventType())) {
                 // 이미 열려 있으면 무시한다. 중복 등원 기록이 재실을 두 번 세지 않게
                 if (openedAt == null) {
                     openedAt = at;
@@ -146,6 +167,11 @@ public class StudyTimeCalculator {
             } else if (openedAt != null) {
                 result.add(new Interval(openedAt, at));
                 openedAt = null;
+            } else {
+                // ⚠️ 재실이 열려 있지 않은데 닫는 이벤트가 왔다 — 조용히 버리지 않는다.
+                //    원장이 어긋난 것이고(중복 외출·순서 뒤바뀜) 그대로 두면 숫자만 이상해진다
+                log.warn("재실이 열리지 않은 상태의 닫는 태깅 — event={}, at={}, date={}",
+                        tagging.getEventType(), at, tagging.getAttendanceDate());
             }
         }
 

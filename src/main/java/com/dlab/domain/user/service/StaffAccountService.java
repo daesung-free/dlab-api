@@ -12,6 +12,7 @@ import com.dlab.domain.audit.AuditRecorder;
 import com.dlab.domain.user.entity.*;
 import com.dlab.domain.user.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ import java.util.stream.Collectors;
  *
  * <p>역할은 {@code account} 기준으로 부여한다 — 선생님·직원 어느 쪽인지 매번 분기하지 않기 위해서다.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StaffAccountService {
@@ -178,6 +180,35 @@ public class StaffAccountService {
         return new Created<>(teacher, account, temporary);
     }
 
+    /**
+     * 외부 강사 등록 — <b>로그인 계정을 만들지 않는다</b> (1016 피드백 2-13).
+     *
+     * <h2>★ 왜 계정을 만들지 않는가</h2>
+     * 특강 한 건을 맡는 외부 강사에게 관리 프로그램 계정을 주면 <b>그 지점 학생 정보에
+     * 접근할 수 있는 계정이 외부에 생긴다.</b> 그리고 퇴출 시 계정을 지우는 절차가
+     * 운영에 없다 — 특강이 끝난 뒤에도 계정이 남는다.
+     *
+     * <h2>⚠️ 그래서 담임으로는 지정되지 않는다</h2>
+     * 담임은 곧 방화벽 승인 에스컬레이션 대상이고, <b>로그인하지 못하는 사람이 담임이면
+     * 학부모 무응답 시 넘길 사람이 없어 신청이 멈춘다.</b> 담임 지정 경로에서 막는다.
+     *
+     * <p>계정이 없으므로 임시 비밀번호도 없다 — {@code Created} 를 쓰지 않고 사람만 돌려준다.
+     */
+    @Transactional
+    public Teacher createExternalTeacher(Long academyId, String name, String phone,
+                                         String affiliation, AuthPrincipal principal) {
+        verifyAccess(academyId, principal);
+
+        Academy academy = academyRepository.findById(academyId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
+
+        Teacher teacher = teacherRepository.save(
+                Teacher.external(academy, name, phone, affiliation));
+        log.info("외부 강사 등록: academyId={}, teacherId={}, 소속={} (계정 없음)",
+                academyId, teacher.getId(), affiliation);
+        return teacher;
+    }
+
     @Transactional
     public Created<Employee> createEmployee(Long academyId, String name, String deptName,
                                             String positionName, String phone, String email,
@@ -315,8 +346,9 @@ public class StaffAccountService {
         }
         account.approve();
         auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
-                AuditEntityListener.Change.of("status",
-                        AccountStatus.PENDING.name(), AccountStatus.ACTIVE.name()));
+                List.of(AuditEntityListener.Change.labeled("status", "계정 상태",
+                        AccountStatus.PENDING.name(), AccountStatus.ACTIVE.name(),
+                        "승인 대기", "활성")));
         return account;
     }
 
@@ -360,7 +392,8 @@ public class StaffAccountService {
         loginAttemptStore.clear(account.getLoginId());
         if (wasLocked) {
             auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
-                    AuditEntityListener.Change.of("locked", "true", "false"));
+                    List.of(AuditEntityListener.Change.labeled("locked", "계정 잠금",
+                            "true", "false", "잠김", "풀림")));
         }
         return account;
     }
@@ -390,7 +423,9 @@ public class StaffAccountService {
         loginAttemptStore.clear(account.getLoginId());
         refreshTokenStore.delete(accountId);
         auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
-                AuditEntityListener.Change.of("temporaryPassword", null, "reissued"));
+                List.of(AuditEntityListener.Change.labeled(
+                        "temporaryPassword", "임시 비밀번호",
+                        null, "reissued", null, "재발급")));
         return temporary;
     }
 
@@ -442,8 +477,10 @@ public class StaffAccountService {
         grantRoles(accountId, roles);
 
         auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, targetAcademyId,
-                AuditEntityListener.Change.of("roles", joinRoles(before),
-                        joinRoles(roles.stream().map(Role::name).collect(Collectors.toSet()))));
+                List.of(AuditEntityListener.Change.labeled("roles", "권한",
+                        joinRoles(before),
+                        joinRoles(roles.stream().map(Role::name)
+                                .collect(Collectors.toSet())))));
     }
 
     /** 화면에 그대로 찍히는 값이라 순서를 고정한다 — 안 그러면 같은 역할 집합이 매번 달라 보인다. */

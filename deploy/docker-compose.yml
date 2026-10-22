@@ -122,6 +122,36 @@ services:
       #   .env 에만 넣고 여기 빠뜨리면 컨테이너까지 전달되지 않아 결제만 조용히 실패한다
       #   (CORS_ALLOWED_ORIGINS 로 한 번 겪은 일이다)
       KCP_PRIVATE_KEY_PASSWORD: ${KCP_PRIVATE_KEY_PASSWORD:-}
+      # 문자·알림톡(알리고). ★ 비어 있으면 목업이 남아 **문자가 로그로만 찍히는데
+      #   API 는 200 을 준다** — 인증번호가 아무에게도 가지 않는다.
+      # ★★ ALIGO_TEST_MODE 가 true 면 과금도 실제 발송도 없이 호출만 성공한다.
+      #    운영 전환 때 false 로 바꿀 것(기동 로그에 경고가 남는다).
+      # ★ ALIGO_SENDER_KEY(발신프로필 키)는 알림톡 전용이다 — 문자는 없이도 나간다.
+      ALIGO_API_KEY: ${ALIGO_API_KEY:-}
+      ALIGO_USER_ID: ${ALIGO_USER_ID:-}
+      ALIGO_SENDER_KEY: ${ALIGO_SENDER_KEY:-}
+      ALIGO_SENDER_PHONE: ${ALIGO_SENDER_PHONE:-}
+      ALIGO_TEST_MODE: ${ALIGO_TEST_MODE:-true}
+      # ★★ 홈페이지 입학신청 연동. **이게 비어 있으면 입학신청이 한 건도 안 들어온다.**
+      #
+      #   ⚠️ 원래 이 블록이 아예 없었다 — .env 에 HOMEPAGE_INTEGRATION_API_KEY 를
+      #      넣어 뒀는데 **compose 가 컨테이너에 넘기지 않아** B안이 전부 401 이었다.
+      #      값을 넣었다고 되는 것이 아니라 여기에도 적혀 있어야 한다.
+      #
+      #   A안(/dlab/**, 대성전산 규격) — CLIENT_ID · SECRET
+      #     ⚠️ 비면 **인증 실패가 910「토큰이 만료되었습니다」로 내려간다.** 토큰이 없는
+      #        것과 자격증명이 빈 것이 밖에서 구분되지 않는다(디지털대성 규격이 그렇다).
+      #        그래서 홈페이지 쪽에서는 "토큰을 갱신해도 계속 910" 으로만 보인다.
+      #     ★ SECRET 은 평문이어야 한다 — 검증식이 MD5(yyyyMMdd + secret) 라
+      #       해시로 저장하면 매일 다시 계산할 수 없다.
+      #
+      #   B안(/api/v1/homepage/**, REST) — API_KEY
+      #     비면 401 이다. ★ A안 토큰과 별개이고 고정 키 하나로 끝난다.
+      #
+      #   ⚠️ 둘 다 **홈페이지 개발사와 합의한 값**이라 서버에서 임의로 만들면 안 된다.
+      HOMEPAGE_INTEGRATION_CLIENT_ID: ${HOMEPAGE_INTEGRATION_CLIENT_ID:-}
+      HOMEPAGE_INTEGRATION_SECRET: ${HOMEPAGE_INTEGRATION_SECRET:-}
+      HOMEPAGE_INTEGRATION_API_KEY: ${HOMEPAGE_INTEGRATION_API_KEY:-}
       # ★ 저장용 비밀키(AES-256). 도어락 번호를 암호화해 보관하는 데 쓴다.
       #   Base64 로 인코딩된 32바이트여야 한다 — `openssl rand -base64 32` 로 만든다.
       #   비어 있으면 앱은 정상 기동하고 **도어락 번호 등록만** 실패한다.

@@ -119,6 +119,72 @@ public class TuitionPricingService {
                 row.dailyStudyRoom() * remainingDays);
     }
 
+    /**
+     * 계산 <b>근거</b>까지 함께 — 데스크가 등록을 누르기 전에 봐야 한다 (1016 피드백 2-4).
+     *
+     * <p>★ <b>금액만 돌려주면 「왜 166,667원인가」에 답할 수 없다.</b> 디랩이 요청한 것이
+     * <i>"일할계산의 과정과 값이 함께 출력"</i>이다.
+     *
+     * <p>⚠️ <b>월 전체 청구에서는 1일 단가를 내리지 않는다({@code null}).</b> 월 전체는
+     * <b>정액</b>이라 1일 단가 × 일수와 값이 다르다(660,000 vs 22,758×29 = 659,982) —
+     * 그런데도 단가를 내려주면 화면이 <i>"660,000 ÷ 29 × 29"</i> 라고 적고,
+     * 그 식의 결과가 청구액과 달라서 <b>데스크는 계산이 틀렸다고 읽는다.</b>
+     *
+     * @param remainingDays 비우면 월 전체
+     */
+    public Breakdown breakdown(TuitionPrice price, short year, int month, Long academyId,
+                               int discountRate, Integer remainingDays) {
+        int teachingDays = teachingDays(year, month, academyId);
+        int days = remainingDays != null ? remainingDays : teachingDays;
+        boolean wholeMonth = days == teachingDays;
+
+        Amounts supplied = prorated(price, teachingDays, days, 0);
+        Amounts billed = prorated(price, teachingDays, days, discountRate);
+
+        DailyFeeCalculator.Row row = wholeMonth ? null
+                : DailyFeeCalculator.rowOf(price, teachingDays, 0);
+
+        return new Breakdown(
+                price.getTuitionFee(), price.getStudyRoomFee(),
+                teachingDays, wholeMonth ? null : days,
+                row == null ? null : row.dailyTuition(),
+                row == null ? null : row.dailyStudyRoom(),
+                supplied.tuition(), supplied.studyRoom(), supplied.total(),
+                discountRate, supplied.total() - billed.total(), billed.total(),
+                DailyFeeCalculator.defaultRounding().name());
+    }
+
+    /**
+     * 일할 계산 근거 한 장.
+     *
+     * @param monthlyTuition   월 정가 교습비(할인 전)
+     * @param remainingDays    일할 일수. <b>월 전체면 {@code null}</b>
+     * @param dailyTuition     1일 교습비. <b>월 전체면 {@code null}</b> — 위 참고
+     * @param discountAmount   할인액. <b>교습비에만 붙는다</b>(독서실비는 규정상 할인 없음)
+     * @param rounding         원 단위 절사 방식({@code FLOOR} = 버림). 화면이 문구로 적는다
+     */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "TuitionBreakdownResponse")
+    public record Breakdown(int monthlyTuition, int monthlyStudyRoom,
+                            int teachingDays, Integer remainingDays,
+                            Integer dailyTuition, Integer dailyStudyRoom,
+                            int suppliedTuition, int suppliedStudyRoom, int suppliedTotal,
+                            int discountRate, int discountAmount, int billedAmount,
+                            String rounding) {
+
+        /**
+         * 월 전체 청구인가 — 화면이 「정액」과 「일할」 식을 가른다.
+         *
+         * <p>⚠️ <b>{@code @JsonProperty} 가 없으면 응답에 실리지 않는다.</b> 레코드는
+         * <b>컴포넌트만</b> 직렬화되고 파생 메서드는 빠진다 — 실제로 한 번 빠뜨렸고,
+         * 화면은 <b>없는 칸을 {@code undefined} 로 받아 「일할」로 읽는다.</b>
+         * 그러면 월 전체 청구에 나눗셈 식이 붙어 18원이 어긋난 값이 화면에 적힌다.
+         */
+        @com.fasterxml.jackson.annotation.JsonProperty("wholeMonth")
+        public boolean wholeMonth() {
+            return remainingDays == null;
+        }
+    }
+
     // ─────────────────────────────────────────── 관리
 
     @Transactional(readOnly = true)

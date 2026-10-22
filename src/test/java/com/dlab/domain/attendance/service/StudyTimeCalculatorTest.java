@@ -180,4 +180,42 @@ class StudyTimeCalculatorTest {
         assertThat(StudyTimeCalculator.format(Duration.ZERO)).isEqualTo("00시간 00분");
         assertThat(StudyTimeCalculator.format(Duration.ofMinutes(630))).isEqualTo("10시간 30분");
     }
+
+    @Test
+    @DisplayName("★★ 조퇴 뒤 복귀가 찍혀도 하루가 다시 열리지 않는다 — 11시간 49분이 찍혔던 건")
+    void earlyLeaveClosesTheDay() {
+        // 2026-10-16 실제 발생. 08:20 에 와서 08:31 까지 있었는데 순공 11시간 49분이 찍혔다.
+        // 조퇴가 openedAt == null 이라 버려지고, 복귀가 재실을 다시 열어
+        // 안 닫힌 구간이 마지막 교시까지 밀린 것이다.
+        List<AttendanceTaggingLog> logs = List.of(
+                log(CHECK_IN, 8, 20),
+                log(OUTING, 8, 30),
+                log(EARLY_LEAVE, 8, 30),
+                log(RETURN, 8, 31));
+
+        // 09:00 부터가 학습 교시라 08:20~08:30 은 교집합이 없다 → 0분
+        assertThat(calc(logs)).isEqualTo(Duration.ZERO);
+    }
+
+    @Test
+    @DisplayName("★ 조퇴 전까지는 정상으로 센다 — 종료 경계가 앞을 잘라먹지 않는다")
+    void countsUntilEarlyLeave() {
+        List<AttendanceTaggingLog> logs = List.of(
+                log(CHECK_IN, 9, 0),
+                log(EARLY_LEAVE, 11, 0),
+                log(RETURN, 11, 30));   // ★ 이 복귀는 무시된다
+
+        assertThat(calc(logs)).isEqualTo(Duration.ofHours(2));
+    }
+
+    @Test
+    @DisplayName("★ 조퇴 뒤 등원 태깅도 하루를 다시 열지 않는다 — 카드를 한 번 더 찍은 경우")
+    void checkInAfterEarlyLeaveIsIgnored() {
+        List<AttendanceTaggingLog> logs = List.of(
+                log(CHECK_IN, 9, 0),
+                log(EARLY_LEAVE, 10, 0),
+                log(CHECK_IN, 14, 0));   // 다시 와서 찍었다 — 조퇴가 취소돼야 맞고, 계산기는 추측하지 않는다
+
+        assertThat(calc(logs)).isEqualTo(Duration.ofHours(1));
+    }
 }

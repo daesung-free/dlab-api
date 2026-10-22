@@ -70,11 +70,17 @@ public class AuditChangeInterceptor implements Interceptor {
             if (java.util.Objects.equals(before, after)) {
                 continue;
             }
-            boolean masked = fields.containsKey(name)
-                    && fields.get(name).isAnnotationPresent(AuditMasked.class);
-            changes.add(new AuditEntityListener.Change(name,
+            java.lang.reflect.Field field = fields.get(name);
+            boolean masked = field != null && field.isAnnotationPresent(AuditMasked.class);
+            // ★★ 라벨을 여기서 박는다 — 읽을 때는 entity_type 이 한국어 이름이라
+            //    어느 클래스였는지 되짚을 수 없다(Change javadoc 참고)
+            String label = labelOf(field);
+            changes.add(new AuditEntityListener.Change(name, label,
                     masked ? "***" : format(before),
-                    masked ? "***" : format(after)));
+                    masked ? "***" : format(after),
+                    // 마스킹된 값에 라벨을 달면 가린 의미가 없다
+                    masked ? null : valueLabel(before),
+                    masked ? null : valueLabel(after)));
         }
 
         if (!changes.isEmpty()) {
@@ -104,6 +110,40 @@ public class AuditChangeInterceptor implements Interceptor {
      * <p>연관은 <b>{@code getId()}만</b> 부른다 — 프록시를 문자열로 풀면 초기화 조회가
      * 플러시 도중에 나가고, 개인정보까지 이력으로 복제된다.
      */
+    /** {@link AuditLabel} 이 없으면 {@code null} — 화면이 필드명을 그대로 보여준다. */
+    private static String labelOf(java.lang.reflect.Field field) {
+        if (field == null) {
+            return null;
+        }
+        AuditLabel label = field.getAnnotation(AuditLabel.class);
+        return label == null ? null : label.value();
+    }
+
+    /**
+     * 값의 한국어 이름.
+     *
+     * <p>★ enum 에 {@code displayName()} 이 있으면 그걸 쓴다 — {@code ConsultStatus}·
+     * {@code AdmissionType} 등이 이미 그 패턴이다. 없으면 {@code null} 이고 화면이
+     * {@code PENDING} 을 그대로 보여준다.
+     *
+     * <p>⚠️ <b>여기서 추측하지 않는다.</b> 「PENDING = 대기」처럼 보편적으로 보이는
+     * 매핑을 넣으면 <b>영역마다 다른 뜻인 값에 틀린 한국어가 붙는다</b> —
+     * 청구의 {@code PENDING}(발행 전)과 가입의 {@code PENDING}(승인 대기)은 다르다.
+     * 각 enum 이 자기 이름을 말하게 둔다.
+     */
+    private static String valueLabel(Object value) {
+        if (!(value instanceof Enum<?> e)) {
+            return null;
+        }
+        try {
+            var method = e.getClass().getMethod("displayName");
+            Object name = method.invoke(e);
+            return name == null ? null : String.valueOf(name);
+        } catch (ReflectiveOperationException ignored) {
+            return null;
+        }
+    }
+
     private static String format(Object value) {
         if (value == null) {
             return null;

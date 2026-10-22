@@ -1,5 +1,7 @@
 package com.dlab.domain.attendance.entity;
 
+import com.dlab.domain.audit.AuditLabel;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -33,6 +35,7 @@ import lombok.NoArgsConstructor;
  * </ul>
  */
 @Getter
+@Audited("출결 정정")
 @Entity
 @Table(name = "attendance_modification")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -54,31 +57,50 @@ public class AttendanceModification extends BaseEntity {
     private StudentEnrollment enrollment;
 
     @Column(name = "attendance_date", nullable = false)
+    @AuditLabel("대상 일자")
     private LocalDate attendanceDate;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "before_status", length = 20)
+    @AuditLabel("이전 상태")
     private DailyStatus beforeStatus;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "after_status", length = 20)
+    @AuditLabel("변경 상태")
     private DailyStatus afterStatus;
 
     @Column(name = "before_excused")
+    @AuditLabel("이전 사유 인정")
     private Boolean beforeExcused;
 
     @Column(name = "after_excused")
+    @AuditLabel("변경 사유 인정")
     private Boolean afterExcused;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "added_event", length = 20)
+    @AuditLabel("추가한 태깅")
     private AttendanceEventType addedEvent;
 
     @Column(name = "added_at")
+    @AuditLabel("추가 태깅 시각")
     private Instant addedAt;
+
+    /** 삭제한 태깅의 이벤트. {@link #addedEvent} 와 별도 칸이다 — 추가와 구분해야 한다 */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "removed_event", length = 20)
+    @AuditLabel("삭제한 태깅")
+    private AttendanceEventType removedEvent;
+
+    /** 삭제한 <b>태깅의 기록 시각</b>. 언제 지웠는가가 아니다 */
+    @Column(name = "removed_at")
+    @AuditLabel("삭제 태깅 시각")
+    private Instant removedAt;
 
     /** 정정 사유. 필수다 — 없으면 이력이 감사 자료가 되지 못한다. */
     @Column(nullable = false, length = 200)
+    @AuditLabel("정정 사유")
     private String reason;
 
     private AttendanceModification(StudentEnrollment enrollment, LocalDate attendanceDate,
@@ -102,6 +124,24 @@ public class AttendanceModification extends BaseEntity {
         modification.beforeExcused = beforeExcused;
         modification.afterStatus = afterStatus;
         modification.afterExcused = afterExcused;
+        return modification;
+    }
+
+    /**
+     * 태깅 <b>삭제</b> 이력 (디랩 1021 피드백 2-1).
+     *
+     * <p>★ {@code addedEvent} 를 재사용하지 않는다 — 추가와 삭제가 구분되지 않는다.
+     *
+     * @param at 지운 <b>태깅의 기록 시각</b>이다. 언제 지웠는가는 {@code createdAt} 이다
+     */
+    public static AttendanceModification ofTaggingRemoved(
+            StudentEnrollment enrollment, LocalDate attendanceDate,
+            AttendanceEventType event, Instant at, String reason) {
+
+        AttendanceModification modification =
+                new AttendanceModification(enrollment, attendanceDate, reason);
+        modification.removedEvent = event;
+        modification.removedAt = at;
         return modification;
     }
 

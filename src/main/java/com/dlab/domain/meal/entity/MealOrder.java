@@ -1,5 +1,7 @@
 package com.dlab.domain.meal.entity;
 
+import com.dlab.domain.audit.AuditLabel;
+import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.user.entity.Academy;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -32,6 +34,7 @@ import lombok.NoArgsConstructor;
  * <b>결제가 붙을 자리가 주문</b>이다. 취소는 항목 단위다.
  */
 @Getter
+@Audited("급식 신청")
 @Entity
 @Table(name = "meal_order")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -51,10 +54,12 @@ public class MealOrder extends BaseEntity {
 
     /** 대상 월. 그 달 <b>1일</b>로 저장한다 — 범위 조회가 쉽다. */
     @Column(name = "target_month", nullable = false)
+    @AuditLabel("대상 월")
     private LocalDate targetMonth;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @AuditLabel("신청 상태")
     private MealOrderStatus status = MealOrderStatus.PENDING;
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -87,6 +92,18 @@ public class MealOrder extends BaseEntity {
      */
     public int totalAmount() {
         return activeItems().stream().mapToInt(MealOrderItem::amount).sum();
+    }
+
+    /**
+     * 단가가 없는 끼니가 섞여 있는가 — <b>합계를 믿을 수 없다는 뜻</b>이다.
+     *
+     * <p>★ {@link #totalAmount()} 는 단가 없는 끼니를 <b>0으로 더한다.</b> 그래서 단가를
+     * 등록하지 않은 주문이 합계 <b>0원</b>으로 내려가고, 화면은 그것을 <b>「무료」로 읽는다</b> —
+     * 끼니 단위에서 {@code unitPrice} 를 {@code null} 로 지켜 「무료」와 「금액 미상」을
+     * 구분해 둔 것이 주문 단위에서 무너지는 자리다. 표시 계층이 이걸로 가른다.
+     */
+    public boolean hasUnpricedItem() {
+        return activeItems().stream().anyMatch(i -> i.getUnitPrice() == null);
     }
 
     public YearMonth month() {
@@ -134,6 +151,7 @@ public class MealOrder extends BaseEntity {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "billing_id")
+    @AuditLabel("연결 청구")
     private com.dlab.domain.payment.entity.Billing billing;
 
     public void assignBilling(com.dlab.domain.payment.entity.Billing billing) {
@@ -143,6 +161,21 @@ public class MealOrder extends BaseEntity {
 
     public boolean isBilled() {
         return billing != null;
+    }
+
+    /**
+     * <b>살아 있는</b> 청구가 붙어 있는가 — 재발행 가능 여부를 이걸로 판단한다.
+     *
+     * <p>★★ {@link #isBilled()} 는 <b>취소 여부를 보지 않는다.</b> 그래서 잘못 발행한
+     * 급식 청구를 데스크가 취소하면 주문은 여전히 「발행됨」으로 남아
+     * <b>다시 발행할 수 없는 상태로 영구히 굳는다</b> — 그 학생 급식비는 그대로 미청구가 된다.
+     * 발행 판정에는 이쪽을 쓴다.
+     *
+     * <p>{@code isBilled()} 를 그대로 둔 이유는 <b>이력</b>이기 때문이다. 목록의 청구번호·
+     * 청구금액은 취소된 청구라도 보여야 한다 — 안 보이면 데스크가 「취소한 적이 없다」로 읽는다.
+     */
+    public boolean hasActiveBilling() {
+        return billing != null && !billing.isCancelled();
     }
 
     /**

@@ -64,6 +64,15 @@ public class ReadinessService {
     private final MenuRepository menuRepository;
     private final SmsSender smsSender;
 
+    /**
+     * 알리고 설정·클라이언트. <b>키가 없으면 빈이 아예 없다</b>(= 목업 상태) —
+     * {@code Optional} 로 받아 그때는 건너뛴다.
+     */
+    private final java.util.Optional<com.dlab.integration.aligo.AligoProperties> aligoProperties;
+    private final java.util.Optional<com.dlab.integration.aligo.AligoClient> aligoClient;
+    private final java.util.Optional<com.dlab.integration.aligo.AligoAlimtalkClient>
+            alimtalkClient;
+
     @Transactional(readOnly = true)
     public Report check(short year) {
         List<Check> common = commonChecks(year);
@@ -116,11 +125,55 @@ public class ReadinessService {
                 realSender ? "발송 구현체 연결됨"
                         : "목업이다 — 인증번호가 로그로만 찍히는데 API 는 정상 응답한다"));
 
+        addSmsSendingChecks(checks);
+
         boolean menus = !menuRepository.findAllOrdered().isEmpty();
         checks.add(Check.of("MENU_CATALOG", "메뉴 카탈로그", Severity.WARNING, menus,
                 "비면 메뉴 노출 설정 화면이 빈 목록으로 뜬다"));
 
         return checks;
+    }
+
+    /**
+     * 문자 발송이 <b>정말 나가는 상태인지</b> 본다.
+     *
+     * <h2>★ 구현체가 붙은 것만으로는 부족하다</h2>
+     * 알리고는 둘 중 하나만 어긋나도 <b>호출은 성공하는데 아무도 못 받는다.</b>
+     * <ul>
+     *   <li><b>테스트 모드</b> — 과금도 실제 발송도 없이 성공 코드가 온다</li>
+     *   <li><b>선불 잔액</b> — 0이면 발송이 실패하는데, 실패가 HTTP 상태가 아니라
+     *       응답 본문({@code result_code})에만 나온다</li>
+     * </ul>
+     * 둘 다 「설정이 빠졌는데 화면은 멀쩡한」 부류라 여기서 드러내는 것이 맞다.
+     *
+     * <p>잔액 조회는 <b>외부 호출</b>이다 — 실패해도 점검 전체를 깨지 않고 WARNING 으로 남긴다.
+     */
+    private void addSmsSendingChecks(List<Check> checks) {
+        if (aligoProperties.isEmpty() || aligoClient.isEmpty()) {
+            return;
+        }
+
+        boolean live = !aligoProperties.get().testModeOrDefault();
+        checks.add(Check.of("SMS_TEST_MODE", "문자 테스트 모드", Severity.BLOCKER, live,
+                live ? "실제 발송 모드다"
+                        : "테스트 모드다 — 호출은 성공하는데 과금도 실제 발송도 없다. "
+                          + "ALIGO_TEST_MODE=false 로 바꿀 것"));
+
+        try {
+            var remain = aligoClient.get().remain();
+            boolean enough = remain.sms() > 0;
+            checks.add(Check.of("SMS_BALANCE", "문자 잔여 건수", Severity.BLOCKER, enough,
+                    enough ? "SMS %d건 · LMS %d건".formatted(remain.sms(), remain.lms())
+                            : "잔액이 없다 — 선불이라 충전하지 않으면 인증 문자가 전부 실패한다"));
+        } catch (RuntimeException e) {
+            checks.add(Check.of("SMS_BALANCE", "문자 잔여 건수", Severity.WARNING, false,
+                    "조회 실패 — 키나 네트워크를 확인할 것: " + e.getMessage()));
+        }
+
+        boolean alimtalk = aligoProperties.get().alimtalkConfigured();
+        checks.add(Check.of("ALIMTALK_PROFILE", "알림톡 발신프로필", Severity.WARNING, alimtalk,
+                alimtalk ? "발신프로필 키 등록됨 — 승인된 템플릿 코드가 생기면 발송할 수 있다"
+                        : "발신프로필 키가 없다 — 알림톡은 보낼 수 없고 문자만 나간다"));
     }
 
     private List<Check> academyChecks(Academy academy, short year) {

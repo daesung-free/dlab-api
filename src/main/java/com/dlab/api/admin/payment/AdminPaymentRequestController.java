@@ -67,6 +67,25 @@ public class AdminPaymentRequestController {
     }
 
     /**
+     * 가상계좌 <b>말소</b> — 입금 전에 더 들어오지 못하게 닫는다 (디랩 10/12 회신 ①).
+     *
+     * <p>★★ <b>청구를 취소할 때 이것도 같이 불러야 한다.</b> 가상계좌는 발급해 두면
+     * 기한까지 계속 입금을 받는다 — 계좌를 안 닫으면 <b>취소된 청구로 돈이 들어오고</b>
+     * 그 입금은 어디에 붙일지 모르는 돈이 된다.
+     *
+     * <p>⚠️ <b>이미 입금된 건은 400 이다.</b> 그때는 말소가 아니라 환불이다
+     * ({@code POST /admin/refunds}).
+     *
+     * <p>두 번 눌러도 안전하다 — 이미 말소된 건은 그대로 돌려준다.
+     */
+    @PostMapping("/{requestId}/close")
+    public ApiResponse<PaymentRequestResponse> closeVbank(@CurrentAccount AuthPrincipal me,
+                                                          @PathVariable Long requestId) {
+        return ApiResponse.success(PaymentRequestResponse.from(
+                paymentRequestService.closeVbank(me, requestId)));
+    }
+
+    /**
      * 단말기(POS) 승인 기록.
      *
      * <p>★ <b>이 API 는 결제를 하지 않는다.</b> 승인은 데스크 PC 의 SecureVCAT 이

@@ -66,6 +66,50 @@ public class PenaltyRuleEngine {
         return applied;
     }
 
+    /**
+     * 자동부여 취소 (디랩 1021 피드백 2-1).
+     *
+     * <p>디랩 원문: <i>"출결이 수정될 경우 벌점도 자동 부여되거나, <b>자동 취소</b>가
+     * 가능하면 좋을것 같습니다."</i>
+     *
+     * <h2>★★ 멱등키로만 찾는다</h2>
+     * 「지각 → 결석」으로 고치면 <b>지각 벌점을 거둬야 한다.</b> 그 건을 집는 유일한 길이
+     * 멱등키({@code 학생:일자:규칙})다 — 사유 문자열로 찾으면 <b>담당자가 손으로 준
+     * 같은 항목까지 같이 지워진다.</b>
+     *
+     * <p>★ <b>soft delete 다.</b> 물리 삭제하면 왜 사라졌는지 못 찾는다 — 학생이
+     * 「벌점이 없어졌다」고 물으면 답할 수 없다.
+     *
+     * <p>⚠️ <b>수기 부여분은 건드리지 않는다.</b> 멱등키가 없는 행(= 사람이 준 것)은
+     * 이 조회에 걸리지 않는다. 사람이 판단해 준 것을 출결 정정이 거두면 안 된다.
+     *
+     * @return 취소한 건수
+     */
+    public int revokeAuto(StudentEnrollment enrollment,
+                          PenaltyTriggerType triggerType,
+                          String condition,
+                          LocalDate occurredOn) {
+        List<PenaltyRule> rules = ruleRepository.findActive(
+                enrollment.getAcademy().getId(), enrollment.getYear(), triggerType);
+
+        int revoked = 0;
+        for (PenaltyRule rule : rules) {
+            if (!rule.matches(condition)) {
+                continue;
+            }
+            String key = PenaltyPoint.attendanceKey(
+                    enrollment.getId(), occurredOn, rule.getId());
+            var found = pointRepository.findByIdempotencyKeyAndDeletedFalse(key);
+            if (found.isPresent()) {
+                found.get().markDeleted();
+                revoked++;
+                log.info("출결 정정으로 자동 벌점 취소: key={}, 항목={}",
+                        key, rule.getPenaltyItem().getItemName());
+            }
+        }
+        return revoked;
+    }
+
     private java.util.Optional<PenaltyPoint> grant(StudentEnrollment enrollment,
                                                    PenaltyRule rule,
                                                    PenaltyTriggerType triggerType,

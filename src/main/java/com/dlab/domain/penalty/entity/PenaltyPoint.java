@@ -1,5 +1,6 @@
 package com.dlab.domain.penalty.entity;
 
+import com.dlab.domain.audit.AuditLabel;
 import com.dlab.domain.audit.AuditEntityListener;
 import com.dlab.domain.audit.Audited;
 import com.dlab.common.entity.BaseEntity;
@@ -42,19 +43,24 @@ public class PenaltyPoint extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "penalty_item_id", nullable = false)
+    @AuditLabel("상벌점 항목")
     private PenaltyItem penaltyItem;
 
     @Column(nullable = false)
+    @AuditLabel("점수")
     private int points;
 
     @Column(length = 500)
+    @AuditLabel("사유")
     private String reason;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @AuditLabel("부여 경로")
     private PenaltySource source;
 
     @Column(name = "occurred_at", nullable = false)
+    @AuditLabel("발생 시각")
     private Instant occurredAt = Instant.now();
 
     /** 자동 부여 중복 방지 키. 수기 부여는 null. */
@@ -90,5 +96,33 @@ public class PenaltyPoint extends BaseEntity {
     /** 출결 트리거 자동 부여용 멱등키. */
     public static String attendanceKey(Long enrollmentId, LocalDate date, Long ruleId) {
         return "ATTENDANCE:%d:%s:%d".formatted(enrollmentId, date, ruleId);
+    }
+
+    /**
+     * 일자·사유 수정 (디랩 1021 피드백 2-8).
+     *
+     * <p>디랩 원문: <i>"입력된 내역을 수정할 수는 없을까요? 잘못 입력된 내용은 취소(삭제)
+     * 후 새로 입력하는 방법 밖에는 없는 것 같습니다. <b>(특히 일자, 사유 수정 필요)</b>"</i>
+     *
+     * <h2>★★ 점수와 항목은 바꿀 수 없다</h2>
+     * 점수는 <b>부여 시점의 항목 점수를 복사해 둔 값</b>이다 — 항목 점수를 나중에 바꿔도
+     * 과거 이력이 소급해서 바뀌지 않게 하기 위해서다(§7). 여기서 점수를 열면 그 보장이
+     * 사라진다.
+     *
+     * <p>항목을 바꿔야 하면 <b>취소 후 재입력</b>이 맞다 — 「지각」으로 준 벌점을
+     * 「무단결석」으로 고치는 것은 <b>다른 사건</b>이고, 멱등키({@code 학생:일자:규칙})도
+     * 그 조합으로 잡혀 있다.
+     *
+     * <p>⚠️ <b>일자를 바꾸면 그날의 누적 집계가 달라진다.</b> 부르는 쪽이 다시 계산해야 한다.
+     *
+     * <p>비워 보낸 항목은 바꾸지 않는다.
+     */
+    public void modify(java.time.Instant occurredAt, String reason) {
+        if (occurredAt != null) {
+            this.occurredAt = occurredAt;
+        }
+        if (reason != null) {
+            this.reason = reason;
+        }
     }
 }

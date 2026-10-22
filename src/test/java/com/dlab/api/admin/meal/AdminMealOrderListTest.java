@@ -218,4 +218,19 @@ class AdminMealOrderListTest {
 
         return stats.getPrepareStatementCount();
     }
+
+    @Test
+    @DisplayName("★ 단가 미등록 주문의 금액은 0 이 아니라 null 이다 — 0 은 「무료」로 읽힌다")
+    void unpricedOrderReportsUnknownAmountNotZero() {
+        MealOrder o = new MealOrder(enrollment(true), MONTH);
+        o.addItem(MONTH.atDay(5), MealType.LUNCH);   // ★ 단가를 넣지 않는다
+        em.persist(o);
+        em.flush();
+
+        var row = list(MONTH).get(0);
+
+        // 0 이면 화면이 무료로 읽고, 정작 손써야 하는 단가 미등록이 발행 누를 때까지 안 보인다
+        assertThat(row.amount()).isNull();
+        assertThat(row.activeCount()).isEqualTo(1);
+    }
 }

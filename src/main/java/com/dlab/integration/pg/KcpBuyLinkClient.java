@@ -42,11 +42,17 @@ public class KcpBuyLinkClient {
     private static final String VBANK_PATH = "/gw/hub/v1/payment";
     /** 취소 전용 경로다. 발급 경로로 보내면 받지 않는다 */
     private static final String CANCEL_PATH = "/gw/mod/v1/cancel";
-    /**
-     * 전체 취소. 부분 취소({@code STPC})는 쓰지 않는다 — 수납을 부분 취소하는 흐름이
-     * 없어서, 만들어 두면 금액이 어긋난 채 신고될 여지만 생긴다.
-     */
+    /** 전체 취소. 현금영수증 취소가 이것을 쓴다 — 금액을 쪼갤 일이 없다. */
     private static final String CANCEL_ALL = "STSC";
+    /**
+     * 부분 취소.
+     *
+     * <p>★ <b>환불이 부분 취소다.</b> 전에는 "수납을 부분 취소하는 흐름이 없다"고 보고
+     * 쓰지 않았는데, 교습비 환불은 <b>이용기간 구간으로 일부만</b> 돌려준다(0820 규정) —
+     * 750,000 을 받고 375,000 만 돌려주는 것이 정상이다. 전체 취소로 걸면
+     * <b>학생이 쓴 기간까지 돌려주게 된다.</b>
+     */
+    private static final String CANCEL_PARTIAL = "STPC";
     /** 가상계좌 거래 구분. KCP 고정값이라 바꾸면 거절된다 */
     private static final String VBANK_TXTYPE = "41100000";
     /** 원화. KCP 규격값이다 */
@@ -220,6 +226,103 @@ public class KcpBuyLinkClient {
                     "현금영수증 취소 실패: %s (%s)".formatted(text(response, "res_msg"), code));
         }
         return new CashReceiptCanceled(text(response, "cash_no"), text(response, "receipt_no"));
+    }
+
+    /**
+     * 결제 취소 — <b>부분 취소</b>다 (환불).
+     *
+     * <p>★ 금액을 함께 보낸다({@code mod_mny}). 교습비 환불은 구간 계산으로 일부만
+     * 돌려주므로 전체 취소로 걸면 <b>학생이 쓴 기간까지 돌려주게 된다.</b>
+     *
+     * <p>취소 대상은 주문번호가 아니라 <b>거래번호({@code tno})</b>다 — 현금영수증이
+     * {@code cash_no} 를 쓰는 것과 같은 구조다.
+     *
+     * @param amount 돌려줄 금액. <b>0 이하면 부르지 말 것</b> — 추가 징수는 취소가 아니다
+     */
+    public PaymentCanceled cancelPayment(PaymentCancelCommand command) {
+        require();
+        if (command.amount() <= 0) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "취소 금액이 0 이하입니다. 추가 징수는 취소로 처리할 수 없습니다.");
+        }
+
+        // ★ 가상계좌 사용중지와 같은 엔드포인트(/gw/mod/v1/cancel)이고 같은 모양이다 —
+        //   tno 를 독립 필드로 보낸다. mod_value·mod_gubn 은 현금영수증 전용이다.
+        //   ⚠️ 카드 부분취소는 규격서를 받지 못해 가상계좌 규격에서 유추했다.
+        //      실호출로 검증되지 않았다 — 운영 인증서가 오면 가장 먼저 확인할 것.
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("site_cd", command.siteCd());
+        body.put("tno", command.tno());
+        body.put("kcp_cert_info", certificate());
+        body.put("kcp_sign_data",
+                signData(command.siteCd() + "^" + command.tno() + "^" + CANCEL_PARTIAL));
+        body.put("mod_type", CANCEL_PARTIAL);
+        body.put("mod_mny", String.valueOf(command.amount()));
+        body.put("mod_desc", command.reason() == null ? "환불" : command.reason());
+
+        JsonNode response = post(CANCEL_PATH, body);
+        String code = text(response, "res_cd");
+        if (!"0000".equals(code)) {
+            throw new BusinessException(ErrorCode.PG_REQUEST_FAILED,
+                    "결제 취소 실패: %s (%s)".formatted(text(response, "res_msg"), code));
+        }
+        return new PaymentCanceled(text(response, "tno"), text(response, "mod_mny"));
+    }
+
+    /**
+     * 가상계좌 <b>말소</b> — 입금 전에 더 들어오지 못하게 닫는다 (디랩 10/12 회신 ①).
+     *
+     * <h2>★★ 안 닫으면 취소된 청구로 돈이 들어온다</h2>
+     * 가상계좌는 발급해 두면 <b>기한까지 계속 입금을 받는다.</b> 청구를 취소했는데 계좌를
+     * 그대로 두면 학부모가 그 번호로 입금하고, 그 돈은 <b>어디에 붙일지 모르는 입금</b>이
+     * 된다 — 회신 원문도 <i>"입금 전 취소 시 가상계좌 즉시 말소. 그 계좌로 더 입금되지
+     * 않게 합니다"</i> 다.
+     *
+     * <p>★ <b>전체 취소({@code STSC})를 쓴다.</b> 아직 입금이 없어 쪼갤 금액이 없다 —
+     * 환불(부분취소)과 다른 경우다.
+     *
+     * <p>⚠️ <b>이미 입금된 계좌에 쓰지 말 것.</b> 그때는 말소가 아니라 환불이다
+     * ({@code cancelPayment}). 호출부가 입금 여부를 먼저 본다.
+     */
+    public VbankClosed closeVbank(VbankCloseCommand command) {
+        require();
+
+        // ★★ tno 를 독립 필드로 보낸다. mod_value 에 넣으면 KCP 가 거래를 못 찾아
+        //    「RC57 원거래 없음」으로 거절한다 — 실제로 그렇게 당했다.
+        //    mod_value·mod_gubn 은 **현금영수증 취소 전용** 모양이다(그 가이드가 명시).
+        //    가상계좌 사용중지는 tno 를 쓴다(가상계좌 HUB 가이드 3장).
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("site_cd", command.siteCd());
+        body.put("tno", command.tno());
+        body.put("kcp_cert_info", certificate());
+        body.put("kcp_sign_data",
+                signData(command.siteCd() + "^" + command.tno() + "^" + CANCEL_ALL));
+        body.put("mod_type", CANCEL_ALL);
+        body.put("mod_desc", command.reason() == null ? "가상계좌 말소" : command.reason());
+
+        JsonNode response = post(CANCEL_PATH, body);
+        String code = text(response, "res_cd");
+        if (!"0000".equals(code)) {
+            throw new BusinessException(ErrorCode.PG_REQUEST_FAILED,
+                    "가상계좌 말소 실패: %s (%s)".formatted(text(response, "res_msg"), code));
+        }
+        return new VbankClosed(text(response, "tno"));
+    }
+
+    /** @param tno 발급 시 받은 거래번호 */
+    public record VbankCloseCommand(String siteCd, String tno, String reason) {
+    }
+
+    public record VbankClosed(String tno) {
+    }
+
+    /**
+     * @param tno 취소할 <b>거래번호</b>. 주문번호가 아니다
+     */
+    public record PaymentCancelCommand(String siteCd, String tno, int amount, String reason) {
+    }
+
+    public record PaymentCanceled(String tno, String canceledAmount) {
     }
 
     /**

@@ -3,6 +3,7 @@ package com.dlab.api.admin.meal;
 import com.dlab.common.response.ApiResponse;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
+import com.dlab.domain.payment.entity.Billing;
 import com.dlab.domain.meal.entity.MealClosure;
 import com.dlab.domain.meal.entity.MealOrder;
 import com.dlab.domain.meal.entity.MealPolicy;
@@ -12,6 +13,7 @@ import com.dlab.domain.meal.entity.MealType;
 import com.dlab.common.privacy.Masking;
 import com.dlab.common.privacy.PersonalDataPolicy;
 import com.dlab.domain.meal.service.MealAdminService;
+import com.dlab.domain.meal.service.MealBillingService;
 import com.dlab.domain.meal.service.MealDailyRosterService;
 import com.dlab.domain.meal.service.MealOrderListEnricher;
 import com.dlab.domain.meal.service.MealOrderService;
@@ -62,6 +64,7 @@ public class AdminMealController {
 
     private final MealAdminService mealAdminService;
     private final MealOrderService mealOrderService;
+    private final MealBillingService mealBillingService;
     private final MealOrderListEnricher orderListEnricher;
     private final MealDailyRosterService dailyRosterService;
 
@@ -219,7 +222,86 @@ public class AdminMealController {
         return ApiResponse.empty();
     }
 
+    /**
+     * 급식비 청구 발행 — 주문 한 건.
+     *
+     * <p>★★ <b>이 경로가 없어서 급식비가 통합 매출장에 들어가지 않았다.</b>
+     * 발행 로직({@code MealBillingService})은 처음부터 있었는데 <b>컨트롤러에 붙어 있지
+     * 않아 테스트에서만 호출됐다</b> — 화면에는 급식 신청이 보이고 금액도 보이는데
+     * 수납 쪽에는 그 돈이 없는 상태였다.
+     *
+     * @param dueDate 납기일. 비우면 없음 — 청구 자동 발행 시점이 미확정이라(디랩 회신 대기)
+     *                지금은 데스크가 넣는다
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+    @PostMapping("/orders/{orderId}/billing")
+    public ApiResponse<BillingIssued> issueBilling(
+            @CurrentAccount AuthPrincipal me, @PathVariable Long orderId,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDate) {
+        return ApiResponse.success(BillingIssued.from(
+                mealBillingService.issue(me, orderId, dueDate)));
+    }
+
+    /**
+     * 급식비 청구 일괄 발행 — 그 달 지점 전체.
+     *
+     * <p>급식은 <b>월 단위 일괄 결제</b>라(A-9) 이쪽이 기본 경로다.
+     *
+     * <p>★ <b>한 건이 막혀도 나머지는 발행한다.</b> 그리고 <b>건너뛴 주문은 사유와 함께</b>
+     * 돌려준다 — 발행 건수만 주면 빠진 학생이 누구인지 화면이 알 수 없고, 단가 미등록으로
+     * 빠진 경우라면 <b>그 학생 급식비는 영영 청구되지 않는다.</b>
+     *
+     * <p><b>두 번 눌러도 안전하다</b> — 이미 발행된 주문은 건너뛴다.
+     */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
+    @PostMapping("/billings/monthly")
+    public ApiResponse<MonthBillingResult> issueMonthlyBilling(
+            @CurrentAccount AuthPrincipal me,
+            @RequestParam(required = false) Long academyId,
+            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDate) {
+        Long resolved = me.requireAcademyScope(academyId);
+        return ApiResponse.success(MonthBillingResult.from(
+                mealBillingService.issueMonth(me, resolved, month, dueDate)));
+    }
+
     // ── DTO ──────────────────────────────────────────────────
+
+    /** 발행된 청구 한 건. */
+    public record BillingIssued(Long billingId, String name, int amount, LocalDate dueDate) {
+
+        static BillingIssued from(Billing b) {
+            return new BillingIssued(b.getId(), b.getName(), b.getBilledAmount(),
+                    b.getDueDate());
+        }
+    }
+
+    /**
+     * 일괄 발행 결과.
+     *
+     * @param skipped <b>비어 있어야 정상</b>이다. 사유별로 조치가 다르다 —
+     *                「이미 발행」은 그냥 두면 되지만 「단가 미등록」은 손을 써야 한다
+     */
+    public record MonthBillingResult(int issuedCount, List<BillingIssued> issued,
+                                     List<SkippedOrderResponse> skipped) {
+
+        static MonthBillingResult from(MealBillingService.MonthIssueOutcome outcome) {
+            return new MonthBillingResult(outcome.issued().size(),
+                    outcome.issued().stream().map(BillingIssued::from).toList(),
+                    outcome.skipped().stream().map(SkippedOrderResponse::from).toList());
+        }
+    }
+
+    public record SkippedOrderResponse(Long orderId, String studentNo, String studentName,
+                                       String reason) {
+
+        static SkippedOrderResponse from(MealBillingService.SkippedOrder s) {
+            return new SkippedOrderResponse(s.orderId(), s.studentNo(), s.studentName(),
+                    s.reason());
+        }
+    }
 
     /**
      * 일자별 신청 명단.
@@ -337,11 +419,22 @@ public class AdminMealController {
      * @param refundableAmount 발행 후 취소된 만큼의 환불 대상 금액. 청구 전이면 0
      * @param paymentMethods 수납 수단. <b>미수납이면 빈 목록</b>이고, 분납이면 여러 개다
      */
+    /**
+     * @param amount        신청 금액. ★ <b>단가가 등록되지 않은 끼니가 있으면 {@code null}</b> 이다 —
+     *                      0 으로 내리면 화면이 「무료」로 읽고, 정작 손을 써야 하는
+     *                      <b>단가 미등록</b> 이 발행을 누를 때까지 안 보인다
+     * @param billingStatus 붙어 있는 청구의 상태. ★ <b>{@code CANCELLED} 면 「취소됨 · 재발행
+     *                      가능」</b> 이다 — {@code billingId} 는 <b>이력</b>이라 취소된 청구도
+     *                      그대로 보이는데, 상태가 없으면 화면이 그것을 「발행됨」으로 읽어
+     *                      <b>발행 버튼이 왜 살아 있는지</b> 알 수 없다
+     */
     public record OrderResponse(Long id, String orderNo, String studentNo, String studentName,
                                 String className, String targetMonth, MealOrderStatus status,
                                 int activeCount, Integer amount, Integer billedAmount,
                                 int refundableAmount, List<String> paymentMethods,
-                                Long billingId, List<MealItemResponse> items, Instant createdAt) {
+                                Long billingId,
+                                com.dlab.domain.payment.entity.BillingStatus billingStatus,
+                                List<MealItemResponse> items, Instant createdAt) {
 
         static OrderResponse from(MealOrder o, MealOrderListEnricher.Extras extras) {
             return new OrderResponse(o.getId(),
@@ -351,11 +444,13 @@ public class AdminMealController {
                     extras.className(o),
                     o.month().toString(), o.getStatus(),
                     o.activeItems().size(),
-                    o.totalAmount(),
+                    // ★ 단가 미등록이면 0 이 아니라 null 이다 — 0 은 「무료」로 읽힌다
+                    o.hasUnpricedItem() ? null : o.totalAmount(),
                     o.isBilled() ? o.getBilling().getBilledAmount() : null,
                     o.refundableAmount(),
                     extras.paymentMethods(o),
                     o.isBilled() ? o.getBilling().getId() : null,
+                    o.isBilled() ? o.getBilling().getStatus() : null,
                     o.getItems().stream().map(MealItemResponse::from).toList(),
                     o.getCreatedAt());
         }

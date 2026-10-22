@@ -127,6 +127,53 @@ public class SeatMasterAdminService {
         seat.markDeleted();
     }
 
+    /**
+     * 좌석 일괄 삭제 — <b>전부-아니면-전무</b>.
+     *
+     * <h2>왜 필요한가</h2>
+     * 화면의 「전체 초기화」가 단건 삭제를 좌석 수만큼 불렀다. 지점에 <b>92석</b>까지
+     * 있어서, 중간에 하나가 배정돼 있으면 <b>절반만 지워진 배치도</b>가 남는다 —
+     * 어디까지 지워졌는지 화면에서 알 방법이 없다.
+     *
+     * <h2>★ 배정된 좌석이 섞이면 전부 거부한다</h2>
+     * 일부만 지우고 성공으로 돌려주면 <b>「지운 줄 알았는데 남아 있는」</b> 상태가 된다.
+     * 대신 <b>배정된 좌석을 전부 모아</b> 알려준다 — 하나씩 알려주면 고쳐 올릴 때마다
+     * 한 건씩만 발견하게 된다(격자 등록의 번호 충돌과 같은 판단).
+     *
+     * @param seatIds 지울 좌석. <b>비우면 그 구역 전체</b>다
+     * @return 지운 건수
+     */
+    @Transactional
+    public int deleteAll(AuthPrincipal me, Long studyAreaId, List<Long> seatIds) {
+        StudyArea area = studyAreaAdminService.load(me, studyAreaId);
+
+        List<SeatMaster> targets = seatMasterRepository.findByStudyAreaId(area.getId()).stream()
+                .filter(seat -> seatIds == null || seatIds.isEmpty()
+                        || seatIds.contains(seat.getId()))
+                .filter(seat -> !seat.isDeleted())
+                .toList();
+        if (targets.isEmpty()) {
+            return 0;
+        }
+
+        // ★ 배정 조회를 한 번에 한다 — 좌석마다 부르면 92석 초기화에 쿼리가 92번 나간다
+        List<String> occupied = seatAssignmentRepository
+                .findActiveBySeatIds(targets.stream().map(SeatMaster::getId).toList()).stream()
+                .map(a -> a.getSeat().getSeatCd())
+                .sorted()
+                .toList();
+        if (!occupied.isEmpty()) {
+            throw new BusinessException(ErrorCode.SEAT_ALREADY_OCCUPIED,
+                    "배정된 좌석이 있어 삭제하지 않았습니다. 배정을 먼저 해제하세요: %s"
+                            .formatted(String.join(", ", occupied)));
+        }
+
+        // soft delete 다 — 물리 삭제하면 seat_assignment 가 참조하는 행이 사라져
+        // 과거 배정 이력이 끊긴다(단건 삭제와 같다)
+        targets.forEach(SeatMaster::markDeleted);
+        return targets.size();
+    }
+
     private SeatMaster load(AuthPrincipal me, Long seatId) {
         SeatMaster seat = seatMasterRepository.findDetailById(seatId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SEAT_NOT_FOUND));
