@@ -103,6 +103,7 @@ public class AdmissionReservationService {
         if (isBlank(command.rsvNm()) || isBlank(command.stdTel()) || isBlank(command.stdGrade())) {
             throw new DsaApiException(DsaCode.INVALID_PARAMETER);
         }
+        requireGradeCode(command.stdGrade());
 
         AdmissionReservation reservation = AdmissionReservation.builder()
                 .academy(academy)
@@ -278,6 +279,49 @@ public class AdmissionReservationService {
         throw new DsaApiException(DsaCode.INVALID_PARAMETER, "코드 발급에 실패했습니다.");
     }
 
+    /** 학년 코드 — 고1 {@code 1} · 고2 {@code 2} · 고3 {@code 3} · N수생 {@code N}. */
+    private static final java.util.Set<String> GRADE_CODES =
+            java.util.Set.of("1", "2", "3", "N");
+
+    /**
+     * 학년 코드가 <b>1자</b>인지 본다.
+     *
+     * <h2>★★ 없으면 DB 제약이 터져 130 으로 나간다</h2>
+     * {@code std_grade} 가 {@code VARCHAR(1)} 이라 {@code "N수"} 처럼 2자가 오면
+     * {@code value too long for type character varying(1)} 이 되고, 그것이
+     * {@code 130 처리 중 오류} 로 내려간다.
+     *
+     * <p>⚠️ <b>130 은 서버 내부 오류라 홈페이지가 원인을 알 방법이 없다.</b> 실제로
+     * 2026-10-22 연동 확인에서 그렇게 막혔다 — 규격서 샘플에 {@code "N수"} 로 적혀
+     * 있었고, 그대로 보내면 <b>모든 접수가 「처리 중 오류」</b>가 된다. 어디가 틀렸는지
+     * 알려주지 않으므로 홈페이지 쪽에서는 짚을 수가 없다.
+     *
+     * <p>★ 그래서 <b>경계에서 901 로 거절하고 이유를 적는다.</b> 같은 실패인데
+     * 「무엇이 틀렸는지」가 달라진다.
+     *
+     * <p>⚠️ 허용값을 좁게 잡지 않는다 — <b>1자이기만 하면 통과</b>시킨다. 학년 구분이
+     * 늘어날 수 있고(재학생 구분 등), 모르는 값을 막으면 <b>정상 접수가 거부된다.</b>
+     * 코드표를 벗어난 값은 메시지로만 알린다.
+     */
+    private void requireGradeCode(String stdGrade) {
+        String value = stdGrade.trim();
+        if (value.length() != 1) {
+            throw new DsaApiException(DsaCode.INVALID_PARAMETER,
+                    "std_grade 는 한 글자입니다 — 고1 '1' · 고2 '2' · 고3 '3' · N수생 'N'. "
+                            + "받은 값: '" + value + "'");
+        }
+        if (!GRADE_CODES.contains(value.toUpperCase(java.util.Locale.ROOT))) {
+            log.warn("입학신청 학년 코드가 코드표에 없다 — std_grade={} (통과시킨다)", value);
+        }
+    }
+
+    /**
+     * 접수 연도.
+     *
+     * <p>⚠️ <b>비우면 901 이다.</b> 규격서가 필수값을 4개(acid·rsv_nm·std_tel·std_grade)로
+     * 적고 *"나머지는 비워 보내셔도 됩니다"* 라고 해 두었는데, 이 값은 비면 통과하지
+     * 않는다 — 기수를 모르면 어느 해 접수인지 정해지지 않는다. 규격서를 고쳤다.
+     */
     private short parseYear(String regYyyy) {
         try {
             return Short.parseShort(regYyyy);
