@@ -45,6 +45,7 @@ public class AdminNoticeController {
 
     private final NoticeService noticeService;
     private final com.dlab.domain.notice.service.NoticeAttachments noticeAttachments;
+    private final com.dlab.domain.share.service.PublicNoticeShareService noticeShareService;
 
     /**
      * 공지 목록. <b>조회는 관리자 전체 공유</b>이고 작성만 역할별로 갈린다.
@@ -174,6 +175,33 @@ public class AdminNoticeController {
                 me, id, request.title(), request.content(),
                 request.pinned(), request.banner(),
                 request.publishedAt(), request.expiresAt())));
+    }
+
+    /**
+     * 공개 공유 링크 발급 — <b>「등록비 안내」 알림톡 버튼이 가리킬 주소</b>.
+     *
+     * <p>응답의 {@code token} 으로 {@code /notice/:token} 주소를 만든다. 로그인 없이
+     * 열리므로 학부모가 알림톡에서 바로 볼 수 있다.
+     *
+     * <p>★★ <b>기한을 요청에서 받지 않는다.</b> 화면마다 다른 기한을 보내면 「왜 이
+     * 링크만 일찍 닫혔나」를 추적할 수 없다 — <b>서버가 정한다.</b> 안내문은 공지의
+     * 게시 종료를 그대로 따르고, 종료가 없으면 {@code expiresAt} 이 {@code null}
+     * (무기한)이다.
+     *
+     * <p>★ <b>여러 번 불러도 된다.</b> 새 토큰이 나오고 <b>이전 토큰도 계속 열린다</b> —
+     * 재전송된 알림톡 두 개가 모두 유효해야 한다. 먼저 받은 쪽을 죽이면 그 학부모에게는
+     * 「없는 링크」가 되어 전화가 온다.
+     */
+    @PostMapping("/{id}/share")
+    public ApiResponse<ShareResponse> share(@CurrentAccount AuthPrincipal me,
+                                            @PathVariable Long id) {
+        var token = noticeShareService.share(me, id);
+        return ApiResponse.success(new ShareResponse(token.getToken(), token.getExpiresAt()));
+    }
+
+    /** @param expiresAt {@code null} 이면 무기한 */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "NoticeShareResponse")
+    public record ShareResponse(String token, Instant expiresAt) {
     }
 
     /** 공지 삭제(soft). */

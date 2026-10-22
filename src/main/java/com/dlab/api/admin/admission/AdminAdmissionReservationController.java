@@ -41,6 +41,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminAdmissionReservationController {
 
     private final AdmissionReservationAdminService adminService;
+    private final com.dlab.domain.share.service.PublicWaitlistShareService waitlistShareService;
 
     /** 목록. 상태·이름·연락처로 좁힌다. */
     @GetMapping
@@ -110,6 +111,31 @@ public class AdminAdmissionReservationController {
                                                      @Valid @RequestBody ChangeStatus request) {
         return ApiResponse.success(ReservationView.from(adminService.changeStatus(
                 me, reservationId, request.status(), request.reason())));
+    }
+
+    /**
+     * 공개 공유 링크 발급 — <b>「대기자 안내」 알림톡 버튼이 가리킬 주소</b>.
+     *
+     * <p>응답의 {@code token} 으로 {@code /waitlist/:token} 주소를 만든다. 학생·학부모가
+     * 로그인 없이 열어 <b>등록 의사를 버튼으로 답한다</b> — 알림톡은 단방향이라 답장이
+     * 우리 시스템에 들어오지 않고, 지금은 전화를 받아 직원이 손으로 적는다.
+     *
+     * <p>★★ <b>기한을 요청에서 받지 않는다.</b> 화면마다 다른 기한을 보내면 「왜 이
+     * 링크만 일찍 닫혔나」를 추적할 수 없다 — <b>서버 기본값(7일)</b>을 쓴다.
+     *
+     * <p>★ <b>여러 번 불러도 되고 이전 토큰도 계속 열린다</b> — 재전송된 알림톡 두 개가
+     * 모두 유효해야 한다. 답변 1회 고정은 토큰이 아니라 <b>예약 건</b>에서 지킨다.
+     */
+    @PostMapping("/{reservationId}/share")
+    public ApiResponse<ShareResponse> share(@CurrentAccount AuthPrincipal me,
+                                            @PathVariable Long reservationId) {
+        var token = waitlistShareService.share(me, reservationId);
+        return ApiResponse.success(new ShareResponse(token.getToken(), token.getExpiresAt()));
+    }
+
+    /** @param expiresAt 응답 기한. 공개 페이지의 {@code deadline} 과 같은 값이다 */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "WaitlistShareResponse")
+    public record ShareResponse(String token, Instant expiresAt) {
     }
 
     @GetMapping("/{reservationId}/status-logs")
@@ -304,12 +330,21 @@ public class AdminAdmissionReservationController {
         }
     }
 
+    /**
+     * @param actorType  ★ <b>{@code STUDENT}(학생 응답) · {@code STAFF}(직원 변경)</b>.
+     *                   {@code changedBy} 로는 구분되지 않는다 — 공개 링크는 인증 주체가
+     *                   없어 시스템 계정(0)으로 기록되고 배치도 같은 값이다
+     * @param actorLabel 화면에 그대로 쓸 문구. 화면이 enum 을 다시 번역하지 않게 한다
+     */
     public record StatusLogView(Long id, ConsultStatus fromStatus, ConsultStatus toStatus,
-                                String reason, Long changedBy, Instant changedAt) {
+                                String reason, Long changedBy, Instant changedAt,
+                                com.dlab.domain.admission.entity.StatusActorType actorType,
+                                String actorLabel) {
 
         static StatusLogView from(AdmissionReservationStatusLog l) {
             return new StatusLogView(l.getId(), l.getFromStatus(), l.getToStatus(),
-                    l.getReason(), l.getCreatedBy(), l.getCreatedAt());
+                    l.getReason(), l.getCreatedBy(), l.getCreatedAt(),
+                    l.getActorType(), l.getActorType().displayName());
         }
     }
 
