@@ -2,6 +2,7 @@ package com.dlab.integration.aligo;
 
 import com.dlab.domain.notification.entity.NotificationChannel;
 import com.dlab.domain.notification.entity.NotificationLog;
+import com.dlab.domain.notification.entity.NotificationTemplate;
 import com.dlab.domain.notification.service.NotificationSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,11 +16,11 @@ import org.springframework.stereotype.Component;
  * 받지만 문자는 본문을 그대로 보낸다. 첫 사용처는 긴급 출입 2종(출입문 비밀번호 제공 ·
  * 07:05 출근 미확인)이다.
  *
- * <h2>★ 알림톡은 여기에 붙이지 말 것</h2>
- * 채널이 다르면 <b>구현체도 따로</b>다({@link #channel()} 이 키다). 알림톡은
- * 엔드포인트도({@code kakaoapi.aligo.in}) 성공 코드도({@code 0}, 문자는 {@code 1})
- * 다르고 <b>승인된 {@code tpl_code} 가 필수</b>라, 한 클래스에 섞으면 한쪽 규칙이 다른 쪽을
- * 조용히 깨뜨린다. 템플릿 코드가 나오면 {@code AligoAlimtalkSender} 를 새로 만든다.
+ * <h2>★ 알림톡은 여기에 붙이지 말 것 — {@link AligoAlimtalkSender} 가 받는다</h2>
+ * 채널이 다르면 <b>구현체도 따로</b>다({@link #channel()} 이 키다 — 한 구현체가 두 채널을
+ * 받을 수 없다). 알림톡은 엔드포인트도({@code kakaoapi.aligo.in}) 성공 코드도({@code 0},
+ * 문자는 {@code 1}) 다르고 <b>승인된 {@code tpl_code} 가 필수</b>라, 한 클래스에 섞으면
+ * 한쪽 규칙이 다른 쪽을 조용히 깨뜨린다.
  *
  * <h2>수신 번호는 계정이 가리키는 사람에게서 찾는다</h2>
  * {@code Account} 자체에는 전화번호가 없다 — 학생·학부모·행정·담당선생님 중 어느
@@ -40,7 +41,8 @@ public class AligoNotificationSender implements NotificationSender {
     }
 
     @Override
-    public void send(NotificationLog log) {
+    public void send(NotificationLog log, NotificationTemplate template) {
+        // 문자는 템플릿 코드가 없다 — 본문을 그대로 보낸다(심사가 없는 채널이라서다)
         // ★ 엔티티가 풀어 준 번호를 쓴다. 계정에서만 꺼내면 계정 없는 수신자
         //   (입학 대기자·급식업체)에게 보내는 이력이 조용히 실패한다
         String phone = log.resolvedPhone();

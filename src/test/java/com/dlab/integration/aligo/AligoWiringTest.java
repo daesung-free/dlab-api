@@ -47,7 +47,7 @@ class AligoWiringTest {
     @EnableConfigurationProperties(AligoProperties.class)
     @Import({AligoClient.class, AligoAlimtalkClient.class,
             AligoSmsSender.class, AligoNotificationSender.class,
-            LoggingSmsSender.class})
+            AligoAlimtalkSender.class, LoggingSmsSender.class})
     static class AligoBeans {
     }
 
@@ -58,6 +58,7 @@ class AligoWiringTest {
                         "aligo.api-key=test-key",
                         "aligo.user-id=dlab",
                         "aligo.sender-phone=0261058090",
+                        "aligo.sender-key=profile-key",
                         "aligo.test-mode=true")
                 .run(context -> {
                     assertThat(context).hasNotFailed();
@@ -68,8 +69,28 @@ class AligoWiringTest {
                     //    ⚠️ 아래 javadoc 의 함정이 **같은 패키지에서 두 번** 났다.
                     assertThat(context).hasSingleBean(AligoAlimtalkClient.class);
                     assertThat(context).hasSingleBean(AligoNotificationSender.class);
+                    // ★ 알림톡 발송기는 발신프로필 키까지 있어야 올라온다 — 아래 테스트 참고
+                    assertThat(context).hasSingleBean(AligoAlimtalkSender.class);
                     // ★ 목업이 물러나고 실제 발송기가 SmsSender 자리를 차지한다
                     assertThat(context.getBean(SmsSender.class)).isInstanceOf(AligoSmsSender.class);
+                });
+    }
+
+    @Test
+    @DisplayName("★★ 발신프로필 키가 없으면 알림톡 발송기를 만들지 않는다 — 실패 이력만 쌓인다")
+    void alimtalkSenderNeedsSenderKey() {
+        // senderkey 없이 호출하면 알리고가 인증 오류를 준다. 빈을 만들어 두면 발송마다
+        // FAILED 가 쌓이는데, 빈이 없으면 「발송 구현체 없음」으로 SKIPPED 가 남아
+        // 「설정이 덜 됐다」와 「보냈는데 실패했다」가 구분된다.
+        runner.withPropertyValues(
+                        "aligo.api-key=test-key",
+                        "aligo.user-id=dlab",
+                        "aligo.sender-phone=0261058090",
+                        "aligo.test-mode=true")
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).hasSingleBean(AligoNotificationSender.class);
+                    assertThat(context).doesNotHaveBean(AligoAlimtalkSender.class);
                 });
     }
 

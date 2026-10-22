@@ -122,6 +122,19 @@ public class NotificationService {
             return;
         }
 
+        if (template.getChannel() == NotificationChannel.KAKAO_ALIMTALK
+                && (template.getKakaoTemplateCode() == null
+                        || template.getKakaoTemplateCode().isBlank())) {
+            // ★★ 템플릿 코드가 없으면 문자로 떨어뜨리지 않고 건너뛴다.
+            //
+            //   카카오는 승인된 tpl_code 만 받는다. 코드가 없을 때 문자로 대신 보내면
+            //   학부모가 받는 문구가 **심사받은 것과 달라진다** — 그리고 SMS 폴백은
+            //   0803 에 폐기됐다(E-5). 조용히 성공으로 두는 것도 안 된다.
+            notificationLog.markSkipped("알림톡 템플릿 코드 미등록");
+            log.info("알림톡 템플릿 코드가 없어 발송 보류: event={}", notificationLog.getEventCode());
+            return;
+        }
+
         NotificationSender sender = senders.get(template.getChannel());
         if (sender == null) {
             notificationLog.markSkipped("발송 구현체 없음: " + template.getChannel());
@@ -129,7 +142,7 @@ public class NotificationService {
         }
 
         try {
-            sender.send(notificationLog);
+            sender.send(notificationLog, template);
             notificationLog.markSent();
         } catch (Exception e) {
             log.error("알림 발송 실패: event={}", notificationLog.getEventCode(), e);

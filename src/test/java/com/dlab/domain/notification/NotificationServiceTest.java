@@ -42,7 +42,7 @@ class NotificationServiceTest {
         }
 
         @Override
-        public void send(NotificationLog log) {
+        public void send(NotificationLog log, NotificationTemplate template) {
             sent.add(log);
         }
     }
@@ -67,6 +67,8 @@ class NotificationServiceTest {
         ReflectionTestUtils.setField(t, "requiredVariables", requiredVariables);
         ReflectionTestUtils.setField(t, "contentConfirmed", contentConfirmed);
         ReflectionTestUtils.setField(t, "active", true);
+        // ★ 알림톡은 승인된 템플릿 코드가 있어야 발송된다 — 없으면 건너뛴다
+        ReflectionTestUtils.setField(t, "kakaoTemplateCode", "UM_8230");
         return t;
     }
 
@@ -154,5 +156,24 @@ class NotificationServiceTest {
         assertThat(log).isNull();
         assertThat(sender.sent).isEmpty();
         verify(logRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("★★ 알림톡 템플릿 코드가 없으면 건너뛴다 — 문자로 떨어뜨리지 않는다")
+    void skipsAlimtalkWithoutTemplateCode() {
+        NotificationTemplate t = template("[{studentName}] 미등원", "{studentName} 학생 미등원",
+                "studentName", true);
+        ReflectionTestUtils.setField(t, "kakaoTemplateCode", null);
+        when(templateRepository.findByEventCode(any())).thenReturn(Optional.of(t));
+
+        NotificationLog log = service.send(new NotificationCommand(
+                NotificationEvent.MISSING_ATTENDANCE, recipient(), null, null, null,
+                Map.of("studentName", "홍길동"), null));
+
+        // 카카오는 승인된 tpl_code 만 받는다. 문자로 대신 보내면 학부모가 받는 문구가
+        // 심사받은 것과 달라지고, SMS 폴백은 0803 에 폐기됐다(E-5).
+        assertThat(log.getStatus()).isEqualTo(NotificationStatus.SKIPPED);
+        assertThat(log.getFailReason()).contains("템플릿 코드");
+        assertThat(sender.sent).isEmpty();
     }
 }
