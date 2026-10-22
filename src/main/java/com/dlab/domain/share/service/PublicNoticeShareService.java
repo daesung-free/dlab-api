@@ -128,6 +128,7 @@ public class PublicNoticeShareService {
      * @param available {@code false} 면 나머지는 전부 {@code null} 이고 {@code message} 만 있다
      * @param academyName 전 지점 공지는 {@code null}
      */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "PublicNoticeView")
     public record View(boolean available, String title, String content, String academyName,
                        Instant postedAt, List<NoticeAttachments.View> attachments,
                        String message) {

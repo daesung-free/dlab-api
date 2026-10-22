@@ -168,6 +168,7 @@ public class PublicWaitlistShareService {
      * @param deadline 응답 기한. 토큰의 만료 시각이다
      * @param answered 아직 안 눌렀으면 {@code null}
      */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "PublicWaitlistView")
     public record View(boolean available, String studentName, String academyName,
                        Instant deadline, WaitlistAnswer answered, Instant answeredAt,
                        String message) {
