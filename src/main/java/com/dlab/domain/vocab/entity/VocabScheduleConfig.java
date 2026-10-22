@@ -45,16 +45,19 @@ public class VocabScheduleConfig extends BaseEntity {
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
 
+    /** ★ 업체 확정 30 (2026-10-22). 범위의 문항 수보다 크면 그 수로 줄어든다 */
     @Column(name = "question_count", nullable = false)
-    private short questionCount = 20;
+    private short questionCount = 30;
 
     /**
      * 금요일 누적 상한.
      *
      * <p>★ 3회독 누적은 범위가 최대 20유닛 = <b>800단어</b>다. 상한 없이는 800문항이 된다.
+     *
+     * <p>★ <b>업체 확정으로 평일과 같은 30이다</b>(2026-10-22) — 누적이라고 더 내지 않는다.
      */
     @Column(name = "weekly_question_cap", nullable = false)
-    private short weeklyQuestionCap = 40;
+    private short weeklyQuestionCap = 30;
 
     @Column(name = "choice_count", nullable = false)
     private short choiceCount = 4;
@@ -68,6 +71,25 @@ public class VocabScheduleConfig extends BaseEntity {
     @Column(name = "multiple_choice_rate", nullable = false)
     private short multipleChoiceRate = 50;
 
+    /**
+     * Part 3(구동사·숙어·혼동어휘)을 시험 범위에 넣는가.
+     *
+     * <p>★ <b>업체 확정으로 넣는다</b>(2026-10-22) — 표제어와 같은 방식(뜻 맞히기)으로
+     * 출제하고 유닛당 6문항이 늘어난다. ⚠️ Part 2(예문 빈칸)는 <b>범위 밖</b>이라
+     * 설정이 없다 — 데이터만 적재해 둔다.
+     */
+    @Column(name = "include_phrase", nullable = false)
+    private boolean includePhrase = true;
+
+    /**
+     * 결과 화면에 발음·예문·유의어를 보여주는가.
+     *
+     * <p>★ <b>업체 확정으로 보여준다</b>(2026-10-22). 데이터는 늘 저장하고 <b>노출만</b>
+     * 끈다 — 끄기 위해 2,000행을 다시 넣는 일이 없게.
+     */
+    @Column(name = "show_word_detail", nullable = false)
+    private boolean showWordDetail = true;
+
     public VocabScheduleConfig(Academy academy, Short year, LocalDate startDate) {
         this.academy = academy;
         this.year = year;
@@ -76,7 +98,8 @@ public class VocabScheduleConfig extends BaseEntity {
 
     /** 비워 보낸 항목은 바꾸지 않는다. */
     public void modify(LocalDate startDate, Short questionCount, Short weeklyQuestionCap,
-                       Short choiceCount, Short multipleChoiceRate) {
+                       Short choiceCount, Short multipleChoiceRate,
+                       Boolean includePhrase, Boolean showWordDetail) {
         if (startDate != null) {
             this.startDate = startDate;
         }
@@ -91,6 +114,12 @@ public class VocabScheduleConfig extends BaseEntity {
         }
         if (multipleChoiceRate != null) {
             this.multipleChoiceRate = multipleChoiceRate;
+        }
+        if (includePhrase != null) {
+            this.includePhrase = includePhrase;
+        }
+        if (showWordDetail != null) {
+            this.showWordDetail = showWordDetail;
         }
     }
 

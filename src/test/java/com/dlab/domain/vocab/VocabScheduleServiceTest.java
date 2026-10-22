@@ -56,14 +56,14 @@ class VocabScheduleServiceTest {
         em.persist(academy);
         em.flush();
         scheduleService.saveConfig(academy.getId(), year, START,
-                null, null, null, null);
+                null, null, null, null, null, null);
     }
 
     @Test
     @DisplayName("★ 첫 등록은 만들고 두 번째는 고친다 — 지점·연도당 한 행이다")
     void configIsSingleRowPerAcademyAndYear() {
         scheduleService.saveConfig(academy.getId(), year, START.plusDays(7),
-                (short) 30, null, null, null);
+                (short) 30, null, null, null, null, null);
 
         var config = scheduleService.config(academy.getId(), year);
         assertThat(config.getStartDate()).isEqualTo(START.plusDays(7));

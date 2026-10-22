@@ -78,8 +78,8 @@ public class AppVocabController {
             @Valid @RequestBody AppVocabRequest.Submit request) {
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         var attempt = examService.submit(enrollmentId, attemptId, request.asMap());
-        return ApiResponse.success(
-                AppVocabResponse.Result.of(attempt, examService.answers(attemptId)));
+        return ApiResponse.success(AppVocabResponse.Result.of(attempt,
+                examService.answers(attemptId), examService.showWordDetail(attempt)));
     }
 
     /** 결과 — ★ 제출 전에는 문항별 정오·정답이 비어 있다. */
@@ -91,8 +91,8 @@ public class AppVocabController {
             @RequestParam(required = false) Long studentId) {
         Long enrollmentId = scopeResolver.resolve(me.accountId(), studentId).getId();
         var attempt = examService.result(enrollmentId, attemptId);
-        return ApiResponse.success(
-                AppVocabResponse.Result.of(attempt, examService.answers(attemptId)));
+        return ApiResponse.success(AppVocabResponse.Result.of(attempt,
+                examService.answers(attemptId), examService.showWordDetail(attempt)));
     }
 
     /** 내 기록 — ★ 재응시 건까지 전부 남는다(v1 6장). */

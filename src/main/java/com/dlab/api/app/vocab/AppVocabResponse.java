@@ -3,6 +3,7 @@ package com.dlab.api.app.vocab;
 import com.dlab.domain.vocab.entity.VocabAnswer;
 import com.dlab.domain.vocab.entity.VocabAttempt;
 import com.dlab.domain.vocab.entity.VocabExamRound;
+import com.dlab.domain.vocab.service.ExamItem;
 import com.dlab.domain.vocab.service.VocabExamService;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
@@ -58,14 +59,19 @@ public final class AppVocabResponse {
     @Schema(name = "VocabQuestionView", description = "문항 — ★ 정답 위치가 없다")
     public record Question(
             Short seqNo,
-            Long wordId,
-            @Schema(description = "영어 단어") String word,
+            @Schema(description = "표제어 문항이면 채워진다") Long wordId,
+            @Schema(description = "★ Part 3(구동사·숙어·혼동어휘) 문항이면 채워진다")
+            Long phraseId,
+            @Schema(description = "WORD=표제어 · PHRASE=구동사·숙어·혼동어휘")
+            ExamItem.Part part,
+            @Schema(description = "문제. Part 3 는 구동사·숙어 표현이다") String word,
             @Schema(description = "MC=객관식 · SA=주관식") VocabAnswer.Type type,
             @Schema(description = "객관식 보기. ★ 섞여 있다. 주관식은 빈 배열")
             List<String> choices) {
 
         public static Question from(VocabExamService.Question q) {
-            return new Question(q.seqNo(), q.wordId(), q.word(), q.type(), q.choices());
+            return new Question(q.seqNo(), q.wordId(), q.phraseId(), q.part(),
+                    q.word(), q.type(), q.choices());
         }
     }
 
@@ -81,28 +87,81 @@ public final class AppVocabResponse {
             @Schema(description = "재응시 건인가") boolean retry,
             List<Graded> items) {
 
+        /**
+         * ★ 발음·예문·유의어를 <b>가린</b> 결과. 지점 설정을 모르는 자리에서 쓴다.
+         */
         public static Result of(VocabAttempt attempt, List<VocabAnswer> answers) {
+            return of(attempt, answers, false);
+        }
+
+        /**
+         * @param showWordDetail 결과 화면에 발음·예문·유의어를 보여주는가
+         *                       (업체 확정 2026-10-22 — 지점 설정이다)
+         */
+        public static Result of(VocabAttempt attempt, List<VocabAnswer> answers,
+                                boolean showWordDetail) {
             return new Result(attempt.getId(), attempt.getRound().getId(),
                     attempt.getStartedAt(), attempt.getSubmittedAt(), attempt.getScore(),
                     attempt.getTotalCount(), attempt.isRetry(),
                     // ★ 제출 전에는 정답을 보여주지 않는다 — 열어 두면 시작만 하고 답을 본다
                     attempt.isSubmitted()
-                            ? answers.stream().map(Graded::from).toList() : List.of());
+                            ? answers.stream().map(a -> Graded.of(a, showWordDetail)).toList()
+                            : List.of());
         }
     }
 
+    /**
+     * 채점된 문항.
+     *
+     * <h2>★ 발음·예문·유의어를 같이 내린다 (업체 확정 2026-10-22)</h2>
+     * 틀린 단어를 그 자리에서 익히는 화면이라 뜻만으로는 모자란다. <b>노출은 지점
+     * 설정으로 끌 수 있고</b>, 끄면 이 칸들이 {@code null} 로 내려간다 —
+     * <b>데이터는 늘 저장돼 있다</b>(끄려고 2,000행을 다시 넣는 일이 없게).
+     *
+     * <p>⚠️ Part 3(구동사·숙어)에는 발음·유의어·파생어가 없다 — 예문만 있다.
+     */
     @Schema(name = "VocabGradedView", description = "채점된 문항")
     public record Graded(
             Short seqNo,
-            String word,
+            @Schema(description = "문제. Part 3 는 구동사·숙어 표현이다") String word,
+            @Schema(description = "WORD=표제어 · PHRASE=구동사·숙어·혼동어휘")
+            ExamItem.Part part,
             VocabAnswer.Type type,
             @Schema(description = "학생이 낸 답. 무응답이면 빈 값") String given,
             Boolean correct,
-            @Schema(description = "정답(원고 뜻). ★ 제출 뒤에만 내려간다") String answer) {
+            @Schema(description = "정답(원고 뜻). ★ 제출 뒤에만 내려간다") String answer,
+            @Schema(description = "발음. ★ 노출 설정이 꺼져 있거나 Part 3 면 null")
+            String pronunciation,
+            @Schema(description = "품사") String pos,
+            @Schema(description = "영문 예문") String exampleEn,
+            @Schema(description = "예문 해석") String exampleKo,
+            @Schema(description = "유의어") String synonym,
+            @Schema(description = "반의어") String antonym,
+            @Schema(description = "파생어") String derivative) {
 
         public static Graded from(VocabAnswer a) {
-            return new Graded(a.getSeqNo(), a.getWord().getWord(), a.getType(),
-                    a.getGiven(), a.getCorrect(), a.getWord().getMeaningRaw());
+            return of(a, false);
+        }
+
+        public static Graded of(VocabAnswer a, boolean showWordDetail) {
+            var part = a.isPhrase() ? ExamItem.Part.PHRASE : ExamItem.Part.WORD;
+            if (!showWordDetail) {
+                return new Graded(a.getSeqNo(), a.prompt(), part, a.getType(),
+                        a.getGiven(), a.getCorrect(), a.meaningRaw(),
+                        null, null, null, null, null, null, null);
+            }
+            if (a.isPhrase()) {
+                var ph = a.getPhrase();
+                return new Graded(a.getSeqNo(), a.prompt(), part, a.getType(),
+                        a.getGiven(), a.getCorrect(), a.meaningRaw(),
+                        null, null, ph.getExampleEn(), ph.getExampleKo(),
+                        null, null, null);
+            }
+            var w = a.getWord();
+            return new Graded(a.getSeqNo(), a.prompt(), part, a.getType(),
+                    a.getGiven(), a.getCorrect(), a.meaningRaw(),
+                    w.getPronunciation(), w.getPos(), w.getExampleEn(), w.getExampleKo(),
+                    w.getSynonym(), w.getAntonym(), w.getDerivative());
         }
     }
 

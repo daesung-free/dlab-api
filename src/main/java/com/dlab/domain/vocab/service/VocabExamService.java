@@ -7,12 +7,15 @@ import com.dlab.domain.user.repository.StudentEnrollmentRepository;
 import com.dlab.domain.vocab.entity.VocabAnswer;
 import com.dlab.domain.vocab.entity.VocabAttempt;
 import com.dlab.domain.vocab.entity.VocabExamRound;
+import com.dlab.domain.vocab.entity.VocabScheduleConfig;
 import com.dlab.domain.vocab.entity.VocabMeaning;
+import com.dlab.domain.vocab.entity.VocabPhrase;
 import com.dlab.domain.vocab.entity.VocabWord;
 import com.dlab.domain.vocab.repository.VocabAnswerRepository;
 import com.dlab.domain.vocab.repository.VocabAttemptRepository;
 import com.dlab.domain.vocab.repository.VocabExamRoundRepository;
 import com.dlab.domain.vocab.repository.VocabMeaningRepository;
+import com.dlab.domain.vocab.repository.VocabPhraseRepository;
 import com.dlab.domain.vocab.repository.VocabScheduleConfigRepository;
 import com.dlab.domain.vocab.repository.VocabWordRepository;
 import java.time.Clock;
@@ -23,6 +26,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Collection;
+import java.util.Objects;
 import java.util.Random;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -50,12 +54,19 @@ public class VocabExamService {
     private final VocabAnswerRepository answerRepository;
     private final VocabWordRepository wordRepository;
     private final VocabMeaningRepository meaningRepository;
+    private final VocabPhraseRepository phraseRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final Clock clock;
 
-    /** 출제된 한 문항 — ★ 정답이 없다. 앱으로 그대로 나가는 모양이다. */
-    public record Question(short seqNo, Long wordId, String word,
-                           VocabAnswer.Type type, List<String> choices) {
+    /**
+     * 출제된 한 문항 — ★ 정답이 없다. 앱으로 그대로 나가는 모양이다.
+     *
+     * @param wordId   Part 1 이면 채워진다
+     * @param phraseId Part 3(구동사·숙어·혼동어휘)이면 채워진다 — ★ 둘 중 하나만 있다
+     * @param word     화면에 내는 문제. Part 3 는 구동사·숙어 표현이다
+     */
+    public record Question(short seqNo, Long wordId, Long phraseId, ExamItem.Part part,
+                           String word, VocabAnswer.Type type, List<String> choices) {
     }
 
     /**
@@ -93,7 +104,7 @@ public class VocabExamService {
                         round.getAcademy().getId(), round.getYear())
                 .orElseThrow(() -> new BusinessException(ErrorCode.VOCAB_SCHEDULE_NOT_CONFIGURED));
 
-        List<VocabWord> pool = wordsInRange(round);
+        List<ExamItem> pool = itemsInRange(round, config.isIncludePhrase());
         if (pool.isEmpty()) {
             // 0문항 시험을 만들면 학생이 제출만 해도 만점이 된다
             throw new BusinessException(ErrorCode.VOCAB_NO_WORDS_IN_RANGE);
@@ -108,7 +119,7 @@ public class VocabExamService {
         Random random = new Random();
         // ★ 범위의 단어 수보다 설정값이 크면 단어 수로 줄어든다 — 같은 단어를 두 번 내지 않는다
         int count = Math.min(config.questionCountFor(round.isWeekly()), pool.size());
-        List<VocabWord> picked = new ArrayList<>(pool);
+        List<ExamItem> picked = new ArrayList<>(pool);
         Collections.shuffle(picked, random);
         picked = picked.subList(0, count);
 
@@ -123,7 +134,14 @@ public class VocabExamService {
         //   ② 전체 단어는 **폴백에 들어갈 때만** 읽는다. 1단계에서 보기가 다 차면
         //      2,000건을 아예 읽지 않는다 — 그리고 한 번 읽으면 그 응시 안에서 재사용한다.
         Map<Short, List<VocabWord>> byUnit = pool.stream()
+                .filter(i -> !i.isPhrase())
+                .map(ExamItem::word)
                 .collect(Collectors.groupingBy(VocabWord::getUnitNo));
+        // ★ Part 3 도 같은 방식이다 — 이미 읽은 pool 을 유닛별로 묶어 쓴다
+        Map<Short, List<VocabPhrase>> phrasesByUnit = pool.stream()
+                .filter(ExamItem::isPhrase)
+                .map(ExamItem::phrase)
+                .collect(Collectors.groupingBy(VocabPhrase::getUnitNo));
         var allWords = new Supplier<Collection<VocabWord>>() {
             private Collection<VocabWord> cached;
 
@@ -135,20 +153,38 @@ public class VocabExamService {
                 return cached;
             }
         };
+        var allPhrases = new Supplier<Collection<VocabPhrase>>() {
+            private Collection<VocabPhrase> cached;
+
+            @Override
+            public Collection<VocabPhrase> get() {
+                if (cached == null) {
+                    cached = phraseRepository.findByDeletedFalse();
+                }
+                return cached;
+            }
+        };
 
         int mcCount = Math.round(count * config.getMultipleChoiceRate() / 100f);
 
         short seq = 1;
-        for (VocabWord word : picked) {
+        for (ExamItem item : picked) {
             boolean multipleChoice = seq <= mcCount;
+            var type = multipleChoice ? VocabAnswer.Type.MC : VocabAnswer.Type.SA;
             List<String> choices = List.of();
             if (multipleChoice) {
-                var sameUnit = byUnit.getOrDefault(word.getUnitNo(), List.of());
-                choices = ChoicePicker.pick(word, sameUnit, allWords,
-                        config.getChoiceCount(), random).texts();
+                choices = item.isPhrase()
+                        // ★ Part 3 오답은 Part 3 에서만 뽑는다 — 섞으면 길이만 봐도 답이 보인다
+                        ? ChoicePicker.pickPhrase(item.phrase(),
+                                phrasesByUnit.getOrDefault(item.unitNo(), List.of()),
+                                allPhrases, config.getChoiceCount(), random).texts()
+                        : ChoicePicker.pick(item.word(),
+                                byUnit.getOrDefault(item.unitNo(), List.of()),
+                                allWords, config.getChoiceCount(), random).texts();
             }
-            var answer = new VocabAnswer(attempt, word, seq,
-                    multipleChoice ? VocabAnswer.Type.MC : VocabAnswer.Type.SA, choices);
+            var answer = item.isPhrase()
+                    ? new VocabAnswer(attempt, item.phrase(), seq, type, choices)
+                    : new VocabAnswer(attempt, item.word(), seq, type, choices);
             answerRepository.save(answer);
             attempt.addAnswer(answer);
             seq++;
@@ -227,19 +263,41 @@ public class VocabExamService {
         // ★★ 정답 후보를 단어마다 조회하지 않는다 — 한 번에 읽어 묶는다.
         //   제출은 시험이 끝나는 순간 한꺼번에 몰리는 호출이라 start 보다 더 위험하다
         //   (실측: 문항당 +1 → 문항 20개면 쿼리 20개가 더 난다).
-        var wordIds = answers.stream().map(a -> a.getWord().getId()).distinct().toList();
-        Map<Long, List<String>> candidates = meaningRepository
+        var wordIds = answers.stream()
+                .filter(a -> !a.isPhrase())
+                .map(a -> a.getWord().getId())
+                .distinct().toList();
+        Map<Long, List<String>> candidates = wordIds.isEmpty() ? Map.of() : meaningRepository
                 .findByWordIdInAndDeletedFalse(wordIds).stream()
                 .collect(Collectors.groupingBy(m -> m.getWord().getId(),
                         Collectors.mapping(VocabMeaning::getText, Collectors.toList())));
 
+        // ★★ Part 3 도 한 번에 읽는다 — 문항마다 getPhrase() 를 풀면 쿼리가 문항 수만큼
+        //   늘어난다(제출은 시험이 끝나는 순간 한꺼번에 몰리는 호출이다).
+        //   ⚠️ Part 3 에는 vocab_meaning 이 없어 뜻 한 칸을 그 자리에서 쪼갠다 —
+        //   관리자 인정 표현은 표제어에만 있다.
+        var phraseIds = answers.stream()
+                .filter(VocabAnswer::isPhrase)
+                .map(a -> a.getPhrase().getId())
+                .filter(Objects::nonNull)
+                .distinct().toList();
+        Map<Long, String> phraseMeanings = phraseIds.isEmpty() ? Map.of()
+                : phraseRepository.findAllById(phraseIds).stream()
+                        .filter(ph -> ph.getMeaning() != null)
+                        .collect(Collectors.toMap(VocabPhrase::getId, VocabPhrase::getMeaning));
+
         int correct = 0;
         for (VocabAnswer answer : answers) {
             String raw = given.get(answer.getSeqNo());
+            // ★ Part 3 는 vocab_meaning 이 없어 뜻 한 칸을 같은 규칙으로 그 자리에서 쪼갠다
+            List<String> itemCandidates = answer.isPhrase()
+                    ? MeaningSplitter.split(phraseMeanings.get(answer.getPhrase().getId()))
+                    : candidates.getOrDefault(answer.getWord().getId(), List.of());
             boolean ok = answer.getType() == VocabAnswer.Type.MC
-                    ? VocabGrader.isCorrectChoice(raw, correctTextOf(answer))
-                    : VocabGrader.isCorrect(raw, candidates.getOrDefault(
-                            answer.getWord().getId(), List.of()));
+                    // ★ 객관식 정답은 보기에 넣은 「첫 후보」다 — ChoicePicker 가 그렇게 넣었다
+                    ? VocabGrader.isCorrectChoice(raw,
+                            itemCandidates.isEmpty() ? "" : itemCandidates.get(0))
+                    : VocabGrader.isCorrect(raw, itemCandidates);
             // ★ 빈 답도 그대로 남긴다 — 관리자가 오답을 보고 인정 표현을 넓히는 근거다
             answer.grade(raw, ok);
             if (ok) {
@@ -276,31 +334,57 @@ public class VocabExamService {
     }
 
     /**
-     * 객관식 정답 문구.
+     * 결과 화면에 발음·예문·유의어를 보여줄 것인가 (업체 확정 2026-10-22, 기본 켜짐).
      *
-     * <p>★ 보기 중 <b>그 단어의 첫 뜻</b>이 정답이다 — {@link ChoicePicker} 가 그렇게 넣었다.
+     * <p>★ <b>지점 설정을 서버가 판정한다.</b> 앱이 들고 있으면 끄려고 앱을 배포해야 한다.
+     *
+     * <p>⚠️ 설정 행이 없으면 보여주지 않는다 — 그 지점은 시험 자체가 돌지 않으므로
+     * 여기서 예외를 던질 자리가 아니다.
      */
-    private String correctTextOf(VocabAnswer answer) {
-        var split = MeaningSplitter.split(answer.getWord().getMeaningRaw());
-        return split.isEmpty() ? "" : split.get(0);
+    @Transactional(readOnly = true)
+    public boolean showWordDetail(VocabAttempt attempt) {
+        return configRepository
+                .findByAcademyIdAndYearAndDeletedFalse(
+                        attempt.getRound().getAcademy().getId(), attempt.getYear())
+                .map(VocabScheduleConfig::isShowWordDetail)
+                .orElse(false);
     }
 
     private List<Question> questionsOf(VocabAttempt attempt) {
         return answerRepository
                 .findByAttemptIdAndDeletedFalseOrderBySeqNoAsc(attempt.getId())
                 .stream()
-                .map(a -> new Question(a.getSeqNo(), a.getWord().getId(),
-                        a.getWord().getWord(), a.getType(), a.choiceList()))
+                .map(a -> new Question(a.getSeqNo(),
+                        a.isPhrase() ? null : a.getWord().getId(),
+                        a.isPhrase() ? a.getPhrase().getId() : null,
+                        a.isPhrase() ? ExamItem.Part.PHRASE : ExamItem.Part.WORD,
+                        a.prompt(), a.getType(), a.choiceList()))
                 .toList();
     }
 
-    /** 회차 범위의 출제 대상 — ★ 출제에서 뺀 단어는 제외한다. */
-    private List<VocabWord> wordsInRange(VocabExamRound round) {
-        List<VocabWord> pool = new ArrayList<>();
+    /**
+     * 회차 범위의 출제 대상 — ★ 출제에서 뺀 단어는 제외한다.
+     *
+     * <p>★ <b>Part 3 도 범위에 들어온다</b>(업체 확정 2026-10-22) — 유닛당 6문항이
+     * 늘어난다. 지점 설정으로 끌 수 있다.
+     *
+     * <p>⚠️ 조회가 <b>유닛마다</b> 돌고 문항마다 돌지는 않는다. 3회독은 하루 5유닛이라
+     * 최대 5(+Part 3 5)번이고, 문항 수(30)와는 무관하다.
+     */
+    private List<ExamItem> itemsInRange(VocabExamRound round, boolean includePhrase) {
+        List<ExamItem> pool = new ArrayList<>();
         for (short unit = round.getUnitFrom(); unit <= round.getUnitTo(); unit++) {
             wordRepository.findByUnitNoAndDeletedFalseOrderBySeqNoAsc(unit).stream()
                     .filter(VocabWord::isActive)
+                    .map(ExamItem::of)
                     .forEach(pool::add);
+            if (includePhrase) {
+                phraseRepository.findByUnitNoAndDeletedFalse(unit).stream()
+                        // ⚠️ 뜻이 비면 아무도 맞힐 수 없는 문항이 된다 — 출제하지 않는다
+                        .filter(ph -> ph.getMeaning() != null && !ph.getMeaning().isBlank())
+                        .map(ExamItem::of)
+                        .forEach(pool::add);
+            }
         }
         return pool;
     }

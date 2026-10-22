@@ -59,7 +59,7 @@ class VocabExamTest {
 
         var config = new VocabScheduleConfig(academy, year, START);
         // 문항 5개 · 보기 4개 · 객관식 40%(2문항) — 경계를 손으로 만든다
-        config.modify(null, (short) 5, (short) 10, (short) 4, (short) 40);
+        config.modify(null, (short) 5, (short) 10, (short) 4, (short) 40, false, true);
         em.persist(config);
 
         // 1유닛에 단어 8개. 보기 4개를 같은 유닛에서 채울 수 있는 수다

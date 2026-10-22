@@ -169,7 +169,7 @@ class VocabImportTest {
     }
 
     @Test
-    @DisplayName("★★ 원고 50개 전체가 들어간다 — 단어 2,000 · Part3 300, 오류는 2건뿐")
+    @DisplayName("★★ 원고 50개 전체가 들어간다 — 단어 2,000 · Part3 300, 오류는 해석 1건뿐")
     @EnabledIf("manuscriptExists")
     void allFiftyFilesLoad() throws Exception {
         int words = 0;
@@ -189,13 +189,14 @@ class VocabImportTest {
 
         assertThat(words).isEqualTo(2_000);
         assertThat(phrases).isEqualTo(300);
-        // ★★ 원고 오류가 정확히 2건이어야 한다 — 품사 1건(beneath, Unit 15) ·
-        //    예문 해석 1건(allow, Unit 31). 전달 문서의 실측과 같은 숫자다.
-        //    더 나오면 파서가 멀쩡한 행을 오류로 보는 것이고, 덜 나오면 놓치는 것이다
+        // ★★ 업체 회신(2026-10-22)으로 품사 빈 칸(Unit 15 beneath)은 「맞다」가 됐다 —
+        //    더 이상 오류가 아니다. 남는 것은 예문 해석 1건(allow, Unit 31)뿐이고,
+        //    업체가 그 해석 문구를 줬으므로 원고가 갱신되면 0건이 된다.
+        //    ⚠️ 그래서 「정확히 1건」으로 못 박지 않는다 — 원고 갱신이 테스트를 깨면 안 된다.
         System.out.println("원고 오류: " + errors);
-        assertThat(errors).hasSize(2);
-        assertThat(errors).anyMatch(e -> e.contains("beneath") && e.contains("품사"));
-        assertThat(errors).anyMatch(e -> e.contains("allow") && e.contains("해석"));
+        assertThat(errors).as("★ 품사 빈 칸은 업체 확인 결과 정상이다").noneMatch(e -> e.contains("품사"));
+        assertThat(errors).as("남는 오류는 예문 해석 누락뿐이다").allMatch(e -> e.contains("해석"));
+        assertThat(errors).hasSizeLessThanOrEqualTo(1);
         assertThat(wordRepository.countByDeletedFalse()).isEqualTo(2_000);
     }
 
