@@ -123,8 +123,9 @@ public class AdminAdmissionReservationController {
      * <p>★★ <b>기한을 요청에서 받지 않는다.</b> 화면마다 다른 기한을 보내면 「왜 이
      * 링크만 일찍 닫혔나」를 추적할 수 없다 — <b>서버 기본값(7일)</b>을 쓴다.
      *
-     * <p>★ <b>여러 번 불러도 되고 이전 토큰도 계속 열린다</b> — 재전송된 알림톡 두 개가
-     * 모두 유효해야 한다. 답변 1회 고정은 토큰이 아니라 <b>예약 건</b>에서 지킨다.
+     * <p>★★ <b>여러 번 불러도 같은 토큰이 나온다.</b> 새로 만들면 이미 보낸 알림톡의
+     * 링크가 죽는다. <b>기한도 처음 정한 날짜를 그대로 둔다</b> — 누를 때마다 7일이 다시
+     * 붙으면 기한이 사실상 없어진다. 답변 1회 고정은 토큰이 아니라 <b>예약 건</b>에서 지킨다.
      */
     @PostMapping("/{reservationId}/share")
     public ApiResponse<ShareResponse> share(@CurrentAccount AuthPrincipal me,

@@ -66,6 +66,17 @@ public class PublicShareToken extends BaseEntity {
     }
 
     /**
+     * 기한을 옮긴다.
+     *
+     * <p>★ <b>토큰은 그대로 둔다.</b> 안내문 링크는 공지의 게시 종료를 따라가는데, 직원이
+     * 종료를 늘렸을 때 새 토큰을 내면 <b>이미 보낸 알림톡의 링크가 죽는다.</b> 같은 토큰의
+     * 기한만 옮기면 나간 링크가 그대로 살아 있다.
+     */
+    public void changeExpiresAt(Instant expiresAt) {
+        this.expiresAt = expiresAt;
+    }
+
+    /**
      * 지금 열어도 되는 링크인가.
      *
      * <p>⚠️ <b>만료를 「없음」과 다르게 다루지 말 것.</b> 호출부는 둘을 같은 응답

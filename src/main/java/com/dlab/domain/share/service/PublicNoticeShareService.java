@@ -52,12 +52,17 @@ public class PublicNoticeShareService {
      * 만들 수 있게 된다.
      *
      * <p>⚠️ <b>기한을 인자로 받지 않는다</b>(설계 결정 5). 공지의 게시 종료를 그대로 쓴다.
+     *
+     * <p>★★ <b>같은 공지면 같은 토큰이 나온다.</b> 누를 때마다 새로 만들면 <b>이미 보낸
+     * 알림톡의 링크가 죽는다</b> — 알림톡은 보낸 뒤 본문을 바꿀 수 없다.
+     * 게시 종료가 늘어났으면 <b>같은 토큰의 기한만</b> 옮긴다({@code SYNC}).
      */
     @Transactional
     public PublicShareToken share(AuthPrincipal me, Long noticeId) {
         Notice notice = noticeService.findOneForAdmin(me, noticeId);
-        return tokenService.issue(ShareTargetType.NOTICE, notice.getId(),
-                notice.getAcademy(), notice.getYear(), notice.getExpiresAt());
+        return tokenService.issueOrReuse(ShareTargetType.NOTICE, notice.getId(),
+                notice.getAcademy(), notice.getYear(), notice.getExpiresAt(),
+                PublicShareTokenService.ExpiryOnReuse.SYNC);
     }
 
     /** 공개 조회. */

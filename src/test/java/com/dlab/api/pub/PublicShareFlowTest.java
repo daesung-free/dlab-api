@@ -149,6 +149,76 @@ class PublicShareFlowTest {
     }
 
     @Test
+    @DisplayName("★★ 같은 공지를 또 누르면 같은 토큰이다 — 새로 만들면 이미 보낸 알림톡이 전부 죽는다")
+    void noticeShareIsIdempotent() {
+        String first = noticeShare.share(admin, notice.getId()).getToken();
+        String second = noticeShare.share(admin, notice.getId()).getToken();
+
+        assertThat(second).isEqualTo(first);
+        // 먼저 나간 링크가 그대로 열린다
+        assertThat(noticeShare.view(first).available()).isTrue();
+    }
+
+    @Test
+    @DisplayName("★ 게시 종료가 늘어나면 같은 토큰의 기한만 옮긴다 — 토큰을 바꾸면 나간 링크가 죽는다")
+    void extendingNoticeKeepsSameToken() {
+        String first = noticeShare.share(admin, notice.getId()).getToken();
+        Instant later = Instant.now().plus(30, ChronoUnit.DAYS);
+        notice.update(notice.getTitle(), notice.getContent(), false, false, null, later);
+        em.flush();
+
+        var again = noticeShare.share(admin, notice.getId());
+
+        assertThat(again.getToken()).isEqualTo(first);
+        assertThat(again.getExpiresAt()).isEqualTo(later);
+    }
+
+    @Test
+    @DisplayName("★ 만료된 뒤에 다시 누르면 새 토큰이 나온다 — 죽은 링크는 치운다")
+    void expiredTokenIsReplaced() {
+        notice.update(notice.getTitle(), notice.getContent(), false, false, null,
+                Instant.now().minus(1, ChronoUnit.DAYS));
+        em.flush();
+        String dead = noticeShare.share(admin, notice.getId()).getToken();
+
+        notice.update(notice.getTitle(), notice.getContent(), false, false, null,
+                Instant.now().plus(5, ChronoUnit.DAYS));
+        em.flush();
+
+        assertThat(noticeShare.share(admin, notice.getId()).getToken()).isNotEqualTo(dead);
+    }
+
+    @Test
+    @DisplayName("★★ 대기자도 같은 토큰이고 기한은 처음 정한 날짜 그대로다 — 누를 때마다 늘면 기한이 없어진다")
+    void waitlistShareIsIdempotent() {
+        var first = waitlistShare.share(admin, reservation.getId());
+        var second = waitlistShare.share(admin, reservation.getId());
+
+        assertThat(second.getToken()).isEqualTo(first.getToken());
+        assertThat(second.getExpiresAt()).isEqualTo(first.getExpiresAt());
+    }
+
+    /**
+     * ★ 프런트는 {@code POST} 뒤에 한 번 더 {@code GET} 한다 — <b>서버가 가진 답이 정본</b>
+     * 이라는 판단이다. 두 번째 {@code POST} 가 {@code accepted:false} 여도 그 뒤 {@code GET}
+     * 의 {@code answered} 는 <b>처음 누른 값</b>이어야 한다. 어긋나면 화면이 「거절됐는데
+     * 아무 값도 없다」를 보여준다.
+     */
+    @Test
+    @DisplayName("★ 거절된 응답 뒤의 조회도 첫 응답을 보여준다 — 화면이 POST 뒤에 다시 GET 한다")
+    void getAfterRejectedPostShowsFirstAnswer() {
+        String token = waitlistShare.share(admin, reservation.getId()).getToken();
+        waitlistShare.answer(token, WaitlistAnswer.ACCEPT, "10.0.0.9");
+
+        var rejected = waitlistShare.answer(token, WaitlistAnswer.DECLINE, "10.0.0.9");
+        var view = waitlistShare.view(token);
+
+        assertThat(rejected.accepted()).isFalse();
+        assertThat(view.answered()).isEqualTo(WaitlistAnswer.ACCEPT);
+        assertThat(view.answeredAt()).isNotNull();
+    }
+
+    @Test
     @DisplayName("★★ 남의 첨부는 받을 수 없다 — fileId 만 바꿔 열리면 성적표까지 나간다")
     void foreignAttachmentIsRejected() {
         FileAttachment mine = fileRepository.save(new FileAttachment(

@@ -57,6 +57,23 @@ CREATE TABLE public_share_token
 --   폐기한 링크가 되살아난다. 랜덤이라 실제로 겹칠 일도 없다.
 CREATE UNIQUE INDEX uq_public_share_token ON public_share_token (token);
 
+-- ★★ 대상당 유효 토큰은 하나다 — 발급이 멱등해야 한다.
+--
+--   누를 때마다 새 토큰이 나오면 **이미 보낸 알림톡의 링크가 죽는다.** 알림톡은 보낸
+--   뒤에 본문을 바꿀 수 없어서, 10월 등록비 안내를 1,000명에게 보낸 뒤 직원이 그 공지의
+--   「링크」 버튼을 한 번 더 누르면 나간 1,000통이 전부 「없는 링크」가 된다.
+--   학부모는 그걸 보고 전화한다 — 없애려던 전화가 그대로 돌아온다.
+--
+--   ⚠️ 코드의 사전 조회만으로는 막히지 않는다. 동시에 두 번 누르면 두 요청이 모두
+--     「없음」을 읽고 둘 다 넣는다 — uq_penalty_point_idempotency 와 같은 판단으로
+--     제약을 심판으로 둔다.
+--
+--   ★ 만료 조건은 인덱스에 넣을 수 없다(now() 는 불변 함수가 아니다). 그래서 제약은
+--     「살아 있는 행 하나」이고, 만료된 토큰은 새로 발급할 때 soft delete 된다 —
+--     이미 죽은 링크를 치우는 것이라 유효한 링크를 끊는 일이 아니다.
+CREATE UNIQUE INDEX uq_public_share_target
+    ON public_share_token (target_type, target_id) WHERE is_deleted = FALSE;
+
 CREATE INDEX idx_public_share_target
     ON public_share_token (target_type, target_id, created_at DESC);
 

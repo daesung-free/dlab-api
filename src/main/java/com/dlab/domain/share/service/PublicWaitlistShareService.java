@@ -75,8 +75,11 @@ public class PublicWaitlistShareService {
     public PublicShareToken share(AuthPrincipal me, Long reservationId) {
         AdmissionReservation reservation = adminService.get(me, reservationId);
         Instant deadline = Instant.now(clock).plus(PublicShareTokenService.WAITLIST_TTL);
-        return tokenService.issue(ShareTargetType.ADMISSION_RESERVATION, reservation.getId(),
-                reservation.getAcademy(), reservation.getYear(), deadline);
+        return tokenService.issueOrReuse(ShareTargetType.ADMISSION_RESERVATION,
+                reservation.getId(), reservation.getAcademy(), reservation.getYear(), deadline,
+                // ★ 기한은 처음 정한 것을 그대로 둔다. 누를 때마다 7일이 다시 붙으면
+                //   기한이 사실상 없어지고, 화면이 보여준 날짜가 조용히 바뀐다
+                PublicShareTokenService.ExpiryOnReuse.KEEP);
     }
 
     /** 공개 조회. */
