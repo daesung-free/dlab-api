@@ -157,6 +157,7 @@ public class SeatLayoutService {
                             seat.getXPos(),
                             seat.getYPos(),
                             seat.isUsable(),
+                            seat.getSeatStyle(),
                             assignment == null ? null : assignment.getEnrollment().getId(),
                             assignment == null ? null
                                     : assignment.getEnrollment().getStudentNo(),
@@ -292,6 +293,8 @@ public class SeatLayoutService {
             int xPos,
             int yPos,
             boolean usable,
+            /** 좌석형태. 배치도에서 형태별로 색을 달리 칠하는 데 쓴다 */
+            com.dlab.domain.facility.entity.SeatStyle seatStyle,
             Long enrollmentId,
             String studentNo,
             String studentName,
