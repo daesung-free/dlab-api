@@ -49,6 +49,10 @@ COMMENT ON COLUMN seat_master.seat_style IS
 -- "어느 것이 별관인지 번호만 보고 단정할 수 없다 — 컷오버 체크리스트 항목이다"
 -- 라며 남겨 뒀다. 2026-10-22 답변으로 **동탄 별관 A·B·C 가 확정**됐으므로 닫는다.
 --
+-- ★ 운영에는 이미 있다 — 거기서 이 INSERT 는 0건이다(아래 가드).
+--   그래도 지우지 않는 이유는 **새로 올리는 환경**(개발 DB 재생성·신규 지점 구성)에서
+--   별관이 없으면 동탄 좌석을 넣을 관이 없기 때문이다.
+--
 -- ★★ seat_cd_offset 은 만든 뒤 바꿀 수 없다
 --    이 값이 좌석 등록 시점에 kiosk_seat_cd 에 **이미 반영돼 저장**되기 때문이다.
 --    나중에 바꾸면 그 관의 기존 좌석들과 어긋나, 화면은 멀쩡한데 단말에서만 자리가
@@ -62,9 +66,29 @@ COMMENT ON COLUMN seat_master.seat_style IS
 --   별관 A·B·C 구역 이동과 2,140석 적재는 배치표를 눈으로 읽어야 하는 별개 작업이다.
 --   그릇만 만든다.
 --
+-- ★★★ 가드가 「코드가 ANNEX 인 행이 없으면」이 아니라 「offset > 0 인 활성 관이
+--      하나도 없으면」인 이유 — 운영에 이미 있다 (2026-10-23 실측)
+--
+--        33 동탄   code='2'    name='별관'   offset=1000  활성
+--        48 대구   code='SUB'  name='11층'   offset=1000  활성
+--        31 분당 · 32 일산 : offset=1000 행이 있으나 is_deleted = TRUE (시험 흔적)
+--
+--      코드로 가드를 걸면 동탄 'ANNEX' 가 없으므로 **그대로 들어가 별관이 두 개**가 된다.
+--      빈 관이 화면에 뜨고 좌석을 어느 관에 넣을지 갈린다.
+--      별관을 가르는 진짜 성질은 코드가 아니라 **키오스크 번호를 밀어 올리는가**이고,
+--      코드는 지점이 붙인 이름이라 제각각이다 — Building.isAnnex() 도 같은 판단이다.
+--
+--      ⚠️ 그렇다고 기존 행의 code 를 'ANNEX' 로 UPDATE 하지 않는다.
+--         code 는 offset 과 마찬가지로 **이미 저장된 값에 박혀 있다** —
+--         study_area.kiosk_area_cd 가 '2-A' 처럼 관 코드로 만들어지고(KioskCodeTranslator),
+--         숫자가 아닌 좌석번호도 그렇다. 코드를 바꾸면 그 뒤에 만드는 구역만
+--         'ANNEX-A' 가 되어 같은 관의 구역이 두 체계로 갈린다.
+--
+--      ⚠️ is_deleted = FALSE 를 반드시 본다. 분당·일산의 삭제된 행을 활성으로 오인하면
+--         두 지점은 영영 별관을 못 만든다(여기서는 동탄만 보지만 규칙은 같다).
+--
 -- created_by 0 은 시스템 계정이다(CLAUDE.md §7).
--- NOT EXISTS 는 지점 시드가 없는 환경(테스트·빈 DB)에서 0건으로 지나가게 하고,
--- 이미 손으로 만들어 둔 별관이 있을 때 중복을 막는다.
+-- 지점 시드가 없는 환경(테스트·빈 DB)에서는 0건으로 지나간다.
 
 INSERT INTO building (academy_id, code, name, sort_order, seat_cd_offset, created_by)
 SELECT a.id, 'ANNEX', '별관', 1, 1000, 0
@@ -73,6 +97,6 @@ WHERE a.acad_cd = '33'
   AND NOT EXISTS (
       SELECT 1 FROM building b
        WHERE b.academy_id = a.id
-         AND b.code = 'ANNEX'
          AND b.is_deleted = FALSE
+         AND b.seat_cd_offset > 0
   );

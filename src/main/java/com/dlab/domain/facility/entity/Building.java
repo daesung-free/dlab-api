@@ -29,10 +29,14 @@ public class Building extends BaseEntity {
     public static final String MAIN_CODE = "MAIN";
 
     /**
-     * 별관. 지금은 <b>동탄 하나뿐</b>이고 {@code seatCdOffset} 이 1000 이다
-     * (V20261023140000 이 만든다 — 운영이 1000번대로 써 온 값 그대로다).
+     * 별관 기본 코드.
+     *
+     * <h2>★ 별관인지를 이 코드로 판별하지 말 것 — {@link #isAnnex()}를 쓴다</h2>
+     * 운영의 별관 코드가 지점마다 다르다(2026-10-23 실측: 동탄 {@code '2'}「별관」·
+     * 대구 {@code 'SUB'}「11층」). 코드로 판별하면 <b>그 지점만 조용히 빠진다.</b>
+     * 이 상수는 <b>새로 만들 때의 기본값</b>일 뿐이다.
      */
-    public static final String ANNEX_CODE = "ANNEX";
+    public static final String DEFAULT_ANNEX_CODE = "ANNEX";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -70,6 +74,17 @@ public class Building extends BaseEntity {
     /** 본관인가 — 키오스크 코드를 변환하지 않는 관이다. */
     public boolean isMain() {
         return seatCdOffset == 0;
+    }
+
+    /**
+     * 별관인가 — <b>코드가 아니라 offset 으로 가른다</b>.
+     *
+     * <p>별관을 가르는 진짜 성질은 "키오스크 번호를 밀어 올리는가"이고, 코드는 지점이
+     * 붙인 이름일 뿐이라 제각각이다(동탄 {@code '2'} · 대구 {@code 'SUB'}).
+     * {@code code.equals("ANNEX")} 로 판별하면 그 지점들이 통째로 빠진다.
+     */
+    public boolean isAnnex() {
+        return seatCdOffset > 0;
     }
 
     /**

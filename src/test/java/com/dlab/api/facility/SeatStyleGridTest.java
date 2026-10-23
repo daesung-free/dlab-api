@@ -126,8 +126,11 @@ class SeatStyleGridTest {
     @Test
     @DisplayName("★★ 가로·세로 역방향 + 세로 우선 — 동탄 별관 C 처럼 오른쪽 아래에서 왼쪽 위로 간다")
     void reverseBothAxesColumnMajor() {
+        // 운영의 동탄 별관이 실제로 쓰는 코드가 '2' 다(2026-10-23 실측). 별관인지는
+        // 코드가 아니라 offset 으로 갈린다 — Building.isAnnex()
         Building annex = buildingAdminService.create(admin, academy.getId(),
-                Building.ANNEX_CODE, "별관", (short) 1, 1000, true);
+                "2", "별관", (short) 1, 1000, true);
+        assertThat(annex.isAnnex()).isTrue();
         StudyArea annexC = area(annex.getId(), "C");
 
         List<SeatMaster> seats = seatMasterAdminService.createGrid(admin, spec(annexC, 6, 3)
