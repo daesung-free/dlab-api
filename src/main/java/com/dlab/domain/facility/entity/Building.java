@@ -28,6 +28,12 @@ public class Building extends BaseEntity {
     /** 마이그레이션이 지점마다 하나씩 만들어 둔 본관. 기존 구역이 전부 여기 붙어 있다. */
     public static final String MAIN_CODE = "MAIN";
 
+    /**
+     * 별관. 지금은 <b>동탄 하나뿐</b>이고 {@code seatCdOffset} 이 1000 이다
+     * (V20261023140000 이 만든다 — 운영이 1000번대로 써 온 값 그대로다).
+     */
+    public static final String ANNEX_CODE = "ANNEX";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

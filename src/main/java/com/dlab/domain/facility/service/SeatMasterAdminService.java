@@ -4,6 +4,7 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.facility.entity.SeatMaster;
+import com.dlab.domain.facility.entity.SeatStyle;
 import com.dlab.domain.facility.entity.StudyArea;
 import com.dlab.domain.facility.repository.SeatAssignmentRepository;
 import com.dlab.domain.facility.repository.SeatMasterRepository;
@@ -59,7 +60,7 @@ public class SeatMasterAdminService {
     /** 좌석 단건 등록. 배치도에서 한 자리만 끼워 넣을 때 쓴다. */
     @Transactional
     public SeatMaster create(AuthPrincipal me, Long studyAreaId, String seatCd, String seatNm,
-                             int xPos, int yPos) {
+                             int xPos, int yPos, SeatStyle seatStyle) {
         StudyArea area = studyAreaAdminService.load(me, studyAreaId);
         List<String> codes = List.of(seatCd);
 
@@ -70,7 +71,8 @@ public class SeatMasterAdminService {
         rejectIfKioskCodeTaken(area, existing, kioskCds);
 
         return persist(area, existing, seatCd, kioskCds.get(seatCd),
-                seatNm == null ? seatCd : seatNm, xPos, yPos);
+                seatNm == null ? seatCd : seatNm, xPos, yPos,
+                seatStyle == null ? SeatStyle.CLASSROOM : seatStyle);
     }
 
     /**
@@ -96,17 +98,49 @@ public class SeatMasterAdminService {
         List<SeatMaster> created = new ArrayList<>(planned.size());
         for (PlannedSeat p : planned) {
             created.add(persist(area, existing, p.seatCd(), kioskCds.get(p.seatCd()),
-                    p.seatCd(), p.xPos(), p.yPos()));
+                    p.seatCd(), p.xPos(), p.yPos(), p.seatStyle()));
         }
         return created;
     }
 
-    /** 이름·좌표 수정. {@code seatCd}는 대상이 아니다(키오스크가 이 코드로 좌석을 찾는다). */
+    /**
+     * 이미 있는 좌석에 형태를 <b>번호 범위로</b> 입힌다.
+     *
+     * <h2>★ 왜 격자 등록과 별도로 두는가</h2>
+     * 좌석을 지웠다 다시 만들면 <b>배정 이력이 그 행을 참조하고 있어</b> 끊긴다. 형태는
+     * 키오스크에 내려가지 않으니 기존 행을 고치는 쪽이 안전하다.
+     *
+     * <p>번호는 좌석번호의 <b>끝에 붙은 숫자</b>로 읽는다({@code A-01} → 1). 숫자가 없는
+     * 좌석은 범위에 들 수 없어 건드리지 않는다.
+     *
+     * @param defaultStyle 범위 밖 좌석의 형태. {@code null}이면 <b>그대로 둔다</b>
+     * @return 실제로 값이 바뀐 좌석 수
+     */
+    @Transactional
+    public int applyStyles(AuthPrincipal me, Long studyAreaId, List<StyleRange> ranges,
+                           SeatStyle defaultStyle) {
+        StudyArea area = studyAreaAdminService.load(me, studyAreaId);
+        rejectIfRangesOverlap(ranges);
+
+        int changed = 0;
+        for (SeatMaster seat : seatMasterRepository.findByStudyAreaId(area.getId())) {
+            Integer number = trailingNumber(seat.getSeatCd());
+            SeatStyle style = number == null ? defaultStyle : styleOf(number, ranges, defaultStyle);
+            if (style == null || style == seat.getSeatStyle()) {
+                continue;
+            }
+            seat.changeStyle(style);
+            changed++;
+        }
+        return changed;
+    }
+
+    /** 이름·좌표·형태 수정. {@code seatCd}는 대상이 아니다(키오스크가 이 코드로 좌석을 찾는다). */
     @Transactional
     public SeatMaster update(AuthPrincipal me, Long seatId, String seatNm, Integer xPos,
-                             Integer yPos) {
+                             Integer yPos, SeatStyle seatStyle) {
         SeatMaster seat = load(me, seatId);
-        seat.update(seatNm, xPos, yPos);
+        seat.update(seatNm, xPos, yPos, seatStyle);
         return seat;
     }
 
@@ -250,15 +284,16 @@ public class SeatMasterAdminService {
     }
 
     private SeatMaster persist(StudyArea area, Map<String, SeatMaster> existing, String seatCd,
-                               String kioskSeatCd, String seatNm, int xPos, int yPos) {
+                               String kioskSeatCd, String seatNm, int xPos, int yPos,
+                               SeatStyle seatStyle) {
         SeatMaster deleted = existing.get(seatCd);
         if (deleted != null) {
             // 새로 만들면 seat_assignment 가 옛 행을 가리킨 채 남아 이력이 갈린다
-            deleted.reviveAs(area, seatNm, xPos, yPos);
+            deleted.reviveAs(area, seatNm, xPos, yPos, seatStyle);
             return deleted;
         }
         return seatMasterRepository.save(
-                new SeatMaster(area, seatCd, kioskSeatCd, seatNm, xPos, yPos));
+                new SeatMaster(area, seatCd, kioskSeatCd, seatNm, xPos, yPos, seatStyle));
     }
 
     /** 좌석번호 → 키오스크 번호. 순서를 지켜야 오류 메시지가 격자 순서대로 나온다. */
@@ -281,6 +316,8 @@ public class SeatMasterAdminService {
                     "한 번에 만들 수 있는 좌석은 " + MAX_GRID_SIZE + "개까지입니다.");
         }
 
+        rejectIfRangesOverlap(spec.styleRanges());
+
         Set<String> skips = new HashSet<>();
         if (spec.skips() != null) {
             spec.skips().forEach(s -> skips.add(s.row() + ":" + s.column()));
@@ -291,16 +328,25 @@ public class SeatMasterAdminService {
         Set<String> seen = new LinkedHashSet<>();
 
         // 세로 우선이면 열을 먼저 훑는다. 번호는 빈 칸을 건너뛰고 이어진다
-        int outer = spec.columnMajor() ? spec.columns() : spec.rows();
-        int inner = spec.columnMajor() ? spec.rows() : spec.columns();
-        for (int o = 1; o <= outer; o++) {
-            for (int i = 1; i <= inner; i++) {
+        //
+        // ★ 역방향은 「좌표」가 아니라 「번호 붙는 순서」를 뒤집는다.
+        //   좌표는 화면에 보이는 자리 그대로여야 하므로(1열이 왼쪽 끝) 그대로 두고,
+        //   훑는 순서만 뒤집는다. 대구 A는 1번이 오른쪽 끝이라 reverseX,
+        //   동탄 별관 C는 1201이 오른쪽 아래라 둘 다 뒤집는다.
+        List<Integer> rowOrder = sequence(spec.rows(), spec.reverseY());
+        List<Integer> columnOrder = sequence(spec.columns(), spec.reverseX());
+        List<Integer> outer = spec.columnMajor() ? columnOrder : rowOrder;
+        List<Integer> inner = spec.columnMajor() ? rowOrder : columnOrder;
+
+        for (int o : outer) {
+            for (int i : inner) {
                 int row = spec.columnMajor() ? i : o;
                 int column = spec.columnMajor() ? o : i;
                 if (skips.contains(row + ":" + column)) {
                     continue;
                 }
-                String seatCd = spec.seatCdPrefix() + pad(number++, spec.numberPadding());
+                int seatNumber = number++;
+                String seatCd = spec.seatCdPrefix() + pad(seatNumber, spec.numberPadding());
                 if (!seen.add(seatCd)) {
                     // 접두어·시작번호 조합이 스스로 겹치면 DB 제약보다 먼저 잡는다
                     throw new BusinessException(ErrorCode.SEAT_CD_DUPLICATED,
@@ -308,7 +354,8 @@ public class SeatMasterAdminService {
                 }
                 planned.add(new PlannedSeat(seatCd,
                         spec.startX() + column - 1,
-                        spec.startY() + row - 1));
+                        spec.startY() + row - 1,
+                        styleOf(seatNumber, spec.styleRanges(), spec.seatStyle())));
             }
         }
         if (planned.isEmpty()) {
@@ -317,12 +364,90 @@ public class SeatMasterAdminService {
         return planned;
     }
 
+    /** {@code 1..n} 또는 뒤집힌 {@code n..1}. */
+    private List<Integer> sequence(int size, boolean reverse) {
+        List<Integer> seq = new ArrayList<>(size);
+        for (int i = 1; i <= size; i++) {
+            seq.add(reverse ? size - i + 1 : i);
+        }
+        return seq;
+    }
+
+    // ── 좌석형태 ────────────────────────────────────────────────────────────
+
+    /**
+     * 범위가 서로 겹치면 거부한다.
+     *
+     * <p>겹치면 <b>먼저 쓴 쪽이 이기는</b> 숨은 규칙이 생기고, 시트를 옮겨 적다 한 줄을
+     * 잘못 적은 것이 조용히 통과한다. 뒤집힌 범위(시작 &gt; 끝)도 여기서 잡는다.
+     */
+    private void rejectIfRangesOverlap(List<StyleRange> ranges) {
+        if (ranges == null || ranges.isEmpty()) {
+            return;
+        }
+        List<StyleRange> sorted = ranges.stream()
+                .sorted(java.util.Comparator.comparingInt(StyleRange::fromNumber))
+                .toList();
+        for (StyleRange r : sorted) {
+            if (r.fromNumber() > r.toNumber()) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "좌석형태 범위의 시작이 끝보다 큽니다: %d~%d"
+                                .formatted(r.fromNumber(), r.toNumber()));
+            }
+        }
+        for (int i = 1; i < sorted.size(); i++) {
+            StyleRange prev = sorted.get(i - 1);
+            StyleRange cur = sorted.get(i);
+            if (cur.fromNumber() <= prev.toNumber()) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "좌석형태 범위가 겹칩니다: %d~%d 와 %d~%d".formatted(
+                                prev.fromNumber(), prev.toNumber(),
+                                cur.fromNumber(), cur.toNumber()));
+            }
+        }
+    }
+
+    /** 번호가 든 범위의 형태. 어느 범위에도 안 들면 기본값이다. */
+    private SeatStyle styleOf(int number, List<StyleRange> ranges, SeatStyle fallback) {
+        if (ranges != null) {
+            for (StyleRange r : ranges) {
+                if (number >= r.fromNumber() && number <= r.toNumber()) {
+                    return r.seatStyle();
+                }
+            }
+        }
+        return fallback;
+    }
+
+    /**
+     * 좌석번호 끝에 붙은 숫자({@code A-01} → 1).
+     *
+     * <p>시트가 번호 범위로 오는데 좌석번호에 접두어가 붙어 있을 수 있어서다.
+     * 숫자가 없으면 {@code null} — 범위에 들 수 없다.
+     */
+    private Integer trailingNumber(String seatCd) {
+        int end = seatCd.length();
+        int start = end;
+        while (start > 0 && Character.isDigit(seatCd.charAt(start - 1))) {
+            start--;
+        }
+        if (start == end) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(seatCd.substring(start));
+        } catch (NumberFormatException e) {
+            // 자릿수가 int 를 넘는 경우. 번호로 다룰 값이 아니다
+            return null;
+        }
+    }
+
     private String pad(int number, int width) {
         String s = String.valueOf(number);
         return s.length() >= width ? s : "0".repeat(width - s.length()) + s;
     }
 
-    private record PlannedSeat(String seatCd, int xPos, int yPos) {
+    private record PlannedSeat(String seatCd, int xPos, int yPos, SeatStyle seatStyle) {
     }
 
     /**
@@ -333,7 +458,11 @@ public class SeatMasterAdminService {
      * @param numberPadding 번호 자릿수. {@code 2}면 {@code 01}
      * @param startX        좌표 시작값. 기존 격자 옆에 붙일 때 쓴다
      * @param columnMajor   세로 우선 번호매김
+     * @param reverseX      번호를 오른쪽에서 왼쪽으로 붙인다(대구 A)
+     * @param reverseY      번호를 아래에서 위로 붙인다(동탄 별관 C는 둘 다)
      * @param skips         통로 등 좌석이 없는 칸(행·열은 1부터)
+     * @param seatStyle     범위 밖 좌석의 형태
+     * @param styleRanges   번호 범위별 형태. 한 구역에 형태가 섞여 있다
      */
     public record SeatGridSpec(
             Long studyAreaId,
@@ -345,10 +474,18 @@ public class SeatMasterAdminService {
             int startX,
             int startY,
             boolean columnMajor,
-            List<GridSkip> skips) {
+            boolean reverseX,
+            boolean reverseY,
+            List<GridSkip> skips,
+            SeatStyle seatStyle,
+            List<StyleRange> styleRanges) {
     }
 
     /** 격자에서 비워 둘 칸. */
     public record GridSkip(int row, int column) {
+    }
+
+    /** 번호 범위별 좌석형태. 양 끝을 포함한다. */
+    public record StyleRange(int fromNumber, int toNumber, SeatStyle seatStyle) {
     }
 }

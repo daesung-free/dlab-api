@@ -171,7 +171,7 @@ public class AdminSeatController {
             @Valid @RequestBody SeatRequests.SeatCreate request) {
         return ApiResponse.success(SeatMasterResponse.from(seatMasterAdminService.create(
                 me, request.studyAreaId(), request.seatCd(), request.seatNm(),
-                request.xPos(), request.yPos())));
+                request.xPos(), request.yPos(), request.seatStyle())));
     }
 
     /**
@@ -180,6 +180,15 @@ public class AdminSeatController {
      * <p>4행 × 5열처럼 행·열만 주면 좌표와 좌석번호를 서버가 만든다. 통로는 {@code skips}로
      * 빼고 번호는 그 칸을 건너뛰고 이어진다. <b>코드가 하나라도 겹치면 아무것도 만들지
      * 않고</b> 겹친 코드를 전부 모아 알려준다.
+     *
+     * <p><b>번호 방향은 네 가지다</b> — {@code columnMajor}(세로 우선)에
+     * {@code reverseX}·{@code reverseY}를 조합한다. 실제 교실이 그렇게 생긴 곳이 있다:
+     * 대구 A는 1번이 오른쪽 끝({@code reverseX}), 동탄 별관 C는 1201이 오른쪽 아래에서
+     * 왼쪽 위로 간다({@code columnMajor} + 둘 다 역방향).
+     *
+     * <p><b>좌석형태는 번호 범위로 준다</b>({@code styleRanges}). 한 구역 안에 교실형·
+     * 집중형이 섞여 있고 최대 3구간으로 쪼개지므로, 한 칸씩 찍게 하면 2,140석을 손으로
+     * 지정하게 된다.
      */
     @PostMapping("/masters/grid")
     public ApiResponse<List<SeatMasterResponse>> createSeatGrid(
@@ -190,11 +199,44 @@ public class AdminSeatController {
                 request.startNumberOrDefault(), request.numberPaddingOrDefault(),
                 request.startXOrDefault(), request.startYOrDefault(),
                 request.columnMajorOrDefault(),
+                request.reverseXOrDefault(), request.reverseYOrDefault(),
                 request.skips() == null ? List.of() : request.skips().stream()
                         .map(c -> new SeatMasterAdminService.GridSkip(c.row(), c.column()))
-                        .toList());
+                        .toList(),
+                request.seatStyle() == null
+                        ? com.dlab.domain.facility.entity.SeatStyle.CLASSROOM
+                        : request.seatStyle(),
+                styleRanges(request.styleRanges()));
         return ApiResponse.success(seatMasterAdminService.createGrid(me, spec).stream()
                 .map(SeatMasterResponse::from).toList());
+    }
+
+    /**
+     * 좌석형태 번호 범위 일괄 적용 — <b>이미 만들어 둔 좌석에</b>.
+     *
+     * <p>좌석을 지웠다 다시 만들지 않으므로 배정 이력이 끊기지 않는다. 범위가 서로 겹치면
+     * 거부한다 — 겹치면 「먼저 쓴 쪽이 이기는」 숨은 규칙이 생긴다.
+     *
+     * <p>{@code defaultStyle}을 비우면 <b>범위 밖 좌석은 그대로 둔다.</b> 일부 구간만
+     * 고치려는데 나머지가 교실형으로 덮이면 안 된다.
+     *
+     * @return 실제로 값이 바뀐 좌석 수
+     */
+    @PatchMapping("/masters/styles")
+    public ApiResponse<Integer> applySeatStyles(
+            @CurrentAccount AuthPrincipal me,
+            @Valid @RequestBody SeatRequests.SeatStyleApply request) {
+        return ApiResponse.success(seatMasterAdminService.applyStyles(
+                me, request.studyAreaId(), styleRanges(request.ranges()),
+                request.defaultStyle()));
+    }
+
+    private static List<SeatMasterAdminService.StyleRange> styleRanges(
+            List<SeatRequests.SeatStyleRange> ranges) {
+        return ranges == null ? List.of() : ranges.stream()
+                .map(r -> new SeatMasterAdminService.StyleRange(
+                        r.fromNumber(), r.toNumber(), r.seatStyle()))
+                .toList();
     }
 
     /** 좌석 수정 — 이름·좌표만. {@code seatCd}는 대상이 아니다. */
@@ -204,7 +246,8 @@ public class AdminSeatController {
             @PathVariable Long seatId,
             @Valid @RequestBody SeatRequests.SeatUpdate request) {
         return ApiResponse.success(SeatMasterResponse.from(seatMasterAdminService.update(
-                me, seatId, request.seatNm(), request.xPos(), request.yPos())));
+                me, seatId, request.seatNm(), request.xPos(), request.yPos(),
+                request.seatStyle())));
     }
 
     /**
@@ -286,6 +329,8 @@ public class AdminSeatController {
             int xPos,
             int yPos,
             String assignmentState,
+            /** 좌석형태(교실형·집중형·1인실). 형태별 색 구분에 쓴다 */
+            com.dlab.domain.facility.entity.SeatStyle seatStyle,
             SeatPresence presence,
             boolean onSeatLeave,
             java.time.Instant seatLeftAt,
@@ -299,7 +344,7 @@ public class AdminSeatController {
 
         public static SeatCellResponse from(SeatLayoutService.SeatCell c) {
             return new SeatCellResponse(c.seatId(), c.seatCd(), c.kioskSeatCd(), c.seatNm(),
-                    c.xPos(), c.yPos(), c.assignmentState(), c.presence(),
+                    c.xPos(), c.yPos(), c.assignmentState(), c.seatStyle(), c.presence(),
                     c.onSeatLeave(), c.seatLeftAt(), c.seatLeaveReason(),
                     c.enrollmentId(), c.studentNo(), c.studentName(),
                     c.classId(), c.className(), c.masked());

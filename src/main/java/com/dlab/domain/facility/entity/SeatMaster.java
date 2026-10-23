@@ -56,6 +56,16 @@ public class SeatMaster extends BaseEntity {
     private boolean usable = true;
 
     /**
+     * 좌석형태(교실형·집중형·1인실).
+     *
+     * <p><b>교습비와 잇지 않는다</b> — 상세는 {@link SeatStyle}. 키오스크 계약에는 없는
+     * 값이라 단말 응답에 싣지 않는다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "seat_style", nullable = false, length = 20)
+    private SeatStyle seatStyle = SeatStyle.CLASSROOM;
+
+    /**
      * 좌석 생성.
      *
      * <p>좌표는 <b>키오스크가 좌석배치도를 그리는 데 쓴다</b> — 없으면 화면이 빈다.
@@ -63,6 +73,17 @@ public class SeatMaster extends BaseEntity {
      */
     public SeatMaster(StudyArea studyArea, String seatCd, String kioskSeatCd, String seatNm,
                       int xPos, int yPos) {
+        this(studyArea, seatCd, kioskSeatCd, seatNm, xPos, yPos, SeatStyle.CLASSROOM);
+    }
+
+    /**
+     * 좌석형태까지 지정해 생성.
+     *
+     * <p>형태를 안 받는 생성자를 남겨 둔 것은 <b>기본값이 교실형</b>이라서다 — 1,637석이
+     * 교실형이라 대부분의 호출이 값을 안 보낸다.
+     */
+    public SeatMaster(StudyArea studyArea, String seatCd, String kioskSeatCd, String seatNm,
+                      int xPos, int yPos, SeatStyle seatStyle) {
         this.academy = studyArea.getAcademy();
         this.studyArea = studyArea;
         this.seatCd = seatCd;
@@ -71,6 +92,7 @@ public class SeatMaster extends BaseEntity {
         this.xPos = xPos;
         this.yPos = yPos;
         this.usable = true;
+        this.seatStyle = seatStyle == null ? SeatStyle.CLASSROOM : seatStyle;
     }
 
     /**
@@ -94,7 +116,7 @@ public class SeatMaster extends BaseEntity {
      * ({@code setSeatChgProc}) 좌석 상태 응답을 코드로 머지하기 때문에, 바꾸면 그 자리가
      * 단말에서 사라진다. 이름·좌표만 고친다.
      */
-    public void update(String seatNm, Integer xPos, Integer yPos) {
+    public void update(String seatNm, Integer xPos, Integer yPos, SeatStyle seatStyle) {
         if (seatNm != null) {
             this.seatNm = seatNm;
         }
@@ -103,6 +125,21 @@ public class SeatMaster extends BaseEntity {
         }
         if (yPos != null) {
             this.yPos = yPos;
+        }
+        if (seatStyle != null) {
+            this.seatStyle = seatStyle;
+        }
+    }
+
+    /**
+     * 좌석형태만 바꾼다 — 번호 범위 일괄 지정에서 쓴다.
+     *
+     * <p>형태는 키오스크에 내려가지 않으므로 바꿔도 단말에는 영향이 없다
+     * ({@code seatCd}와 다른 점이다).
+     */
+    public void changeStyle(SeatStyle seatStyle) {
+        if (seatStyle != null) {
+            this.seatStyle = seatStyle;
         }
     }
 
@@ -116,12 +153,14 @@ public class SeatMaster extends BaseEntity {
      * <p>{@code seatCd}·{@code kioskSeatCd}는 덮지 않는다. 같은 코드를 찾아 온 것이라
      * 이미 같은 값이고, 관이 다르면 애초에 이 좌석을 찾지 않는다.
      */
-    public void reviveAs(StudyArea studyArea, String seatNm, int xPos, int yPos) {
+    public void reviveAs(StudyArea studyArea, String seatNm, int xPos, int yPos,
+                         SeatStyle seatStyle) {
         restore();
         this.studyArea = studyArea;
         this.seatNm = seatNm;
         this.xPos = xPos;
         this.yPos = yPos;
         this.usable = true;
+        this.seatStyle = seatStyle == null ? SeatStyle.CLASSROOM : seatStyle;
     }
 }
