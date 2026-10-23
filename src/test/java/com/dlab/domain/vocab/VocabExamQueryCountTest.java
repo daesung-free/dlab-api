@@ -89,7 +89,7 @@ class VocabExamQueryCountTest {
 
     private VocabScheduleConfig config(short questionCount, short mcRate) {
         var c = new VocabScheduleConfig(academy, year, START);
-        c.modify(null, questionCount, questionCount, (short) 4, mcRate);
+        c.modify(null, questionCount, questionCount, (short) 4, mcRate, false, true);
         em.persist(c);
         return c;
     }

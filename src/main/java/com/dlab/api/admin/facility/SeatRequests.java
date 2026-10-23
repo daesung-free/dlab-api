@@ -1,6 +1,7 @@
 package com.dlab.api.admin.facility;
 
 import com.dlab.domain.facility.entity.AreaType;
+import com.dlab.domain.facility.entity.SeatStyle;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -80,14 +81,20 @@ public final class SeatRequests {
             Boolean active) {
     }
 
-    /** 좌석 단건 등록. */
+    /**
+     * 좌석 단건 등록.
+     *
+     * @param seatStyle 좌석형태. <b>비우면 교실형</b>이다 — 1,637석이 교실형이라 대부분
+     *                  보내지 않는다
+     */
     public record SeatCreate(
             @NotNull(message = "구역은 필수입니다.") Long studyAreaId,
             @NotBlank(message = "좌석번호는 필수입니다.")
             @Size(max = 50, message = "좌석번호는 50자까지입니다.") String seatCd,
             @Size(max = 50, message = "좌석 이름은 50자까지입니다.") String seatNm,
             @Min(0) @NotNull(message = "X 좌표는 필수입니다.") Integer xPos,
-            @Min(0) @NotNull(message = "Y 좌표는 필수입니다.") Integer yPos) {
+            @Min(0) @NotNull(message = "Y 좌표는 필수입니다.") Integer yPos,
+            SeatStyle seatStyle) {
     }
 
     /**
@@ -103,7 +110,15 @@ public final class SeatRequests {
      * @param startX        x 좌표 시작값(기본 1)
      * @param startY        y 좌표 시작값(기본 1)
      * @param columnMajor   세로 우선 번호매김(기본 가로 우선)
+     * @param reverseX      가로 역방향 — 번호가 <b>오른쪽에서 왼쪽으로</b> 붙는다.
+     *                      대구 A가 그렇다(1번이 오른쪽 끝)
+     * @param reverseY      세로 역방향 — 번호가 <b>아래에서 위로</b> 붙는다.
+     *                      동탄 별관 C가 가로·세로 둘 다 역방향이다
      * @param skips         통로 등 좌석이 없는 칸. 번호는 이 칸을 건너뛰고 이어진다
+     * @param seatStyle     형태 범위에 들지 않는 좌석의 형태. 비우면 교실형
+     * @param styleRanges   <b>번호 범위별 형태</b>. 한 구역에 형태가 섞여 있어
+     *                      (광명 C는 3구간) 범위 목록으로 받는다 — 한 칸씩 찍게 하면
+     *                      2,140석을 손으로 지정하게 된다
      */
     public record SeatGridCreate(
             @NotNull(message = "구역은 필수입니다.") Long studyAreaId,
@@ -120,7 +135,11 @@ public final class SeatRequests {
             @Min(0) Integer startX,
             @Min(0) Integer startY,
             Boolean columnMajor,
-            @Valid List<SeatGridSkipCell> skips) {
+            Boolean reverseX,
+            Boolean reverseY,
+            @Valid List<SeatGridSkipCell> skips,
+            SeatStyle seatStyle,
+            @Valid List<SeatStyleRange> styleRanges) {
 
         public String seatCdPrefixOrEmpty() {
             return seatCdPrefix == null ? "" : seatCdPrefix;
@@ -145,6 +164,14 @@ public final class SeatRequests {
         public boolean columnMajorOrDefault() {
             return Boolean.TRUE.equals(columnMajor);
         }
+
+        public boolean reverseXOrDefault() {
+            return Boolean.TRUE.equals(reverseX);
+        }
+
+        public boolean reverseYOrDefault() {
+            return Boolean.TRUE.equals(reverseY);
+        }
     }
 
     /** 격자에서 비워 둘 칸. 행·열은 1부터 센다(화면에 보이는 그대로). */
@@ -153,10 +180,43 @@ public final class SeatRequests {
             @Min(value = 1, message = "열은 1부터입니다.") int column) {
     }
 
+    /**
+     * 번호 범위별 좌석형태.
+     *
+     * <p>디랩이 준 시트가 「구역 · 시작번호 · 끝번호 · 형태」 모양이라 <b>그대로 옮겨
+     * 넣을 수 있게</b> 같은 형태로 받는다. 양 끝을 포함한다(213~253이면 253도 들어간다).
+     *
+     * @param fromNumber 시작 번호(포함)
+     * @param toNumber   끝 번호(포함)
+     */
+    public record SeatStyleRange(
+            @NotNull(message = "시작 번호는 필수입니다.") @Min(0) Integer fromNumber,
+            @NotNull(message = "끝 번호는 필수입니다.") @Min(0) Integer toNumber,
+            @NotNull(message = "좌석형태는 필수입니다.") SeatStyle seatStyle) {
+    }
+
+    /**
+     * 이미 만들어 둔 좌석에 형태를 번호 범위로 입히기.
+     *
+     * <p>격자 등록 때 형태를 안 넣었거나, 시트가 나중에 온 구역을 위한 경로다. 좌석을
+     * 다시 만들지 않으므로 <b>배정 이력이 끊기지 않는다.</b>
+     *
+     * @param defaultStyle 범위에 안 든 좌석을 어떻게 할지. <b>비우면 건드리지 않는다</b> —
+     *                     일부 구간만 고치려는데 나머지가 교실형으로 덮이면 안 된다
+     */
+    public record SeatStyleApply(
+            @NotNull(message = "구역은 필수입니다.") Long studyAreaId,
+            @NotEmpty(message = "적용할 범위가 없습니다.")
+            @Size(max = 100, message = "범위는 100개까지입니다.")
+            @Valid List<SeatStyleRange> ranges,
+            SeatStyle defaultStyle) {
+    }
+
     /** 좌석 수정. {@code seatCd}는 대상이 아니다(키오스크가 이 코드로 좌석을 찾는다). */
     public record SeatUpdate(
             @Size(max = 50, message = "좌석 이름은 50자까지입니다.") String seatNm,
             @Min(0) Integer xPos,
-            @Min(0) Integer yPos) {
+            @Min(0) Integer yPos,
+            SeatStyle seatStyle) {
     }
 }

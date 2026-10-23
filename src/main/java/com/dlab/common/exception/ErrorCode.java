@@ -205,6 +205,23 @@ public enum ErrorCode {
     NOTIFICATION_REVIEW_NOT_APPLICABLE(HttpStatus.BAD_REQUEST,
             "카카오 알림톡 템플릿만 심사 대상입니다."),
 
+    // 직원 수동 발송 (디랩 1016 「직원 발송」)
+    /** ★ 미리보기를 거치지 않은 발송. 조건을 발송 본문에 다시 싣게 하지 않는 이유다 —
+     *  화면이 미리보기 뒤에 대상을 바꿔도 서버는 모르고, 담당자가 본 것과 다른 사람에게 나간다. */
+    MANUAL_SEND_PREVIEW_NOT_FOUND(HttpStatus.BAD_REQUEST,
+            "미리보기를 먼저 확인해야 발송할 수 있습니다."),
+    /** 유효기간 10분 경과. 창을 열어 둔 사이 퇴원한 학생이 섞인다. */
+    MANUAL_SEND_PREVIEW_EXPIRED(HttpStatus.BAD_REQUEST,
+            "미리보기가 만료되었습니다. 대상을 다시 확인해 주세요."),
+    /** ★ 같은 미리보기로 두 번. 알림톡은 건당 과금이라 DB 유니크로도 막는다. */
+    MANUAL_SEND_ALREADY_SENT(HttpStatus.CONFLICT, "이미 발송된 미리보기입니다."),
+    MANUAL_SEND_TEMPLATE_NOT_MANUAL(HttpStatus.BAD_REQUEST,
+            "직원 발송용 템플릿이 아닙니다."),
+    /** 수신자는 템플릿이 정한다 — 실행 시점에 갈리는 ROUTED·관리자 알림은 수동 발송 대상이 아니다. */
+    MANUAL_SEND_RECIPIENT_NOT_SUPPORTED(HttpStatus.BAD_REQUEST,
+            "이 템플릿의 수신자는 수동 발송으로 정할 수 없습니다."),
+    MANUAL_SEND_NO_TARGET(HttpStatus.BAD_REQUEST, "발송 대상이 없습니다."),
+
     // 급식 (F-4.5 · A-9)
     MEAL_ORDER_NOT_FOUND(HttpStatus.NOT_FOUND, "급식 주문을 찾을 수 없습니다."),
     MEAL_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "급식 신청 내역을 찾을 수 없습니다."),

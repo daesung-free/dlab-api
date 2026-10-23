@@ -181,7 +181,9 @@ class SeatBuildingTest {
 
         var created = seatMasterAdminService.createGrid(admin,
                 new SeatMasterAdminService.SeatGridSpec(
-                        annexA.getId(), 1, 3, "", 1, 1, 1, 1, false, List.of()));
+                        annexA.getId(), 1, 3, "", 1, 1, 1, 1, false, false, false,
+                        List.of(), com.dlab.domain.facility.entity.SeatStyle.CLASSROOM,
+                        List.of()));
 
         assertThat(created)
                 .extracting(s -> s.getSeatCd() + "->" + s.getKioskSeatCd())
@@ -274,6 +276,6 @@ class SeatBuildingTest {
     }
 
     private SeatMaster seat(StudyArea area, String seatCd) {
-        return seatMasterAdminService.create(admin, area.getId(), seatCd, seatCd + "번", 1, 1);
+        return seatMasterAdminService.create(admin, area.getId(), seatCd, seatCd + "번", 1, 1, null);
     }
 }

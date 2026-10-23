@@ -52,12 +52,13 @@ public class VocabScheduleService {
     @Transactional
     public VocabScheduleConfig saveConfig(Long academyId, Short year, LocalDate startDate,
                                           Short questionCount, Short weeklyQuestionCap,
-                                          Short choiceCount, Short multipleChoiceRate) {
+                                          Short choiceCount, Short multipleChoiceRate,
+                                          Boolean includePhrase, Boolean showWordDetail) {
         var existing = configRepository.findByAcademyIdAndYearAndDeletedFalse(academyId, year);
         if (existing.isPresent()) {
             var config = existing.get();
             config.modify(startDate, questionCount, weeklyQuestionCap,
-                    choiceCount, multipleChoiceRate);
+                    choiceCount, multipleChoiceRate, includePhrase, showWordDetail);
             return config;
         }
         if (startDate == null) {
@@ -67,7 +68,8 @@ public class VocabScheduleService {
         Academy academy = academyRepository.findById(academyId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACADEMY_NOT_FOUND));
         var config = new VocabScheduleConfig(academy, year, startDate);
-        config.modify(null, questionCount, weeklyQuestionCap, choiceCount, multipleChoiceRate);
+        config.modify(null, questionCount, weeklyQuestionCap, choiceCount,
+                multipleChoiceRate, includePhrase, showWordDetail);
         return configRepository.save(config);
     }
 

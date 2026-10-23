@@ -67,6 +67,74 @@ public class AligoAlimtalkClient {
     }
 
     /**
+     * 알림톡 한 통.
+     *
+     * <h2>★★ {@code tpl_code} 는 <b>승인된</b> 템플릿 코드여야 한다</h2>
+     * 카카오는 사전 심사를 통과한 문안만 받는다. 심사 전(`inspStatus=REG`) 코드로 호출하면
+     * 거절되고, <b>문자로 대신 보내서도 안 된다</b> — 학부모가 받는 문구가 심사받은 것과
+     * 달라진다(SMS 폴백은 E-5 로 폐기됐다). 코드가 없으면 발송 경로에서 건너뛴다.
+     *
+     * <h2>★ 수신자 파라미터에 {@code _1} 꼬리가 붙는다</h2>
+     * 알림톡은 1~500 건을 한 번에 받는 규격이라 {@code receiver_1}·{@code subject_1}·
+     * {@code message_1} 처럼 <b>번호가 붙은 이름</b>을 쓴다. 문자({@code receiver})처럼
+     * 꼬리를 떼면 「필수값 누락」이 난다. 우리는 수신자별로 이력을 남기므로 한 건씩 보낸다.
+     *
+     * @param title 알림톡 {@code subject_1}. 카카오 친구톡/알림톡 목록에 뜨는 제목이고
+     *              <b>필수값</b>이라 비면 호출이 거절된다 — 비어 있으면 기본값으로 채운다
+     * @throws AligoException 실패 시. 조용히 넘기지 않는다 — 폴백이 없어서 그냥 안 간다
+     */
+    public void send(String phone, String tplCode, String title, String message) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("apikey", properties.apiKey());
+        form.add("userid", properties.userId());
+        // ★ 발신프로필 키. 문자에는 없는 값이고, 없으면 인증 오류로 돌아온다
+        form.add("senderkey", properties.senderKey());
+        form.add("tpl_code", tplCode);
+        form.add("sender", digits(properties.senderPhone()));
+        form.add("receiver_1", digits(phone));
+        form.add("subject_1", subjectOf(title));
+        form.add("message_1", message);
+        if (properties.testModeOrDefault()) {
+            // AligoClient 와 같은 규약이다 — 호출은 성공하고 과금도 없는데 수신자는 못 받는다
+            form.add("testmode_yn", "Y");
+        }
+
+        Map<String, Object> body = post("/akv10/alimtalk/send/", form);
+
+        // ★ 건수는 `info` 안에 있다 — heartinfo 의 `list` 와 다른 자리다
+        log.info("알림톡 발송: to={}, tpl={}, msgId={}, 성공 {}건 / 실패 {}건{}",
+                AligoClient.mask(phone), tplCode, info(body, "mid"),
+                info(body, "scnt"), info(body, "fcnt"),
+                properties.testModeOrDefault() ? " (테스트 모드 — 실제로 안 나간다)" : "");
+    }
+
+    /** 응답 {@code info.*}. 없는 경우도 있어 실패로 보지 않는다 — 성공 판정은 {@code code} 다. */
+    @SuppressWarnings("unchecked")
+    private static Object info(Map<String, Object> body, String key) {
+        return body.get("info") instanceof Map<?, ?> map
+                ? ((Map<String, Object>) map).get(key)
+                : null;
+    }
+
+    /**
+     * 제목은 필수이고 50자 제한이다.
+     *
+     * <p>⚠️ 비어 있으면 호출 자체가 거절된다 — 템플릿 제목을 안 채운 이벤트가 실제로 있어
+     * 기본값으로 메운다. 발송이 제목 한 칸 때문에 멈추는 것보다 낫다.
+     */
+    private static String subjectOf(String title) {
+        if (title == null || title.isBlank()) {
+            return "알림";
+        }
+        return title.length() <= 50 ? title : title.substring(0, 50);
+    }
+
+    /** 하이픈·공백을 떼고 숫자만 보낸다. 형식이 섞여 들어와도 호출은 같아야 한다. */
+    private static String digits(String phone) {
+        return phone == null ? "" : phone.replaceAll("[^0-9]", "");
+    }
+
+    /**
      * 남은 알림톡 건수.
      *
      * <p>응답의 {@code list.ALT_CNT}다. ⚠️ 같은 응답에 {@code SMS_CNT}도 들어 있는데

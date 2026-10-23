@@ -25,7 +25,7 @@ import java.util.Set;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class NotificationTemplate extends BaseEntity {
 
-    /** 모든 학생 관련 알림에 반드시 들어가야 하는 변수. 다자녀 학부모 구분용. */
+    /** 모든 <b>학생 관련</b> 알림에 반드시 들어가야 하는 변수. 다자녀 학부모 구분용. */
     public static final String REQUIRED_STUDENT_NAME = "studentName";
 
     @Id
@@ -39,6 +39,25 @@ public class NotificationTemplate extends BaseEntity {
     @org.springframework.data.annotation.LastModifiedBy
     @Column(name = "updated_by")
     private Long updatedBy;
+
+    /**
+     * 학생 개인에 관한 알림인가.
+     *
+     * <h2>★ 「모든 템플릿에 학생명 필수」 규칙의 적용 범위다</h2>
+     * 그 규칙의 근거는 <b>다자녀 학부모가 「이거 누구 얘기지」 헷갈리지 않게</b> 하는
+     * 것이다. 그런데 전원 공통 안내는 그 문제가 생기지 않는다 —
+     * <i>「11월 급식 신청이 10월 28일에 마감됩니다」</i> 는 학생마다 다르지 않고,
+     * 이름을 넣으면 문장이 어색해진다.
+     *
+     * <p>⚠️ <b>규칙을 없애는 것이 아니라 제 뜻대로 좁히는 것이다.</b> 학생 개인에 관한
+     * 알림(출결·상벌점·미납 등)은 그대로 학생명을 요구한다 — 기본값이 {@code true} 인
+     * 이유이고, <b>새 템플릿은 자동으로 규칙을 따른다.</b>
+     *
+     * <p>{@code false} 면 수신자 중복도 제거한다 — 자녀가 둘인 학부모에게 같은 안내가
+     * 두 번 가기 때문이다(발송 쪽에서 처리한다).
+     */
+    @Column(name = "student_specific", nullable = false)
+    private boolean studentSpecific = true;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "event_code", nullable = false, unique = true, length = 60)
@@ -67,6 +86,19 @@ public class NotificationTemplate extends BaseEntity {
 
     @Column(nullable = false)
     private boolean active;
+
+    /**
+     * 직원이 발송 시점을 골라 보내는 템플릿인가 (디랩 1016 「직원 발송」 4종).
+     *
+     * <p><b>{@link #isSendable()}과 다른 축이다.</b> 이쪽은 "이벤트 트리거가 없는 문구인가",
+     * 그쪽은 "지금 실제로 나가는가"다. 합치면 <b>심사 대기 중인 수동 템플릿이 목록에서
+     * 사라져</b> 담당자가 「급식 안내가 왜 없지」를 겪는다.
+     *
+     * <p>★ <b>수동 발송 대상은 서버가 가린다.</b> 화면이 이벤트 이름으로 추측하면
+     * 템플릿이 늘 때마다 화면을 고쳐야 한다.
+     */
+    @Column(name = "manual", nullable = false)
+    private boolean manual;
 
     /** A-C3 매핑표의 수신자 축. */
     @Enumerated(EnumType.STRING)
@@ -185,9 +217,17 @@ public class NotificationTemplate extends BaseEntity {
         return reviewStatus.canSend();
     }
 
+    /**
+     * 발송 전에 값이 채워져 있어야 하는 변수.
+     *
+     * <p>★ 공통 안내({@code studentSpecific == false})는 <b>학생명을 요구하지 않는다</b> —
+     * 본문에 자리가 없는데 값을 요구하면 영원히 발송되지 않는다.
+     */
     public Set<String> requiredVariableSet() {
         Set<String> names = new LinkedHashSet<>();
-        names.add(REQUIRED_STUDENT_NAME);
+        if (studentSpecific) {
+            names.add(REQUIRED_STUDENT_NAME);
+        }
         Arrays.stream(requiredVariables.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())

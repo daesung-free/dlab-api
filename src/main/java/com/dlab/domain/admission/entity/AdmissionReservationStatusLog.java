@@ -45,14 +45,44 @@ public class AdmissionReservationStatusLog extends BaseEntity {
     @Column(length = 500)
     private String reason;
 
+    /**
+     * 누가 바꿨나 — <b>{@code created_by} 로는 구분되지 않는다.</b>
+     *
+     * <p>공개 링크는 인증 주체가 없어 시스템 계정({@code 0})으로 기록되고, 배치·DSA 호환
+     * 구획도 같은 값이다. 전화 받아 적는 일을 없애려고 <b>학생 응답이 상태를 바로 바꾸되</b>,
+     * 직원이 덮은 변경과 구분돼 남아야 한다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "actor_type", nullable = false, length = 10)
+    private StatusActorType actorType = StatusActorType.STAFF;
+
+    /**
+     * 학생 응답이 들어온 IP. 직원 변경이면 {@code null}.
+     *
+     * <p>토큰이 새면 남이 누를 수 있고, 1회 고정이라 피해가 1건으로 끝나지만
+     * <b>그 1건이 어디서·언제 들어왔는지는 보여야 한다</b>(시각은 {@code created_at}).
+     */
+    @Column(name = "actor_ip", length = 45)
+    private String actorIp;
+
+    /** 직원 변경. */
     public AdmissionReservationStatusLog(AdmissionReservation reservation,
                                          ConsultStatus fromStatus, ConsultStatus toStatus,
                                          String reason) {
+        this(reservation, fromStatus, toStatus, reason, StatusActorType.STAFF, null);
+    }
+
+    public AdmissionReservationStatusLog(AdmissionReservation reservation,
+                                         ConsultStatus fromStatus, ConsultStatus toStatus,
+                                         String reason, StatusActorType actorType,
+                                         String actorIp) {
         this.reservation = reservation;
         this.academy = reservation.getAcademy();
         this.year = reservation.getYear();
         this.fromStatus = fromStatus;
         this.toStatus = toStatus;
         this.reason = reason;
+        this.actorType = actorType;
+        this.actorIp = actorIp;
     }
 }

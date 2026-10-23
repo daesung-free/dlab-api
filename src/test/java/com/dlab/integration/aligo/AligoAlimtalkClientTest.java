@@ -91,4 +91,76 @@ class AligoAlimtalkClientTest {
 
         assertThat(f.client().remainingAlimtalk()).isEqualTo(1000);
     }
+
+    @Test
+    @DisplayName("★★ 발송은 /akv10/alimtalk/send/ 로 가고 수신자 파라미터에 _1 이 붙는다")
+    void sendUsesAlimtalkEndpoint() {
+        var f = fixture();
+        f.server().expect(requestTo("https://kakaoapi.aligo.in/akv10/alimtalk/send/"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("apikey=key")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("userid=user")))
+                // ★ 발신프로필 키 — 문자에는 없는 값이고 빠지면 인증 오류가 난다
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("senderkey=senderkey")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("tpl_code=UM_8230")))
+                // ★ 하이픈을 떼고 숫자만 보낸다
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("sender=0261058090")))
+                // ★★ 꼬리 _1 을 떼면 「필수값 누락」이 난다
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("receiver_1=01012345678")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("subject_1=")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("message_1=")))
+                .andRespond(withSuccess("""
+                        {"code":0,"message":"성공적으로 전송요청 하였습니다.",
+                         "info":{"type":"AT","mid":12345,"scnt":"1","fcnt":"0"}}
+                        """, MediaType.APPLICATION_JSON));
+
+        f.client().send("010-1234-5678", "UM_8230", "미등원 안내", "홍길동 학생이 등원하지 않았습니다.");
+        f.server().verify();
+    }
+
+    @Test
+    @DisplayName("★★ 실패는 HTTP 200 으로 온다 — 던지지 않으면 안 간 알림이 성공으로 남는다")
+    void sendFailureIsThrown() {
+        var f = fixture();
+        f.server().expect(requestTo("https://kakaoapi.aligo.in/akv10/alimtalk/send/"))
+                .andRespond(withSuccess("""
+                        {"code":-105,"message":"템플릿 정보가 존재하지 않습니다."}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> f.client().send("01012345678", "UM_9999", "제목", "본문"))
+                .isInstanceOf(AligoException.class)
+                .hasMessageContaining("템플릿 정보가 존재하지 않습니다");
+        f.server().verify();
+    }
+
+    @Test
+    @DisplayName("★ 테스트 모드면 testmode_yn=Y 를 함께 보낸다 — 문자와 같은 규약이다")
+    void testModeSendsFlag() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        var client = new AligoAlimtalkClient(
+                new AligoProperties("key", "user", "senderkey", "02-6105-8090", true), builder);
+
+        server.expect(requestTo("https://kakaoapi.aligo.in/akv10/alimtalk/send/"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("testmode_yn=Y")))
+                .andRespond(withSuccess("""
+                        {"code":0,"message":"ok","info":{"mid":1,"scnt":"1","fcnt":"0"}}
+                        """, MediaType.APPLICATION_JSON));
+
+        client.send("01012345678", "UM_8230", "제목", "본문");
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("★ 제목이 비어 있으면 기본값으로 채운다 — subject_1 이 필수라 호출이 거절된다")
+    void blankSubjectIsFilled() {
+        var f = fixture();
+        f.server().expect(requestTo("https://kakaoapi.aligo.in/akv10/alimtalk/send/"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("subject_1=%EC%95%8C%EB%A6%BC")))
+                .andRespond(withSuccess("""
+                        {"code":0,"message":"ok","info":{"mid":1,"scnt":"1","fcnt":"0"}}
+                        """, MediaType.APPLICATION_JSON));
+
+        f.client().send("01012345678", "UM_8230", "  ", "본문");
+        f.server().verify();
+    }
 }

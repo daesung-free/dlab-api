@@ -60,17 +60,31 @@ public final class MeaningSplitter {
 
         Set<String> result = new LinkedHashSet<>();
         for (String piece : splitTopLevel(raw)) {
-            // 괄호를 뺀 것도 후보다 — 괄호는 문맥 설명이라 학생이 안 쓴다
-            for (String withOrWithout : List.of(piece, PAREN.matcher(piece).replaceAll(""))) {
-                for (String expanded : expandBracket(withOrWithout)) {
-                    String cleaned = clean(expanded);
-                    if (!cleaned.isBlank()) {
-                        result.add(cleaned);
-                    }
+            addVariants(result, piece);
+        }
+        // ★ 원고 한 칸을 **그대로 다 쓴 답**도 정답이다 — 교재를 보고 외운 학생이 실제로
+        //   「재정의, 금융의」라고 둘 다 적는다. 쪼갠 후보만 두면 그 답이 오답이 된다.
+        //
+        //   ⚠️ 그렇다고 학생 답을 쪼개 「하나만 맞으면 정답」으로 하지는 않는다 —
+        //   그러면 아무거나 여러 개 나열해서 맞히게 된다. 허용하는 것은 **원고와 같은 한 줄**뿐이다.
+        //
+        //   ★ 반드시 **맨 뒤에** 넣는다. 첫 후보는 객관식 보기 문구로 쓰이므로
+        //   (ChoicePicker.firstMeaning) 앞에 끼면 보기가 「기업, 회사; 확고한, 단단한」처럼
+        //   길어지고 품사가 다른 뜻이 한 보기에 섞인다.
+        addVariants(result, raw);
+        return List.copyOf(result);
+    }
+
+    /** 괄호 뺀 것·대괄호 양쪽을 모두 후보로 넣는다 — 괄호는 문맥 설명이라 학생이 안 쓴다 */
+    private static void addVariants(Set<String> result, String piece) {
+        for (String withOrWithout : List.of(piece, PAREN.matcher(piece).replaceAll(""))) {
+            for (String expanded : expandBracket(withOrWithout)) {
+                String cleaned = clean(expanded);
+                if (!cleaned.isBlank()) {
+                    result.add(cleaned);
                 }
             }
         }
-        return List.copyOf(result);
     }
 
     /**

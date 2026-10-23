@@ -20,11 +20,17 @@ public final class AdminVocabScheduleRequest {
             @Schema(description = "지점. 비우면 내 지점") Long academyId,
             @Schema(description = "1회독 1유닛이 공개되는 첫 시험일. 첫 등록에는 필수")
             LocalDate startDate,
-            @Schema(description = "평일 회차 문항 수(기본 20)") Short questionCount,
-            @Schema(description = "★ 금요일 누적 상한(기본 40). 3회독 누적은 최대 800단어다")
+            @Schema(description = "평일 회차 문항 수(업체 확정 기본 30)") Short questionCount,
+            @Schema(description = "★ 금요일 누적 상한(업체 확정 기본 30). "
+                    + "3회독 누적은 최대 800단어다")
             Short weeklyQuestionCap,
             @Schema(description = "객관식 보기 수(기본 4)") Short choiceCount,
-            @Schema(description = "객관식 비율 %(기본 50)") Short multipleChoiceRate) {
+            @Schema(description = "객관식 비율 %(기본 50)") Short multipleChoiceRate,
+            @Schema(description = "★ Part 3(구동사·숙어·혼동어휘) 출제 여부(기본 true). "
+                    + "유닛당 6문항이 늘어난다")
+            Boolean includePhrase,
+            @Schema(description = "★ 결과 화면에 발음·예문·유의어 노출(기본 true)")
+            Boolean showWordDetail) {
     }
 
     /** 시험 없는 날 — 공휴일·모의고사 등. ★ 그날은 진도가 밀린다(v1 5.1). */

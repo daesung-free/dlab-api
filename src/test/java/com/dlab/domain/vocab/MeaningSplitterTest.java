@@ -16,15 +16,18 @@ class MeaningSplitterTest {
     @Test
     @DisplayName("★ 쉼표로 나눈다 — 「금융의」라고 써도 정답이어야 한다")
     void splitsByComma() {
+        // ★ 맨 뒤의 「재정의, 금융의」는 원고 한 줄을 그대로 쓴 답을 위한 후보다
         assertThat(MeaningSplitter.split("재정의, 금융의"))
-                .containsExactly("재정의", "금융의");
+                .containsExactly("재정의", "금융의", "재정의, 금융의");
     }
 
     @Test
     @DisplayName("★ 세미콜론은 품사 경계다 — 둘 다 나눈다")
     void splitsBySemicolonThenComma() {
         assertThat(MeaningSplitter.split("기업, 회사; 확고한, 단단한"))
-                .containsExactly("기업", "회사", "확고한", "단단한");
+                .startsWith("기업", "회사", "확고한", "단단한")
+                .as("★ 원고를 그대로 쓴 답도 정답이다 — 맨 뒤에 들어간다")
+                .endsWith("기업, 회사; 확고한, 단단한");
     }
 
     @Test
@@ -33,7 +36,7 @@ class MeaningSplitterTest {
         // 이것이 규칙의 시험대다. 괄호 보호를 빼면 「(온도」 / 「각도의) 도」가 되고
         // 학생이 「도」라고 써도 오답이 된다
         assertThat(MeaningSplitter.split("정도, (온도, 각도의) 도"))
-                .containsExactly("정도", "(온도, 각도의) 도", "도")
+                .startsWith("정도", "(온도, 각도의) 도", "도")
                 .doesNotContain("(온도", "각도의) 도");
     }
 
@@ -48,12 +51,14 @@ class MeaningSplitterTest {
     @DisplayName("★ 물결은 지운다 — 학생이 ~를 쓰지 않는다")
     void removesTilde() {
         assertThat(MeaningSplitter.split("~할 엄두를 내다, 감히 ~하다; 모험, 도전"))
-                .containsExactly("할 엄두를 내다", "감히 하다", "모험", "도전");
+                .startsWith("할 엄두를 내다", "감히 하다", "모험", "도전")
+                .allSatisfy(s -> assertThat(s).doesNotContain("~"));
     }
 
     @Test
     @DisplayName("뜻이 하나면 그대로 한 개다")
     void singleMeaning() {
+        // 쪼갤 것이 없으면 「전체」 후보가 같은 값이라 한 개로 합쳐진다
         assertThat(MeaningSplitter.split("경제")).containsExactly("경제");
     }
 

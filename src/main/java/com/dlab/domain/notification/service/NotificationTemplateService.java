@@ -40,6 +40,17 @@ public class NotificationTemplateService {
         return templateRepository.findAllByDeletedFalseOrderByEventCode();
     }
 
+    /**
+     * 직원 수동 발송 대상 템플릿 (디랩 1016 「직원 발송」).
+     *
+     * <p><b>서버가 가린다</b> — 화면이 이벤트 이름으로 추측하면 템플릿이 늘 때마다
+     * 화면을 고쳐야 한다. 발송 불가({@code sendable = false})인 것도 그대로 담는다.
+     */
+    @Transactional(readOnly = true)
+    public List<NotificationTemplate> findManual() {
+        return templateRepository.findAllByManualTrueAndDeletedFalseOrderByEventCode();
+    }
+
     /** 심사 진행 중인 것만 — 카카오 심사는 리드타임이 길어 따로 본다(E-5). */
     @Transactional(readOnly = true)
     public List<NotificationTemplate> findInReview() {
@@ -98,7 +109,11 @@ public class NotificationTemplateService {
         if (contentConfirmed && isBlank(body)) {
             throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_BODY_EMPTY);
         }
-        if (contentConfirmed && !body.contains(STUDENT_NAME_PLACEHOLDER)) {
+        // ★ 공통 안내는 이 조건을 걸지 않는다. 마감일·등록기간은 학생마다 다르지 않아
+        //   「누구 얘기지」가 생기지 않고, 이름을 넣으면 문장이 어색해진다.
+        //   ⚠️ 기본값이 student_specific = TRUE 라 **새 템플릿은 자동으로 규칙을 따른다.**
+        if (contentConfirmed && template.isStudentSpecific()
+                && !body.contains(STUDENT_NAME_PLACEHOLDER)) {
             throw new BusinessException(ErrorCode.NOTIFICATION_TEMPLATE_CONTENT_EMPTY,
                     "본문에 %s 을(를) 넣어야 합니다 — 다자녀 학부모가 누구 얘기인지 알 수 없습니다."
                             .formatted(STUDENT_NAME_PLACEHOLDER));

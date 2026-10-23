@@ -46,9 +46,26 @@ public class VocabAnswer extends BaseEntity {
     @JoinColumn(name = "attempt_id", nullable = false)
     private VocabAttempt attempt;
 
+    /**
+     * 표제어 문항(Part 1).
+     *
+     * <p>★ Part 3 문항이면 {@code null} 이고 {@link #phrase} 가 채워진다 —
+     * <b>둘 중 정확히 하나</b>다(DB 제약 {@code ck_vocab_answer_item}).
+     */
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "word_id", nullable = false)
+    @JoinColumn(name = "word_id")
     private VocabWord word;
+
+    /**
+     * Part 3 문항 — 구동사·숙어·혼동어휘 (업체 확정 2026-10-22).
+     *
+     * <p>★ <b>표제어 테이블에 끼워 넣지 않는다.</b> {@code vocab_word} 는 번호
+     * {@code 0001}~{@code 2000} 체계이고 재업로드가 그 번호로 덮어쓴다 — 구동사를
+     * 섞으면 그 구조가 통째로 무너진다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "phrase_id")
+    private VocabPhrase phrase;
 
     /** 문항 번호(1-based). 화면이 「3번 문항」으로 말하는 그 번호다 */
     @Column(name = "seq_no", nullable = false)
@@ -71,12 +88,42 @@ public class VocabAnswer extends BaseEntity {
 
     public VocabAnswer(VocabAttempt attempt, VocabWord word, short seqNo,
                        Type type, List<String> choices) {
-        this.attempt = attempt;
+        this(attempt, seqNo, type, choices);
         this.word = word;
+    }
+
+    /** Part 3 문항. ★ {@code word} 는 비워 둔다 — 둘 중 하나만 채운다 */
+    public VocabAnswer(VocabAttempt attempt, VocabPhrase phrase, short seqNo,
+                       Type type, List<String> choices) {
+        this(attempt, seqNo, type, choices);
+        this.phrase = phrase;
+    }
+
+    private VocabAnswer(VocabAttempt attempt, short seqNo, Type type, List<String> choices) {
+        this.attempt = attempt;
         this.seqNo = seqNo;
         this.type = type;
         this.choices = choices == null || choices.isEmpty()
                 ? null : String.join(CHOICE_DELIMITER, choices);
+    }
+
+    /** 문항이 Part 3 인가. */
+    public boolean isPhrase() {
+        return phrase != null;
+    }
+
+    /**
+     * 화면에 내는 문제 — 표제어이거나 구동사·숙어다.
+     *
+     * <p>⚠️ 호출하면 지연 로딩이 풀린다. 목록에서 문항마다 부르지 말 것.
+     */
+    public String prompt() {
+        return phrase != null ? phrase.getExpression() : word.getWord();
+    }
+
+    /** 정답(원고 뜻) — Part 3 는 {@code vocab_phrase.meaning} 이다. */
+    public String meaningRaw() {
+        return phrase != null ? phrase.getMeaning() : word.getMeaningRaw();
     }
 
     public List<String> choiceList() {
