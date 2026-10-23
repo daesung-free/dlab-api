@@ -34,8 +34,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class PublicNoticeShareService {
 
     /** 열 수 없을 때의 문구. <b>이유를 가르지 않는다</b> — 없음·만료·미게시가 전부 같다. */
+    /**
+     * 열 수 없을 때 화면에 그대로 띄우는 문장.
+     *
+     * <h2>★★ 세 경우에 같은 문장을 쓴다 — 갈라 주면 그 차이가 정보가 된다</h2>
+     * 없는 토큰 · 기간 지남 · 삭제된 공지를 <b>구분해 알려 주면 주소를 찔러 보는 쪽이
+     * 살아 있는 주소를 추려낼 수 있다.</b> 그래서 셋을 <b>나열</b>하되 어느 것인지는
+     * 말하지 않는다 — 받는 사람에게 「다음에 할 일」(학원 문의)은 주고 구분은 주지 않는다.
+     *
+     * <p>⚠️ <b>경우마다 다른 문장을 넣지 말 것.</b> 응답 코드를 200 으로 통일한 것과 같은
+     * 이유다(404 로 내리면 그 자체가 「있다/없다」를 알려 준다).
+     *
+     * <p>줄바꿈은 {@code \n} 으로 넘긴다 — 화면이 그대로 살린다.
+     */
     public static final String UNAVAILABLE_MESSAGE =
-            "안내문을 열 수 없습니다. 기간이 지났거나 주소가 올바르지 않습니다.";
+            """
+            안내문을 확인할 수 없습니다.
+            유효하지 않은 링크이거나, 기간이 지났거나, 삭제된 안내문입니다.
+            자세한 내용은 학원으로 문의해 주시기 바랍니다.""";
 
     private final PublicShareTokenService tokenService;
     private final NoticeRepository noticeRepository;
