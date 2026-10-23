@@ -45,6 +45,7 @@ class ManualNotificationSendTest {
     @Autowired EntityManager em;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired ObjectMapper objectMapper;
+    @Autowired com.dlab.domain.notification.service.NotificationService notificationService;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
@@ -465,5 +466,84 @@ class ManualNotificationSendTest {
         assertThat(sharedCount)
                 .as("학생 개인 알림은 자녀 수만큼 가야 한다")
                 .isEqualTo(2);
+    }
+
+    // ── 수신 거부 ──────────────────────────────────────────────
+
+    /** 이 계정이 이 이벤트를 끈 것으로 만든다. */
+    private void optOut(Long accountId,
+                        com.dlab.domain.notification.entity.NotificationEvent event) {
+        Account account = em.find(Account.class, accountId);
+        em.persist(new com.dlab.domain.appconfig.entity.NotificationPreference(
+                account, event, false));
+        em.flush();
+    }
+
+    private Long guardianAccountId(String studentName) {
+        return em.createQuery("""
+                        SELECT a.id FROM Account a
+                        WHERE a.guardian.name = :name
+                        """, Long.class)
+                .setParameter("name", studentName + "모")
+                .getSingleResult();
+    }
+
+    private long logCountFor(Long accountId) {
+        em.flush();
+        return em.createQuery("""
+                        SELECT COUNT(l) FROM NotificationLog l WHERE l.recipient.id = :id
+                        """, Long.class)
+                .setParameter("id", accountId)
+                .getSingleResult();
+    }
+
+    @Test
+    @DisplayName("★★ 미리보기에서 빠진 사람과 실제 발송에서 빠지는 사람이 같다 — 판정이 한 군데다")
+    void optOutIsConsistentBetweenPreviewAndSend() throws Exception {
+        // 반에 거부하지 않은 학부모를 한 명 더 둔다 — 거부자만 있으면 미리보기 자체가 거부된다
+        createStudent(academy, "MS-D", "거부안함", "010-9876-7777", classMaster);
+
+        var event = com.dlab.domain.notification.entity.NotificationEvent.TUITION_UNPAID_NOTICE;
+        Long optedOut = guardianAccountId("학부모있음");
+        optOut(optedOut, event);
+        em.clear();
+
+        // ① 미리보기 — 거부자는 OPTED_OUT 으로 빠진다
+        var root = objectMapper.readTree(preview(classScopeBody())).path("data");
+        assertThat(root.path("targetCount").asInt()).isEqualTo(1);
+        assertThat(root.path("recipients").get(0).path("studentName").asString())
+                .isEqualTo("거부안함");
+        assertThat(root.path("blocked").toString()).contains("OPTED_OUT");
+
+        // ② 발송 — 거부자에게는 이력이 한 건도 생기지 않는다(미리보기에서 이미 빠졌다)
+        mvc.perform(post("/api/v1/admin/notifications/manual/send")
+                        .header("Authorization", token("MSBRANCH"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"previewId":"%s"}""".formatted(
+                                root.path("previewId").asString())))
+                .andExpect(status().isOk());
+        assertThat(logCountFor(optedOut)).isZero();
+        assertThat(logCountFor(guardianAccountId("거부안함"))).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("★★ 자동 발송 경로도 같은 거부 설정을 본다 — 그동안 이것만 그대로 나갔다")
+    void autoDispatchHonoursOptOut() {
+        var event = com.dlab.domain.notification.entity.NotificationEvent.TUITION_UNPAID_NOTICE;
+        Long optedOut = guardianAccountId("학부모있음");
+        optOut(optedOut, event);
+        em.clear();
+
+        StudentEnrollment enrollment = em.find(StudentEnrollment.class, enrollmentWithGuardian);
+        var log = notificationService.send(
+                com.dlab.domain.notification.service.NotificationCommand.forStudent(
+                        event, em.find(Account.class, optedOut), enrollment.getStudent(),
+                        academy, enrollment.getYear(), java.util.Map.of("월", "11"), null));
+
+        // ★ 조용히 버리지 않는다 — 왜 안 갔는지가 이력에 남아야 문의에 답할 수 있다
+        assertThat(log.getStatus())
+                .isEqualTo(com.dlab.domain.notification.entity.NotificationStatus.SKIPPED);
+        assertThat(log.getFailReason()).contains("수신 거부");
     }
 }

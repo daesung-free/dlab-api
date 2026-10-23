@@ -28,13 +28,16 @@ public class NotificationService {
 
     private final NotificationTemplateRepository templateRepository;
     private final NotificationLogRepository logRepository;
+    private final NotificationOptOutPolicy optOutPolicy;
     private final Map<NotificationChannel, NotificationSender> senders;
 
     public NotificationService(NotificationTemplateRepository templateRepository,
                                NotificationLogRepository logRepository,
+                               NotificationOptOutPolicy optOutPolicy,
                                List<NotificationSender> senders) {
         this.templateRepository = templateRepository;
         this.logRepository = logRepository;
+        this.optOutPolicy = optOutPolicy;
         this.senders = senders.stream()
                 .collect(Collectors.toMap(NotificationSender::channel, s -> s));
     }
@@ -103,6 +106,24 @@ public class NotificationService {
     }
 
     private void dispatch(NotificationTemplate template, NotificationLog notificationLog) {
+        // ★★ 수신 거부를 가장 먼저 본다 — 템플릿이 어떻든 이 사람은 받지 않겠다고 한 것이다.
+        //
+        //   그동안 이 게이트가 없어서, 직원 수동 발송 미리보기는 거부자를 OPTED_OUT 으로
+        //   빼 보여주는데 **자동 발송(출결·승인·미등원·설문)은 그대로 나갔다.** 알림톡이
+        //   테스트 모드라 드러나지 않았을 뿐이고, 심사가 통과하면 그날부터 민원이 된다.
+        //
+        //   ★ 조용히 버리지 않고 SKIPPED 로 남긴다 — 「보냈는데 안 왔다」 문의에
+        //   이 이력으로 답한다. 판정은 미리보기와 **같은 NotificationOptOutPolicy** 가 한다
+        //   (갈리면 「미리보기엔 빠졌는데 실제로는 갔다」가 된다).
+        Long recipientId = notificationLog.getRecipient() == null
+                ? null : notificationLog.getRecipient().getId();
+        if (optOutPolicy.optedOut(recipientId, notificationLog.getEventCode())) {
+            notificationLog.markSkipped("수신 거부 설정");
+            log.info("수신 거부로 발송 보류: event={}, accountId={}",
+                    notificationLog.getEventCode(), recipientId);
+            return;
+        }
+
         if (!template.isActive()) {
             notificationLog.markSkipped("비활성 템플릿");
             return;
