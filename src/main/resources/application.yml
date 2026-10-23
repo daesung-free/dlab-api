@@ -72,6 +72,11 @@ storage:
   presign-ttl: PT5M
   # 입학상담 첨부 기준(10MB 이하, 최대 4개)에 맞춘다
   max-file-size: 10MB
+  # ★ 한 대상(공지 1건 등)에 붙일 수 있는 수와 합계. 공지 기준 5개·50MB 로 정했다.
+  #   ⚠️ 화면도 같은 값을 안내하지만 **서버에도 걸어야 한다** — 화면만 막으면
+  #   API 를 직접 부르는 경로로 뚫린다.
+  max-files-per-owner: 5
+  max-total-size-per-owner: 50MB
 
 jwt:
   # 운영 값은 환경변수로 주입한다. 커밋 금지(CLAUDE.md §8).

@@ -75,6 +75,8 @@ public enum ErrorCode {
     FILE_NOT_FOUND(HttpStatus.NOT_FOUND, "파일을 찾을 수 없습니다."),
     FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "파일이 너무 큽니다."),
     FILE_TYPE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "허용되지 않는 파일 형식입니다."),
+    FILE_COUNT_EXCEEDED(HttpStatus.BAD_REQUEST, "첨부할 수 있는 파일 수를 넘었습니다."),
+    FILE_TOTAL_SIZE_EXCEEDED(HttpStatus.PAYLOAD_TOO_LARGE, "첨부 파일 합계 용량을 넘었습니다."),
     SEAT_NOT_FOUND(HttpStatus.NOT_FOUND, "좌석을 찾을 수 없습니다."),
     SEAT_ALREADY_OCCUPIED(HttpStatus.CONFLICT, "이미 배정된 좌석입니다."),
     SEAT_NOT_ASSIGNED(HttpStatus.NOT_FOUND, "배정된 좌석이 없습니다."),
