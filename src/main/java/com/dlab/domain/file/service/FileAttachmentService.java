@@ -63,6 +63,11 @@ public class FileAttachmentService {
     public FileAttachment upload(FileVisibility visibility, String ownerType, Long ownerId,
                                  String originalName, String contentType, byte[] content) {
         validate(contentType, content);
+        // ★ 올리는 시점에 대상이 정해져 있으면 그때 상한을 본다. 정해지기 전이면
+        //   attach 가 본다 — 두 경로가 다 있어서 한쪽만 막으면 다른 쪽으로 들어온다
+        if (ownerId != null) {
+            requireWithinOwnerLimits(ownerType, ownerId, content.length, null);
+        }
 
         byte[] stored = ExifStripper.strip(content, contentType);
         String objectKey = objectKey(ownerType, ownerId, originalName);
@@ -85,8 +90,47 @@ public class FileAttachmentService {
     @Transactional
     public FileAttachment attach(Long attachmentId, Long ownerId) {
         FileAttachment file = load(attachmentId);
+        // ⚠️ 업로드와 붙이기가 나뉘어 있어 **여기서도 봐야 한다.** 화면은 고르는 순간
+        //    막지만, API 를 직접 부르면 ownerId 없이 여러 건을 올려 두고 하나씩 붙일 수 있다
+        requireWithinOwnerLimits(file.getOwnerType(), ownerId, file.getSizeBytes(),
+                file.getId());
         file.attachTo(ownerId);
         return file;
+    }
+
+    /**
+     * 한 대상에 붙는 <b>개수와 합계</b> 상한.
+     *
+     * <h2>★ 왜 서버에도 걸어야 하는가</h2>
+     * 화면이 고르는 순간 막고 숫자도 안내하지만, <b>화면만 막으면 API 를 직접 부르는
+     * 경로로 뚫린다.</b> 첨부는 「올리기」와 「붙이기」가 나뉘어 있어 더 그렇다.
+     *
+     * <p>★ <b>합계를 따로 보는 이유</b> — 파일 하나씩은 전부 10MB 이하라 통과인데
+     * 합치면 넘는 경우가 있다. 그때 서블릿 단계에서 거부되면 우리 오류 문구가 아니라
+     * 톰캣 오류로 떨어져 사용자가 원인을 알 수 없다.
+     *
+     * @param excludeId 이미 저장된 자기 자신. 붙이기에서 두 번 세지 않기 위해 뺀다
+     */
+    private void requireWithinOwnerLimits(String ownerType, Long ownerId, long addingBytes,
+                                          Long excludeId) {
+        List<FileAttachment> existing = repository.findByOwner(ownerType, ownerId).stream()
+                .filter(f -> excludeId == null || !excludeId.equals(f.getId()))
+                .toList();
+
+        int max = properties.maxFilesPerOwnerOrDefault();
+        if (existing.size() >= max) {
+            throw new BusinessException(ErrorCode.FILE_COUNT_EXCEEDED,
+                    "첨부는 최대 %d개까지입니다. 지금 %d개가 붙어 있습니다."
+                            .formatted(max, existing.size()));
+        }
+
+        long total = existing.stream().mapToLong(FileAttachment::getSizeBytes).sum() + addingBytes;
+        long cap = properties.maxTotalSizePerOwnerOrDefault().toBytes();
+        if (total > cap) {
+            throw new BusinessException(ErrorCode.FILE_TOTAL_SIZE_EXCEEDED,
+                    "첨부 합계는 %dMB까지입니다. 이 파일을 더하면 %dMB가 됩니다."
+                            .formatted(cap / (1024 * 1024), total / (1024 * 1024)));
+        }
     }
 
     @Transactional(readOnly = true)

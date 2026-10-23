@@ -20,6 +20,10 @@ import org.springframework.util.unit.DataSize;
  * @param presignTtl    비공개 파일 presigned URL 유효시간. <b>길게 잡지 말 것</b> —
  *                      그 주소는 로그인 없이 열리므로 전달되면 그대로 새어 나간다
  * @param maxFileSize   업로드 1건 상한. 입학상담 첨부 기준(10MB)에 맞춘다
+ * @param maxFilesPerOwner 한 대상(공지 1건 등)에 붙일 수 있는 파일 수. 공지 기준 5개로 정했다
+ * @param maxTotalSizePerOwner 한 대상에 붙은 파일 <b>합계</b> 상한.
+ *                      ★ 하나씩은 통과인데 합치면 넘는 경우를 막는다 —
+ *                      10MB 파일 6개는 파일마다는 통과지만 요청·저장소에서 막힌다
  */
 @ConfigurationProperties(prefix = "storage")
 public record StorageProperties(
@@ -30,7 +34,22 @@ public record StorageProperties(
         String accessKey,
         String secretKey,
         Duration presignTtl,
-        DataSize maxFileSize) {
+        DataSize maxFileSize,
+        Integer maxFilesPerOwner,
+        DataSize maxTotalSizePerOwner) {
+
+    private static final int DEFAULT_MAX_FILES = 5;
+    private static final DataSize DEFAULT_MAX_TOTAL = DataSize.ofMegabytes(50);
+
+    /** 설정이 비어도 상한은 있어야 한다 — 비면 「제한 없음」이 되어 구멍이 된다. */
+    public int maxFilesPerOwnerOrDefault() {
+        return maxFilesPerOwner == null || maxFilesPerOwner <= 0
+                ? DEFAULT_MAX_FILES : maxFilesPerOwner;
+    }
+
+    public DataSize maxTotalSizePerOwnerOrDefault() {
+        return maxTotalSizePerOwner == null ? DEFAULT_MAX_TOTAL : maxTotalSizePerOwner;
+    }
 
     public boolean configured() {
         return notBlank(publicBucket) && notBlank(privateBucket)

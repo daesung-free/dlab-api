@@ -105,4 +105,48 @@ class FileAttachmentServiceTest {
 
         assertThat(service.url(saved.getId())).isEqualTo("https://s3.example/signed");
     }
+
+    // ──────────────────────────────────────────────────────────────
+    //  ★★ 한 대상에 붙는 개수·합계 상한 — 화면만 막으면 API 로 뚫린다
+    // ──────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 한 대상에 6번째를 올리면 거부된다 — 상한 5개")
+    void rejectsSixthFile() {
+        for (int i = 1; i <= 5; i++) {
+            upload("증빙" + i + ".pdf", "application/pdf", new byte[]{37, 80});
+        }
+
+        assertThatThrownBy(() -> upload("증빙6.pdf", "application/pdf", new byte[]{37, 80}))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("최대 5개");
+    }
+
+    @Test
+    @DisplayName("★★ 붙이기 경로로도 막힌다 — 올리기만 막으면 ownerId 없이 올려 두고 붙일 수 있다")
+    void attachPathIsAlsoLimited() {
+        for (int i = 1; i <= 5; i++) {
+            upload("증빙" + i + ".pdf", "application/pdf", new byte[]{37, 80});
+        }
+        // ownerId 를 비워 올린다 — 화면이 저장 전에 올리는 경로다
+        FileAttachment pending = service.upload(FileVisibility.PRIVATE, "ADMISSION_CONSULT",
+                null, "나중에.pdf", "application/pdf", new byte[]{37, 80});
+
+        assertThatThrownBy(() -> service.attach(pending.getId(), 7L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("최대 5개");
+    }
+
+    @Test
+    @DisplayName("★ 다른 대상에는 따로 센다 — 공지 하나가 찼다고 다른 공지가 막히면 안 된다")
+    void limitIsPerOwner() {
+        for (int i = 1; i <= 5; i++) {
+            upload("증빙" + i + ".pdf", "application/pdf", new byte[]{37, 80});
+        }
+
+        FileAttachment other = service.upload(FileVisibility.PRIVATE, "ADMISSION_CONSULT",
+                8L, "다른대상.pdf", "application/pdf", new byte[]{37, 80});
+
+        assertThat(other.getId()).isNotNull();
+    }
 }
