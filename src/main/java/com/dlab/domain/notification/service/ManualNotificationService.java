@@ -3,7 +3,6 @@ package com.dlab.domain.notification.service;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.privacy.Masking;
-import com.dlab.domain.appconfig.repository.NotificationPreferenceRepository;
 import com.dlab.domain.notification.entity.*;
 import com.dlab.domain.notification.repository.NotificationManualPreviewRepository;
 import com.dlab.domain.notification.repository.NotificationManualSendRepository;
@@ -65,7 +64,7 @@ public class ManualNotificationService {
     private final ClassAssignmentRepository classAssignmentRepository;
     private final ClassMasterRepository classMasterRepository;
     private final AccountRepository accountRepository;
-    private final NotificationPreferenceRepository preferenceRepository;
+    private final NotificationOptOutPolicy optOutPolicy;
     private final NotificationService notificationService;
     private final Clock clock;
 
@@ -189,8 +188,9 @@ public class ManualNotificationService {
                     blocked.add(block(enrollment, ManualBlockReason.NO_PHONE));
                     continue;
                 }
-                if (preferenceRepository.existsByAccountIdAndEventCodeAndEnabledFalse(
-                        receiver.accountId(), template.getEventCode())) {
+                // ★ 발송 경로(NotificationService.dispatch)와 **같은 판정**을 쓴다.
+                //   따로 조회하면 조건이 갈려 「미리보기엔 빠졌는데 실제로는 갔다」가 된다
+                if (optOutPolicy.optedOut(receiver.accountId(), template.getEventCode())) {
                     blocked.add(block(enrollment, ManualBlockReason.OPTED_OUT));
                     continue;
                 }
