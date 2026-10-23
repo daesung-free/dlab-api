@@ -26,6 +26,7 @@ import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -136,6 +137,32 @@ class PublicShareFlowTest {
         em.flush();
 
         assertThat(noticeShare.view(token).available()).isFalse();
+    }
+
+    @Test
+    @DisplayName("★★ 없는 토큰·기간 지남·삭제가 같은 문장이다 — 갈라 주면 그 차이가 정보가 된다")
+    void allUnavailableCasesShareOneMessage() {
+        // ① 없는 토큰
+        String unknown = noticeShare.view("존재하지않는토큰").message();
+
+        // ② 기간 지남
+        String token = noticeShare.share(admin, notice.getId()).getToken();
+        notice.update(notice.getTitle(), notice.getContent(), false, false, null,
+                Instant.now().minus(1, ChronoUnit.DAYS));
+        em.flush();
+        String expired = noticeShare.view(token).message();
+
+        // ③ 삭제된 공지
+        notice.update(notice.getTitle(), notice.getContent(), false, false, null, null);
+        notice.markDeleted();
+        em.flush();
+        String deleted = noticeShare.view(token).message();
+
+        // ★ 셋이 같아야 한다. 하나라도 다르면 주소를 찔러 보는 쪽이 살아 있는 주소를
+        //   추려낼 수 있다 — 응답 코드를 200 으로 통일한 것과 같은 이유다.
+        assertThat(List.of(unknown, expired, deleted))
+                .as("열 수 없는 세 경우는 같은 문장이어야 한다")
+                .containsOnly(PublicNoticeShareService.UNAVAILABLE_MESSAGE);
     }
 
     @Test

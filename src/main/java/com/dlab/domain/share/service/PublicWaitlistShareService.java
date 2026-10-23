@@ -48,7 +48,10 @@ public class PublicWaitlistShareService {
 
     /** 열 수 없을 때. <b>없음·만료를 가르지 않는다</b> — 가르면 토큰 대입에 힌트가 된다. */
     public static final String UNAVAILABLE_MESSAGE =
-            "페이지를 열 수 없습니다. 기간이 지났거나 주소가 올바르지 않습니다.";
+            """
+            등록 안내를 확인할 수 없습니다.
+            유효하지 않은 링크이거나, 응답 기간이 지났습니다.
+            자세한 내용은 학원으로 문의해 주시기 바랍니다.""";
 
     /** 두 번째 응답. <b>문구가 「전화해 달라」로 끝나야 한다</b> — 수정 경로가 그것뿐이다. */
     public static final String ALREADY_ANSWERED_MESSAGE =
