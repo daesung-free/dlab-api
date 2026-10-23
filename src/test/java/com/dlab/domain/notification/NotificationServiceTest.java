@@ -7,6 +7,8 @@ import com.dlab.domain.notification.repository.NotificationLogRepository;
 import com.dlab.domain.notification.repository.NotificationTemplateRepository;
 import com.dlab.domain.notification.service.NotificationCommand;
 import com.dlab.domain.notification.service.NotificationSender;
+import com.dlab.domain.appconfig.repository.NotificationPreferenceRepository;
+import com.dlab.domain.notification.service.NotificationOptOutPolicy;
 import com.dlab.domain.notification.service.NotificationService;
 import com.dlab.domain.user.entity.Account;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,6 +31,7 @@ class NotificationServiceTest {
 
     private NotificationTemplateRepository templateRepository;
     private NotificationLogRepository logRepository;
+    private NotificationPreferenceRepository preferenceRepository;
     private RecordingSender sender;
     private NotificationService service;
 
@@ -51,8 +54,11 @@ class NotificationServiceTest {
     void setUp() {
         templateRepository = mock(NotificationTemplateRepository.class);
         logRepository = mock(NotificationLogRepository.class);
+        preferenceRepository = mock(NotificationPreferenceRepository.class);
         sender = new RecordingSender();
-        service = new NotificationService(templateRepository, logRepository, List.of(sender));
+        // ★ 수신거부 판정은 실물 정책을 쓴다 — 필수 알림 목록까지 같이 고정된다
+        service = new NotificationService(templateRepository, logRepository,
+                new NotificationOptOutPolicy(preferenceRepository), List.of(sender));
 
         when(logRepository.save(any(NotificationLog.class))).thenAnswer(i -> i.getArgument(0));
     }
@@ -74,6 +80,21 @@ class NotificationServiceTest {
 
     private Account recipient() {
         return mock(Account.class);
+    }
+
+    /** id 가 있는 수신 계정. 수신거부는 계정 단위라 id 가 없으면 판정 자체가 돌지 않는다. */
+    private Account recipient(long accountId) {
+        Account account = mock(Account.class);
+        when(account.getId()).thenReturn(accountId);
+        return account;
+    }
+
+    /** 수신 거부가 가능한(= 필수가 아닌) 이벤트 템플릿. */
+    private NotificationTemplate optionalTemplate() {
+        NotificationTemplate t = template("[{studentName}] 등원", "{studentName} 학생 등원",
+                "studentName", true);
+        ReflectionTestUtils.setField(t, "eventCode", NotificationEvent.ATTENDANCE_CHECK_IN);
+        return t;
     }
 
     @Test
@@ -175,5 +196,71 @@ class NotificationServiceTest {
         assertThat(log.getStatus()).isEqualTo(NotificationStatus.SKIPPED);
         assertThat(log.getFailReason()).contains("템플릿 코드");
         assertThat(sender.sent).isEmpty();
+    }
+
+    // ── 수신 거부 (자동 발송 경로) ────────────────────────────────────────
+
+    @Test
+    @DisplayName("★★ 수신 거부한 사람에게는 보내지 않고 SKIPPED 로 남긴다")
+    void skipsOptedOutRecipient() {
+        when(templateRepository.findByEventCode(any())).thenReturn(Optional.of(optionalTemplate()));
+        when(preferenceRepository.existsByAccountIdAndEventCodeAndEnabledFalse(
+                7L, NotificationEvent.ATTENDANCE_CHECK_IN)).thenReturn(true);
+
+        NotificationLog log = service.send(new NotificationCommand(
+                NotificationEvent.ATTENDANCE_CHECK_IN, recipient(7L), null, null, null,
+                Map.of("studentName", "홍길동"), null));
+
+        // ★ 조용히 버리지 않는다 — 「보냈는데 안 왔다」 문의에 이 이력으로 답한다
+        assertThat(log.getStatus()).isEqualTo(NotificationStatus.SKIPPED);
+        assertThat(log.getFailReason()).contains("수신 거부");
+        assertThat(sender.sent).isEmpty();
+    }
+
+    @Test
+    @DisplayName("거부하지 않은 사람에게는 그대로 간다 — 행이 없으면 수신이다")
+    void sendsWhenNotOptedOut() {
+        when(templateRepository.findByEventCode(any())).thenReturn(Optional.of(optionalTemplate()));
+        when(preferenceRepository.existsByAccountIdAndEventCodeAndEnabledFalse(
+                7L, NotificationEvent.ATTENDANCE_CHECK_IN)).thenReturn(false);
+
+        NotificationLog log = service.send(new NotificationCommand(
+                NotificationEvent.ATTENDANCE_CHECK_IN, recipient(7L), null, null, null,
+                Map.of("studentName", "홍길동"), null));
+
+        assertThat(log.getStatus()).isEqualTo(NotificationStatus.SENT);
+        assertThat(sender.sent).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("★★ 미등원은 꺼진 행이 있어도 나간다 — 거부 불가 알림이다")
+    void mandatoryEventIgnoresPreference() {
+        when(templateRepository.findByEventCode(any()))
+                .thenReturn(Optional.of(template("[{studentName}] 미등원", "{studentName} 미등원",
+                        "studentName", true)));
+        // 앱 API 는 끄는 것 자체를 거절하지만, 과거 데이터·직접 UPDATE 로 남아 있을 수 있다
+        when(preferenceRepository.existsByAccountIdAndEventCodeAndEnabledFalse(
+                7L, NotificationEvent.MISSING_ATTENDANCE)).thenReturn(true);
+
+        NotificationLog log = service.send(new NotificationCommand(
+                NotificationEvent.MISSING_ATTENDANCE, recipient(7L), null, null, null,
+                Map.of("studentName", "홍길동"), null));
+
+        assertThat(log.getStatus()).isEqualTo(NotificationStatus.SENT);
+        assertThat(sender.sent).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("계정 없는 수신자(대기자·급식업체)는 설정을 가질 수 없어 그대로 간다")
+    void phoneRecipientHasNoPreference() {
+        when(templateRepository.findByEventCode(any())).thenReturn(Optional.of(optionalTemplate()));
+
+        NotificationLog log = service.send(NotificationCommand.toPhone(
+                NotificationEvent.ATTENDANCE_CHECK_IN, "010-1234-5678", "대기자",
+                null, null, Map.of("studentName", "홍길동"), null));
+
+        assertThat(log.getStatus()).isEqualTo(NotificationStatus.SENT);
+        verify(preferenceRepository, never())
+                .existsByAccountIdAndEventCodeAndEnabledFalse(any(), any());
     }
 }
