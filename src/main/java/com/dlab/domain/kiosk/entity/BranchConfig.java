@@ -69,6 +69,47 @@ public class BranchConfig extends BaseEntity {
     private String nebulaSiteId;
 
     /**
+     * 키오스크가 {@code /kiosk/**} 를 마지막으로 부른 시각.
+     *
+     * <h2>★★ 왜 남기는가</h2>
+     * <b>단말이 꺼져 있으면 이탈 기록이 「0」이 아니라 「비는 것」</b>이다. 이 값이 없으면
+     * 좌석표가 비었을 때 <b>「아무도 안 나갔다」와 「단말이 죽었다」를 가를 수 없다.</b>
+     *
+     * <p>⚠️ 키오스크는 <b>우리 장애를 알려주지 않는다</b>(§3) — 급식 조회가 실패하면 전원
+     * 통과시키는 폴백이 있어 <b>우리 서버가 죽어도 화면은 정상으로 보인다.</b>
+     *
+     * <p>★ 하트비트가 없어 <b>호출 시각</b>을 쓴다. 정확한 생존 신호는 아니지만
+     * 「오늘 한 번도 안 불렀다」는 확실히 드러난다.
+     */
+    @Column(name = "kiosk_last_seen_at")
+    private java.time.Instant kioskLastSeenAt;
+
+    /** 온라인으로 볼 시간. ★ 서버가 정한다 — 화면이 정하면 지점마다 다른 기준이 생긴다. */
+    public static final java.time.Duration ONLINE_WINDOW = java.time.Duration.ofMinutes(10);
+
+    /** 갱신 간격. ★ 호출마다 UPDATE 하면 태깅이 몰리는 시간대에 같은 행을 계속 때린다. */
+    private static final java.time.Duration TOUCH_INTERVAL = java.time.Duration.ofMinutes(1);
+
+    /**
+     * 통신 시각을 갱신한다.
+     *
+     * @return 실제로 갱신했으면 {@code true}. <b>간격 안이면 아무것도 하지 않는다</b>
+     */
+    public boolean touchKioskSeen(java.time.Instant now) {
+        if (kioskLastSeenAt != null
+                && kioskLastSeenAt.isAfter(now.minus(TOUCH_INTERVAL))) {
+            return false;
+        }
+        this.kioskLastSeenAt = now;
+        return true;
+    }
+
+    /** 살아 있다고 볼 수 있는가. ⚠️ 한산한 시간대에는 {@code false} 가 될 수 있다. */
+    public boolean isKioskOnline(java.time.Instant now) {
+        return kioskLastSeenAt != null && kioskLastSeenAt.isAfter(now.minus(ONLINE_WINDOW));
+    }
+
+    /**
      * 지점별 정책값.
      *
      * <p><b>스키마가 확정되지 않은 값의 임시 수용소로 쓰지 말 것.</b> 여기 들어간 값은
