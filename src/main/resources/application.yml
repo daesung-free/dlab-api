@@ -164,3 +164,12 @@ aligo:
   sender-key: ${ALIGO_SENDER_KEY:}
   sender-phone: ${ALIGO_SENDER_PHONE:}
   test-mode: ${ALIGO_TEST_MODE:true}
+
+fcm:
+  # ⚠️ 비어 있으면 연동이 꺼진다(FirebaseConfig 의 @ConditionalOnExpression).
+  #    발송 경로가 SKIPPED "발송 구현체 없음: FCM_PUSH" 로 남겨 「설정이 덜 됐다」와
+  #    「보냈는데 실패했다」가 구분된다 — 알리고와 같은 규약이다.
+  # ★ 서비스 계정 키(JSON) 파일 경로다. 파일을 커밋하지 말 것(§8).
+  credentials-path: ${FCM_CREDENTIALS_PATH:}
+  # true 면 FCM 에 검증만 요청하고 단말로 보내지 않는다
+  dry-run: ${FCM_DRY_RUN:false}
