@@ -138,13 +138,24 @@ class VocabResultBoardTest {
     }
 
     /** 회차 하나를 다 틀리게 푼다. */
-    private void takeAllWrong(StudentEnrollment e, VocabExamRound round) {
+    /**
+     * 전부 틀리게 응시한다.
+     *
+     * @return 그 학생이 <b>실제로 받은 단어 id</b>. ★ 문항 선택이 학생마다 무작위라
+     *         두 학생의 문항이 같지 않다 — 묶임을 보려면 <b>겹치는 단어</b>를 골라야 한다.
+     */
+    private java.util.Set<Long> takeAllWrong(StudentEnrollment e, VocabExamRound round) {
         var started = examService.start(e.getId(), round.getId());
         Map<Short, String> given = new HashMap<>();
+        java.util.Set<Long> wordIds = new java.util.LinkedHashSet<>();
         for (var q : started.questions()) {
             given.put(q.seqNo(), "엉뚱한답");
+            if (q.wordId() != null) {
+                wordIds.add(q.wordId());
+            }
         }
         examService.submit(e.getId(), started.attemptId(), given);
+        return wordIds;
     }
 
     @Test
@@ -307,14 +318,27 @@ class VocabResultBoardTest {
         em.clear();
 
         // 두 학생이 같은 틀린 답을 쓴다
-        takeAllWrong(student, round1);
-        takeAllWrong(other, round1);
+        var mine = takeAllWrong(student, round1);
+        var theirs = takeAllWrong(other, round1);
         em.flush();
+
+        // ★★ words.get(0) 으로 단정하지 말 것. 문항 선택이 학생마다 무작위라
+        //    한 학생만 받은 단어가 첫 줄에 올 수 있고, 그러면 count 가 1 이 되어
+        //    **CI 에서만 깨진다.** 실제로 두 번 깨졌다(2026-10-23 · 10-26).
+        //    묶는지 보는 테스트이므로 **둘 다 받은 단어**를 골라야 한다.
+        java.util.Set<Long> shared = new java.util.LinkedHashSet<>(mine);
+        shared.retainAll(theirs);
+        assertThat(shared)
+                .as("두 학생이 공통으로 받은 문항이 있어야 묶임을 볼 수 있다")
+                .isNotEmpty();
 
         var words = wrongAnswerService.words(admin, (short) 1);
         assertThat(words).isNotEmpty();
 
-        var givens = wrongAnswerService.givens(admin, words.get(0).wordId());
+        Long sharedWordId = shared.iterator().next();
+        assertThat(words).extracting(w -> w.wordId()).contains(sharedWordId);
+
+        var givens = wrongAnswerService.givens(admin, sharedWordId);
         assertThat(givens).hasSize(1);
         assertThat(givens.get(0).given()).isEqualTo("엉뚱한답");
         assertThat(givens.get(0).count())

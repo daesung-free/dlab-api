@@ -32,6 +32,8 @@ dependencies {
     // 키오스크 구획 감시용. 우리 장애가 키오스크 화면에서는 안 보이므로(폴백이 가린다)
     // 외부 모니터가 직접 찔러볼 창구가 필요하다 — CLAUDE.md §3
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // FCM 푸시. ★ 구글이 닫은 legacy 서버 키가 아니라 서비스 계정 JSON 으로 HTTP v1 을 쓴다
+    implementation 'com.google.firebase:firebase-admin:9.2.0'
     // JWT — jjwt는 api/impl/jackson 3개를 함께 넣어야 동작한다
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
