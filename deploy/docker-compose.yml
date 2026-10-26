@@ -132,6 +132,16 @@ services:
       ALIGO_SENDER_KEY: ${ALIGO_SENDER_KEY:-}
       ALIGO_SENDER_PHONE: ${ALIGO_SENDER_PHONE:-}
       ALIGO_TEST_MODE: ${ALIGO_TEST_MODE:-true}
+      # ★★ FCM 푸시. **이 두 줄이 없으면 .env 에 경로를 넣어도 푸시가 꺼진 채로 돈다.**
+      #    실제로 그렇게 배포했다(2026-10-26) — 앱은 멀쩡히 떴고 기동 로그도 조용해서
+      #    원인을 찾는 데 시간이 걸렸다. CORS·입학신청 API 키와 **같은 함정이 세 번째다.**
+      # ★ 값은 서비스 계정 키(JSON) 의 **컨테이너 안 경로**다(호스트 경로가 아니다).
+      #   secrets 는 아래에서 /app/secrets 로 읽기전용 마운트된다.
+      #   ⚠️ 파일 주인이 컨테이너 사용자(uid 999)여야 한다 — 호스트 사용자 소유로
+      #      chmod 600 을 걸면 **컨테이너가 못 읽는다.** 그때도 앱은 뜨고 푸시만 꺼진다.
+      FCM_CREDENTIALS_PATH: ${FCM_CREDENTIALS_PATH:-}
+      # true 면 FCM 에 검증만 요청하고 단말로 보내지 않는다
+      FCM_DRY_RUN: ${FCM_DRY_RUN:-false}
       # ★★ 홈페이지 입학신청 연동. **이게 비어 있으면 입학신청이 한 건도 안 들어온다.**
       #
       #   ⚠️ 원래 이 블록이 아예 없었다 — .env 에 HOMEPAGE_INTEGRATION_API_KEY 를

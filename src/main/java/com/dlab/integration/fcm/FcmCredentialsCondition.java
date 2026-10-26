@@ -2,7 +2,6 @@ package com.dlab.integration.fcm;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Condition;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.core.type.AnnotatedTypeMetadata;
@@ -24,25 +23,21 @@ import org.springframework.core.type.AnnotatedTypeMetadata;
  *
  * <p>읽히지 않으면 빈이 만들어지지 않고 발송 경로가
  * {@code SKIPPED "발송 구현체 없음: FCM_PUSH"} 로 남긴다 — 알림톡과 같은 규약이다.
- * ★ <b>대신 기동 로그에 크게 남긴다.</b> 조용히 넘기면 「푸시가 왜 안 오지」를
- * 한참 뒤에 알게 된다.
+ *
+ * <h2>★ 여기서는 로그를 남기지 않는다</h2>
+ * 두 곳({@link FirebaseConfig} · {@code FcmPushSender})이 이 조건을 쓰므로
+ * <b>같은 줄이 두 번 찍힌다.</b> 상태를 알리는 일은 {@link FcmStatusLogger} 가
+ * 한 줄로 맡는다 — 그쪽은 꺼져 있을 때도 뜬다.
  */
-@Slf4j
 public class FcmCredentialsCondition implements Condition {
 
     @Override
     public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
-        String path = context.getEnvironment().getProperty("fcm.credentials-path");
-        if (path == null || path.isBlank()) {
-            // 로컬·CI 의 정상 상태다 — 경고하지 않는다
-            return false;
-        }
-        if (!Files.isReadable(Path.of(path))) {
-            log.error("★★ FCM 키를 읽을 수 없어 푸시 발송을 끈다: {} "
-                    + "— 컨테이너 사용자가 읽을 수 있는지 확인할 것(파일 주인·권한). "
-                    + "푸시는 SKIPPED 로 남고 다른 기능은 정상 동작한다.", path);
-            return false;
-        }
-        return true;
+        return usable(context.getEnvironment().getProperty("fcm.credentials-path"));
+    }
+
+    /** {@link FcmStatusLogger} 와 같은 판정을 쓴다 — 갈리면 로그와 실제가 어긋난다. */
+    static boolean usable(String path) {
+        return path != null && !path.isBlank() && Files.isReadable(Path.of(path));
     }
 }
