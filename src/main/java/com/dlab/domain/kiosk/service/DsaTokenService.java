@@ -73,6 +73,7 @@ public class DsaTokenService {
     private final AcademyRepository academyRepository;
     private final StringRedisTemplate redis;
     private final Clock clock;
+    private final KioskPresenceService kioskPresence;
 
     /**
      * {@code POST /auth/token} — client_id + secret_id 검증 후 토큰 발급.
@@ -222,7 +223,11 @@ public class DsaTokenService {
         if (academyId == null) {
             throw new DsaApiException(DsaCode.TOKEN_EXPIRED);
         }
-        return Long.valueOf(academyId);
+        Long resolved = Long.valueOf(academyId);
+        // ★ 모든 /kiosk/** 가 이 메서드를 지난다 — 통신 시각을 남길 유일한 공통 지점이다.
+        //   ⚠️ 토큰이 틀린 호출은 여기 닿기 전에 끊기므로 「인증된 호출」만 기록된다. 그게 맞다.
+        kioskPresence.seen(resolved);
+        return resolved;
     }
 
     /**
