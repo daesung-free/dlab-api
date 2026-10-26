@@ -17,7 +17,7 @@ import com.google.firebase.messaging.SendResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,7 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 새 토큰이 생긴 뒤에도 실패가 섞여 「푸시가 안 간다」로 보인다.
  *
  * <h2>★★ 자격증명이 없으면 이 빈을 만들지 않는다</h2>
- * {@link FirebaseConfig} 와 <b>같은 조건을 걸어야 한다.</b> 설정에만 걸고 여기 빠뜨리면
+ * {@link FcmCredentialsCondition} 을 {@link FirebaseConfig} 와 <b>같이 쓴다.</b>
+ * 설정에만 걸고 여기 빠뜨리면
  * {@code FirebaseMessaging} 빈이 없는 환경에서 <b>컨텍스트가 아예 뜨지 않는다</b> —
  * 로컬·CI 가 전부 깨진다(실제로 한 번 깨뜨렸다).
  * 빈이 없으면 발송 경로가 {@code SKIPPED "발송 구현체 없음: FCM_PUSH"} 로 남긴다.
@@ -51,7 +52,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Slf4j
 @Component
-@ConditionalOnExpression("'${fcm.credentials-path:}' != ''")
+@Conditional(FcmCredentialsCondition.class)
 @RequiredArgsConstructor
 public class FcmPushSender implements NotificationSender {
 

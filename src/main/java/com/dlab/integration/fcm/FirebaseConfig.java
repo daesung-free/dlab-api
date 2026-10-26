@@ -9,16 +9,16 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 
 /**
  * Firebase 초기화.
  *
- * <h2>★ 자격증명이 없으면 빈을 만들지 않는다</h2>
- * {@code FirebaseApp.initializeApp} 은 키가 없으면 예외를 던진다 — 조건 없이 두면
- * <b>로컬·CI 에서 앱이 아예 뜨지 않는다.</b>
+ * <h2>★ 자격증명을 쓸 수 없으면 빈을 만들지 않는다</h2>
+ * 판정은 {@link FcmCredentialsCondition} 한 곳에 있다 — <b>경로가 있는가가 아니라
+ * 읽히는가</b>를 본다. {@code FcmPushSender} 도 같은 조건을 쓴다.
  *
  * <h2>★ FirebaseApp 은 프로세스에 하나다</h2>
  * 이미 초기화돼 있으면 그것을 쓴다. 두 번 부르면
@@ -27,17 +27,13 @@ import org.springframework.context.annotation.Configuration;
  */
 @Slf4j
 @Configuration
-@ConditionalOnExpression("'${fcm.credentials-path:}' != ''")
+@Conditional(FcmCredentialsCondition.class)
 public class FirebaseConfig {
 
     @Bean
     public FirebaseMessaging firebaseMessaging(FcmProperties properties) throws IOException {
+        // ★ 읽히는지는 FcmCredentialsCondition 이 이미 봤다 — 여기 오면 읽을 수 있다
         Path path = Path.of(properties.credentialsPath());
-        if (!Files.isReadable(path)) {
-            // ⚠️ 경로가 틀리면 기동에서 끊는다. 발송 때 알면 그날 알림이 전부 실패한다
-            throw new IllegalStateException(
-                    "FCM 서비스 계정 키를 읽을 수 없습니다: " + path.toAbsolutePath());
-        }
 
         FirebaseApp app = FirebaseApp.getApps().stream()
                 .filter(a -> FirebaseApp.DEFAULT_APP_NAME.equals(a.getName()))
