@@ -40,6 +40,7 @@ import java.util.Set;
 public class AuthService {
 
     private final AccountRepository accountRepository;
+    private final com.dlab.domain.user.repository.SignupRejectionRepository rejectionRepository;
     private final AccountRoleRepository accountRoleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
@@ -239,6 +240,20 @@ public class AuthService {
         if (account.getStatus() == AccountStatus.PENDING) {
             // 학생 가입 승인 대기. 안내 문구가 달라야 해서 별도 코드로 구분한다.
             throw new BusinessException(ErrorCode.SIGNUP_PENDING);
+        }
+        if (account.getStatus() == AccountStatus.REJECTED) {
+            // ★★ 사유를 여기서 알려준다. 승인 전에는 앱에 들어올 수 없어 다른 경로가 없고,
+            //    알림톡은 템플릿 심사가 필요해 뒤로 뒀다.
+            //    ⚠️ 무인증 「가입 상태 조회」를 만들지 않는 것과 어긋나지 않는다 —
+            //       로그인은 **비밀번호가 맞아야** 여기까지 오므로 본인이다.
+            //       그쪽을 막은 이유는 전화번호만으로 학생 고유ID 가 새는 것이었다(§3).
+            String reason = rejectionRepository
+                    .findFirstByAccountIdAndDeletedFalseOrderByIdDesc(account.getId())
+                    .map(r -> r.getReason())
+                    // 사유는 필수지만, 옛 데이터를 만나도 로그인 흐름이 깨지지 않게 둔다
+                    .orElse("학원에 문의해 주세요.");
+            throw new BusinessException(ErrorCode.SIGNUP_REJECTED,
+                    "가입이 반려되었습니다. " + reason);
         }
         if (account.isWithdrawnByOwner()) {
             // ★ 퇴원으로 끊긴 것과 구분한다 — 본인 탈퇴면 "다시 가입하라"가 맞고,

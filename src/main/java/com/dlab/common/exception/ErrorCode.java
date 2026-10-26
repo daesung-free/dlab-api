@@ -14,6 +14,11 @@ public enum ErrorCode {
     INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "유효하지 않은 토큰입니다."),
     ACCOUNT_NOT_ACTIVE(HttpStatus.FORBIDDEN, "사용할 수 없는 계정입니다."),
     SIGNUP_PENDING(HttpStatus.FORBIDDEN, "가입 승인 대기 중입니다."),
+    // ★ SIGNUP_PENDING 과 가른다 — 「아직 심사 중」과 「반려됐다」는 안내가 달라야 한다.
+    //   사유는 응답 메시지에 담는다(로그인은 비밀번호가 맞아야 통과하므로 본인이다)
+    SIGNUP_REJECTED(HttpStatus.FORBIDDEN, "가입이 반려되었습니다."),
+    // ★ 「신청」만 막는다. 조회는 열려 있고, 정기일정은 온보딩 단계라 막지 않는다(I-24)
+    OT_REQUIRED(HttpStatus.FORBIDDEN, "대면 OT 를 받으신 뒤에 이용할 수 있습니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "권한이 없습니다."),
     // 로그인 보안 (A-1 · F-4.12-1)
     ACCOUNT_LOCKED(HttpStatus.FORBIDDEN,
