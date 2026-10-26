@@ -293,6 +293,19 @@ class VocabResultBoardTest {
     @Test
     @DisplayName("★★ 오답 확인이 같은 답끼리 묶는다 — 묶지 않으면 200줄을 읽어야 한다")
     void wrongAnswersAreGrouped() {
+        // ⚠️ 주관식만 나오게 고정한다. ★ 객관식·주관식 배정이 무작위라, 같은 단어가
+        //    한 학생에게는 주관식 다른 학생에게는 객관식으로 나올 수 있다. givens 는
+        //    객관식 오답을 제외하므로(바로 아래 테스트가 그것을 단정한다) 그러면
+        //    words.get(0) 의 count 가 1 이 되어 **CI 에서만 깨진다.**
+        //    실제로 그렇게 깨졌다(2026-10-23). 묶는지 보는 테스트이지 유형을 보는
+        //    테스트가 아니므로 유형을 고정하는 것이 맞다.
+        em.createQuery("update VocabScheduleConfig c set c.multipleChoiceRate = 0 "
+                        + "where c.academy.id = :a")
+                .setParameter("a", academy.getId())
+                .executeUpdate();
+        em.flush();
+        em.clear();
+
         // 두 학생이 같은 틀린 답을 쓴다
         takeAllWrong(student, round1);
         takeAllWrong(other, round1);
