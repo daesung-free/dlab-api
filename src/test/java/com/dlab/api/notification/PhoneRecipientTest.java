@@ -107,6 +107,17 @@ class PhoneRecipientTest {
     @Test
     @DisplayName("문구 미확정 템플릿이면 번호 수신자도 SKIPPED 로 남는다 — 안 나간 사실이 보여야 한다")
     void unconfirmedTemplateIsSkippedNotSent() {
+        // ⚠️ 시드 상태에 기대지 않는다. V20261026120000 이 카카오 승인본 문구를 넣으면서
+        //    MISSING_ATTENDANCE 가 **확정 상태로 바뀌어** 이 테스트가 깨졌다 —
+        //    「문구 미확정이면 어떻게 되는가」를 보는 테스트이지 특정 템플릿이 미확정인지를
+        //    보는 테스트가 아니므로, 여기서 직접 미확정으로 돌려놓는다.
+        em.createQuery("update NotificationTemplate t set t.contentConfirmed = false "
+                        + "where t.eventCode = :e")
+                .setParameter("e", NotificationEvent.MISSING_ATTENDANCE)
+                .executeUpdate();
+        em.flush();
+        em.clear();
+
         NotificationLog log = notificationService.send(NotificationCommand.toPhone(
                 NotificationEvent.MISSING_ATTENDANCE, "010-0000-0002", "대기자", academy, year,
                 // 템플릿이 요구하는 변수를 다 채운다 — 하나라도 빠지면 「변수 누락」으로
