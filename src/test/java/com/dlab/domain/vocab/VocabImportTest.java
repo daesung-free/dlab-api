@@ -36,7 +36,18 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class VocabImportTest {
 
-    static final Path MANUSCRIPT_DIR = Path.of("md/추가개발/D VOCA 엑셀 원고");
+    /**
+     * 업체 원고 폴더.
+     *
+     * <p>⚠️⚠️ <b>경로가 바뀌면 이 테스트가 조용히 전부 건너뛴다.</b> 실제로 그랬다 —
+     * 2026-10-22 에 원고가 {@code md/추가개발/VOCA/} 아래로 옮겨졌는데 이 상수가
+     * 옛 경로를 가리켜, <b>50유닛 적재와 Part 3 파싱이 한 번도 검증되지 않은 채
+     * 「skip 7건」으로 넘어가고 있었다.</b>
+     *
+     * <p>★ 그래서 아래 {@code manuscriptsExist} 가 <b>폴더가 없으면 실패</b>한다.
+     * 건너뛰기만 하면 다음에 또 같은 일이 난다 — 0건은 통과가 아니라 「확인 못 함」이다.
+     */
+    static final Path MANUSCRIPT_DIR = Path.of("md/추가개발/VOCA/D VOCA 엑셀 원고");
 
     static boolean manuscriptExists() {
         return Files.isDirectory(MANUSCRIPT_DIR);
