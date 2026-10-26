@@ -132,6 +132,9 @@ services:
       ALIGO_SENDER_KEY: ${ALIGO_SENDER_KEY:-}
       ALIGO_SENDER_PHONE: ${ALIGO_SENDER_PHONE:-}
       ALIGO_TEST_MODE: ${ALIGO_TEST_MODE:-true}
+      # ★★ 대면 OT 전 「신청」 차단(I-24). **기본 꺼짐**이고 범위가 확정되면 켠다 —
+      #   범위를 정해 켜 두었다가 기존 동작을 10곳에서 깨뜨린 적이 있다.
+      OT_GATE_ENABLED: ${OT_GATE_ENABLED:-false}
       # ★★ FCM 푸시. **이 두 줄이 없으면 .env 에 경로를 넣어도 푸시가 꺼진 채로 돈다.**
       #    실제로 그렇게 배포했다(2026-10-26) — 앱은 멀쩡히 떴고 기동 로그도 조용해서
       #    원인을 찾는 데 시간이 걸렸다. CORS·입학신청 API 키와 **같은 함정이 세 번째다.**

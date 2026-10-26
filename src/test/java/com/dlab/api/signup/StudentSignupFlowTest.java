@@ -49,6 +49,7 @@ class StudentSignupFlowTest {
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
     @MockitoBean SmsSender smsSender;
+    @Autowired com.dlab.domain.user.service.StudentSignupApprovalService approvalService;
 
     MockMvc mvc;
     Academy academy;
@@ -61,6 +62,28 @@ class StudentSignupFlowTest {
         academy = new Academy("SS01", "학생가입테스트지점", LocalTime.of(9, 0));
         em.persist(academy);
         em.flush();
+    }
+
+    /** ★ 반려는 서비스로 부른다 — HTTP 로 가면 직원 인증을 꾸며야 해서 테스트가 잘 깨진다. */
+    private void rejectSignup(String reason) {
+        Long enrollmentId = em.createQuery("""
+                SELECT e.id FROM StudentEnrollment e
+                 WHERE e.student.id = (SELECT a.student.id FROM Account a WHERE a.loginId = :phone)
+                """, Long.class).setParameter("phone", PHONE).getSingleResult();
+        // 전 지점 권한 주체로 부른다 — 지점 접근 검사를 타므로 null 을 넘길 수 없다
+        var me = new com.dlab.common.security.AuthPrincipal(
+                0L, "EMPLOYEE", academy.getId(),
+                java.util.Set.of(com.dlab.common.security.Role.SUPER_ADMIN),
+                true, false);
+        approvalService.reject(me, enrollmentId, reason);
+        em.flush();
+        em.clear();
+    }
+
+    private AccountStatus statusOf(String phone) {
+        return em.createQuery("""
+                SELECT a.status FROM Account a WHERE a.loginId = :phone
+                """, AccountStatus.class).setParameter("phone", phone).getSingleResult();
     }
 
     private String verifyPhone(String phone) throws Exception {
@@ -122,6 +145,45 @@ class StudentSignupFlowTest {
                         .content("""
                                 {"loginId":"%s","password":"%s"}""".formatted(PHONE, PASSWORD)))
                 .andExpect(jsonPath("$.error.code").value("SIGNUP_PENDING"));
+    }
+
+    @Test
+    @DisplayName("★★ 반려되면 로그인에 사유가 담겨 나온다 — 앱에 못 들어오는 사용자에게 알릴 유일한 길이다")
+    void rejectionReasonComesBackOnLogin() throws Exception {
+        signup(verifyPhone(PHONE)).andExpect(status().isOk());
+        em.flush();
+        rejectSignup("내신 성적표가 식별되지 않습니다. 다시 첨부해 주세요.");
+
+        mvc.perform(post("/api/v1/app/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"loginId":"%s","password":"%s"}""".formatted(PHONE, PASSWORD)))
+                .andExpect(jsonPath("$.error.code").value("SIGNUP_REJECTED"))
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("다시 첨부")));
+    }
+
+    @Test
+    @DisplayName("★★ 반려된 뒤 같은 번호로 다시 가입하면 재신청이 된다 — 고치기 전에는 아예 막혀 있었다")
+    void rejectedStudentCanReapply() throws Exception {
+        signup(verifyPhone(PHONE)).andExpect(status().isOk());
+        em.flush();
+        rejectSignup("서류 미비");
+
+        signup(verifyPhone(PHONE))
+                .andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        assertThat(statusOf(PHONE))
+                .as("다시 승인 대기로 돌아간다")
+                .isEqualTo(AccountStatus.PENDING);
+        assertThat(em.createQuery("""
+                        SELECT count(a) FROM Account a WHERE a.loginId = :phone
+                        """, Long.class)
+                        .setParameter("phone", PHONE).getSingleResult())
+                .as("★ 계정을 새로 만들지 않는다 — login_id 가 UNIQUE 라 터진다")
+                .isEqualTo(1L);
     }
 
     @Test
