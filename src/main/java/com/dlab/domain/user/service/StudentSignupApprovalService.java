@@ -6,6 +6,7 @@ import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.user.entity.Account;
 import com.dlab.domain.user.entity.AccountStatus;
 import com.dlab.domain.user.entity.OnboardingStatus;
+import com.dlab.domain.user.entity.SignupRejection;
 import com.dlab.domain.user.entity.Student;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import com.dlab.domain.user.repository.AccountRepository;
@@ -38,6 +39,8 @@ public class StudentSignupApprovalService {
 
     private final AccountRepository accountRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
+    private final com.dlab.domain.user.repository.SignupRejectionRepository rejectionRepository;
+    private final java.time.Clock clock;
 
     /**
      * 가입 승인.
@@ -60,6 +63,66 @@ public class StudentSignupApprovalService {
         account.approve();
         log.info("학생 가입 승인: enrollmentId={}, accountId={}", enrollmentId, account.getId());
         return account;
+    }
+
+    /**
+     * 가입 반려 (A-2 · F-4.12-1).
+     *
+     * <p>★ <b>사유가 필수다.</b> 비워 두면 학생이 무엇을 고쳐야 하는지 알 수 없고,
+     * 재신청해도 같은 이유로 또 반려된다.
+     *
+     * <p>★ 전달은 <b>앱 화면</b>에서 한다 — 로그인 시도({@code SIGNUP_REJECTED} + 사유)와
+     * 재가입 시도 양쪽이다. 알림톡은 템플릿 심사가 필요해 뒤로 뒀다.
+     *
+     * <p>⚠️ <b>이미 승인된 계정은 반려할 수 없다.</b> 승인을 되돌리는 것은 반려가 아니라
+     * 정지·퇴원이고 후속처리가 다르다.
+     */
+    public SignupRejection reject(AuthPrincipal me, Long enrollmentId, String reason) {
+        StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
+        Account account = requireAccount(enrollment.getStudent());
+
+        if (account.getStatus() == AccountStatus.ACTIVE) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "이미 승인된 계정은 반려할 수 없습니다. 정지·퇴원 절차를 쓰십시오.");
+        }
+        if (account.getStatus() != AccountStatus.PENDING
+                && account.getStatus() != AccountStatus.REJECTED) {
+            throw new BusinessException(ErrorCode.ACCOUNT_NOT_ACTIVE);
+        }
+
+        account.reject();
+        SignupRejection rejection =
+                rejectionRepository.save(new SignupRejection(enrollment, account, reason));
+        log.info("학생 가입 반려: enrollmentId={}, accountId={}", enrollmentId, account.getId());
+        return rejection;
+    }
+
+    /**
+     * 재신청. 반려된 계정을 다시 승인 대기로 돌린다.
+     *
+     * <p>★ 해소되지 않은 반려를 <b>전부</b> 닫는다 — 하나만 닫으면 다음 조회에서 옛 사유가
+     * 다시 떠서 「고쳤는데 그대로」로 보인다.
+     *
+     * <p>★ 반려 행은 <b>지우지 않는다</b> — 몇 번 반려됐는지가 근거로 남아야 한다.
+     */
+    public Account reapply(Long accountId) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ACCOUNT_NOT_FOUND));
+        if (account.getStatus() != AccountStatus.REJECTED) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "반려된 가입만 재신청할 수 있습니다.");
+        }
+
+        rejectionRepository.findByAccountIdAndResolvedAtIsNullAndDeletedFalse(accountId)
+                .forEach(r -> r.resolve(clock.instant()));
+        account.reapply();
+        return account;
+    }
+
+    /** 가장 최근 반려 사유. 없으면 비어 있다. */
+    @Transactional(readOnly = true)
+    public java.util.Optional<SignupRejection> latestRejection(Long accountId) {
+        return rejectionRepository.findFirstByAccountIdAndDeletedFalseOrderByIdDesc(accountId);
     }
 
     /**

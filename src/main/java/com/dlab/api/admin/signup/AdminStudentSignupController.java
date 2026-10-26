@@ -56,6 +56,29 @@ public class AdminStudentSignupController {
     }
 
     /**
+     * 가입 반려 (A-2 · F-4.12-1).
+     *
+     * <h2>★ 사유가 필수다</h2>
+     * 비워 두면 학생이 무엇을 고쳐야 하는지 알 수 없고, 재신청해도 같은 이유로 또 반려된다.
+     *
+     * <h2>★ 학생은 앱에서 사유를 본다</h2>
+     * 로그인 시도에 {@code SIGNUP_REJECTED} 와 사유가 담겨 나가고, <b>같은 번호로 다시
+     * 가입하면 재신청으로 받는다.</b> 알림톡은 템플릿 심사가 필요해 뒤로 뒀다 —
+     * 필요해지면 템플릿 하나를 추가하면 된다.
+     *
+     * <h2>⚠️ 이미 승인된 계정은 반려할 수 없다</h2>
+     * 승인을 되돌리는 것은 반려가 아니라 정지·퇴원이고 후속처리가 다르다.
+     */
+    @PostMapping("/{enrollmentId}/reject")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BRANCH_ADMIN', 'STAFF')")
+    public ApiResponse<Void> reject(@CurrentAccount AuthPrincipal me,
+                                    @PathVariable Long enrollmentId,
+                                    @jakarta.validation.Valid @RequestBody RejectRequest request) {
+        approvalService.reject(me, enrollmentId, request.reason());
+        return ApiResponse.success(null);
+    }
+
+    /**
      * 대면 OT 완료 처리.
      *
      * <p>OT는 오프라인이라 관리자가 눌러줘야 앱이 다음 단계로 넘어간다 —
@@ -72,6 +95,12 @@ public class AdminStudentSignupController {
     /**
      * @param onboardingStatus 승인과 별개 축이다. 승인 직후에도 {@code REGISTERED}(OT 전)다
      */
+    @io.swagger.v3.oas.annotations.media.Schema(name = "StudentSignupRejectRequest")
+    public record RejectRequest(
+            @jakarta.validation.constraints.NotBlank
+            @jakarta.validation.constraints.Size(max = 500) String reason) {
+    }
+
     public record PendingSignupResponse(
             Long enrollmentId,
             Long accountId,

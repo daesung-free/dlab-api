@@ -20,12 +20,17 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     private final PasswordChangeRequiredInterceptor passwordChangeRequiredInterceptor;
     private final com.dlab.common.security.MenuAccessInterceptor menuAccessInterceptor;
+    private final com.dlab.common.security.OnboardingGateInterceptor onboardingGateInterceptor;
     private final com.dlab.api.homepage.rest.HomepageApiKeyInterceptor homepageApiKeyInterceptor;
 
     @Override
     public void addInterceptors(@NonNull InterceptorRegistry registry) {
         registry.addInterceptor(passwordChangeRequiredInterceptor)
                 .addPathPatterns("/api/**");
+        // ★ 대면 OT 전에는 「신청」을 막는다(I-24). 앱만 대상이다 — 막는 목록은
+        //   OnboardingGateInterceptor 한 곳에 있다(범위가 미확정이라 바뀔 수 있다)
+        registry.addInterceptor(onboardingGateInterceptor)
+                .addPathPatterns("/api/v1/app/**");
         // 계정별 메뉴 노출. 관리자 웹만 대상이다 — 앱에는 메뉴 설정 개념이 없다
         registry.addInterceptor(menuAccessInterceptor)
                 .addPathPatterns("/api/v1/admin/**");

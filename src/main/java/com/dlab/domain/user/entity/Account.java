@@ -158,6 +158,28 @@ public class Account extends BaseEntity {
     }
 
     /**
+     * 가입 반려.
+     *
+     * <p>★ {@code PENDING} 과 가른다 — 합쳐 두면 <b>관리자 대기 목록에 반려한 건이 계속
+     * 남고</b>, 학생은 「아직 심사 중」과 「반려됐다」를 구분할 수 없다.
+     *
+     * <p>사유는 {@code signup_rejection} 에 행으로 쌓는다.
+     */
+    public void reject() {
+        this.status = AccountStatus.REJECTED;
+    }
+
+    /**
+     * 재신청. 다시 승인 대기로 돌린다.
+     *
+     * <p>★ <b>반려를 승인으로 뒤집는 경로는 두지 않는다</b> — 사유가 고쳐졌는지는
+     * 학생이 다시 낸 내용으로만 알 수 있다.
+     */
+    public void reapply() {
+        this.status = AccountStatus.PENDING;
+    }
+
+    /**
      * 퇴원·제적·수료 시 앱 접근 차단.
      *
      * <p><b>계정을 지우지 않는다</b> — 재등록 시 같은 사람을 다시 찾아야 하고,

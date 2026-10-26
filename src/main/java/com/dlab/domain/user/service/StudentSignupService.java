@@ -64,6 +64,7 @@ public class StudentSignupService {
     private final PasswordEncoder passwordEncoder;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    private final StudentSignupApprovalService approvalService;
 
     /**
      * 가입 신청.
@@ -76,6 +77,18 @@ public class StudentSignupService {
         String phone = phoneVerificationService.consume(command.verificationToken()).phone();
         PasswordPolicy.validate(command.password());
 
+        // ★★ 반려된 가입이면 재신청으로 받는다 — 새 계정을 만들지 않는다.
+        //    중복 검사가 WITHDRAWN 만 빼므로 반려도 걸려서, 고치기 전에는 반려된 학생이
+        //    「이미 등록된 번호」로 막혀 **재신청을 아예 할 수 없었다.**
+        //    새 계정을 만드는 쪽도 안 된다 — login_id 가 UNIQUE 라 제약 위반으로 터지고,
+        //    학번 채번 재시도가 그 예외까지 5번 다시 돌린다.
+        Account rejected = accountRepository.findByLoginId(phone)
+                .filter(a -> a.getStatus() == AccountStatus.REJECTED)
+                .orElse(null);
+        if (rejected != null) {
+            return reapply(rejected, command);
+        }
+
         // ★ 트랜잭션 밖에서 먼저 본다. 안에서 보면 "이미 신청함"과 학번 채번 충돌이
         //    같은 예외로 뭉뚱그려져, 재시도하면 안 되는 건까지 5번 다시 시도한다.
         if (accountRepository.existsActiveOrPendingByLoginId(phone)) {
@@ -84,6 +97,23 @@ public class StudentSignupService {
 
         Account account = withStudentNoRetry(() -> create(command, phone));
         log.info("학생 가입 신청: accountId={}, academyId={}", account.getId(), command.academyId());
+        return account;
+    }
+
+    /**
+     * 재신청.
+     *
+     * <p>★ <b>학번·등록 건을 다시 만들지 않는다.</b> 반려는 등록이 성립하지 않은 상태가
+     * 아니라 <b>계정 승인이 거절된 상태</b>라, 등록 행은 이미 있다. 새로 채번하면
+     * 같은 사람에게 학번이 둘 생긴다.
+     *
+     * <p>비밀번호는 <b>다시 받은 값으로 바꾼다</b> — 반려되고 한참 뒤에 다시 오면
+     * 기억하지 못하는 쪽이 보통이고, 휴대폰 인증을 통과한 본인이다.
+     */
+    private Account reapply(Account account, Command command) {
+        account.changePassword(passwordEncoder.encode(command.password()), clock.instant());
+        approvalService.reapply(account.getId());
+        log.info("학생 가입 재신청: accountId={}", account.getId());
         return account;
     }
 
