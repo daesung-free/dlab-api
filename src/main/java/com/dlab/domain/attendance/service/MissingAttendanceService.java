@@ -39,7 +39,8 @@ public class MissingAttendanceService {
             DateTimeFormatter.ofPattern("M월 d일").withZone(TimeConfig.KST);
 
     private final StudentEnrollmentRepository enrollmentRepository;
-    private final AccountRepository accountRepository;
+    private final com.dlab.domain.notification.service.GuardianRecipientResolver
+            recipientResolver;
     private final NotificationService notificationService;
 
     /**
@@ -58,16 +59,33 @@ public class MissingAttendanceService {
         String formattedDate = DATE_FORMAT.format(date.atStartOfDay(TimeConfig.KST));
         for (StudentEnrollment enrollment : absentees) {
             Student student = enrollment.getStudent();
-            for (Account guardian : accountRepository.findGuardianAccountsOfStudent(student.getId())) {
-                notificationService.send(NotificationCommand.forStudent(
-                        NotificationEvent.MISSING_ATTENDANCE,
-                        guardian,
-                        student,
-                        academy,
-                        enrollment.getYear(),
-                        Map.of("attendanceDate", formattedDate),
-                        // 배치가 재실행돼도 같은 학부모에게 같은 날 두 번 나가지 않도록 막는다
-                        dedupKey(student.getId(), date, guardian.getId())));
+            // ★★ 앱을 설치하지 않은 보호자에게도 보낸다. 미등원은 끌 수 없는 필수 알림이라
+            //   수신처가 없으면 **무단결석을 아무도 모르게 된다.** 신입생 동의서가 보호자
+            //   번호를 필수로 수집하므로 번호만 있어도 보내는 것이 맞다.
+            //   ★ 수신자 해석은 GuardianRecipientResolver 한 곳이다 — 출결 알림·수동 발송과
+            //     조건이 갈리면 「미리보기엔 빠졌는데 실제로는 갔다」가 된다.
+            for (var recipient : recipientResolver.of(student.getId())) {
+                if (!recipient.hasPhone()) {
+                    // 번호가 없으면 알림톡이 나갈 곳이 없다. 조용히 넘기지 않고 남긴다 —
+                    // 필수 알림이라 「왜 안 왔나」에 답해야 한다
+                    log.warn("미등원 알림 수신처 없음: studentId={}, guardianId={}",
+                            student.getId(), recipient.guardianId());
+                    continue;
+                }
+                // 배치가 재실행돼도 같은 보호자에게 같은 날 두 번 나가지 않도록 막는다.
+                // ★ 계정이 없어도 보호자 행은 있으므로 보호자 id 를 키로 쓴다 —
+                //   계정 id 로 두면 번호만 있는 보호자의 멱등성이 성립하지 않는다
+                String dedupKey = dedupKey(student.getId(), date, recipient.guardianId());
+
+                notificationService.send(recipient.account() != null
+                        ? NotificationCommand.forStudent(
+                                NotificationEvent.MISSING_ATTENDANCE, recipient.account(),
+                                student, academy, enrollment.getYear(),
+                                Map.of("attendanceDate", formattedDate), dedupKey)
+                        : NotificationCommand.forStudentPhone(
+                                NotificationEvent.MISSING_ATTENDANCE, recipient.phone(),
+                                recipient.name(), student, academy, enrollment.getYear(),
+                                Map.of("attendanceDate", formattedDate), dedupKey));
             }
         }
 

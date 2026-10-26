@@ -46,11 +46,40 @@ public class FirebaseConfig {
         return FirebaseMessaging.getInstance(app);
     }
 
+    /**
+     * 서비스 계정 키에서 {@code project_id} 를 읽는다.
+     *
+     * <p>⚠️ 못 읽어도 기동을 막지 않는다 — 푸시는 보조 채널이고, <b>API 가 죽는 쪽이
+     * 훨씬 나쁘다</b>(이 설정이 조건부인 것과 같은 판단).
+     */
+    private String projectIdOf(Path path) {
+        try {
+            var node = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(Files.readString(path));
+            var value = node.get("project_id");
+            return value == null || value.isNull() ? null : value.asText();
+        } catch (Exception e) {
+            log.warn("FCM 키에서 project_id 를 읽지 못했다 — 발송이 실패할 수 있다.", e);
+            return null;
+        }
+    }
+
     private FirebaseApp initialize(Path path) {
         try (InputStream in = Files.newInputStream(path)) {
-            FirebaseApp app = FirebaseApp.initializeApp(FirebaseOptions.builder()
-                    .setCredentials(GoogleCredentials.fromStream(in))
-                    .build());
+            GoogleCredentials credentials = GoogleCredentials.fromStream(in);
+            FirebaseOptions.Builder options = FirebaseOptions.builder()
+                    .setCredentials(credentials);
+
+            // ★★ project id 를 명시한다. 자격증명에서 자동으로 잡히지 않아 기동 로그가
+            //   project=null 로 떴다 — HTTP v1 은 엔드포인트에 project id 가 들어가므로
+            //   비어 있으면 **발송 때 「Project ID is required」로 실패**한다.
+            //   키 파일(JSON)에 project_id 가 있으므로 거기서 읽는다.
+            String projectId = projectIdOf(path);
+            if (projectId != null) {
+                options.setProjectId(projectId);
+            }
+
+            FirebaseApp app = FirebaseApp.initializeApp(options.build());
             log.info("FCM 연동이 활성화됐다: project={}", app.getOptions().getProjectId());
             return app;
         } catch (IOException e) {

@@ -60,6 +60,32 @@ public record NotificationCommand(
     }
 
     /**
+     * 계정 없는 보호자에게 — <b>번호로 보내되 학생 정보는 남긴다</b>.
+     *
+     * <h2>★★ {@code toPhone} 과 가른 이유</h2>
+     * {@code toPhone} 은 학생을 받지 않아 <b>학생명 변수가 빠진다.</b> 모든 학생 관련
+     * 알림에 학생명이 필수인데(다자녀 학부모가 「이거 누구 얘기지」 헷갈리지 않게),
+     * 그걸로 보내면 <b>미등원 알림에 이름이 안 들어간다.</b>
+     * {@code toPhone} 은 급식업체·입학 대기자처럼 <b>학생과 무관한</b> 수신자용이다.
+     *
+     * <p>★ 앱을 설치하지 않은 보호자가 이 경로를 탄다 — 신입생 동의서가 보호자 번호를
+     * 필수로 수집하므로 <b>번호만 있어도 보내는 것이 맞다.</b>
+     */
+    public static NotificationCommand forStudentPhone(NotificationEvent event, String phone,
+                                                      String receiverName, Student student,
+                                                      Academy academy, Short year,
+                                                      Map<String, String> variables,
+                                                      String dedupKey) {
+        Map<String, String> merged = new LinkedHashMap<>();
+        merged.put("studentName", student.getName());
+        if (variables != null) {
+            merged.putAll(variables);
+        }
+        return new NotificationCommand(event, null, student, academy, year, merged, dedupKey,
+                phone, receiverName);
+    }
+
+    /**
      * 학생명 변수를 자동으로 채워 넣은 커맨드를 만든다.
      * 모든 학생 관련 알림에 학생명이 필수이므로 호출부가 빠뜨리지 않게 여기서 넣는다.
      */

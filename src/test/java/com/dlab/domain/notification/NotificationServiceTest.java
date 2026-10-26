@@ -57,8 +57,12 @@ class NotificationServiceTest {
         preferenceRepository = mock(NotificationPreferenceRepository.class);
         sender = new RecordingSender();
         // ★ 수신거부 판정은 실물 정책을 쓴다 — 필수 알림 목록까지 같이 고정된다
+        // ★ 허용목록도 실물을 쓴다. 설정이 비어 있으면 전면 개방이라 기존 단정이 그대로 선다 —
+        //   모킹하면 「비었을 때 막지 않는다」는 규약이 테스트에서 빠진다
         service = new NotificationService(templateRepository, logRepository,
-                new NotificationOptOutPolicy(preferenceRepository), List.of(sender));
+                new NotificationOptOutPolicy(preferenceRepository),
+                new com.dlab.domain.notification.service.RecipientAllowlist(""),
+                List.of(sender));
 
         when(logRepository.save(any(NotificationLog.class))).thenAnswer(i -> i.getArgument(0));
     }

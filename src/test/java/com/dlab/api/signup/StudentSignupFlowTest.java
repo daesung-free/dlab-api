@@ -115,6 +115,16 @@ class StudentSignupFlowTest {
                         .formatted(token, PASSWORD, academy.getId())));
     }
 
+    private ResultActions signupWithGuardian(String token, String guardianPhone)
+            throws Exception {
+        return mvc.perform(post("/api/v1/app/signup/student")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"verificationToken":"%s","name":"김학생","password":"%s",
+                         "academyId":%d,"grade":"HIGH3","guardianPhone":"%s"}"""
+                        .formatted(token, PASSWORD, academy.getId(), guardianPhone)));
+    }
+
     // ─────────────────────────────────────────── 가입
 
     @Test
@@ -145,6 +155,31 @@ class StudentSignupFlowTest {
                         .content("""
                                 {"loginId":"%s","password":"%s"}""".formatted(PHONE, PASSWORD)))
                 .andExpect(jsonPath("$.error.code").value("SIGNUP_PENDING"));
+    }
+
+    @Test
+    @DisplayName("★ 보호자 번호를 받아 연결한다 — 신입생 동의서의 필수 수집 항목인데 빠져 있었다")
+    void storesGuardianPhone() throws Exception {
+        signupWithGuardian(verifyPhone(PHONE), "010-8888-1111")
+                .andExpect(status().isOk());
+        em.flush();
+        em.clear();
+
+        String phone = em.createQuery("""
+                SELECT g.phone FROM StudentGuardianLink l JOIN l.guardian g
+                 WHERE l.student.id = (SELECT a.student.id FROM Account a
+                                        WHERE a.loginId = :phone)
+                """, String.class).setParameter("phone", PHONE).getSingleResult();
+        assertThat(phone).isEqualTo("010-8888-1111");
+    }
+
+    @Test
+    @DisplayName("보호자 번호는 없어도 가입된다 — 필수로 걸면 이미 가입한 학생의 재신청이 막힌다")
+    void guardianPhoneIsOptional() throws Exception {
+        signup(verifyPhone(PHONE)).andExpect(status().isOk());
+        em.flush();
+
+        assertThat(statusOf(PHONE)).isEqualTo(AccountStatus.PENDING);
     }
 
     @Test

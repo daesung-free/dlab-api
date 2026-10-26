@@ -86,7 +86,8 @@ public class AppSignupController {
         var account = studentSignupService.signup(new StudentSignupService.Command(
                 request.verificationToken(), request.name(), request.password(),
                 request.academyId(), request.grade(), request.track(),
-                request.birthDate(), request.gender(), request.schoolName(), request.address()));
+                request.birthDate(), request.gender(), request.schoolName(), request.address(),
+                request.guardianPhone()));
 
         return ApiResponse.success(new SignupResponses.StudentSignupResult(
                 account.getLoginId(), account.getStudent().getUniqueCode(), true));
