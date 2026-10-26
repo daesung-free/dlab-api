@@ -17,6 +17,7 @@ import com.google.firebase.messaging.SendResponse;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,12 @@ import org.springframework.transaction.annotation.Transactional;
  * 지우지 않으면 <b>그 계정 발송이 영구히 실패로 쌓이고</b>, 기기를 바꾼 사용자에게
  * 새 토큰이 생긴 뒤에도 실패가 섞여 「푸시가 안 간다」로 보인다.
  *
+ * <h2>★★ 자격증명이 없으면 이 빈을 만들지 않는다</h2>
+ * {@link FirebaseConfig} 와 <b>같은 조건을 걸어야 한다.</b> 설정에만 걸고 여기 빠뜨리면
+ * {@code FirebaseMessaging} 빈이 없는 환경에서 <b>컨텍스트가 아예 뜨지 않는다</b> —
+ * 로컬·CI 가 전부 깨진다(실제로 한 번 깨뜨렸다).
+ * 빈이 없으면 발송 경로가 {@code SKIPPED "발송 구현체 없음: FCM_PUSH"} 로 남긴다.
+ *
  * <h2>⚠️ 푸시가 도착한다고 보장되지 않는다</h2>
  * FCM 이 성공을 돌려줘도 단말 도착은 별개다. 특히 <b>iOS 는 APNs 인증키가 콘솔에
  * 올라가 있어야</b> 하고, 없으면 <b>발송은 성공으로 뜨는데 아무것도 오지 않는다.</b>
@@ -44,6 +51,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Slf4j
 @Component
+@ConditionalOnExpression("'${fcm.credentials-path:}' != ''")
 @RequiredArgsConstructor
 public class FcmPushSender implements NotificationSender {
 
