@@ -53,14 +53,15 @@ public class BranchConfigService {
         return academyRepository.findAll().stream()
                 .filter(a -> !a.isDeleted())
                 .map(a -> View.of(a, configRepository
-                        .findByAcademyIdAndDeletedFalse(a.getId()).orElse(null)))
+                        .findByAcademyIdAndDeletedFalse(a.getId()).orElse(null),
+                        clock.instant()))
                 .toList();
     }
 
     public View get(Long academyId) {
         Academy academy = requireAcademy(academyId);
         return View.of(academy, configRepository
-                .findByAcademyIdAndDeletedFalse(academyId).orElse(null));
+                .findByAcademyIdAndDeletedFalse(academyId).orElse(null), clock.instant());
     }
 
     /**
@@ -209,12 +210,17 @@ public class BranchConfigService {
                        String kioskClientId, String kioskSecretMasked,
                        String pgMerchantCodeMasked, String nebulaDeviceId,
                        String nebulaSiteId,
+                       /** 키오스크가 마지막으로 호출한 시각. 한 번도 없으면 null */
+                       java.time.Instant kioskLastSeenAt,
+                       /** ★ 판정 기준은 서버가 정한다(BranchConfig.ONLINE_WINDOW) */
+                       boolean kioskOnline,
                        Map<String, String> policy) {
 
-        static View of(Academy academy, BranchConfig config) {
+        /** @param now ★ {@code Clock} 빈에서 받는다 — 테스트가 시계를 고정한다 */
+        static View of(Academy academy, BranchConfig config, java.time.Instant now) {
             if (config == null) {
                 return new View(academy.getId(), academy.getName(), academy.getAcadCd(),
-                        null, null, null, null, null, Map.of());
+                        null, null, null, null, null, null, false, Map.of());  // 설정 없음
             }
             return new View(academy.getId(), academy.getName(), academy.getAcadCd(),
                     config.getKioskClientId(),
@@ -222,6 +228,8 @@ public class BranchConfigService {
                     mask(config.getPgMerchantCode()),
                     config.getNebulaDeviceId(),
                     config.getNebulaSiteId(),
+                    config.getKioskLastSeenAt(),
+                    config.isKioskOnline(now),
                     config.getConfigJson());
         }
 

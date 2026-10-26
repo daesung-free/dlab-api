@@ -1,0 +1,8542 @@
+{
+  "generatedOn": "2026-10-23",
+  "source": "md/좌석배치/개발자_전달_좌석배치확정_1023.md · 1021 좌석배치표 확인요청 답변_1022.xlsx 시트2 · 배치표 PNG 39장",
+  "totals": {
+    "seats": 2140,
+    "CLASSROOM": 1637,
+    "FOCUS": 449,
+    "SINGLE_ROOM": 54
+  },
+  "branchTotals": {
+    "분당": 181,
+    "일산": 138,
+    "동탄": 161,
+    "동탄별관": 100,
+    "김포": 116,
+    "부천": 162,
+    "이매": 134,
+    "광명": 196,
+    "목동": 292,
+    "송파": 199,
+    "대전": 203,
+    "대구": 258
+  },
+  "areas": [
+    {
+      "acadCd": "31",
+      "academyName": "분당",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 71,
+      "styleCounts": {
+        "CLASSROOM": 71
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 71,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 7,
+          "columns": 17,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 71,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 13
+            },
+            {
+              "row": 1,
+              "column": 16
+            },
+            {
+              "row": 1,
+              "column": 17
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 10
+            },
+            {
+              "row": 2,
+              "column": 13
+            },
+            {
+              "row": 2,
+              "column": 16
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 10
+            },
+            {
+              "row": 3,
+              "column": 13
+            },
+            {
+              "row": 3,
+              "column": 16
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 10
+            },
+            {
+              "row": 4,
+              "column": 13
+            },
+            {
+              "row": 4,
+              "column": 16
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 5,
+              "column": 13
+            },
+            {
+              "row": 5,
+              "column": 16
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 10
+            },
+            {
+              "row": 6,
+              "column": 13
+            },
+            {
+              "row": 6,
+              "column": 16
+            },
+            {
+              "row": 6,
+              "column": 17
+            },
+            {
+              "row": 7,
+              "column": 1
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 10
+            },
+            {
+              "row": 7,
+              "column": 13
+            },
+            {
+              "row": 7,
+              "column": 16
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "31",
+      "academyName": "분당",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 68,
+      "styleCounts": {
+        "CLASSROOM": 59,
+        "FOCUS": 9
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 159,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 160,
+          "toNumber": 168,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 9,
+          "columns": 16,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 68,
+          "skips": [
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 1,
+              "column": 12
+            },
+            {
+              "row": 1,
+              "column": 15
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 12
+            },
+            {
+              "row": 2,
+              "column": 15
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 9
+            },
+            {
+              "row": 3,
+              "column": 12
+            },
+            {
+              "row": 3,
+              "column": 15
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 9
+            },
+            {
+              "row": 4,
+              "column": 12
+            },
+            {
+              "row": 4,
+              "column": 15
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 12
+            },
+            {
+              "row": 5,
+              "column": 15
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 12
+            },
+            {
+              "row": 6,
+              "column": 15
+            },
+            {
+              "row": 7,
+              "column": 1
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 4
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 7
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 10
+            },
+            {
+              "row": 7,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 12
+            },
+            {
+              "row": 7,
+              "column": 13
+            },
+            {
+              "row": 7,
+              "column": 14
+            },
+            {
+              "row": 7,
+              "column": 15
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 8,
+              "column": 12
+            },
+            {
+              "row": 8,
+              "column": 13
+            },
+            {
+              "row": 8,
+              "column": 14
+            },
+            {
+              "row": 8,
+              "column": 15
+            },
+            {
+              "row": 9,
+              "column": 1
+            },
+            {
+              "row": 9,
+              "column": 2
+            },
+            {
+              "row": 9,
+              "column": 3
+            },
+            {
+              "row": 9,
+              "column": 4
+            },
+            {
+              "row": 9,
+              "column": 5
+            },
+            {
+              "row": 9,
+              "column": 6
+            },
+            {
+              "row": 9,
+              "column": 7
+            },
+            {
+              "row": 9,
+              "column": 8
+            },
+            {
+              "row": 9,
+              "column": 9
+            },
+            {
+              "row": 9,
+              "column": 10
+            },
+            {
+              "row": 9,
+              "column": 11
+            },
+            {
+              "row": 9,
+              "column": 12
+            },
+            {
+              "row": 9,
+              "column": 13
+            },
+            {
+              "row": 9,
+              "column": 14
+            },
+            {
+              "row": 9,
+              "column": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "31",
+      "academyName": "분당",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 27,
+      "styleCounts": {
+        "CLASSROOM": 27
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 227,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 7,
+          "columns": 6,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 27,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "31",
+      "academyName": "분당",
+      "building": "MAIN",
+      "areaCd": "D",
+      "areaNm": "D구역",
+      "sortOrder": 4,
+      "expectedSeats": 15,
+      "styleCounts": {
+        "SINGLE_ROOM": 15
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 301,
+          "toNumber": 315,
+          "seatStyle": "SINGLE_ROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 4,
+          "columns": 6,
+          "startNumber": 301,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 15,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 1
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "32",
+      "academyName": "일산",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 56,
+      "styleCounts": {
+        "FOCUS": 16,
+        "CLASSROOM": 40
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 8,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 9,
+          "toNumber": 48,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 49,
+          "toNumber": 56,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 8,
+          "columns": 15,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 56,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 1,
+              "column": 14
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 14
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 14
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 14
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 14
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 4
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 7
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 10
+            },
+            {
+              "row": 6,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 12
+            },
+            {
+              "row": 6,
+              "column": 13
+            },
+            {
+              "row": 6,
+              "column": 14
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 4
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 7
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 10
+            },
+            {
+              "row": 7,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 12
+            },
+            {
+              "row": 7,
+              "column": 13
+            },
+            {
+              "row": 7,
+              "column": 14
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 8,
+              "column": 12
+            },
+            {
+              "row": 8,
+              "column": 13
+            },
+            {
+              "row": 8,
+              "column": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "32",
+      "academyName": "일산",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 35,
+      "styleCounts": {
+        "FOCUS": 8,
+        "CLASSROOM": 27
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 108,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 109,
+          "toNumber": 135,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 8,
+          "columns": 10,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 35,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 4
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 7
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 10
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 4
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 7
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "32",
+      "academyName": "일산",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 47,
+      "styleCounts": {
+        "FOCUS": 39,
+        "CLASSROOM": 8
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 215,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 216,
+          "toNumber": 223,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 224,
+          "toNumber": 247,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 8,
+          "columns": 14,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 47,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 13
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 10
+            },
+            {
+              "row": 2,
+              "column": 13
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 7
+            },
+            {
+              "row": 3,
+              "column": 10
+            },
+            {
+              "row": 3,
+              "column": 13
+            },
+            {
+              "row": 3,
+              "column": 14
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 7
+            },
+            {
+              "row": 4,
+              "column": 10
+            },
+            {
+              "row": 4,
+              "column": 13
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 7
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 5,
+              "column": 13
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 4
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 7
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 10
+            },
+            {
+              "row": 6,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 12
+            },
+            {
+              "row": 6,
+              "column": 13
+            },
+            {
+              "row": 6,
+              "column": 14
+            },
+            {
+              "row": 7,
+              "column": 1
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 4
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 7
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 10
+            },
+            {
+              "row": 7,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 12
+            },
+            {
+              "row": 7,
+              "column": 13
+            },
+            {
+              "row": 7,
+              "column": 14
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 8,
+              "column": 12
+            },
+            {
+              "row": 8,
+              "column": 13
+            },
+            {
+              "row": 8,
+              "column": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "33",
+      "academyName": "동탄",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 50,
+      "styleCounts": {
+        "FOCUS": 7,
+        "CLASSROOM": 43
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 7,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 8,
+          "toNumber": 50,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 7,
+          "columns": 1,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 3,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 7
+        },
+        {
+          "rows": 1,
+          "columns": 7,
+          "startNumber": 8,
+          "numberPadding": 0,
+          "startX": 3,
+          "startY": 10,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 7
+        },
+        {
+          "rows": 8,
+          "columns": 7,
+          "startNumber": 15,
+          "numberPadding": 0,
+          "startX": 3,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 36,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "33",
+      "academyName": "동탄",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 55,
+      "styleCounts": {
+        "CLASSROOM": 55
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 155,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 8,
+          "columns": 9,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 48,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 8
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 7,
+          "startNumber": 149,
+          "numberPadding": 0,
+          "startX": 3,
+          "startY": 10,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 7
+        }
+      ]
+    },
+    {
+      "acadCd": "33",
+      "academyName": "동탄",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 56,
+      "styleCounts": {
+        "CLASSROOM": 45,
+        "FOCUS": 11
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 239,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 240,
+          "toNumber": 250,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 251,
+          "toNumber": 256,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 11,
+          "columns": 9,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 50,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 1
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 9,
+              "column": 2
+            },
+            {
+              "row": 9,
+              "column": 5
+            },
+            {
+              "row": 9,
+              "column": 8
+            },
+            {
+              "row": 10,
+              "column": 2
+            },
+            {
+              "row": 10,
+              "column": 5
+            },
+            {
+              "row": 10,
+              "column": 8
+            },
+            {
+              "row": 11,
+              "column": 1
+            },
+            {
+              "row": 11,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 3
+            },
+            {
+              "row": 11,
+              "column": 4
+            },
+            {
+              "row": 11,
+              "column": 5
+            },
+            {
+              "row": 11,
+              "column": 6
+            },
+            {
+              "row": 11,
+              "column": 7
+            },
+            {
+              "row": 11,
+              "column": 8
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 6,
+          "startNumber": 251,
+          "numberPadding": 0,
+          "startX": 3,
+          "startY": 12,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 6
+        }
+      ]
+    },
+    {
+      "acadCd": "33",
+      "academyName": "동탄",
+      "building": "ANNEX",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 34,
+      "styleCounts": {
+        "CLASSROOM": 34
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 34,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 8,
+          "columns": 7,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 34,
+          "skips": [
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "33",
+      "academyName": "동탄",
+      "building": "ANNEX",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 41,
+      "styleCounts": {
+        "CLASSROOM": 41
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 141,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 8,
+          "columns": 9,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 41,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "33",
+      "academyName": "동탄",
+      "building": "ANNEX",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 25,
+      "styleCounts": {
+        "CLASSROOM": 25
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 225,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 6,
+          "columns": 12,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": true,
+          "reverseY": true,
+          "seats": 25,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 1,
+              "column": 12
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 12
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 1
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 4
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 4
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 7
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "34",
+      "academyName": "김포",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 51,
+      "styleCounts": {
+        "FOCUS": 15,
+        "CLASSROOM": 36
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 15,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 16,
+          "toNumber": 51,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 10,
+          "columns": 1,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 10
+        },
+        {
+          "rows": 1,
+          "columns": 5,
+          "startNumber": 11,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 12,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 5
+        },
+        {
+          "rows": 8,
+          "columns": 7,
+          "startNumber": 16,
+          "numberPadding": 0,
+          "startX": 3,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 36,
+          "skips": [
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "34",
+      "academyName": "김포",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 35,
+      "styleCounts": {
+        "CLASSROOM": 35
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 135,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 7,
+          "columns": 7,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 35,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "34",
+      "academyName": "김포",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 30,
+      "styleCounts": {
+        "CLASSROOM": 7,
+        "FOCUS": 23
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 207,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 208,
+          "toNumber": 230,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 4,
+          "columns": 2,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 3,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 7,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 11,
+          "startNumber": 208,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 11
+        },
+        {
+          "rows": 1,
+          "columns": 12,
+          "startNumber": 219,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 8,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 12
+        }
+      ]
+    },
+    {
+      "acadCd": "42",
+      "academyName": "부천",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 92,
+      "styleCounts": {
+        "CLASSROOM": 85,
+        "FOCUS": 7
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 85,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 86,
+          "toNumber": 92,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 9,
+          "columns": 15,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 85,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 1,
+              "column": 14
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 14
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 14
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 14
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 14
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 14
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 14
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 8,
+              "column": 14
+            },
+            {
+              "row": 9,
+              "column": 1
+            },
+            {
+              "row": 9,
+              "column": 2
+            },
+            {
+              "row": 9,
+              "column": 3
+            },
+            {
+              "row": 9,
+              "column": 4
+            },
+            {
+              "row": 9,
+              "column": 5
+            },
+            {
+              "row": 9,
+              "column": 6
+            },
+            {
+              "row": 9,
+              "column": 7
+            },
+            {
+              "row": 9,
+              "column": 8
+            },
+            {
+              "row": 9,
+              "column": 11
+            },
+            {
+              "row": 9,
+              "column": 14
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 7,
+          "startNumber": 86,
+          "numberPadding": 0,
+          "startX": 8,
+          "startY": 11,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 7
+        }
+      ]
+    },
+    {
+      "acadCd": "42",
+      "academyName": "부천",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 39,
+      "styleCounts": {
+        "CLASSROOM": 39
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 139,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 10,
+          "columns": 6,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 39,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 9,
+              "column": 2
+            },
+            {
+              "row": 9,
+              "column": 5
+            },
+            {
+              "row": 10,
+              "column": 1
+            },
+            {
+              "row": 10,
+              "column": 2
+            },
+            {
+              "row": 10,
+              "column": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "42",
+      "academyName": "부천",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 31,
+      "styleCounts": {
+        "CLASSROOM": 23,
+        "FOCUS": 8
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 223,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 224,
+          "toNumber": 231,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 8,
+          "columns": 7,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 31,
+          "skips": [
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 1
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 4
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "43",
+      "academyName": "이매",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 37,
+      "styleCounts": {
+        "FOCUS": 8,
+        "CLASSROOM": 29
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 8,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 9,
+          "toNumber": 37,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 8,
+          "columns": 9,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 37,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 4
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 7
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "43",
+      "academyName": "이매",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 36,
+      "styleCounts": {
+        "CLASSROOM": 30,
+        "FOCUS": 6
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 130,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 131,
+          "toNumber": 136,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 5,
+          "columns": 8,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 30,
+          "skips": [
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 6,
+          "startNumber": 131,
+          "numberPadding": 0,
+          "startX": 2,
+          "startY": 7,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 6
+        }
+      ]
+    },
+    {
+      "acadCd": "43",
+      "academyName": "이매",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 61,
+      "styleCounts": {
+        "FOCUS": 25,
+        "CLASSROOM": 36
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 209,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 210,
+          "toNumber": 245,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 246,
+          "toNumber": 261,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 9,
+          "columns": 10,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 45,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 10
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            },
+            {
+              "row": 9,
+              "column": 2
+            },
+            {
+              "row": 9,
+              "column": 3
+            },
+            {
+              "row": 9,
+              "column": 4
+            },
+            {
+              "row": 9,
+              "column": 5
+            },
+            {
+              "row": 9,
+              "column": 6
+            },
+            {
+              "row": 9,
+              "column": 7
+            },
+            {
+              "row": 9,
+              "column": 8
+            },
+            {
+              "row": 9,
+              "column": 9
+            },
+            {
+              "row": 9,
+              "column": 10
+            }
+          ]
+        },
+        {
+          "rows": 6,
+          "columns": 4,
+          "startNumber": 246,
+          "numberPadding": 0,
+          "startX": 12,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 16,
+          "skips": [
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "44",
+      "academyName": "광명",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 55,
+      "styleCounts": {
+        "CLASSROOM": 38,
+        "FOCUS": 17
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 38,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 39,
+          "toNumber": 55,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 9,
+          "columns": 10,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 46,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 9
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 4
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 9,
+              "column": 2
+            },
+            {
+              "row": 9,
+              "column": 3
+            },
+            {
+              "row": 9,
+              "column": 4
+            },
+            {
+              "row": 9,
+              "column": 5
+            },
+            {
+              "row": 9,
+              "column": 6
+            },
+            {
+              "row": 9,
+              "column": 7
+            },
+            {
+              "row": 9,
+              "column": 8
+            },
+            {
+              "row": 9,
+              "column": 9
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 9,
+          "startNumber": 47,
+          "numberPadding": 0,
+          "startX": 2,
+          "startY": 10,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 9
+        }
+      ]
+    },
+    {
+      "acadCd": "44",
+      "academyName": "광명",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 54,
+      "styleCounts": {
+        "CLASSROOM": 48,
+        "FOCUS": 6
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 148,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 149,
+          "toNumber": 154,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 8,
+          "columns": 12,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 54,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 4
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 8
+            },
+            {
+              "row": 7,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 12
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 8,
+              "column": 12
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "44",
+      "academyName": "광명",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 87,
+      "styleCounts": {
+        "FOCUS": 30,
+        "CLASSROOM": 57
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 212,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 213,
+          "toNumber": 253,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 254,
+          "toNumber": 267,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 268,
+          "toNumber": 283,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 284,
+          "toNumber": 287,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 3,
+          "columns": 6,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 13,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 12,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            }
+          ]
+        },
+        {
+          "rows": 2,
+          "columns": 7,
+          "startNumber": 213,
+          "numberPadding": 0,
+          "startX": 12,
+          "startY": 5,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 14
+        },
+        {
+          "rows": 2,
+          "columns": 7,
+          "startNumber": 227,
+          "numberPadding": 0,
+          "startX": 12,
+          "startY": 8,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 14
+        },
+        {
+          "rows": 2,
+          "columns": 7,
+          "startNumber": 241,
+          "numberPadding": 0,
+          "startX": 12,
+          "startY": 11,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 13,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 10,
+          "startNumber": 254,
+          "numberPadding": 0,
+          "startX": 9,
+          "startY": 14,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 10
+        },
+        {
+          "rows": 8,
+          "columns": 7,
+          "startNumber": 264,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 7,
+          "columnMajor": true,
+          "reverseX": true,
+          "reverseY": true,
+          "seats": 24,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 4
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 1
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 4
+            },
+            {
+              "row": 7,
+              "column": 5
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "45",
+      "academyName": "목동",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 75,
+      "styleCounts": {
+        "CLASSROOM": 44,
+        "FOCUS": 14,
+        "SINGLE_ROOM": 17
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 42,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 43,
+          "toNumber": 56,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 57,
+          "toNumber": 64,
+          "seatStyle": "SINGLE_ROOM"
+        },
+        {
+          "fromNumber": 65,
+          "toNumber": 66,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 67,
+          "toNumber": 75,
+          "seatStyle": "SINGLE_ROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 6,
+          "columns": 12,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 42,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 12
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 12
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 9
+            },
+            {
+              "row": 3,
+              "column": 12
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 9
+            },
+            {
+              "row": 4,
+              "column": 12
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 12
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 12
+            }
+          ]
+        },
+        {
+          "rows": 8,
+          "columns": 2,
+          "startNumber": 43,
+          "numberPadding": 0,
+          "startX": 13,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 11,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 1
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 2
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 11,
+          "startNumber": 54,
+          "numberPadding": 0,
+          "startX": 4,
+          "startY": 10,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 11
+        },
+        {
+          "rows": 2,
+          "columns": 11,
+          "startNumber": 65,
+          "numberPadding": 0,
+          "startX": 4,
+          "startY": 11,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 11,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "45",
+      "academyName": "목동",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 89,
+      "styleCounts": {
+        "FOCUS": 15,
+        "CLASSROOM": 74
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 115,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 116,
+          "toNumber": 189,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 11,
+          "columns": 2,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 15,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 3,
+              "column": 1
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 9,
+              "column": 1
+            },
+            {
+              "row": 9,
+              "column": 2
+            }
+          ]
+        },
+        {
+          "rows": 10,
+          "columns": 11,
+          "startNumber": 116,
+          "numberPadding": 0,
+          "startX": 4,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 74,
+          "skips": [
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 9
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 9,
+              "column": 3
+            },
+            {
+              "row": 9,
+              "column": 6
+            },
+            {
+              "row": 9,
+              "column": 9
+            },
+            {
+              "row": 10,
+              "column": 3
+            },
+            {
+              "row": 10,
+              "column": 6
+            },
+            {
+              "row": 10,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "45",
+      "academyName": "목동",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 77,
+      "styleCounts": {
+        "FOCUS": 29,
+        "CLASSROOM": 48
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 217,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 218,
+          "toNumber": 265,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 266,
+          "toNumber": 277,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 12,
+          "columns": 3,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 17,
+          "skips": [
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 9,
+              "column": 3
+            },
+            {
+              "row": 10,
+              "column": 3
+            },
+            {
+              "row": 11,
+              "column": 1
+            },
+            {
+              "row": 11,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 3
+            }
+          ]
+        },
+        {
+          "rows": 8,
+          "columns": 8,
+          "startNumber": 218,
+          "numberPadding": 0,
+          "startX": 4,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 48,
+          "skips": [
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 6
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 10,
+          "startNumber": 266,
+          "numberPadding": 0,
+          "startX": 5,
+          "startY": 12,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 10
+        },
+        {
+          "rows": 2,
+          "columns": 1,
+          "startNumber": 276,
+          "numberPadding": 0,
+          "startX": 14,
+          "startY": 13,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 2
+        }
+      ]
+    },
+    {
+      "acadCd": "45",
+      "academyName": "목동",
+      "building": "MAIN",
+      "areaCd": "D",
+      "areaNm": "D구역",
+      "sortOrder": 4,
+      "expectedSeats": 51,
+      "styleCounts": {
+        "CLASSROOM": 35,
+        "FOCUS": 16
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 301,
+          "toNumber": 335,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 336,
+          "toNumber": 351,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 11,
+          "columns": 7,
+          "startNumber": 301,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 46,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 3,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 6,
+              "column": 3
+            },
+            {
+              "row": 6,
+              "column": 6
+            },
+            {
+              "row": 7,
+              "column": 3
+            },
+            {
+              "row": 7,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 9,
+              "column": 3
+            },
+            {
+              "row": 9,
+              "column": 6
+            },
+            {
+              "row": 10,
+              "column": 1
+            },
+            {
+              "row": 10,
+              "column": 2
+            },
+            {
+              "row": 10,
+              "column": 3
+            },
+            {
+              "row": 10,
+              "column": 4
+            },
+            {
+              "row": 10,
+              "column": 5
+            },
+            {
+              "row": 10,
+              "column": 6
+            },
+            {
+              "row": 11,
+              "column": 1
+            },
+            {
+              "row": 11,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 3
+            },
+            {
+              "row": 11,
+              "column": 4
+            },
+            {
+              "row": 11,
+              "column": 5
+            },
+            {
+              "row": 11,
+              "column": 6
+            }
+          ]
+        },
+        {
+          "rows": 1,
+          "columns": 5,
+          "startNumber": 347,
+          "numberPadding": 0,
+          "startX": 3,
+          "startY": 13,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 5
+        }
+      ]
+    },
+    {
+      "acadCd": "46",
+      "academyName": "송파",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 64,
+      "styleCounts": {
+        "FOCUS": 14,
+        "CLASSROOM": 50
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 3,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 4,
+          "toNumber": 24,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 25,
+          "toNumber": 30,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 31,
+          "toNumber": 59,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 60,
+          "toNumber": 64,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 4,
+          "columns": 12,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 24,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 4
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 7
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 9
+            },
+            {
+              "row": 4,
+              "column": 10
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 12
+            }
+          ]
+        },
+        {
+          "rows": 6,
+          "columns": 12,
+          "startNumber": 25,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 5,
+          "columnMajor": true,
+          "reverseX": true,
+          "reverseY": true,
+          "seats": 40,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "46",
+      "academyName": "송파",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 72,
+      "styleCounts": {
+        "FOCUS": 26,
+        "CLASSROOM": 46
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 113,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 114,
+          "toNumber": 136,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 137,
+          "toNumber": 144,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 145,
+          "toNumber": 167,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 168,
+          "toNumber": 172,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 5,
+          "columns": 13,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 36,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 7
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 12
+            },
+            {
+              "row": 5,
+              "column": 13
+            }
+          ]
+        },
+        {
+          "rows": 5,
+          "columns": 14,
+          "startNumber": 137,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 6,
+          "columnMajor": true,
+          "reverseX": true,
+          "reverseY": true,
+          "seats": 36,
+          "skips": [
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 1,
+              "column": 12
+            },
+            {
+              "row": 1,
+              "column": 13
+            },
+            {
+              "row": 1,
+              "column": 14
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 13
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 13
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 13
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "46",
+      "academyName": "송파",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 63,
+      "styleCounts": {
+        "FOCUS": 29,
+        "CLASSROOM": 34
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 203,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 204,
+          "toNumber": 225,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 226,
+          "toNumber": 236,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 237,
+          "toNumber": 248,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 249,
+          "toNumber": 263,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 4,
+          "columns": 12,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 25,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 4
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 6
+            },
+            {
+              "row": 4,
+              "column": 7
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 9
+            },
+            {
+              "row": 4,
+              "column": 10
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 12
+            }
+          ]
+        },
+        {
+          "rows": 6,
+          "columns": 12,
+          "startNumber": 226,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 5,
+          "columnMajor": true,
+          "reverseX": true,
+          "reverseY": true,
+          "seats": 38,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 5
+            },
+            {
+              "row": 1,
+              "column": 6
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 1,
+              "column": 12
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 5
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 5
+            },
+            {
+              "row": 4,
+              "column": 8
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 5
+            },
+            {
+              "row": 6,
+              "column": 8
+            },
+            {
+              "row": 6,
+              "column": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "47",
+      "academyName": "대전",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 75,
+      "styleCounts": {
+        "FOCUS": 27,
+        "CLASSROOM": 48
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 27,
+          "seatStyle": "FOCUS"
+        },
+        {
+          "fromNumber": 28,
+          "toNumber": 75,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 3,
+          "columns": 14,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 9,
+          "columnMajor": true,
+          "reverseX": false,
+          "reverseY": true,
+          "seats": 27,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 13
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 10
+            },
+            {
+              "row": 2,
+              "column": 13
+            },
+            {
+              "row": 3,
+              "column": 1
+            },
+            {
+              "row": 3,
+              "column": 4
+            },
+            {
+              "row": 3,
+              "column": 7
+            },
+            {
+              "row": 3,
+              "column": 10
+            },
+            {
+              "row": 3,
+              "column": 13
+            }
+          ]
+        },
+        {
+          "rows": 7,
+          "columns": 10,
+          "startNumber": 28,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": true,
+          "seats": 48,
+          "skips": [
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 10
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 7
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 7,
+              "column": 1
+            },
+            {
+              "row": 7,
+              "column": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "47",
+      "academyName": "대전",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 50,
+      "styleCounts": {
+        "CLASSROOM": 50
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 150,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 9,
+          "columns": 11,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": true,
+          "seats": 50,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 10
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 1
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 1
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 7
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 11
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 9,
+              "column": 1
+            },
+            {
+              "row": 9,
+              "column": 8
+            },
+            {
+              "row": 9,
+              "column": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "47",
+      "academyName": "대전",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 78,
+      "styleCounts": {
+        "CLASSROOM": 78
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 278,
+          "seatStyle": "CLASSROOM"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 16,
+          "columns": 9,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 78,
+          "skips": [
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 7
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 9,
+              "column": 3
+            },
+            {
+              "row": 10,
+              "column": 8
+            },
+            {
+              "row": 10,
+              "column": 9
+            },
+            {
+              "row": 11,
+              "column": 1
+            },
+            {
+              "row": 11,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 3
+            },
+            {
+              "row": 11,
+              "column": 4
+            },
+            {
+              "row": 11,
+              "column": 5
+            },
+            {
+              "row": 11,
+              "column": 6
+            },
+            {
+              "row": 11,
+              "column": 7
+            },
+            {
+              "row": 11,
+              "column": 8
+            },
+            {
+              "row": 11,
+              "column": 9
+            },
+            {
+              "row": 12,
+              "column": 1
+            },
+            {
+              "row": 12,
+              "column": 2
+            },
+            {
+              "row": 12,
+              "column": 3
+            },
+            {
+              "row": 12,
+              "column": 4
+            },
+            {
+              "row": 12,
+              "column": 5
+            },
+            {
+              "row": 12,
+              "column": 6
+            },
+            {
+              "row": 12,
+              "column": 7
+            },
+            {
+              "row": 12,
+              "column": 8
+            },
+            {
+              "row": 12,
+              "column": 9
+            },
+            {
+              "row": 13,
+              "column": 8
+            },
+            {
+              "row": 13,
+              "column": 9
+            },
+            {
+              "row": 14,
+              "column": 8
+            },
+            {
+              "row": 14,
+              "column": 9
+            },
+            {
+              "row": 15,
+              "column": 1
+            },
+            {
+              "row": 15,
+              "column": 2
+            },
+            {
+              "row": 15,
+              "column": 3
+            },
+            {
+              "row": 15,
+              "column": 4
+            },
+            {
+              "row": 15,
+              "column": 5
+            },
+            {
+              "row": 15,
+              "column": 6
+            },
+            {
+              "row": 15,
+              "column": 7
+            },
+            {
+              "row": 15,
+              "column": 8
+            },
+            {
+              "row": 15,
+              "column": 9
+            },
+            {
+              "row": 16,
+              "column": 1
+            },
+            {
+              "row": 16,
+              "column": 8
+            },
+            {
+              "row": 16,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "48",
+      "academyName": "대구",
+      "building": "MAIN",
+      "areaCd": "A",
+      "areaNm": "A구역",
+      "sortOrder": 1,
+      "expectedSeats": 68,
+      "styleCounts": {
+        "SINGLE_ROOM": 6,
+        "CLASSROOM": 51,
+        "FOCUS": 11
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 1,
+          "toNumber": 6,
+          "seatStyle": "SINGLE_ROOM"
+        },
+        {
+          "fromNumber": 7,
+          "toNumber": 57,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 58,
+          "toNumber": 68,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 12,
+          "columns": 11,
+          "startNumber": 1,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 68,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 10
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 1
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 1
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 7
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 1
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 9,
+              "column": 1
+            },
+            {
+              "row": 9,
+              "column": 2
+            },
+            {
+              "row": 10,
+              "column": 1
+            },
+            {
+              "row": 10,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 1
+            },
+            {
+              "row": 11,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 3
+            },
+            {
+              "row": 11,
+              "column": 4
+            },
+            {
+              "row": 11,
+              "column": 5
+            },
+            {
+              "row": 11,
+              "column": 6
+            },
+            {
+              "row": 11,
+              "column": 7
+            },
+            {
+              "row": 11,
+              "column": 8
+            },
+            {
+              "row": 11,
+              "column": 9
+            },
+            {
+              "row": 11,
+              "column": 10
+            },
+            {
+              "row": 11,
+              "column": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "48",
+      "academyName": "대구",
+      "building": "MAIN",
+      "areaCd": "B",
+      "areaNm": "B구역",
+      "sortOrder": 2,
+      "expectedSeats": 61,
+      "styleCounts": {
+        "SINGLE_ROOM": 5,
+        "CLASSROOM": 45,
+        "FOCUS": 11
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 101,
+          "toNumber": 105,
+          "seatStyle": "SINGLE_ROOM"
+        },
+        {
+          "fromNumber": 106,
+          "toNumber": 150,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 151,
+          "toNumber": 161,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 12,
+          "columns": 11,
+          "startNumber": 101,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 61,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 10
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 7
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 9
+            },
+            {
+              "row": 3,
+              "column": 10
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 9
+            },
+            {
+              "row": 4,
+              "column": 10
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 7
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 10
+            },
+            {
+              "row": 6,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 10
+            },
+            {
+              "row": 7,
+              "column": 11
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 9,
+              "column": 9
+            },
+            {
+              "row": 9,
+              "column": 10
+            },
+            {
+              "row": 9,
+              "column": 11
+            },
+            {
+              "row": 10,
+              "column": 9
+            },
+            {
+              "row": 10,
+              "column": 10
+            },
+            {
+              "row": 10,
+              "column": 11
+            },
+            {
+              "row": 11,
+              "column": 1
+            },
+            {
+              "row": 11,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 3
+            },
+            {
+              "row": 11,
+              "column": 4
+            },
+            {
+              "row": 11,
+              "column": 5
+            },
+            {
+              "row": 11,
+              "column": 6
+            },
+            {
+              "row": 11,
+              "column": 7
+            },
+            {
+              "row": 11,
+              "column": 8
+            },
+            {
+              "row": 11,
+              "column": 9
+            },
+            {
+              "row": 11,
+              "column": 10
+            },
+            {
+              "row": 11,
+              "column": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "48",
+      "academyName": "대구",
+      "building": "MAIN",
+      "areaCd": "C",
+      "areaNm": "C구역",
+      "sortOrder": 3,
+      "expectedSeats": 68,
+      "styleCounts": {
+        "SINGLE_ROOM": 6,
+        "CLASSROOM": 51,
+        "FOCUS": 11
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 201,
+          "toNumber": 206,
+          "seatStyle": "SINGLE_ROOM"
+        },
+        {
+          "fromNumber": 207,
+          "toNumber": 257,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 258,
+          "toNumber": 268,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 12,
+          "columns": 11,
+          "startNumber": 201,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": true,
+          "reverseY": false,
+          "seats": 68,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 2
+            },
+            {
+              "row": 1,
+              "column": 3
+            },
+            {
+              "row": 1,
+              "column": 4
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 10
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 1
+            },
+            {
+              "row": 3,
+              "column": 2
+            },
+            {
+              "row": 3,
+              "column": 3
+            },
+            {
+              "row": 4,
+              "column": 1
+            },
+            {
+              "row": 4,
+              "column": 2
+            },
+            {
+              "row": 4,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 7
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 2
+            },
+            {
+              "row": 6,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 1
+            },
+            {
+              "row": 7,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 9,
+              "column": 1
+            },
+            {
+              "row": 9,
+              "column": 2
+            },
+            {
+              "row": 10,
+              "column": 1
+            },
+            {
+              "row": 10,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 1
+            },
+            {
+              "row": 11,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 3
+            },
+            {
+              "row": 11,
+              "column": 4
+            },
+            {
+              "row": 11,
+              "column": 5
+            },
+            {
+              "row": 11,
+              "column": 6
+            },
+            {
+              "row": 11,
+              "column": 7
+            },
+            {
+              "row": 11,
+              "column": 8
+            },
+            {
+              "row": 11,
+              "column": 9
+            },
+            {
+              "row": 11,
+              "column": 10
+            },
+            {
+              "row": 11,
+              "column": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "acadCd": "48",
+      "academyName": "대구",
+      "building": "MAIN",
+      "areaCd": "D",
+      "areaNm": "D구역",
+      "sortOrder": 4,
+      "expectedSeats": 61,
+      "styleCounts": {
+        "SINGLE_ROOM": 5,
+        "CLASSROOM": 45,
+        "FOCUS": 11
+      },
+      "styleRanges": [
+        {
+          "fromNumber": 301,
+          "toNumber": 305,
+          "seatStyle": "SINGLE_ROOM"
+        },
+        {
+          "fromNumber": 306,
+          "toNumber": 350,
+          "seatStyle": "CLASSROOM"
+        },
+        {
+          "fromNumber": 351,
+          "toNumber": 361,
+          "seatStyle": "FOCUS"
+        }
+      ],
+      "grids": [
+        {
+          "rows": 12,
+          "columns": 11,
+          "startNumber": 301,
+          "numberPadding": 0,
+          "startX": 1,
+          "startY": 1,
+          "columnMajor": false,
+          "reverseX": false,
+          "reverseY": false,
+          "seats": 61,
+          "skips": [
+            {
+              "row": 1,
+              "column": 1
+            },
+            {
+              "row": 1,
+              "column": 7
+            },
+            {
+              "row": 1,
+              "column": 8
+            },
+            {
+              "row": 1,
+              "column": 9
+            },
+            {
+              "row": 1,
+              "column": 10
+            },
+            {
+              "row": 1,
+              "column": 11
+            },
+            {
+              "row": 2,
+              "column": 1
+            },
+            {
+              "row": 2,
+              "column": 2
+            },
+            {
+              "row": 2,
+              "column": 3
+            },
+            {
+              "row": 2,
+              "column": 4
+            },
+            {
+              "row": 2,
+              "column": 5
+            },
+            {
+              "row": 2,
+              "column": 6
+            },
+            {
+              "row": 2,
+              "column": 7
+            },
+            {
+              "row": 2,
+              "column": 8
+            },
+            {
+              "row": 2,
+              "column": 9
+            },
+            {
+              "row": 2,
+              "column": 10
+            },
+            {
+              "row": 2,
+              "column": 11
+            },
+            {
+              "row": 3,
+              "column": 7
+            },
+            {
+              "row": 3,
+              "column": 8
+            },
+            {
+              "row": 3,
+              "column": 9
+            },
+            {
+              "row": 3,
+              "column": 10
+            },
+            {
+              "row": 3,
+              "column": 11
+            },
+            {
+              "row": 4,
+              "column": 9
+            },
+            {
+              "row": 4,
+              "column": 10
+            },
+            {
+              "row": 4,
+              "column": 11
+            },
+            {
+              "row": 5,
+              "column": 1
+            },
+            {
+              "row": 5,
+              "column": 2
+            },
+            {
+              "row": 5,
+              "column": 3
+            },
+            {
+              "row": 5,
+              "column": 4
+            },
+            {
+              "row": 5,
+              "column": 5
+            },
+            {
+              "row": 5,
+              "column": 6
+            },
+            {
+              "row": 5,
+              "column": 7
+            },
+            {
+              "row": 5,
+              "column": 8
+            },
+            {
+              "row": 5,
+              "column": 9
+            },
+            {
+              "row": 5,
+              "column": 10
+            },
+            {
+              "row": 5,
+              "column": 11
+            },
+            {
+              "row": 6,
+              "column": 1
+            },
+            {
+              "row": 6,
+              "column": 9
+            },
+            {
+              "row": 6,
+              "column": 10
+            },
+            {
+              "row": 6,
+              "column": 11
+            },
+            {
+              "row": 7,
+              "column": 9
+            },
+            {
+              "row": 7,
+              "column": 10
+            },
+            {
+              "row": 7,
+              "column": 11
+            },
+            {
+              "row": 8,
+              "column": 1
+            },
+            {
+              "row": 8,
+              "column": 2
+            },
+            {
+              "row": 8,
+              "column": 3
+            },
+            {
+              "row": 8,
+              "column": 4
+            },
+            {
+              "row": 8,
+              "column": 5
+            },
+            {
+              "row": 8,
+              "column": 6
+            },
+            {
+              "row": 8,
+              "column": 7
+            },
+            {
+              "row": 8,
+              "column": 8
+            },
+            {
+              "row": 8,
+              "column": 9
+            },
+            {
+              "row": 8,
+              "column": 10
+            },
+            {
+              "row": 8,
+              "column": 11
+            },
+            {
+              "row": 9,
+              "column": 9
+            },
+            {
+              "row": 9,
+              "column": 10
+            },
+            {
+              "row": 9,
+              "column": 11
+            },
+            {
+              "row": 10,
+              "column": 9
+            },
+            {
+              "row": 10,
+              "column": 10
+            },
+            {
+              "row": 10,
+              "column": 11
+            },
+            {
+              "row": 11,
+              "column": 1
+            },
+            {
+              "row": 11,
+              "column": 2
+            },
+            {
+              "row": 11,
+              "column": 3
+            },
+            {
+              "row": 11,
+              "column": 4
+            },
+            {
+              "row": 11,
+              "column": 5
+            },
+            {
+              "row": 11,
+              "column": 6
+            },
+            {
+              "row": 11,
+              "column": 7
+            },
+            {
+              "row": 11,
+              "column": 8
+            },
+            {
+              "row": 11,
+              "column": 9
+            },
+            {
+              "row": 11,
+              "column": 10
+            },
+            {
+              "row": 11,
+              "column": 11
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

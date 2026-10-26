@@ -70,7 +70,10 @@ class DsaTokenServiceTest {
         Academy academy = new Academy(ACAD_CD, "분당", java.time.LocalTime.of(9, 0));
         given(academyRepository.findById(ACADEMY_ID)).willReturn(Optional.of(academy));
 
-        service = new DsaTokenService(repository, academyRepository, redis, clock);
+        // ★ 통신 시각 기록은 이 테스트의 관심이 아니다. repository 가 목이라
+        //   찾는 설정이 없어 아무 일도 하지 않는다 — 전용 테스트는 KioskPresenceTest 다.
+        service = new DsaTokenService(repository, academyRepository, redis, clock,
+                new KioskPresenceService(repository, clock));
     }
 
     /**

@@ -8,6 +8,7 @@ import com.dlab.domain.appconfig.entity.PushToken;
 import com.dlab.domain.appconfig.repository.NotificationPreferenceRepository;
 import com.dlab.domain.appconfig.repository.PushTokenRepository;
 import com.dlab.domain.notification.entity.NotificationEvent;
+import com.dlab.domain.notification.service.NotificationOptOutPolicy;
 import com.dlab.domain.user.entity.Account;
 import com.dlab.domain.user.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,10 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -34,16 +33,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AppNotificationSettingService {
 
-    /**
-     * 수신 거부할 수 없는 알림.
-     *
-     * <p>미등원은 <b>학생이 학원에 오지 않았다는 통지</b>라 학부모가 끌 수 있으면 안 된다.
-     * 알림톡으로 격상한 것도 같은 이유이고, SMS 폴백이 폐기(E-5)돼 대체 수단도 없다.
-     */
-    private static final Set<NotificationEvent> MANDATORY =
-            EnumSet.of(NotificationEvent.MISSING_ATTENDANCE);
-
     private final NotificationPreferenceRepository preferenceRepository;
+
+    /**
+     * ★ 수신 거부 판정은 여기서 하지 않는다.
+     *
+     * <p>필수 알림 목록과 "꺼진 행이 있는가" 판정을 {@link NotificationOptOutPolicy} 로
+     * 옮겼다 — 발송 경로({@code NotificationService.dispatch})와 직원 수동 발송
+     * 미리보기가 <b>같은 기준</b>을 써야 한다. 두 벌이면 한쪽만 바뀐다.
+     */
+    private final NotificationOptOutPolicy optOutPolicy;
     private final PushTokenRepository pushTokenRepository;
     private final AccountRepository accountRepository;
     private final Clock clock;
@@ -72,13 +71,13 @@ public class AppNotificationSettingService {
                 .map(event -> new PreferenceView(
                         event,
                         saved.getOrDefault(event, true),
-                        MANDATORY.contains(event)))
+                        optOutPolicy.mandatory(event)))
                 .toList();
     }
 
     @Transactional
     public void changePreference(Long accountId, NotificationEvent event, boolean enabled) {
-        if (!enabled && MANDATORY.contains(event)) {
+        if (!enabled && optOutPolicy.mandatory(event)) {
             throw new BusinessException(ErrorCode.REQUIRED_NOTIFICATION_CANNOT_BE_DISABLED);
         }
         preferenceRepository.findByAccountIdAndEventCode(accountId, event)
@@ -95,10 +94,7 @@ public class AppNotificationSettingService {
      */
     @Transactional(readOnly = true)
     public boolean isEnabled(Long accountId, NotificationEvent event) {
-        if (MANDATORY.contains(event)) {
-            return true;
-        }
-        return !preferenceRepository.existsByAccountIdAndEventCodeAndEnabledFalse(accountId, event);
+        return optOutPolicy.enabled(accountId, event);
     }
 
     /**
