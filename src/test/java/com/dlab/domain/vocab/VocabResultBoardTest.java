@@ -310,7 +310,12 @@ class VocabResultBoardTest {
         //    words.get(0) 의 count 가 1 이 되어 **CI 에서만 깨진다.**
         //    실제로 그렇게 깨졌다(2026-10-23). 묶는지 보는 테스트이지 유형을 보는
         //    테스트가 아니므로 유형을 고정하는 것이 맞다.
-        em.createQuery("update VocabScheduleConfig c set c.multipleChoiceRate = 0 "
+        // ★★ 그리고 문항 수를 단어 수(8)와 같게 맞춘다 — 그러면 두 학생이 ★ 같은 8문항을
+        //    받아 겹침이 보장된다. 기본값은 8개 중 4개라 ★ 안 겹칠 확률이 1/70 이고,
+        //    그래서 CI 에서만 드물게 깨졌다(2026-10-23 · 10-26 · 10-27). 묶는지 보는
+        //    테스트이지 문항 추출을 보는 테스트가 아니므로 ★ 무작위에 기대지 않는다.
+        em.createQuery("update VocabScheduleConfig c "
+                        + "set c.multipleChoiceRate = 0, c.questionCount = 8 "
                         + "where c.academy.id = :a")
                 .setParameter("a", academy.getId())
                 .executeUpdate();
@@ -322,10 +327,9 @@ class VocabResultBoardTest {
         var theirs = takeAllWrong(other, round1);
         em.flush();
 
-        // ★★ words.get(0) 으로 단정하지 말 것. 문항 선택이 학생마다 무작위라
-        //    한 학생만 받은 단어가 첫 줄에 올 수 있고, 그러면 count 가 1 이 되어
-        //    **CI 에서만 깨진다.** 실제로 두 번 깨졌다(2026-10-23 · 10-26).
-        //    묶는지 보는 테스트이므로 **둘 다 받은 단어**를 골라야 한다.
+        // ★★ words.get(0) 으로 단정하지 말 것. 한 학생만 받은 단어가 첫 줄에 올 수 있어
+        //    count 가 1 이 된다. 위에서 문항 수를 고정했으니 지금은 둘이 같은 문항을
+        //    받지만, ★ 그 고정이 빠지면 다시 무작위가 되므로 공통 문항을 골라 둔다.
         java.util.Set<Long> shared = new java.util.LinkedHashSet<>(mine);
         shared.retainAll(theirs);
         assertThat(shared)
