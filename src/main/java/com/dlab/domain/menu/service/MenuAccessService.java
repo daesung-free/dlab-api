@@ -144,6 +144,72 @@ public class MenuAccessService {
     }
 
     /**
+     * ★★ 편집본대로 저장하면 <b>실제로 어떻게 열리는가</b> — 저장하지 않고 미리 본다.
+     *
+     * <h2>왜 필요한가</h2>
+     * 계정별 메뉴 지정은 <b>보이는 것을 줄이는</b> 기능이고 <b>권한을 늘리지 못한다.</b>
+     * 그런데 화면에서는 역할에 없는 메뉴도 체크가 되므로, 담당자는 열어 준 줄 알고
+     * 저장한다. 그 계정으로 들어가면 <b>사이드바에는 보이고 누르면 403</b> 이다 —
+     * 빈 화면도 아니고 오류 화면이라 <b>설정이 틀린 줄 안다.</b>
+     * 2026-10-27 에 실제로 그 혼동이 있었다(입학예약을 조회 전용에 체크한 건).
+     *
+     * <h2>★ 결과는 두 축이다</h2>
+     * <pre>
+     * visible   편집본 기준 ★ 메뉴에 나오는가        (restricted + menuCodes 가 정한다)
+     * level     FULL     역할 기본 노출에 있다 — 들어가면 열린다
+     *           PARTIAL  ★ 역할 기본 노출에 없다 — 보이지만 막힐 수 있다
+     * </pre>
+     *
+     * <p>★ <b>계산을 서버에서만 한다.</b> 화면이 같은 규칙을 또 구현하면 둘이 어긋나고,
+     * 그 어긋남이 바로 이 문제의 뿌리였다(10/14 담임 시간표 — 메뉴는 열렸는데 그 화면이
+     * 쓰는 API 가 403 이라 격자가 비었다).
+     *
+     * <h2>⚠️ PARTIAL 은 「역할 기본 노출」을 근거로 한 추정이다</h2>
+     * API 권한은 컨트롤러마다 {@code @PreAuthorize} 로 흩어져 있어 <b>서버도 목록으로
+     * 들고 있지 않다.</b> 지금 가진 가장 가까운 근거가 역할 기본 노출이고, 지금까지
+     * 둘을 손으로 맞춰 왔다(성적 메뉴를 조회 전용에서 일부러 뺀 것이 그 예다).
+     * <b>그래서 PARTIAL 은 「열린다/안 열린다」가 아니라 「확인이 필요하다」로 읽어야 한다.</b>
+     *
+     * @param restricted 편집본의 제한 여부. {@code false} 면 역할 기본값이 그대로 내려간다
+     * @param menuCodes  편집본에서 체크된 메뉴
+     */
+    @Transactional(readOnly = true)
+    public List<MenuOutcome> preview(Long accountId, boolean restricted,
+                                     List<String> menuCodes) {
+        Set<Role> roles = accountRoleRepository.findRoleNamesByAccountId(accountId).stream()
+                .map(Role::valueOf)
+                .collect(java.util.stream.Collectors.toSet());
+
+        // 역할이 없는 계정은 기본값 판정이 성립하지 않는다 — 전부 보이는 것으로 둔다
+        // (roleDefaults 가 같은 선택을 한다. 두 곳이 다르면 결과와 기본값이 어긋난다)
+        boolean noRoles = roles.isEmpty();
+
+        List<String> checked = menuCodes == null ? List.of() : menuCodes;
+        return catalog().stream().map(menu -> {
+            boolean byRole = noRoles || RoleMenuDefaults.visibleTo(menu.getCode(), roles);
+            // ★ 동작 권한(action_only)은 restricted 와 무관하게 보낸 그대로다 — replace 와
+            //   같은 규칙을 쓴다. 다르게 두면 미리보기와 저장 결과가 갈린다
+            boolean visible = menu.isActionOnly()
+                    ? checked.contains(menu.getCode())
+                    : (restricted ? checked.contains(menu.getCode()) : byRole);
+            return new MenuOutcome(menu.getCode(), menu.getName(), visible,
+                    byRole ? OutcomeLevel.FULL : OutcomeLevel.PARTIAL,
+                    byRole ? null : "이 역할에는 열려 있지 않습니다. 메뉴에는 보이지만 "
+                            + "들어갔을 때 거부될 수 있습니다.");
+        }).toList();
+    }
+
+    /** 편집본대로 저장했을 때 메뉴 하나가 어떻게 열리는가. */
+    public record MenuOutcome(String code, String name, boolean visible,
+                              OutcomeLevel level, String note) {
+    }
+
+    /** {@link #preview} 참고. {@code PARTIAL} 은 「확인이 필요하다」는 뜻이다. */
+    public enum OutcomeLevel {
+        FULL, PARTIAL
+    }
+
+    /**
      * 설정을 통째로 바꾼다.
      *
      * <h2>★ 「기본값 사용」과 「아무것도 못 봄」은 다른 뜻이다</h2>
