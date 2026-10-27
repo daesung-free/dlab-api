@@ -165,6 +165,13 @@ aligo:
   sender-phone: ${ALIGO_SENDER_PHONE:}
   test-mode: ${ALIGO_TEST_MODE:true}
 
+notification:
+  # ★★ 이관 기간 수신 허용목록. 쉼표로 구분한 번호에만 **실제로 나간다.**
+  #   비어 있으면 전면 개방이다(기본) — 반대로 두면 설정을 빠뜨린 환경에서
+  #   **알림이 조용히 전멸**하고 알아채기까지 오래 걸린다.
+  #   ⚠️ 켠 채로 두면 그 번호들만 알림을 받는다 — 이관이 끝나면 비울 것.
+  allowlist: ${NOTIFICATION_ALLOWLIST:}
+
 onboarding:
   # ★★ 대면 OT 전 「신청」 차단. I-24(게이트 범위)가 미확정이라 **기본 꺼짐**이다.
   #   범위를 정해 켜 두었다가 기존 동작을 10곳에서 깨뜨렸다 — 방화벽 해제가

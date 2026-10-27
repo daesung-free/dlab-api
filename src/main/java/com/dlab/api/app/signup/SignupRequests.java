@@ -73,7 +73,26 @@ public final class SignupRequests {
             LocalDate birthDate,
             @Pattern(regexp = "^[MF]$", message = "성별은 M 또는 F입니다.") String gender,
             @Size(max = 64) String schoolName,
-            @Size(max = 200) String address) {
+            @Size(max = 200) String address,
+            /**
+             * 보호자 전화번호.
+             *
+             * <h2>★ 신입생 동의서의 필수 수집 항목이다</h2>
+             * *"필수항목 : 이름, 성별, 생년월일, 전화번호, 주소, 출신학교, … <b>보호자
+             * 전화번호</b>, 출결석 현황, …"* — 받기로 한 값인데 가입에서 빠져 있었다.
+             *
+             * <h2>⚠️ 필수로 걸지 않는다</h2>
+             * 이미 가입한 학생들이 있고, 필수로 바꾸면 <b>그 학생들의 재신청·수정이
+             * 막힌다.</b> 비어 있으면 관리자 화면
+             * ({@code /admin/students/{id}/guardians})에서 채운다.
+             *
+             * <h2>⚠️ 번호만 넣어도 지금은 알림톡이 가지 않는다</h2>
+             * 발송 경로가 <b>학부모 앱 계정</b>을 찾는다 — 번호만 있는 보호자는
+             * 수신자가 되지 않는다. 「앱을 설치하지 않은 학부모에게 보낼 것인가」는
+             * 미확정이라(디랩 질의) <b>번호 기반 발송 경로를 만들지 않았다.</b>
+             * 그래도 지금 받아 두는 것이 맞다 — 나중에 받으려면 학생 전원에게 다시 물어야 한다.
+             */
+            @Size(max = 20) String guardianPhone) {
     }
 
     /** 자녀 추가 연결(다자녀). 이미 로그인한 상태라 인증 토큰이 필요 없다. */

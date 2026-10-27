@@ -65,6 +65,8 @@ public class ManualNotificationService {
     private final ClassMasterRepository classMasterRepository;
     private final AccountRepository accountRepository;
     private final NotificationOptOutPolicy optOutPolicy;
+    private final RecipientAllowlist allowlist;
+    private final GuardianRecipientResolver recipientResolver;
     private final NotificationService notificationService;
     private final Clock clock;
 
@@ -157,7 +159,7 @@ public class ManualNotificationService {
         //
         // ⚠️ 학생 개인에 관한 알림에는 걸지 않는다 — 출결·미납은 자녀마다 내용이 달라
         // **두 통이 맞다.** 거기서 묶으면 한 자녀의 알림이 사라진다.
-        Set<Long> alreadyReceiving = template.isStudentSpecific() ? null : new HashSet<>();
+        Set<Object> alreadyReceiving = template.isStudentSpecific() ? null : new HashSet<>();
 
         for (StudentEnrollment enrollment : candidates) {
             // ⚠️ 다른 지점이 섞여 들어오는 경로는 SELECTED 다. 조용히 빼지 않고 드러낸다 —
@@ -181,7 +183,12 @@ public class ManualNotificationService {
                 // 공통 안내에서 이미 받는 사람이면 건너뛴다. ★ blocked 에 넣지 않는다 —
                 // 「빠진 사람」이 아니라 「이미 받는 사람」이고, 섞으면 담당자가
                 // 안 간 줄로 읽는다
-                if (alreadyReceiving != null && !alreadyReceiving.add(receiver.accountId())) {
+                // ⚠️ 계정이 없는 보호자는 accountId 가 null 이다. 번호로 묶는다 —
+                //    null 로 묶으면 계정 없는 보호자가 **한 명만 받는다**
+                Object dedupeKey = receiver.accountId() != null
+                        ? receiver.accountId() : receiver.phone();
+                if (alreadyReceiving != null && dedupeKey != null
+                        && !alreadyReceiving.add(dedupeKey)) {
                     continue;
                 }
                 if (receiver.phone() == null || receiver.phone().isBlank()) {
@@ -190,13 +197,21 @@ public class ManualNotificationService {
                 }
                 // ★ 발송 경로(NotificationService.dispatch)와 **같은 판정**을 쓴다.
                 //   따로 조회하면 조건이 갈려 「미리보기엔 빠졌는데 실제로는 갔다」가 된다
-                if (optOutPolicy.optedOut(receiver.accountId(), template.getEventCode())) {
+                // ⚠️ 계정이 없으면 수신 설정이 없다 — 거부 판정이 성립하지 않는다.
+                //    필수 알림은 어차피 거부되지 않으므로 통과시키는 것이 맞다
+                if (receiver.accountId() != null
+                        && optOutPolicy.optedOut(receiver.accountId(), template.getEventCode())) {
                     blocked.add(block(enrollment, ManualBlockReason.OPTED_OUT));
+                    continue;
+                }
+                // ★ 이관 기간 수신 허용목록. 위와 같은 이유로 발송 경로와 같은 곳을 쓴다
+                if (!allowlist.allows(receiver.phone())) {
+                    blocked.add(block(enrollment, ManualBlockReason.NOT_IN_ALLOWLIST));
                     continue;
                 }
                 targets.add(new ManualSendTarget(enrollment.getId(),
                         enrollment.getStudent().getId(), receiver.accountId(),
-                        receiver.name()));
+                        receiver.name(), receiver.phone()));
                 recipients.add(new RecipientView(enrollment.getId(),
                         enrollment.getStudentName(), enrollment.getStudentNo(),
                         classNames.get(enrollment.getId()), receiver.name(),
@@ -274,8 +289,10 @@ public class ManualNotificationService {
         int skipped = 0;
 
         for (ManualSendTarget target : preview.getTargets()) {
-            Account recipient = accountRepository.findById(target.accountId()).orElse(null);
-            if (recipient == null || recipient.isDeleted()) {
+            // ★ 계정이 없는 보호자(앱 미설치)는 번호로 보낸다
+            Account recipient = target.accountId() == null ? null
+                    : accountRepository.findById(target.accountId()).orElse(null);
+            if (target.accountId() != null && (recipient == null || recipient.isDeleted())) {
                 // 미리보기 뒤에 계정이 사라진 경우. 이력도 남길 대상이 없다
                 skipped++;
                 continue;
@@ -289,12 +306,23 @@ public class ManualNotificationService {
 
             // ★ forStudent 가 studentName 을 자동으로 채운다 — 수신자마다 다른 값이라
             //   직원이 입력할 수 없고, 빠지면 다자녀 학부모가 「이거 누구 얘기지」를 겪는다
-            NotificationCommand command = NotificationCommand.forStudent(
-                    template.getEventCode(), recipient, enrollment.getStudent(),
-                    preview.getAcademy(), preview.getYear(), preview.getVariables(),
-                    // ★ 발송 경로의 dedupKey 도 함께 건다. 미리보기 1회성이 1차 방어고,
-                    //   이건 같은 묶음 안에서 같은 수신자가 두 줄일 때를 막는다
-                    "MANUAL:%s:%d".formatted(preview.getPreviewId(), target.accountId()));
+            // ★ 발송 경로의 dedupKey 도 함께 건다. 미리보기 1회성이 1차 방어고,
+            //   이건 같은 묶음 안에서 같은 수신자가 두 줄일 때를 막는다.
+            //   ⚠️ 계정이 없으면 번호를 키에 쓴다 — null 로 두면 계정 없는 보호자끼리
+            //      같은 키가 되어 **한 명만 받는다**
+            String dedupKey = "MANUAL:%s:%s".formatted(preview.getPreviewId(),
+                    target.accountId() != null ? target.accountId() : target.receiverPhone());
+
+            NotificationCommand command = recipient != null
+                    ? NotificationCommand.forStudent(
+                            template.getEventCode(), recipient, enrollment.getStudent(),
+                            preview.getAcademy(), preview.getYear(), preview.getVariables(),
+                            dedupKey)
+                    : NotificationCommand.forStudentPhone(
+                            template.getEventCode(), target.receiverPhone(),
+                            target.receiverName(), enrollment.getStudent(),
+                            preview.getAcademy(), preview.getYear(), preview.getVariables(),
+                            dedupKey);
 
             NotificationLog sent = notificationService.send(command);
             if (sent == null) {
@@ -386,13 +414,12 @@ public class ManualNotificationService {
                             enrollment.getStudentName(), enrollment.getStudent().getPhone())));
         }
         if (type == RecipientType.PARENT || type == RecipientType.BOTH) {
-            for (Account account
-                    : accountRepository.findGuardianAccountsOfStudent(
-                            enrollment.getStudent().getId())) {
-                ParentGuardian guardian = account.getGuardian();
-                receivers.add(new Receiver(account.getId(),
-                        guardian == null ? null : guardian.getName(),
-                        guardian == null ? null : guardian.getPhone()));
+            // ★★ 앱을 설치하지 않은 보호자도 수신자다 — 번호만 있으면 보낸다.
+            //    해석은 GuardianRecipientResolver 한 곳이고 미등원 배치·출결 알림과
+            //    **같은 판정**이다. 갈리면 「미리보기엔 빠졌는데 실제로는 갔다」가 된다.
+            for (var recipient : recipientResolver.of(enrollment.getStudent().getId())) {
+                receivers.add(new Receiver(recipient.accountId(),
+                        recipient.name(), recipient.phone()));
             }
         }
         return receivers;

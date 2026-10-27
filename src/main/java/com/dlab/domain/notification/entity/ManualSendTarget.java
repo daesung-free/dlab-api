@@ -18,7 +18,10 @@ package com.dlab.domain.notification.entity;
 public record ManualSendTarget(
         Long enrollmentId,
         Long studentId,
+        /** ★ 앱을 설치하지 않은 보호자는 {@code null} 이다 — 그때는 번호로 보낸다. */
         Long accountId,
-        String receiverName
+        String receiverName,
+        /** 계정이 없을 때 쓰는 수신 번호. */
+        String receiverPhone
 ) {
 }

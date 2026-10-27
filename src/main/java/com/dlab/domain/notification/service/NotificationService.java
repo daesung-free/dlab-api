@@ -29,15 +29,18 @@ public class NotificationService {
     private final NotificationTemplateRepository templateRepository;
     private final NotificationLogRepository logRepository;
     private final NotificationOptOutPolicy optOutPolicy;
+    private final RecipientAllowlist allowlist;
     private final Map<NotificationChannel, NotificationSender> senders;
 
     public NotificationService(NotificationTemplateRepository templateRepository,
                                NotificationLogRepository logRepository,
                                NotificationOptOutPolicy optOutPolicy,
+                               RecipientAllowlist allowlist,
                                List<NotificationSender> senders) {
         this.templateRepository = templateRepository;
         this.logRepository = logRepository;
         this.optOutPolicy = optOutPolicy;
+        this.allowlist = allowlist;
         this.senders = senders.stream()
                 .collect(Collectors.toMap(NotificationSender::channel, s -> s));
     }
@@ -121,6 +124,15 @@ public class NotificationService {
             notificationLog.markSkipped("수신 거부 설정");
             log.info("수신 거부로 발송 보류: event={}, accountId={}",
                     notificationLog.getEventCode(), recipientId);
+            return;
+        }
+
+        // ★★ 이관 기간 수신 허용목록. 실제 번호를 넣어 두고 검증하는 동안 학부모에게
+        //   나가지 않게 막는다. 비어 있으면 아무도 막지 않는다(기본 전면 개방) —
+        //   반대로 두면 설정을 빠뜨린 환경에서 **알림이 조용히 전멸**한다.
+        //   ⚠️ 판정은 수동 발송 미리보기와 **같은 RecipientAllowlist** 가 한다.
+        if (!allowlist.allows(notificationLog.resolvedPhone())) {
+            notificationLog.markSkipped("이관 기간 수신 허용목록 외 번호");
             return;
         }
 
