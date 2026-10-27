@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 직원이 때를 골라 보내는 알림 (디랩 1016 「직원 발송」 4종).
@@ -223,7 +224,14 @@ public class ManualNotificationService {
         if (targets.isEmpty()) {
             // ★ 여기서 미리보기 행을 만들지 않는다. 만들면 0명에게 보내는 previewId 가
             //   돌아다니고, 담당자는 「발송됨」을 보고 나갔다고 믿는다
-            throw new BusinessException(ErrorCode.MANUAL_SEND_NO_TARGET);
+            //
+            // ★★ 다만 ★ 왜 0명인지는 응답에 싣는다. 사유 없이 「발송 대상이 없습니다」만
+            //    주면 담당자는 ★ 무엇을 고쳐야 하는지 알 방법이 없다 — 연락처를 넣어야
+            //    하는지, 앱 가입을 안내해야 하는지, 수신거부를 푼 것인지, 허용목록
+            //    때문인지가 전부 같은 문장으로 보인다. 2026-10-27 에 프런트가 그 자리에서
+            //    막혀, 계정이 없어서 빠진 것인지 허용목록 때문인지 구분하지 못했다.
+            throw new BusinessException(ErrorCode.MANUAL_SEND_NO_TARGET,
+                    noTargetMessage(blocked), new NoTargetView(blocked));
         }
 
         Map<String, String> variables = command.variables() == null
@@ -378,7 +386,11 @@ public class ManualNotificationService {
             }
         };
         if (candidates.isEmpty()) {
-            throw new BusinessException(ErrorCode.MANUAL_SEND_NO_TARGET);
+            // ★ 여기는 걸러진 것이 아니라 ★ 애초에 고른 학생이 없는 경우다 — 사유 목록이
+            //   비어 있으므로 그렇게 말해 준다. 위와 같은 문장을 주면 담당자가 수신 설정을
+            //   들여다보게 된다
+            throw new BusinessException(ErrorCode.MANUAL_SEND_NO_TARGET,
+                    "조건에 맞는 학생이 없습니다. 지점·학년·반 조건을 확인해 주세요.");
         }
         return candidates;
     }
@@ -423,6 +435,40 @@ public class ManualNotificationService {
             }
         }
         return receivers;
+    }
+
+    /**
+     * 대상이 0명일 때 ★ 왜 그런지.
+     *
+     * <p>{@code blocked} 는 미리보기 성공 응답과 <b>같은 모양</b>이다 — 화면이 두 가지
+     * 파싱을 들고 있지 않게 한다. {@code summary} 는 사유별 인원이고, 화면이
+     * <b>「연락처 없음 3명 · 허용목록 2명」</b>처럼 한 줄로 쓸 수 있다.
+     */
+    public record NoTargetView(List<BlockedView> blocked,
+                               Map<ManualBlockReason, Long> summary) {
+        NoTargetView(List<BlockedView> blocked) {
+            this(blocked, blocked.stream().collect(Collectors.groupingBy(
+                    BlockedView::reason, LinkedHashMap::new, Collectors.counting())));
+        }
+    }
+
+    /**
+     * 「발송 대상이 없습니다」 뒤에 붙는 ★ 가장 많은 사유.
+     *
+     * <p>사유가 섞여 있을 때 전부 늘어놓으면 토스트에 들어가지 않는다 — <b>가장 많은 것
+     * 하나</b>를 말하고 나머지는 {@code blocked} 에서 보게 한다.
+     */
+    private String noTargetMessage(List<BlockedView> blocked) {
+        if (blocked.isEmpty()) {
+            return null;
+        }
+        Map.Entry<ManualBlockReason, Long> top = blocked.stream()
+                .collect(Collectors.groupingBy(BlockedView::reason, Collectors.counting()))
+                .entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .orElseThrow();
+        return "발송 대상이 없습니다. " + top.getKey().message()
+                + " (" + top.getValue() + "명)";
     }
 
     private BlockedView block(StudentEnrollment enrollment, ManualBlockReason reason) {
