@@ -40,6 +40,7 @@ public class SecurityConfig {
 
     private final JwtProvider jwtProvider;
     private final TokenBlacklist tokenBlacklist;
+    private final SessionCutoff sessionCutoff;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
 
@@ -154,7 +155,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/homepage/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated())
-                .addFilterBefore(new JwtAuthenticationFilter(jwtProvider, tokenBlacklist),
+                .addFilterBefore(new JwtAuthenticationFilter(jwtProvider, tokenBlacklist, sessionCutoff),
                         UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(authenticationEntryPoint)

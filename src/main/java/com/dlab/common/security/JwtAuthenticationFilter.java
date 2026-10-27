@@ -33,6 +33,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
     private final TokenBlacklist tokenBlacklist;
+    private final SessionCutoff sessionCutoff;
 
     @Override
     protected void doFilterInternal(@NonNull HttpServletRequest request,
@@ -49,7 +50,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
             try {
-                AuthPrincipal principal = jwtProvider.parse(token);
+                JwtProvider.Parsed parsed = jwtProvider.parseWithIssuedAt(token);
+                AuthPrincipal principal = parsed.principal();
+                // 계정이 중지·잠금됐거나 역할·메뉴가 바뀌면 그 전에 발급된 토큰은 무효다.
+                // 이게 없으면 중지해도 최대 1시간(Access Token 수명) 동안 그대로 쓰인다.
+                if (sessionCutoff.revoked(principal.accountId(), parsed.issuedAt())) {
+                    SecurityContextHolder.clearContext();
+                    request.setAttribute(JwtAuthenticationException.class.getName(),
+                            new JwtAuthenticationException(
+                                    JwtAuthenticationException.Reason.INVALID, null));
+                    chain.doFilter(request, response);
+                    return;
+                }
                 // authenticated() 팩토리를 쓴다 — 3-arg 생성자는 Security 7에서 deprecated이고,
                 // 자격증명 없이 인증완료 토큰을 만드는 의도가 이름에 드러난다.
                 var authentication = UsernamePasswordAuthenticationToken.authenticated(
