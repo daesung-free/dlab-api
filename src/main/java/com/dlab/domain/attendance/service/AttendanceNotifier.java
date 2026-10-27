@@ -44,7 +44,8 @@ public class AttendanceNotifier {
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
     private final NotificationService notificationService;
-    private final AccountRepository accountRepository;
+    private final com.dlab.domain.notification.service.GuardianRecipientResolver
+            recipientResolver;
     private final java.time.Clock clock;
 
     /**
@@ -60,21 +61,34 @@ public class AttendanceNotifier {
         }
         try {
             // 학부모에게만 보낸다 — 학생 본인에게 "당신이 등원했습니다"는 보낼 이유가 없다.
-            // 부·모 양쪽에 각각 간다(선착순 승인과 같은 전제 — 양쪽이 각자 계정을 만든다)
-            List<Account> guardians =
-                    accountRepository.findGuardianAccountsOfStudent(enrollment.getStudent().getId());
+            // 부·모 양쪽에 각각 간다(선착순 승인과 같은 전제).
+            // ★★ 앱을 설치하지 않은 보호자에게도 보낸다 — 수신자 해석은
+            //    GuardianRecipientResolver 한 곳이다(미등원 배치·수동 발송과 같은 판정).
             Map<String, String> variables = Map.of("taggedAt",
                     TIME_FORMAT.format(tagging.getRecordedAt().atZone(clock.getZone())));
 
-            for (Account guardian : guardians) {
-                notificationService.send(NotificationCommand.forStudent(
+            for (var recipient : recipientResolver.of(enrollment.getStudent().getId())) {
+                if (!recipient.hasPhone()) {
+                    continue;
+                }
+                notificationService.send(recipient.account() != null
+                        ? NotificationCommand.forStudent(
                         event,
-                        guardian,
+                        recipient.account(),
                         enrollment.getStudent(),
                         enrollment.getAcademy(),
                         enrollment.getYear(),
                         variables,
-                        "%s:%d:%d".formatted(event, tagging.getId(), guardian.getId())));
+                        dedupKey(event, tagging, recipient))
+                        : NotificationCommand.forStudentPhone(
+                        event,
+                        recipient.phone(),
+                        recipient.name(),
+                        enrollment.getStudent(),
+                        enrollment.getAcademy(),
+                        enrollment.getYear(),
+                        variables,
+                        dedupKey(event, tagging, recipient)));
             }
         } catch (Exception e) {
             // ★ 삼킨다. 태깅은 이미 끝났고, 알림이 본 행위를 되돌리면 안 된다.
@@ -82,6 +96,18 @@ public class AttendanceNotifier {
             log.error("출결 알림 발송 실패: event={}, enrollmentId={}",
                     event, enrollment.getId(), e);
         }
+    }
+
+    /**
+     * 중복 방지 키.
+     *
+     * <p>★ <b>보호자 id 를 쓴다.</b> 계정 id 로 두면 계정이 없는 보호자(앱 미설치)의
+     * 멱등성이 성립하지 않는다 — 같은 태깅에 두 번 나갈 수 있다.
+     */
+    private String dedupKey(NotificationEvent event, AttendanceTaggingLog tagging,
+                            com.dlab.domain.notification.service.GuardianRecipientResolver
+                                    .GuardianRecipient recipient) {
+        return "%s:%d:%d".formatted(event, tagging.getId(), recipient.guardianId());
     }
 
     /**

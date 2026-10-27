@@ -46,7 +46,7 @@ class AttendanceNotifierTest {
             TimeConfig.KST);
 
     NotificationService notificationService;
-    AccountRepository accountRepository;
+    com.dlab.domain.notification.service.GuardianRecipientResolver recipientResolver;
     AttendanceNotifier notifier;
 
     Academy bundang;
@@ -57,8 +57,11 @@ class AttendanceNotifierTest {
     @BeforeEach
     void setUp() {
         notificationService = Mockito.mock(NotificationService.class);
-        accountRepository = Mockito.mock(AccountRepository.class);
-        notifier = new AttendanceNotifier(notificationService, accountRepository, CLOCK);
+        // ★ 수신자 해석이 GuardianRecipientResolver 로 빠졌다 — 미등원 배치·수동 발송과
+        //   **같은 판정**을 쓰게 하려고 한 곳으로 모았다
+        recipientResolver = Mockito.mock(
+                com.dlab.domain.notification.service.GuardianRecipientResolver.class);
+        notifier = new AttendanceNotifier(notificationService, recipientResolver, CLOCK);
 
         bundang = new Academy("31", "분당", LocalTime.of(9, 0));
         ReflectionTestUtils.setField(bundang, "id", 1L);
@@ -83,8 +86,24 @@ class AttendanceNotifierTest {
         return log;
     }
 
+    /**
+     * ★ 멱등키가 <b>보호자 id</b> 를 쓴다 — 계정 id 로 두면 계정이 없는 보호자(앱 미설치)의
+     * 멱등성이 성립하지 않는다. 그래서 여기서도 보호자를 꾸민다.
+     */
     private void withGuardians(Account... accounts) {
-        when(accountRepository.findGuardianAccountsOfStudent(11L)).thenReturn(List.of(accounts));
+        List<com.dlab.domain.notification.service.GuardianRecipientResolver.GuardianRecipient>
+                recipients = new java.util.ArrayList<>();
+        // ⚠️ when(...) 안에서 목을 또 만들면 중첩 스터빙이 된다 — 미리 다 만들어 둔다
+        for (Account account : accounts) {
+            Long id = account.getId();
+            com.dlab.domain.user.entity.ParentGuardian guardian =
+                    Mockito.mock(com.dlab.domain.user.entity.ParentGuardian.class);
+            // 계정 id 를 그대로 보호자 id 로 쓴다 — 기존 단정(…:101·…:102)이 그대로 선다
+            Mockito.doReturn(id).when(guardian).getId();
+            recipients.add(new com.dlab.domain.notification.service.GuardianRecipientResolver
+                    .GuardianRecipient(account, guardian, "보호자", "010-1234-5678"));
+        }
+        Mockito.doReturn(recipients).when(recipientResolver).of(11L);
     }
 
     private List<NotificationCommand> captured() {

@@ -65,6 +65,8 @@ public class StudentSignupService {
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final StudentSignupApprovalService approvalService;
+    private final com.dlab.domain.user.repository.ParentGuardianRepository guardianRepository;
+    private final com.dlab.domain.user.repository.StudentGuardianLinkRepository linkRepository;
 
     /**
      * 가입 신청.
@@ -134,8 +136,44 @@ public class StudentSignupService {
                 enrollment.getStudent(), phone, passwordEncoder.encode(command.password())));
         // 본인이 정한 비밀번호라 최초 로그인 시 변경 강제 대상이 아니다
         account.markPasswordInitialized(Instant.now(clock));
+
+        linkGuardian(enrollment, command.guardianPhone());
+
         accountRepository.flush();
         return account;
+    }
+
+    /**
+     * 보호자 번호를 받았으면 연결해 둔다.
+     *
+     * <h2>★ 번호가 같으면 기존 보호자를 재사용한다</h2>
+     * 형제자매가 같은 보호자를 공유하고 {@code parent_guardian.phone} 에 UNIQUE 가
+     * 걸려 있어 <b>새로 만들면 제약 위반으로 터진다</b> — 그러면 가입 자체가 실패하고,
+     * 채번 재시도가 그 예외까지 다시 돌린다.
+     *
+     * <h2>★ 이름을 「학부모」로 둔다</h2>
+     * 학생이 적는 것은 번호뿐이라 이름을 알 수 없다. 학부모가 나중에 앱에 가입하면
+     * <b>본인이 적은 이름이 그 행에 들어간다</b>(번호가 같으면 같은 행이다).
+     *
+     * <h2>⚠️ 이것만으로는 알림톡이 가지 않는다</h2>
+     * 발송 경로가 <b>학부모 앱 계정</b>을 찾는다. 「앱을 설치하지 않은 학부모에게
+     * 보낼 것인가」가 미확정이라(디랩 질의) 번호 기반 발송 경로는 만들지 않았다.
+     * 그래도 받아 두는 것이 맞다 — 나중에 받으려면 <b>학생 전원에게 다시 물어야 한다.</b>
+     */
+    private void linkGuardian(StudentEnrollment enrollment, String guardianPhone) {
+        if (guardianPhone == null || guardianPhone.isBlank()) {
+            return;
+        }
+        ParentGuardian guardian = guardianRepository
+                .findByPhoneAndDeletedFalse(guardianPhone)
+                .orElseGet(() -> guardianRepository.save(
+                        new ParentGuardian("학부모", guardianPhone, null)));
+
+        if (!linkRepository.existsByStudentIdAndGuardianId(
+                enrollment.getStudent().getId(), guardian.getId())) {
+            linkRepository.save(new StudentGuardianLink(
+                    enrollment.getStudent(), guardian, (short) 1));
+        }
     }
 
     /** {@link StudentService#admit}과 같은 이유로 <b>시도마다 새 트랜잭션</b>을 연다. */
@@ -160,6 +198,13 @@ public class StudentSignupService {
      */
     public record Command(String verificationToken, String name, String password,
                           Long academyId, GradeType grade, TrackType track,
-                          LocalDate birthDate, String gender, String schoolName, String address) {
+                          LocalDate birthDate, String gender, String schoolName, String address,
+                          /**
+                           * 보호자 전화번호. ★ 신입생 동의서의 필수 수집 항목이다.
+                           *
+                           * <p>⚠️ 비어 있어도 가입은 된다 — 이미 가입한 학생이 있고,
+                           * 필수로 바꾸면 그 학생들의 재신청이 막힌다.
+                           */
+                          String guardianPhone) {
     }
 }

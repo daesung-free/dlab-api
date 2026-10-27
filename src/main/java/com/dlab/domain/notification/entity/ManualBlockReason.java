@@ -26,7 +26,15 @@ public enum ManualBlockReason {
     OPTED_OUT("이 알림 수신을 거부한 수신자입니다."),
 
     /** 다른 지점 학생. 지점 범위를 벗어난 선택은 발송하지 않고 드러낸다. */
-    OTHER_ACADEMY("다른 지점 학생입니다.");
+    OTHER_ACADEMY("다른 지점 학생입니다."),
+    /**
+     * ★ 이관 기간 수신 허용목록에 없는 번호.
+     *
+     * <p>실제 번호를 다 넣어 두고 검증하는 동안 학부모에게 나가지 않게 막는 장치다
+     * ({@code notification.allowlist}). ⚠️ 이관이 끝나면 비워야 한다 —
+     * 켠 채로 두면 <b>그 번호들만 알림을 받고</b> 화면에는 제외로만 남는다.
+     */
+    NOT_IN_ALLOWLIST("이관 기간 수신 허용목록에 없는 번호입니다.");
 
     private final String message;
 

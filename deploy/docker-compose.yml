@@ -132,6 +132,10 @@ services:
       ALIGO_SENDER_KEY: ${ALIGO_SENDER_KEY:-}
       ALIGO_SENDER_PHONE: ${ALIGO_SENDER_PHONE:-}
       ALIGO_TEST_MODE: ${ALIGO_TEST_MODE:-true}
+      # ★★ 이관 기간 알림 수신 허용목록. 적은 번호에만 실제로 나간다.
+      #   비우면 전면 개방(기본). ⚠️ 이관이 끝나면 비울 것 —
+      #   켠 채로 두면 그 번호들만 받고 나머지는 SKIPPED 로만 남는다
+      NOTIFICATION_ALLOWLIST: ${NOTIFICATION_ALLOWLIST:-}
       # ★★ 대면 OT 전 「신청」 차단(I-24). **기본 꺼짐**이고 범위가 확정되면 켠다 —
       #   범위를 정해 켜 두었다가 기존 동작을 10곳에서 깨뜨린 적이 있다.
       OT_GATE_ENABLED: ${OT_GATE_ENABLED:-false}
