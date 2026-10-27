@@ -103,37 +103,60 @@ public class JwtProvider {
     }
 
     /**
+     * 파싱 결과에 <b>발급시각({@code iat})을 함께</b> 돌려준다 — 세션 컷오프 판정에 쓴다
+     * ({@link SessionCutoff}).
+     *
+     * <p>★ {@link #parse(String)} 를 고치지 않고 따로 둔다. {@code AuthPrincipal} 에 필드를
+     * 더하면 <b>그 레코드를 만드는 모든 자리와 테스트가 함께 깨지는데</b>, 발급시각이 필요한
+     * 곳은 필터 하나다.
+     */
+    public Parsed parseWithIssuedAt(String token) {
+        Claims claims = claims(token);
+        return new Parsed(principalOf(claims), claims.getIssuedAt().toInstant());
+    }
+
+    /** 파싱 결과 + 발급시각. */
+    public record Parsed(AuthPrincipal principal, java.time.Instant issuedAt) {
+    }
+
+    @SuppressWarnings("unchecked")
+    private AuthPrincipal principalOf(Claims claims) {
+        // Refresh를 Access 자리에 쓰면 역할이 비어 "인증됐지만 권한 없는 사용자"가 되어
+        // authenticated()만 요구하는 경로를 통과한다. 종류를 먼저 막는다.
+        requireType(claims, TYPE_ACCESS);
+
+        List<String> roleNames = claims.get(CLAIM_ROLES, List.class);
+        List<Role> roles = roleNames == null ? List.of() : roleNames.stream().map(Role::from).toList();
+
+        Number academyId = claims.get(CLAIM_ACADEMY_ID, Number.class);
+
+        return AuthPrincipal.of(
+                Long.valueOf(claims.getSubject()),
+                claims.get(CLAIM_ACCOUNT_TYPE, String.class),
+                academyId == null ? null : academyId.longValue(),
+                roles,
+                Boolean.TRUE.equals(claims.get(CLAIM_ALL_ACADEMY, Boolean.class)),
+                Boolean.TRUE.equals(claims.get(CLAIM_MUST_CHANGE_PASSWORD, Boolean.class))
+        );
+    }
+
+    /**
      * 서명·만료를 검증하고 주체를 복원한다.
      *
      * @throws JwtAuthenticationException 서명 불일치·만료·형식 오류
      */
-    @SuppressWarnings("unchecked")
     public AuthPrincipal parse(String token) {
+        return principalOf(claims(token));
+    }
+
+    private Claims claims(String token) {
         try {
-            Claims claims = Jwts.parser()
+            return Jwts.parser()
                     .verifyWith(key)
                     .clock(() -> Date.from(clock.instant()))
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
-
-            // Refresh를 Access 자리에 쓰면 역할이 비어 "인증됐지만 권한 없는 사용자"가 되어
-            // authenticated()만 요구하는 경로를 통과한다. 종류를 먼저 막는다.
-            requireType(claims, TYPE_ACCESS);
-
-            List<String> roleNames = claims.get(CLAIM_ROLES, List.class);
-            List<Role> roles = roleNames == null ? List.of() : roleNames.stream().map(Role::from).toList();
-
-            Number academyId = claims.get(CLAIM_ACADEMY_ID, Number.class);
-
-            return AuthPrincipal.of(
-                    Long.valueOf(claims.getSubject()),
-                    claims.get(CLAIM_ACCOUNT_TYPE, String.class),
-                    academyId == null ? null : academyId.longValue(),
-                    roles,
-                    Boolean.TRUE.equals(claims.get(CLAIM_ALL_ACADEMY, Boolean.class)),
-                    Boolean.TRUE.equals(claims.get(CLAIM_MUST_CHANGE_PASSWORD, Boolean.class))
-            );
         } catch (ExpiredJwtException e) {
             throw new JwtAuthenticationException(JwtAuthenticationException.Reason.EXPIRED, e);
         } catch (JwtException | IllegalArgumentException e) {
