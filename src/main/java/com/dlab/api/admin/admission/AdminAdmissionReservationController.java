@@ -37,6 +37,17 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/admin/admission-reservations")
 @RequiredArgsConstructor
+/*
+ * ★ 조회(GET)에만 READONLY 를 더 열어 둔다 — 쓰기는 이 클래스 레벨 제약이 그대로 막는다.
+ *
+ * 2026-10-27 연구소가 「입학예약만 볼 수 있는 계정」을 요청했다. 계정별 메뉴 지정으로
+ * 보이는 화면은 「대기자 관리」 하나로 줄일 수 있는데, ★ 메뉴 설정은 보이는 것을 줄이는
+ * 기능이고 권한을 늘리지 못한다 — 역할에 없으면 사이드바에는 보이고 눌렀을 때 403 이다.
+ * 그래서 조회 전용 역할에 이 화면의 조회만 연다.
+ *
+ * ⚠️ 역할 기본 메뉴(RoleMenuDefaults)는 건드리지 않았다. 그쪽을 바꾸면 ★ 모든 조회 전용
+ * 계정에 입학예약이 보이게 된다 — 요청한 것은 계정 하나이므로 계정별 지정으로 준다.
+ */
 @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
 public class AdminAdmissionReservationController {
 
@@ -44,6 +55,7 @@ public class AdminAdmissionReservationController {
     private final com.dlab.domain.share.service.PublicWaitlistShareService waitlistShareService;
 
     /** 목록. 상태·이름·연락처로 좁힌다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
     @GetMapping
     public ApiResponse<List<ReservationView>> list(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam short year,
@@ -74,6 +86,7 @@ public class AdminAdmissionReservationController {
      * @param parentTel 학부모 또는 학생 연락처. 하이픈이 있어도 된다
      * @param year      비우면 올해
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
     @GetMapping("/duplicates")
     public ApiResponse<List<DuplicateView>> duplicates(
             @CurrentAccount AuthPrincipal me,
@@ -97,6 +110,7 @@ public class AdminAdmissionReservationController {
      * <p><b>목록에는 싣지 않는다.</b> 칸반이 수백 건을 한 번에 받는 화면이라, 행마다 주소·동의
      * 항목까지 실으면 목록이 몇 배로 커진다.
      */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
     @GetMapping("/{reservationId}")
     public ApiResponse<ReservationDetailView> detail(@CurrentAccount AuthPrincipal me,
                                                      @PathVariable Long reservationId) {
@@ -139,6 +153,7 @@ public class AdminAdmissionReservationController {
     public record ShareResponse(String token, Instant expiresAt) {
     }
 
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
     @GetMapping("/{reservationId}/status-logs")
     public ApiResponse<List<StatusLogView>> statusLogs(@CurrentAccount AuthPrincipal me,
                                                        @PathVariable Long reservationId) {
@@ -147,6 +162,7 @@ public class AdminAdmissionReservationController {
     }
 
     /** 메모. <b>지점 메모는 그 지점만, 본사는 전체</b>를 본다. */
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF','READONLY')")
     @GetMapping("/{reservationId}/memos")
     public ApiResponse<List<MemoView>> memos(@CurrentAccount AuthPrincipal me,
                                              @PathVariable Long reservationId) {
