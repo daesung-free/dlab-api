@@ -33,6 +33,7 @@ import java.time.Instant;
 public class LoginFailureRecorder {
 
     private final AccountRepository accountRepository;
+    private final com.dlab.common.security.SessionCutoff sessionCutoff;
     private final LoginAttemptStore loginAttemptStore;
     private final Clock clock;
 
@@ -51,6 +52,10 @@ public class LoginFailureRecorder {
         accountRepository.findById(accountId).ifPresent(account -> {
             if (!account.isLocked()) {
                 account.lock(Instant.now(clock));
+                // ★ 잠긴 계정이 이미 로그인해 있을 수 있다 — 다른 기기에서 비밀번호를
+                //   틀려 잠긴 경우다. 끊지 않으면 그 세션이 최대 1시간 더 살아 있어
+                //   "잠겼는데 쓰고 있다"가 된다.
+                sessionCutoff.revokeAll(accountId);
                 log.warn("로그인 실패 {}회 누적으로 계정 잠금: accountId={}", failures, accountId);
             }
         });

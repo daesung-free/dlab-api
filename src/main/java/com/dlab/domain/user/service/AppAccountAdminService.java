@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class AppAccountAdminService {
 
     private final AccountRepository accountRepository;
+    private final com.dlab.common.security.SessionCutoff sessionCutoff;
     private final LoginAttemptStore loginAttemptStore;
     private final RefreshTokenStore refreshTokenStore;
     private final PasswordEncoder passwordEncoder;
@@ -66,6 +67,9 @@ public class AppAccountAdminService {
         loginAttemptStore.clear(account.getLoginId());
         refreshTokenStore.delete(accountId);
         log.info("임시 비밀번호 재발급: accountId={}", accountId);
+        // ★ Refresh 는 위에서 지웠지만 Access Token 은 최대 1시간 더 살아 있다.
+        //   분실·탈취로 재발급하는 경우가 대부분이라 그 창을 남기면 안 된다.
+        sessionCutoff.revokeAll(accountId);
         return temporary;
     }
 

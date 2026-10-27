@@ -49,6 +49,7 @@ public class StaffAccountService {
     private final TeacherRepository teacherRepository;
     private final EmployeeRepository employeeRepository;
     private final AccountRepository accountRepository;
+    private final com.dlab.common.security.SessionCutoff sessionCutoff;
     private final AccountRoleRepository accountRoleRepository;
     private final AcademyRepository academyRepository;
     private final PasswordEncoder passwordEncoder;
@@ -367,6 +368,10 @@ public class StaffAccountService {
         auditRecorder.recordChanges(AUDIT_ACCOUNT, accountId, academyIdOf(account),
                 AuditEntityListener.Change.of("status",
                         before.name(), account.getStatus().name()));
+
+        // ★ 중지는 급한 상황(퇴사·계정 공유 적발)에 누른다. 끊지 않으면 그 사람이 최대
+        //   1시간 더 쓰는데, 담당자는 누르고 끝난 줄 안다.
+        sessionCutoff.revokeAll(accountId);
         return account;
     }
 
@@ -426,6 +431,9 @@ public class StaffAccountService {
                 List.of(AuditEntityListener.Change.labeled(
                         "temporaryPassword", "임시 비밀번호",
                         null, "reissued", null, "재발급")));
+        // ★ Refresh 는 위에서 지웠지만 Access Token 은 최대 1시간 더 살아 있다.
+        //   분실·탈취로 재발급하는 경우가 대부분이라 그 창을 남기면 안 된다.
+        sessionCutoff.revokeAll(accountId);
         return temporary;
     }
 
@@ -481,6 +489,9 @@ public class StaffAccountService {
                         joinRoles(before),
                         joinRoles(roles.stream().map(Role::name)
                                 .collect(Collectors.toSet())))));
+
+        // ★ 역할은 토큰에 박혀 나간다. 끊지 않으면 줄인 권한이 최대 1시간 동안 그대로 돈다.
+        sessionCutoff.revokeAll(accountId);
     }
 
     /** 화면에 그대로 찍히는 값이라 순서를 고정한다 — 안 그러면 같은 역할 집합이 매번 달라 보인다. */

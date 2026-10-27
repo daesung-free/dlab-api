@@ -40,6 +40,7 @@ public class MenuAccessService {
     private static final int FAVORITE_LIMIT = 8;
 
     private final MenuRepository menuRepository;
+    private final com.dlab.common.security.SessionCutoff sessionCutoff;
     private final AccountMenuRepository accountMenuRepository;
     private final com.dlab.domain.menu.repository.FavoriteMenuRepository favoriteMenuRepository;
     private final AccountRepository accountRepository;
@@ -205,6 +206,11 @@ public class MenuAccessService {
                 ? java.util.stream.Stream.concat(screens.stream(), actions.stream()).toList()
                 : actions;
         saved.forEach(menu -> accountMenuRepository.save(new AccountMenu(account, menu)));
+
+        // ★ 바뀐 노출 범위를 즉시 적용한다. 끊지 않으면 이미 발급된 토큰이 최대 1시간 동안
+        //   옛 범위로 돌아, 담당자 눈에는 「설정했는데 안 바뀐다」로 보인다 — 그 증상이
+        //   「역할에 없어서 403」과 구분되지 않아 2026-10-27 에 실제로 혼동이 있었다.
+        sessionCutoff.revokeAll(accountId);
         return saved;
     }
 
