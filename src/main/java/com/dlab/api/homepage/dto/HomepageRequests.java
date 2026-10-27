@@ -1,6 +1,7 @@
 package com.dlab.api.homepage.dto;
 
 import com.dlab.domain.admission.service.AdmissionReservationService.SaveCommand;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigDecimal;
 
@@ -50,8 +51,16 @@ public final class HomepageRequests {
                               @JsonProperty("zip") String zip,
                               @JsonProperty("addr1") String addr1,
                               @JsonProperty("addr2") String addr2,
-                              @JsonProperty("sch_cd_hight") Integer schCdHigh,
-                              @JsonProperty("sch_nm_hight") String schNmHigh,
+                              // ★★ 규격서 표기는 `_hight`(t 포함)이고 우리도 그대로 받는다.
+                              //   그런데 보내는 쪽이 `_high` 로 보내는 경우가 실제로 있었다
+                              //   (2026-10-26 연구소 테스트 — 3건 전부 null 로 저장됐다).
+                              //   ⚠️ 바인딩이 조용히 실패해 **접수는 성공하고 값만 빈다** —
+                              //   그래서 「저장이 안 됐다」가 아니라 「필드명이 달랐다」를
+                              //   찾기까지 시간이 걸린다. 두 표기를 모두 받는다.
+                              @JsonProperty("sch_cd_hight")
+                              @JsonAlias("sch_cd_high") Integer schCdHigh,
+                              @JsonProperty("sch_nm_hight")
+                              @JsonAlias("sch_nm_high") String schNmHigh,
                               @JsonProperty("agree_ad") String agreeAd,
                               @JsonProperty("promo_ad") String promoAd,
                               @JsonProperty("std_grade") String stdGrade) {

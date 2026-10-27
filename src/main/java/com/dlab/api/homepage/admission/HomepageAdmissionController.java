@@ -38,6 +38,7 @@ public class HomepageAdmissionController {
 
     private final HomepageTokenService tokenService;
     private final AdmissionReservationService admissionService;
+    private final com.dlab.domain.admission.repository.CommonCodeRepository codeRepository;
 
     /** 3.3 — 입학예약 저장. {@code rsv_cd}는 최상위에 실린다(규격서 샘플). */
     @PostMapping("/setStdInfo")
@@ -103,9 +104,17 @@ public class HomepageAdmissionController {
     /**
      * 조회 응답 한 줄.
      *
-     * <p>규격서 3.4의 필드명·순서 그대로다. <b>코드값이 아니라 이름({@code _nm})을 주게
-     * 돼 있는데 공통코드 목록을 아직 못 받아 채울 수 없다</b> — 지금은 코드를 문자열로
-     * 넣고, 목록이 오면 여기서 이름으로 바꾼다.
+     * <p>규격서 3.4의 필드명·순서 그대로다.
+     *
+     * <h2>★ {@code _nm} 은 공통코드 표에서 찾는다</h2>
+     * 그전에는 <b>코드를 그대로 문자열로 내보냈다</b> — 목록을 못 받았다는 이유였는데,
+     * 우리가 {@code getComInfo} 로 내려주는 {@code common_code} 가 곧 그 표였다.
+     * ⚠️ 그래서 코드 {@code 0} 으로 접수한 건의 {@code _nm} 이 전부 {@code "0"} 으로
+     * 나갔다(2026-10-26 연구소 테스트). <b>코드를 이름 자리에 넣으면 받는 쪽이 그것을
+     * 이름으로 읽는다</b> — 「0」이라는 학원·유입경로가 있는 것처럼 보인다.
+     *
+     * <p>★ <b>표에 없으면 빈 값이다.</b> 코드를 돌려주지 않는다 —
+     * 「이름을 모른다」와 「이름이 0 이다」는 다르다.
      */
     private Map<String, Object> toRow(AdmissionReservation r) {
         Map<String, Object> row = new LinkedHashMap<>();
@@ -117,16 +126,38 @@ public class HomepageAdmissionController {
         row.put("adm_dt", r.getAdmDt());
         row.put("gender_gb_nm", "M".equals(r.getGender()) ? "남" : "F".equals(r.getGender()) ? "여" : null);
         row.put("geyul_gb_nm", geyulName(r.getGeyulGb()));
-        row.put("pre_test_nm", asText(r.getPreTest()));
-        row.put("find_gb_nm", asText(r.getFindGb()));
+        // 응시 구분(ADMI) · 유입경로(FIND) · 출신학원(ACAD) — getComInfo 가 내리는 그 표다
+        row.put("pre_test_nm", codeName("ADMI", r.getPreTest()));
+        row.put("find_gb_nm", codeName("FIND", r.getFindGb()));
         row.put("find_txt", r.getFindTxt());
-        row.put("sch_cd_nm", asText(r.getSchCd()));
+        row.put("sch_cd_nm", codeName("ACAD", r.getSchCd()));
         row.put("zip", r.getZip());
         row.put("addr1", r.getAddr1());
         row.put("addr2", r.getAddr2());
         row.put("sch_nm_high", r.getSchNmHigh());
+        // ★ 규격 응답 항목에 없어 빠져 있었다(2026-10-26 요청으로 추가).
+        //   저장은 되고 있었다 — 내리지 않았을 뿐이다
+        row.put("par_tel", r.getParentTel());
         row.put("grade", r.getStdGrade());
         return row;
+    }
+
+    /**
+     * 공통코드 이름.
+     *
+     * <p>★ <b>표에 없으면 빈 값</b>이다. 코드를 그대로 돌려주면 받는 쪽이 그것을 이름으로
+     * 읽는다 — 「0」이라는 학원이 있는 것처럼 보인다.
+     */
+    private String codeName(String group, Integer code) {
+        if (code == null) {
+            return null;
+        }
+        String key = String.valueOf(code);
+        return codeRepository.findAllOfGroup(group).stream()
+                .filter(c -> key.equals(c.getCode()))
+                .map(com.dlab.domain.admission.entity.CommonCode::getName)
+                .findFirst()
+                .orElse(null);
     }
 
     /** 규격서 3.5 응답 — {@code comm_cd}·{@code comm_nm}·{@code att1}. */
@@ -148,11 +179,9 @@ public class HomepageAdmissionController {
             case 2 -> "자연";
             case 3 -> "예체능";
             case 9 -> "공통";
-            default -> String.valueOf(geyulGb);
+            // ★ 모르는 코드는 빈 값이다. 코드를 돌려주면 「0」이 계열명으로 읽힌다
+            default -> null;
         };
     }
 
-    private String asText(Integer code) {
-        return code == null ? null : String.valueOf(code);
-    }
 }

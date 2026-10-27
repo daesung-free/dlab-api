@@ -121,6 +121,71 @@ class HomepageAdmissionTest {
         return json.replaceAll(".*\"rsv_cd\":\"([^\"]+)\".*", "$1");
     }
 
+    /** 보내는 쪽이 규격서와 다르게 `_high`(t 없이) 로 보내는 경우. */
+    private String saveWithHighAlias() throws Exception {
+        String json = call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","reg_yyyy":"2026","rsv_nm":"알리아스",
+                 "std_tel":"01011112222","par_tel":"01033334444","gender_gb":"M",
+                 "birth":"20081106","geyul_gb":0,"adm_dt":"20261014","pre_test":0,
+                 "find_gb":0,"sch_cd":0,
+                 "sch_cd_high":5001,"sch_nm_high":"대성고등학교",
+                 "agree_ad":"Y","promo_ad":"Y","std_grade":"N"}""".formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andReturn().getResponse().getContentAsString();
+        em.flush();
+        em.clear();
+        return json.replaceAll(".*\"rsv_cd\":\"([^\"]+)\".*", "$1");
+    }
+
+    // ── 연구소 1026 테스트에서 나온 것 ─────────────────────────
+
+    @Test
+    @DisplayName("★★ sch_nm_high(t 없이)로 보내도 저장된다 — 규격서는 _hight 지만 보내는 쪽이 달랐다")
+    void acceptsBothSchoolSpellings() throws Exception {
+        String rsvCd = saveWithHighAlias();
+
+        String name = em.createQuery("""
+                SELECT r.schNmHigh FROM AdmissionReservation r WHERE r.rsvCd = :cd
+                """, String.class).setParameter("cd", rsvCd).getSingleResult();
+        assertThat(name)
+                .as("바인딩이 조용히 실패하면 접수는 성공하고 값만 빈다 — 찾기 어렵다")
+                .isEqualTo("대성고등학교");
+    }
+
+    @Test
+    @DisplayName("★★ 코드표에 없는 값의 _nm 은 빈 값이다 — 코드를 그대로 주면 「0」이 이름으로 읽힌다")
+    void unknownCodeNamesAreBlank() throws Exception {
+        saveWithHighAlias();
+
+        // ★ 규격서 3.4 는 rsv_cd 가 아니라 이름·생년월일·연락처로 찾는다
+        call("/dlab/getStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"알리아스",
+                 "birth":"20081106","std_tel":"01011112222"}""".formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                // ⚠️ doesNotExist 만 쓰면 경로 자체가 틀렸을 때도 통과한다 —
+                //   먼저 같은 행의 다른 값으로 경로가 맞는지 확인한다
+                .andExpect(jsonPath("$.data[0].rsv_nm").value("알리아스"))
+                .andExpect(jsonPath("$.data[0].sch_cd_nm").doesNotExist())
+                .andExpect(jsonPath("$.data[0].find_gb_nm").doesNotExist())
+                .andExpect(jsonPath("$.data[0].pre_test_nm").doesNotExist())
+                .andExpect(jsonPath("$.data[0].geyul_gb_nm").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("★ par_tel 이 응답에 실린다 — 저장은 되고 있었고 내리지 않았을 뿐이다")
+    void parTelIsReturned() throws Exception {
+        saveWithHighAlias();
+
+        // ★ 규격서 3.4 는 rsv_cd 가 아니라 이름·생년월일·연락처로 찾는다
+        call("/dlab/getStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"알리아스",
+                 "birth":"20081106","std_tel":"01011112222"}""".formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].par_tel").value("01033334444"));
+    }
+
     // ── 인증 ──────────────────────────────────────────────────
 
     @Test
