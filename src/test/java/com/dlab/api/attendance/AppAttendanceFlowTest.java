@@ -294,6 +294,10 @@ class AppAttendanceFlowTest {
     void penaltyWithoutPeriodHasNoDelta() throws Exception {
         mvc.perform(get("/api/v1/app/attendance/penalties")
                         .header("Authorization", token(studentPhone)))
+                // ⚠️ status 와 양수 단정을 함께 건다 — 「없음」만 보면 요청이 400·403 이어도
+                //    통과한다(경로 자체가 없으니까)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").exists())
                 .andExpect(jsonPath("$.data.periodPoints").doesNotExist());
     }
 

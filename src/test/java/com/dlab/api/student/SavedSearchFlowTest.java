@@ -126,6 +126,10 @@ class SavedSearchFlowTest {
 
         mvc.perform(get("/api/v1/admin/students/saved-searches")
                         .header("Authorization", token("SSADM2")))
+                // ★★ 권한 단정이다 — status 가 없으면 요청이 403 이어도 통과해
+                //    「안 보인다」를 증명하지 못한다
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data").isEmpty());
     }
 

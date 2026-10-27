@@ -332,6 +332,9 @@ class DailyRoutineFlowTest {
         mvc.perform(get("/api/v1/app/routines/today")
                         .header("Authorization", appToken())
                         .param("date", DAY.toString()))
+                // ⚠️ 비었음만 보면 요청이 실패해도 통과한다
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data").isEmpty());
     }
 
