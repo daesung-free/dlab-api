@@ -370,6 +370,10 @@ class StudentListFieldsTest {
 
         mvc.perform(get("/api/v1/admin/students").header("Authorization", token())
                         .param("year", "2026").param("keyword", "미가입학생"))
+                // ⚠️ 「없음」만 보면 목록이 비어 있어도(검색 실패) 통과한다 —
+                //    그 학생이 실제로 조회됐는지를 먼저 단정한다
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].name").value("미가입학생"))
                 .andExpect(jsonPath("$.data[0].appAccount").doesNotExist())
                 .andExpect(jsonPath("$.data[0].guardianAccounts").isEmpty());
     }
