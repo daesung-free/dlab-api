@@ -70,6 +70,7 @@ department → course_type → class_group → curriculum → penalty_item → t
 | status | varchar(20) NOT NULL DEFAULT 'PENDING' CHECK IN ('PENDING','ACTIVE','SUSPENDED','WITHDRAWN') | 학생: PENDING→ACTIVE 이분법(중간상태 없음). 학부모: 즉시 ACTIVE |
 | student_id / guardian_id / employee_id / **teacher_id** | bigint, FK, nullable (넷 중 정확히 하나만 NOT NULL) | `CHECK (num_nonnulls(...) = 1)` |
 | last_login_at | timestamptz | |
+| all_admission_read | boolean NOT NULL DEFAULT FALSE | DB에서만 지정. READONLY 단일 역할 계정의 전 지점 입학예약 조회만 허용하며 다른 업무·쓰기 범위는 유지. 조회마다 DB 값을 확인하므로 해제 즉시 반영 |
 | created_at/updated_at | timestamptz | |
 
 > Refresh Token/Access Token 블랙리스트/로그인 rate limiting은 **Redis**에서 처리.
