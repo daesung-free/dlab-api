@@ -259,7 +259,7 @@ public class AdminAdmissionReservationController {
      * @param statusName 화면에 그대로 쓰는 표기. 하드코딩하면 화면마다 갈린다
      * @param converted  이미 학생으로 전환됐는가. 버튼을 감추는 근거다
      */
-    public record ReservationView(Long id, String rsvCd, short year, Long academyId,
+    public record ReservationView(Long id, String rsvCd, short year, Long academyId, String academyName,
                                   String studentName, String studentTel, String parentTel,
                                   String stdGrade, String schoolName,
                                   ConsultStatus status, String statusName,
@@ -280,7 +280,7 @@ public class AdminAdmissionReservationController {
 
         static ReservationView from(AdmissionReservation r) {
             return new ReservationView(r.getId(), r.getRsvCd(), r.getYear(),
-                    r.getAcademy().getId(), r.getStudentName(), r.getStudentTel(),
+                    r.getAcademy().getId(), r.getAcademy().getAcadNm(), r.getStudentName(), r.getStudentTel(),
                     r.getParentTel(), r.getStdGrade(), r.getSchNmHigh(),
                     r.getConsultStatus(), r.getConsultStatus().displayName(),
                     r.converted(),
@@ -309,7 +309,7 @@ public class AdminAdmissionReservationController {
      *                      값이 들어오는 경우가 있다 — 화면에 쓰지 말 것
      */
     public record ReservationDetailView(
-            Long id, String rsvCd, short year, Long academyId,
+            Long id, String rsvCd, short year, Long academyId, String academyName,
             String studentName, String studentTel, String parentTel,
             String stdGrade, String schoolName, Integer schoolCode,
             ConsultStatus status, String statusName,
@@ -327,7 +327,7 @@ public class AdminAdmissionReservationController {
 
         static ReservationDetailView from(AdmissionReservation r) {
             return new ReservationDetailView(
-                    r.getId(), r.getRsvCd(), r.getYear(), r.getAcademy().getId(),
+                    r.getId(), r.getRsvCd(), r.getYear(), r.getAcademy().getId(), r.getAcademy().getAcadNm(),
                     r.getStudentName(), r.getStudentTel(), r.getParentTel(),
                     r.getStdGrade(), r.getSchNmHigh(), r.getSchCdHigh(),
                     r.getConsultStatus(), r.getConsultStatus().displayName(),
