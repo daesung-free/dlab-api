@@ -72,6 +72,11 @@ public class Account extends BaseEntity {
     @Column(name = "must_change_password", nullable = false)
     private boolean mustChangePassword = false;
 
+    /** DB에서만 지정하는 전 지점 입학예약 조회 허용. 다른 업무·쓰기 권한과 무관하다. */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    @Column(name = "all_admission_read", nullable = false)
+    private boolean allAdmissionRead = false;
+
     @Column(name = "password_changed_at")
     private Instant passwordChangedAt;
 

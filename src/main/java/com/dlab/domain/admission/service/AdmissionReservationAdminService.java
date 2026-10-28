@@ -3,14 +3,17 @@ package com.dlab.domain.admission.service;
 import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
+import com.dlab.common.security.Role;
 import com.dlab.domain.admission.entity.*;
 import com.dlab.domain.admission.repository.*;
 import com.dlab.domain.user.entity.GradeType;
 import com.dlab.domain.user.entity.StudentEnrollment;
+import com.dlab.domain.user.repository.AccountRepository;
 import com.dlab.domain.user.service.StudentService;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -39,6 +42,7 @@ public class AdmissionReservationAdminService {
     private final AdmissionReservationStatusLogRepository statusLogRepository;
     private final StudentService studentService;
     private final AdmissionDuplicateService duplicateService;
+    private final AccountRepository accountRepository;
     private final java.time.Clock clock;
 
     /**
@@ -55,7 +59,11 @@ public class AdmissionReservationAdminService {
     public List<AdmissionDuplicateService.Match> duplicates(AuthPrincipal me, Long academyId,
                                                             Short year, String name,
                                                             String birth, String parentTel) {
-        Long scope = me.requireAcademyScope(academyId);
+        // 중복찾기는 지점별 조회다. 전 지점 조회 허용 계정도 지정한 지점만 검색한다.
+        Long scope = readScope(me, academyId);
+        if (scope == null) {
+            scope = me.requireAcademyScope(null);
+        }
         short resolvedYear = year != null
                 ? year : (short) LocalDate.now(clock).getYear();
         return duplicateService.findReservations(scope, resolvedYear, name, birth, parentTel);
@@ -70,7 +78,7 @@ public class AdmissionReservationAdminService {
     @Transactional(readOnly = true)
     public List<AdmissionReservation> search(AuthPrincipal me, short year,
                                              ConsultStatus status, String keyword) {
-        Long scope = me.allAcademy() ? null : me.academyId();
+        Long scope = readScope(me, null);
         // ★ null 을 넘기면 PostgreSQL 이 bytea 로 추론해 LIKE 가 깨진다. 패턴을 만들어 넘긴다
         String pattern = keyword == null || keyword.isBlank() ? "%" : "%" + keyword.trim() + "%";
         return reservationRepository.search(scope, year, status, pattern);
@@ -78,18 +86,18 @@ public class AdmissionReservationAdminService {
 
     @Transactional(readOnly = true)
     public AdmissionReservation get(AuthPrincipal me, Long reservationId) {
-        return require(me, reservationId);
+        return requireRead(me, reservationId);
     }
 
     @Transactional(readOnly = true)
     public List<AdmissionReservationMemo> memos(AuthPrincipal me, Long reservationId) {
-        require(me, reservationId);
+        requireRead(me, reservationId);
         return memoRepository.findByReservationId(reservationId);
     }
 
     @Transactional(readOnly = true)
     public List<AdmissionReservationStatusLog> statusLogs(AuthPrincipal me, Long reservationId) {
-        require(me, reservationId);
+        requireRead(me, reservationId);
         return statusLogRepository.findByReservationId(reservationId);
     }
 
@@ -217,12 +225,32 @@ public class AdmissionReservationAdminService {
                 : reservation.getAddr1() + " " + reservation.getAddr2();
     }
 
+    /** 입학예약 조회에서만 사용한다. 공통 allAcademy 클레임·쓰기 경로는 바꾸지 않는다. */
+    private Long readScope(AuthPrincipal me, Long requestedAcademyId) {
+        if (me.allAcademy() || (me.roles().equals(Set.of(Role.READONLY))
+                && accountRepository.allowsAllAdmissionRead(me.accountId()))) {
+            return requestedAcademyId;
+        }
+        return me.requireAcademyScope(requestedAcademyId);
+    }
+
+    private AdmissionReservation requireRead(AuthPrincipal me, Long reservationId) {
+        AdmissionReservation reservation = findReservation(reservationId);
+        readScope(me, reservation.getAcademy().getId());
+        return reservation;
+    }
+
     private AdmissionReservation require(AuthPrincipal me, Long reservationId) {
+        AdmissionReservation reservation = findReservation(reservationId);
+        me.requireAcademyScope(reservation.getAcademy().getId());
+        return reservation;
+    }
+
+    private AdmissionReservation findReservation(Long reservationId) {
         AdmissionReservation reservation = reservationRepository.findById(reservationId)
                 .filter(r -> !r.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
                         "입학예약 신청을 찾을 수 없습니다."));
-        me.requireAcademyScope(reservation.getAcademy().getId());
         return reservation;
     }
 }

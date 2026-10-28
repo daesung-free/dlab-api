@@ -12,6 +12,15 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     Optional<Account> findByLoginId(String loginId);
 
+    /** JWT에 싣지 않아 DB에서 허용을 해제하면 다음 조회부터 소속 지점으로 돌아간다. */
+    @Query("""
+            SELECT COUNT(a) > 0 FROM Account a
+            WHERE a.id = :accountId AND a.allAdmissionRead = true
+              AND a.deleted = false
+              AND a.status = com.dlab.domain.user.entity.AccountStatus.ACTIVE
+            """)
+    boolean allowsAllAdmissionRead(@Param("accountId") Long accountId);
+
     /**
      * 감사 로그에 남길 사람 이름.
      *

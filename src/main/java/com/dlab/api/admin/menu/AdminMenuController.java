@@ -92,6 +92,30 @@ public class AdminMenuController {
     }
 
     /**
+     * ★★ 저장하지 않고 <b>편집본대로면 실제로 어떻게 열리는지</b> 본다.
+     *
+     * <p>요청 본문은 {@code PUT .../menus} 와 <b>같다</b> — 화면이 보낼 것을 그대로
+     * 보내고 결과만 받는다. 저장은 하지 않으므로 <b>체크를 누를 때마다 불러도 된다</b>
+     * (화면은 묶어서 보낸다).
+     *
+     * <p>★ 계산을 서버에서만 한다. 화면이 같은 규칙을 또 구현하면 둘이 어긋나고,
+     * 그 어긋남이 바로 이 문제의 뿌리였다 — 자세한 것은
+     * {@link com.dlab.domain.menu.service.MenuAccessService#preview} 주석.
+     */
+    @PostMapping("/staff/accounts/{accountId}/menus/preview")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ApiResponse<List<com.dlab.domain.menu.service.MenuAccessService.MenuOutcome>> preview(
+            @PathVariable Long accountId, @RequestBody MenuCodes request) {
+        if (request.restricted() == null) {
+            throw new com.dlab.common.exception.BusinessException(
+                    com.dlab.common.exception.ErrorCode.INVALID_REQUEST,
+                    "restricted 를 함께 보내 주세요. true=이 계정만 직접 지정, false=역할 기본값 사용");
+        }
+        return ApiResponse.success(
+                menuAccessService.preview(accountId, request.restricted(), request.menuCodes()));
+    }
+
+    /**
      * 설정을 통째로 바꾼다.
      *
      * <h2>★ {@code restricted} 로 뜻을 명시한다</h2>

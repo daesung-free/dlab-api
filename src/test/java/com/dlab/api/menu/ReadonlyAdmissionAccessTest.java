@@ -3,6 +3,7 @@ package com.dlab.api.menu;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 
 import com.dlab.domain.user.entity.Academy;
@@ -52,6 +53,9 @@ class ReadonlyAdmissionAccessTest {
     com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
 
     MockMvc mvc;
+    Long viewerId;
+    Long otherAcademyId;
+    Long otherReservationId;
 
     @BeforeEach
     void setUp() {
@@ -65,6 +69,13 @@ class ReadonlyAdmissionAccessTest {
                 passwordEncoder.encode(PASSWORD), false);
         em.persist(account);
         em.flush();
+        viewerId = account.getId();
+        Academy other = new Academy("32", "일산", LocalTime.of(8, 20));
+        em.persist(other);
+        em.flush();
+        otherAcademyId = other.getId();
+        insertReservation(academy.getId(), "READ-OWN");
+        otherReservationId = insertReservation(other.getId(), "READ-OTHER");
 
         em.createNativeQuery("""
                         INSERT INTO account_role (account_id, role_id)
@@ -119,6 +130,7 @@ class ReadonlyAdmissionAccessTest {
     @Test
     @DisplayName("★★ 그래도 쓰기는 막힌다 — 클래스 레벨 제약을 풀지 않았다는 근거")
     void readonlyStillCannotWrite() throws Exception {
+        setAllAdmissionRead(true);
         String token = login();
 
         // 상담 상태 변경 — 풀리면 조회 전용이 「입학확정」을 누를 수 있게 된다
@@ -141,6 +153,104 @@ class ReadonlyAdmissionAccessTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/v1/admin/admission-reservations/" + otherReservationId + "/share")
+                        .header("Authorization", token))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete(
+                        "/api/v1/admin/admission-reservations/memos/1")
+                        .header("Authorization", token))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("기본 조회 전용은 소속 지점만 조회하며 다른 지점 상세·중복찾기는 막힌다")
+    void defaultScopeStaysLocal() throws Exception {
+        String token = login();
+        list(token, 1);
+        assertOtherDetailPaths(token, false);
+        duplicates(token, false);
+    }
+
+    @Test
+    @DisplayName("DB 허용 계정만 전 지점 예약을 조회하며 같은 토큰으로 허용·해제가 반영된다")
+    void crossAcademyReadsFollowDatabaseFlag() throws Exception {
+        String token = login();
+        list(token, 1);
+        setAllAdmissionRead(true);
+        list(token, 2);
+        assertOtherDetailPaths(token, true);
+        duplicates(token, true);
+
+        // 로그인 ID가 바뀌어도 권한은 계정에 붙어 있고, 다른 업무의 지점 범위는 늘지 않는다.
+        em.createNativeQuery("UPDATE account SET login_id = 'RENAMED' WHERE id = :id")
+                .setParameter("id", viewerId).executeUpdate();
+        em.clear();
+        list(token, 2);
+        var principal = jwtProvider.parse(token.substring(7));
+        org.assertj.core.api.Assertions.assertThat(principal.allAcademy()).isFalse();
+        org.assertj.core.api.Assertions.assertThat(principal.canAccessAcademy(otherAcademyId)).isFalse();
+
+        setAllAdmissionRead(false);
+        list(token, 1);
+        assertOtherDetailPaths(token, false);
+        duplicates(token, false);
+    }
+
+    @Test
+    @DisplayName("허용값이 있어도 다른 역할을 가진 계정의 조회 범위는 넓어지지 않는다")
+    void flagDoesNotExpandStaffRole() throws Exception {
+        setAllAdmissionRead(true);
+        em.createNativeQuery("""
+                UPDATE account_role SET role_id = (SELECT id FROM role WHERE name = 'STAFF')
+                WHERE account_id = :id
+                """).setParameter("id", viewerId).executeUpdate();
+        em.clear();
+        String token = login();
+        list(token, 1);
+        assertOtherDetailPaths(token, false);
+    }
+
+    @Autowired com.dlab.common.security.JwtProvider jwtProvider;
+
+    private void list(String token, int count) throws Exception {
+        mvc.perform(get("/api/v1/admin/admission-reservations")
+                        .header("Authorization", token).param("year", "2026"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(count));
+    }
+
+    private void assertOtherDetailPaths(String token, boolean allowed) throws Exception {
+        for (String suffix : new String[] { "", "/memos", "/status-logs" }) {
+            mvc.perform(get("/api/v1/admin/admission-reservations/" + otherReservationId + suffix)
+                            .header("Authorization", token))
+                    .andExpect(allowed ? status().isOk() : status().isForbidden());
+        }
+    }
+
+    private void duplicates(String token, boolean allowed) throws Exception {
+        var result = mvc.perform(get("/api/v1/admin/admission-reservations/duplicates")
+                .header("Authorization", token).param("academyId", otherAcademyId.toString())
+                .param("year", "2026").param("name", "조회검증").param("birth", "20080101"))
+                .andExpect(allowed ? status().isOk() : status().isForbidden());
+        if (allowed) result.andExpect(jsonPath("$.data.length()").value(1));
+    }
+
+    private void setAllAdmissionRead(boolean allowed) {
+        em.createNativeQuery("UPDATE account SET all_admission_read = :allowed WHERE id = :id")
+                .setParameter("allowed", allowed).setParameter("id", viewerId).executeUpdate();
+        em.clear();
+    }
+
+    private Long insertReservation(Long academyId, String code) {
+        return ((Number) em.createNativeQuery("""
+                INSERT INTO admission_reservation
+                    (academy_id, year, rsv_cd, student_name, student_tel, parent_tel, birth, std_grade)
+                VALUES (:academyId, 2026, :code, '조회검증', '01000000000', '01000000001', '20080101', 'N')
+                RETURNING id
+                """).setParameter("academyId", academyId).setParameter("code", code)
+                .getSingleResult()).longValue();
     }
 
     private String login() throws Exception {

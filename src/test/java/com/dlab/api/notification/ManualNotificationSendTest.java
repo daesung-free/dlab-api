@@ -373,7 +373,50 @@ class ManualNotificationSendTest {
                         .content("""
                                 {"templateId":%d,"scope":"SELECTED","enrollmentIds":[%d]}"""
                                 .formatted(manualTemplateId, enrollmentWithoutGuardian)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MANUAL_SEND_NO_TARGET"));
+    }
+
+    /**
+     * ★★ 0명일 때 <b>왜 0명인지</b>가 응답에 있어야 한다.
+     *
+     * <p>사유 없이 「발송 대상이 없습니다」만 주면 담당자는 <b>무엇을 고쳐야 하는지 알
+     * 방법이 없다</b> — 연락처를 넣어야 하는지, 앱 가입을 안내해야 하는지, 수신거부를
+     * 푼 것인지, 이관 허용목록 때문인지가 <b>전부 같은 문장으로 보인다.</b>
+     * 2026-10-27 에 프런트가 그 자리에서 막혀 「계정이 없어서」와 「허용목록 때문」을
+     * 구분하지 못했다.
+     */
+    @Test
+    @DisplayName("★★ 0명일 때 제외 사유가 응답에 담긴다 — 없으면 무엇을 고쳐야 할지 모른다")
+    void emptyTargetTellsWhy() throws Exception {
+        mvc.perform(post("/api/v1/admin/notifications/manual/preview")
+                        .header("Authorization", token("MSOTHER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"templateId":%d,"scope":"SELECTED","enrollmentIds":[%d]}"""
+                                .formatted(manualTemplateId, enrollmentWithoutGuardian)))
+                .andExpect(status().isBadRequest())
+                // ★ 사유별 인원 — 화면이 「연락처 없음 1명」처럼 한 줄로 쓴다
+                .andExpect(jsonPath("$.error.data.summary").isMap())
+                .andExpect(jsonPath("$.error.data.blocked[0].reason").exists())
+                .andExpect(jsonPath("$.error.data.blocked[0].message").exists())
+                // ★ 메시지에 사유가 들어가 토스트만 봐도 방향이 잡힌다
+                .andExpect(jsonPath("$.error.message").value(
+                        org.hamcrest.Matchers.not("발송 대상이 없습니다.")));
+    }
+
+    @Test
+    @DisplayName("★ 애초에 고른 학생이 없으면 조건을 보라고 말한다 — 수신 설정을 뒤지게 하지 않는다")
+    void noCandidateSaysCheckFilters() throws Exception {
+        mvc.perform(post("/api/v1/admin/notifications/manual/preview")
+                        .header("Authorization", token("MSOTHER"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"templateId":%d,"scope":"SELECTED","enrollmentIds":[999999]}"""
+                                .formatted(manualTemplateId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("조건")));
     }
 
     // ──────────────────────────────────────────────────────────────
