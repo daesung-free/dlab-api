@@ -218,14 +218,20 @@ class ReadonlyAdmissionAccessTest {
         mvc.perform(get("/api/v1/admin/admission-reservations")
                         .header("Authorization", token).param("year", "2026"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(count));
+                .andExpect(jsonPath("$.data.length()").value(count))
+                .andExpect(jsonPath("$.data[*].academyName").value(
+                        count == 2 ? org.hamcrest.Matchers.containsInAnyOrder("분당", "일산")
+                                : org.hamcrest.Matchers.contains("분당")));
     }
 
     private void assertOtherDetailPaths(String token, boolean allowed) throws Exception {
         for (String suffix : new String[] { "", "/memos", "/status-logs" }) {
-            mvc.perform(get("/api/v1/admin/admission-reservations/" + otherReservationId + suffix)
+            var result = mvc.perform(get("/api/v1/admin/admission-reservations/" + otherReservationId + suffix)
                             .header("Authorization", token))
                     .andExpect(allowed ? status().isOk() : status().isForbidden());
+            if (allowed && suffix.isEmpty()) {
+                result.andExpect(jsonPath("$.data.academyName").value("일산"));
+            }
         }
     }
 
