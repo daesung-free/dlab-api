@@ -41,4 +41,19 @@ public interface PenaltyRuleRepository extends JpaRepository<PenaltyRule, Long> 
 
     /** 이 항목을 쓰는 규칙. 항목 삭제 전에 확인한다 — 지우면 규칙이 없는 항목을 가리킨다. */
     List<PenaltyRule> findByPenaltyItemIdAndDeletedFalse(Long penaltyItemId);
+
+    /** 항목 하나의 자동 부여 여부. ⚠️ <b>목록에서는 쓰지 말 것</b> — 아래 묶음 조회를 쓴다. */
+    boolean existsByPenaltyItemIdAndActiveTrueAndDeletedFalse(Long penaltyItemId);
+
+    /**
+     * ★ 자동 부여 규칙이 걸린 <b>항목 id 들</b>을 한 번에 받는다.
+     *
+     * <p>항목마다 {@code existsBy...} 를 부르면 <b>목록 한 번에 항목 수만큼 쿼리가 난다</b> —
+     * 디랩 상벌점 항목이 56개라 한 화면에 57 쿼리였다.
+     */
+    @Query("""
+            SELECT DISTINCT r.penaltyItem.id FROM PenaltyRule r
+             WHERE r.penaltyItem.id IN :itemIds AND r.active = true AND r.deleted = false
+            """)
+    java.util.Set<Long> findAutomaticItemIds(java.util.Collection<Long> itemIds);
 }

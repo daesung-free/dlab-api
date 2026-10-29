@@ -44,8 +44,12 @@ public class AdminPenaltyMasterController {
     public ApiResponse<List<ItemRow>> items(@CurrentAccount AuthPrincipal me,
                                             @RequestParam(required = false) Long academyId,
                                             @RequestParam short year) {
-        return ApiResponse.success(masterService.items(me, academyId, year)
-                .stream().map(ItemRow::from).toList());
+        List<com.dlab.domain.penalty.entity.PenaltyItem> items =
+                masterService.items(me, academyId, year);
+        // ★ 자동 부여 여부를 한 번에 받는다 — 항목마다 조회하면 56개면 57 쿼리다
+        java.util.Set<Long> automatic = masterService.automaticItemIds(items);
+        return ApiResponse.success(items.stream()
+                .map(item -> ItemRow.from(item, automatic.contains(item.getId()))).toList());
     }
 
     /**
@@ -58,7 +62,8 @@ public class AdminPenaltyMasterController {
                                            @Valid @RequestBody ItemRequest request) {
         return ApiResponse.success(ItemRow.from(masterService.createItem(
                 me, request.academyId(), request.year(), request.itemName(),
-                request.point(), request.category())));
+                request.point(), request.category(),
+                request.groupName(), request.description())));
     }
 
     /** <b>이미 부여된 상벌점은 안 바뀐다</b> — 부여 시점 점수를 복사해두기 때문이다. */
@@ -67,7 +72,19 @@ public class AdminPenaltyMasterController {
                                            @PathVariable Long itemId,
                                            @Valid @RequestBody ItemRequest request) {
         return ApiResponse.success(ItemRow.from(masterService.updateItem(
-                me, itemId, request.itemName(), request.point(), request.category())));
+                me, itemId, request.itemName(), request.point(), request.category(),
+                request.groupName(), request.description())));
+    }
+
+    /** 공통 항목 목록을 다른 지점에 복사한다. 이미 같은 이름인 항목은 건너뛴다. */
+    @PostMapping("/penalty-items/copy")
+    public ApiResponse<List<ItemRow>> copyItems(@CurrentAccount AuthPrincipal me,
+                                                @Valid @RequestBody CopyItemsRequest request) {
+        List<com.dlab.domain.penalty.entity.PenaltyItem> copies = masterService.copyItems(
+                me, request.sourceAcademyId(), request.targetAcademyId(), request.year());
+        java.util.Set<Long> automatic = masterService.automaticItemIds(copies);
+        return ApiResponse.success(copies.stream()
+                .map(item -> ItemRow.from(item, automatic.contains(item.getId()))).toList());
     }
 
     /** 상벌점 항목 삭제(soft). 과거 부여 이력이 참조한다. */
@@ -148,7 +165,16 @@ public class AdminPenaltyMasterController {
                               @NotNull Short year,
                               @NotBlank @Size(max = 100) String itemName,
                               @NotNull Integer point,
-                              @NotNull PenaltyCategory category) {
+                              @NotNull PenaltyCategory category,
+                              @Size(max = 100) String groupName,
+                              @Size(max = 500) String description) {
+        // ★ 수정 시 groupName·description 은 null 과 "" 의 뜻이 다르다 —
+        //   null 이면 ★ 기존 값 유지, "" 면 ★ 지운다. 상세는 PenaltyMasterService#updateItem
+    }
+
+    public record CopyItemsRequest(@NotNull Long sourceAcademyId,
+                                   @NotNull Long targetAcademyId,
+                                   @NotNull Short year) {
     }
 
     /**
@@ -170,12 +196,23 @@ public class AdminPenaltyMasterController {
      *              이쪽만 저장값을 그대로 줘서, 부호가 잘못 저장된 옛 행에서 두 경로가
      *              다른 값을 보였다 — 화면이 어느 쪽을 믿어야 할지 알 수 없다.
      */
-    public record ItemRow(Long id, String itemName, PenaltyCategory category, int point) {
+    public record ItemRow(Long id, String itemName, PenaltyCategory category, int point,
+                          String groupName, String description, boolean automatic) {
 
+        /** 단건 응답. 방금 만든 항목에는 규칙이 없으므로 한 번만 조회한다. */
         static ItemRow from(PenaltyItem i) {
+            return from(i, false);
+        }
+
+        /**
+         * @param automatic 자동 부여 규칙이 걸려 있나. ★ <b>목록에서는 묶음으로 받은 값을
+         *                  넘긴다</b> — 항목마다 조회하면 56개면 57 쿼리다
+         */
+        static ItemRow from(PenaltyItem i, boolean automatic) {
             int magnitude = Math.abs(i.getPointValue());
             return new ItemRow(i.getId(), i.getItemName(), i.getCategory(),
-                    i.getCategory() == PenaltyCategory.DEMERIT ? -magnitude : magnitude);
+                    i.getCategory() == PenaltyCategory.DEMERIT ? -magnitude : magnitude,
+                    i.getGroupName(), i.getDescription(), automatic);
         }
     }
 

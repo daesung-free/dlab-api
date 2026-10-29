@@ -28,6 +28,12 @@ public class PenaltyItem extends BaseEntity {
     @Column(name = "item_name", nullable = false, length = 100)
     private String itemName;
 
+    @Column(name = "group_name", length = 100)
+    private String groupName;
+
+    @Column(name = "description", length = 500)
+    private String description;
+
     @Column(name = "point_value", nullable = false)
     private int pointValue;
 
@@ -36,9 +42,16 @@ public class PenaltyItem extends BaseEntity {
     private PenaltyCategory category;
 
     public PenaltyItem(Academy academy, short year, String itemName, int pointValue, PenaltyCategory category) {
+        this(academy, year, itemName, pointValue, category, null, null);
+    }
+
+    public PenaltyItem(Academy academy, short year, String itemName, int pointValue,
+                       PenaltyCategory category, String groupName, String description) {
         this.academy = academy;
         this.year = year;
         this.itemName = itemName;
+        this.groupName = normalize(groupName);
+        this.description = normalize(description);
         this.category = category;
         this.pointValue = signed(pointValue, category);
     }
@@ -51,9 +64,20 @@ public class PenaltyItem extends BaseEntity {
      * 바꿔도 지난달에 받은 학생은 3점 그대로다.
      */
     public void change(String itemName, int pointValue, PenaltyCategory category) {
+        change(itemName, pointValue, category, this.groupName, this.description);
+    }
+
+    public void change(String itemName, int pointValue, PenaltyCategory category,
+                       String groupName, String description) {
         this.itemName = itemName;
+        this.groupName = normalize(groupName);
+        this.description = normalize(description);
         this.category = category;
         this.pointValue = signed(pointValue, category);
+    }
+
+    private static String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     /**
