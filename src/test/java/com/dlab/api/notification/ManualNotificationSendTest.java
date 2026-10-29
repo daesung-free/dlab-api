@@ -229,6 +229,39 @@ class ManualNotificationSendTest {
         assertThat(root.path("blocked").get(0).path("message").asString()).isNotBlank();
         assertThat(root.path("blocked").get(0).path("studentName").asString())
                 .isEqualTo("학부모없음");
+        // ★ 보호자가 없어 막힌 경우라 ★ 빠진 사람이 특정되지 않는다
+        assertThat(root.path("blocked").get(0).path("receiverName").isNull())
+                .as("수신자가 정해지기 전에 막혔으면 null 이다").isTrue();
+    }
+
+    /**
+     * ★★ <b>누가</b> 빠졌는지가 있어야 한다.
+     *
+     * <p>보호자가 둘이고 둘 다 막히면 <b>같은 학생 이름이 두 줄</b>로 나온다. 이름이
+     * 없으면 담당자는 <b>「학생이 두 명인가」를 찾는다</b>(2026-10-29 프런트 지적).
+     * 수신자 단위로 막힌 사유(연락처 없음·수신거부·허용목록)에는 반드시 실린다.
+     */
+    @Test
+    @DisplayName("★★ 수신자 단위로 막히면 누가 빠졌는지 함께 온다 — 같은 학생이 두 줄일 수 있다")
+    void blockedCarriesReceiverName() throws Exception {
+        // 수신거부로 막는다 — ★ 수신자가 정해진 뒤에 걸리는 사유다
+        // 거부하지 않은 학부모를 한 명 더 둔다 — 전원 거부면 미리보기 자체가 거부된다
+        createStudent(academy, "MS-R", "거부안함", "010-9876-7778", classMaster);
+        optOut(guardianAccountId("학부모있음"),
+                com.dlab.domain.notification.entity.NotificationEvent.TUITION_UNPAID_NOTICE);
+        em.clear();
+
+        String body = preview(classScopeBody());
+        var blocked = objectMapper.readTree(body).path("data").path("blocked");
+
+        var optedOut = java.util.stream.StreamSupport
+                .stream(blocked.spliterator(), false)
+                .filter(b -> "OPTED_OUT".equals(b.path("reason").asString()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("수신거부 건이 없다: " + blocked));
+
+        assertThat(optedOut.path("receiverName").asString())
+                .as("★ 빠진 보호자 이름이 있어야 한다").isEqualTo("학부모있음모");
     }
 
     @Test
