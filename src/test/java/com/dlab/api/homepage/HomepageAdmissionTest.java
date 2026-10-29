@@ -189,6 +189,31 @@ class HomepageAdmissionTest {
     // ── 인증 ──────────────────────────────────────────────────
 
     @Test
+    @DisplayName("정상 코드의 이름과 학교명이 접수 후 조회 응답에 반환된다")
+    void knownCodeNamesAndSchoolAreReturned() throws Exception {
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","reg_yyyy":"2026","rsv_nm":"정상코드",
+                 "std_tel":"01000000000","par_tel":"01000000001","gender_gb":"M",
+                 "birth":"20081106","geyul_gb":2,"pre_test":1007,"find_gb":636,
+                 "sch_cd":637,"sch_cd_high":5001,"sch_nm_high":"대성고등학교",
+                 "agree_ad":"Y","promo_ad":"Y","std_grade":"N"}""".formatted(token))
+                .andExpect(jsonPath("$.code").value(0));
+        em.flush();
+        em.clear();
+
+        call("/dlab/getStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"정상코드",
+                 "birth":"20081106","std_tel":"01000000000"}""".formatted(token))
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].sch_cd_nm").value("잇올"))
+                .andExpect(jsonPath("$.data[0].geyul_gb_nm").value("자연"))
+                .andExpect(jsonPath("$.data[0].pre_test_nm").value("수능"))
+                .andExpect(jsonPath("$.data[0].find_gb_nm").value("대성학원홈페이지"))
+                .andExpect(jsonPath("$.data[0].sch_nm_high").value("대성고등학교"))
+                .andExpect(jsonPath("$.data[0].par_tel").value("01000000001"));
+    }
+
+    @Test
     @DisplayName("★ 토큰이 최상위에 실린다 — data 배열이 아니다(규격서 3.1)")
     void tokenIsAtTopLevel() throws Exception {
         call("/auth2/token", """

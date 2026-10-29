@@ -48,6 +48,24 @@ public class PenaltyMasterService {
                 scope(me, academyId), year);
     }
 
+    public boolean isAutomatic(PenaltyItem item) {
+        return ruleRepository.existsByPenaltyItemIdAndActiveTrueAndDeletedFalse(item.getId());
+    }
+
+    /**
+     * ★ 여러 항목의 자동 부여 여부를 <b>한 번에</b> 판정한다.
+     *
+     * <p>목록 응답을 만들 때 항목마다 {@link #isAutomatic} 을 부르면 <b>항목 수만큼
+     * 쿼리가 난다</b> — 디랩 상벌점 항목이 56개라 한 화면에 57 쿼리였다.
+     */
+    public java.util.Set<Long> automaticItemIds(List<PenaltyItem> items) {
+        if (items.isEmpty()) {
+            return java.util.Set.of();
+        }
+        return ruleRepository.findAutomaticItemIds(
+                items.stream().map(PenaltyItem::getId).toList());
+    }
+
     /**
      * 항목 생성.
      *
@@ -57,8 +75,15 @@ public class PenaltyMasterService {
     @Transactional
     public PenaltyItem createItem(AuthPrincipal me, Long requestedAcademyId, short year,
                                   String itemName, int pointValue, PenaltyCategory category) {
+        return createItem(me, requestedAcademyId, year, itemName, pointValue, category, null, null);
+    }
+
+    @Transactional
+    public PenaltyItem createItem(AuthPrincipal me, Long requestedAcademyId, short year,
+                                  String itemName, int pointValue, PenaltyCategory category,
+                                  String groupName, String description) {
         Long academyId = scope(me, requestedAcademyId);
-        verifyItem(itemName, pointValue);
+        verifyItem(itemName);
 
         itemRepository.findByAcademyIdAndYearAndItemNameAndDeletedFalse(
                         academyId, year, itemName.trim())
@@ -68,7 +93,8 @@ public class PenaltyMasterService {
                 });
 
         return itemRepository.save(new PenaltyItem(
-                requireAcademy(academyId), year, itemName.trim(), pointValue, category));
+                requireAcademy(academyId), year, itemName.trim(), pointValue, category,
+                groupName, description));
     }
 
     /**
@@ -80,10 +106,59 @@ public class PenaltyMasterService {
     @Transactional
     public PenaltyItem updateItem(AuthPrincipal me, Long itemId, String itemName,
                                   int pointValue, PenaltyCategory category) {
-        verifyItem(itemName, pointValue);
+        return updateItem(me, itemId, itemName, pointValue, category, null, null);
+    }
+
+    /**
+     * ★ <b>분류·설명은 {@code null} 과 빈 문자열의 뜻이 다르다.</b>
+     *
+     * <pre>
+     * null   ★ 기존 값을 그대로 둔다 (보내지 않은 것으로 본다)
+     * ""     ★ 지운다
+     * </pre>
+     *
+     * <p>이렇게 나눈 이유는 <b>옛 2-인자 호출이 분류를 지우지 않아야</b> 하기 때문이다 —
+     * 그쪽은 {@code null} 을 넘긴다. 반대로 두면 <b>이름만 고쳐도 분류가 사라진다.</b>
+     * ⚠️ 그래서 화면에서 분류를 비우려면 <b>빈 문자열을 보내야 한다.</b>
+     */
+    @Transactional
+    public PenaltyItem updateItem(AuthPrincipal me, Long itemId, String itemName,
+                                  int pointValue, PenaltyCategory category,
+                                  String groupName, String description) {
+        verifyItem(itemName);
         PenaltyItem item = requireItem(me, itemId);
-        item.change(itemName.trim(), pointValue, category);
+        item.change(itemName.trim(), pointValue, category,
+                groupName == null ? item.getGroupName() : groupName,
+                description == null ? item.getDescription() : description);
         return item;
+    }
+
+    /** 원본 지점의 항목을 대상 지점에 복사한다. 이미 같은 이름이 있으면 건너뛴다. */
+    @Transactional
+    public List<PenaltyItem> copyItems(AuthPrincipal me, Long sourceAcademyId,
+                                       Long targetAcademyId, short year) {
+        Long sourceId = scope(me, sourceAcademyId);
+        Long targetId = scope(me, targetAcademyId);
+        if (sourceId.equals(targetId)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "복사 원본과 대상 지점이 같습니다.");
+        }
+
+        List<PenaltyItem> sources = itemRepository
+                .findByAcademyIdAndYearAndDeletedFalseOrderByItemNameAsc(sourceId, year);
+        List<PenaltyItem> copies = new java.util.ArrayList<>();
+        Academy target = requireAcademy(targetId);
+        for (PenaltyItem source : sources) {
+            if (itemRepository.findByAcademyIdAndYearAndItemNameAndDeletedFalse(
+                    targetId, year, source.getItemName()).isPresent()) {
+                continue;
+            }
+            PenaltyItem copy = new PenaltyItem(target, year, source.getItemName(),
+                    source.getPointValue(), source.getCategory(), source.getGroupName(),
+                    source.getDescription());
+            copy.markCopiedFrom(source.getId());
+            copies.add(itemRepository.save(copy));
+        }
+        return List.copyOf(copies);
     }
 
     /**
@@ -169,13 +244,10 @@ public class PenaltyMasterService {
 
     // ─────────────────────────────────────────────────────────
 
-    /** 점수 0점은 막는다 — 부여해도 합계가 안 바뀌어 아무 효과가 없다. */
-    private void verifyItem(String itemName, int pointValue) {
+    /** 0점은 유효한 기록 항목이다. 합계에는 더해지지 않지만 이력으로 남는다. */
+    private void verifyItem(String itemName) {
         if (itemName == null || itemName.isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST, "항목명을 입력해 주세요.");
-        }
-        if (pointValue == 0) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST, "점수는 0점일 수 없습니다.");
         }
     }
 
