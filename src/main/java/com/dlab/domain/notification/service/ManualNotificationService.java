@@ -83,10 +83,17 @@ public class ManualNotificationService {
     }
 
     /**
-     * @param reason  고정된 사유 코드. 화면이 묶어서 셀 수 있어야 한다
-     * @param message 사람이 읽는 문장. 코드만 주면 화면마다 다른 말로 번역된다
+     * @param receiverName ★ <b>누가</b> 빠졌나. 보호자가 둘이고 둘 다 막히면 <b>같은 학생
+     *                     이름이 두 줄</b>로 나오는데, 이게 없으면 담당자는 「학생이 두
+     *                     명인가」를 찾는다. {@code RecipientView} 와 <b>같은 이름</b>을
+     *                     쓴다 — 화면이 성공·실패를 같은 모양으로 읽는다.
+     *                     <p>⚠️ 수신자가 <b>정해지기 전에</b> 막힌 경우(다른 지점·재원
+     *                     상태·보호자 없음)는 {@code null} 이다 — 그때는 빠진 사람이
+     *                     특정되지 않는다.
+     * @param reason       고정된 사유 코드. 화면이 묶어서 셀 수 있어야 한다
+     * @param message      사람이 읽는 문장. 코드만 주면 화면마다 다른 말로 번역된다
      */
-    public record BlockedView(Long enrollmentId, String studentName,
+    public record BlockedView(Long enrollmentId, String studentName, String receiverName,
                               ManualBlockReason reason, String message) {
     }
 
@@ -177,7 +184,10 @@ public class ManualNotificationService {
 
             List<Receiver> receivers = receiversOf(enrollment, template.getRecipientType());
             if (receivers.isEmpty()) {
-                blocked.add(block(enrollment, ManualBlockReason.NO_ACCOUNT));
+                // ★ 사유가 담당자가 할 일을 정한다. 보호자 수신인데 「앱 가입이 필요합니다」를
+                //   주면 ★ 엉뚱한 일을 하게 된다 — 보호자는 번호만 있어도 받으므로(#290)
+                //   할 일은 연락처 등록이다.
+                blocked.add(block(enrollment, noReceiverReason(template.getRecipientType())));
                 continue;
             }
             for (Receiver receiver : receivers) {
@@ -193,7 +203,7 @@ public class ManualNotificationService {
                     continue;
                 }
                 if (receiver.phone() == null || receiver.phone().isBlank()) {
-                    blocked.add(block(enrollment, ManualBlockReason.NO_PHONE));
+                    blocked.add(block(enrollment, receiver, ManualBlockReason.NO_PHONE));
                     continue;
                 }
                 // ★ 발송 경로(NotificationService.dispatch)와 **같은 판정**을 쓴다.
@@ -202,12 +212,12 @@ public class ManualNotificationService {
                 //    필수 알림은 어차피 거부되지 않으므로 통과시키는 것이 맞다
                 if (receiver.accountId() != null
                         && optOutPolicy.optedOut(receiver.accountId(), template.getEventCode())) {
-                    blocked.add(block(enrollment, ManualBlockReason.OPTED_OUT));
+                    blocked.add(block(enrollment, receiver, ManualBlockReason.OPTED_OUT));
                     continue;
                 }
                 // ★ 이관 기간 수신 허용목록. 위와 같은 이유로 발송 경로와 같은 곳을 쓴다
                 if (!allowlist.allows(receiver.phone())) {
-                    blocked.add(block(enrollment, ManualBlockReason.NOT_IN_ALLOWLIST));
+                    blocked.add(block(enrollment, receiver, ManualBlockReason.NOT_IN_ALLOWLIST));
                     continue;
                 }
                 targets.add(new ManualSendTarget(enrollment.getId(),
@@ -471,9 +481,30 @@ public class ManualNotificationService {
                 + " (" + top.getValue() + "명)";
     }
 
+    /**
+     * 수신자가 없을 때의 사유 — ★ <b>수신 유형에 따라 다르다.</b>
+     *
+     * <p>학생 수신은 자기 계정으로만 받으므로 <b>계정이 없다</b>가 맞고, 보호자 수신은
+     * <b>번호만 있어도 받으므로</b> 계정이 이유가 될 수 없다. {@code BOTH} 는 둘 다
+     * 비었다는 뜻이고, <b>보호자 쪽이 담당자가 먼저 할 일</b>이라 그쪽을 알린다.
+     */
+    private ManualBlockReason noReceiverReason(RecipientType type) {
+        return type == RecipientType.STUDENT
+                ? ManualBlockReason.NO_ACCOUNT
+                : ManualBlockReason.NO_GUARDIAN;
+    }
+
+    /** 수신자가 정해지기 전에 막힌 경우 — 빠진 사람이 특정되지 않는다. */
     private BlockedView block(StudentEnrollment enrollment, ManualBlockReason reason) {
-        return new BlockedView(enrollment.getId(), enrollment.getStudentName(),
+        return new BlockedView(enrollment.getId(), enrollment.getStudentName(), null,
                 reason, reason.message());
+    }
+
+    /** ★ 수신자 단위로 막힌 경우 — <b>누가</b> 빠졌는지 함께 준다. */
+    private BlockedView block(StudentEnrollment enrollment, Receiver receiver,
+                              ManualBlockReason reason) {
+        return new BlockedView(enrollment.getId(), enrollment.getStudentName(),
+                receiver.name(), reason, reason.message());
     }
 
     /**

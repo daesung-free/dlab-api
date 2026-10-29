@@ -220,12 +220,48 @@ class ManualNotificationSendTest {
 
         assertThat(root.path("targetCount").asInt()).isEqualTo(1);
         assertThat(root.path("blocked").size()).isEqualTo(1);
+        // ★ 보호자 수신이므로 「보호자 연락처가 없다」다 — ★ 「계정이 없다」가 아니다.
+        //   번호만 있어도 받으므로(#290) 계정 유무는 이유가 될 수 없고, 담당자가 할 일은
+        //   앱 가입 안내가 아니라 ★ 연락처 등록이다
         assertThat(root.path("blocked").get(0).path("reason").asString())
-                .isEqualTo("NO_ACCOUNT");
+                .isEqualTo("NO_GUARDIAN");
         // 사유 코드만 주면 화면마다 다른 말로 번역된다
         assertThat(root.path("blocked").get(0).path("message").asString()).isNotBlank();
         assertThat(root.path("blocked").get(0).path("studentName").asString())
                 .isEqualTo("학부모없음");
+        // ★ 보호자가 없어 막힌 경우라 ★ 빠진 사람이 특정되지 않는다
+        assertThat(root.path("blocked").get(0).path("receiverName").isNull())
+                .as("수신자가 정해지기 전에 막혔으면 null 이다").isTrue();
+    }
+
+    /**
+     * ★★ <b>누가</b> 빠졌는지가 있어야 한다.
+     *
+     * <p>보호자가 둘이고 둘 다 막히면 <b>같은 학생 이름이 두 줄</b>로 나온다. 이름이
+     * 없으면 담당자는 <b>「학생이 두 명인가」를 찾는다</b>(2026-10-29 프런트 지적).
+     * 수신자 단위로 막힌 사유(연락처 없음·수신거부·허용목록)에는 반드시 실린다.
+     */
+    @Test
+    @DisplayName("★★ 수신자 단위로 막히면 누가 빠졌는지 함께 온다 — 같은 학생이 두 줄일 수 있다")
+    void blockedCarriesReceiverName() throws Exception {
+        // 수신거부로 막는다 — ★ 수신자가 정해진 뒤에 걸리는 사유다
+        // 거부하지 않은 학부모를 한 명 더 둔다 — 전원 거부면 미리보기 자체가 거부된다
+        createStudent(academy, "MS-R", "거부안함", "010-9876-7778", classMaster);
+        optOut(guardianAccountId("학부모있음"),
+                com.dlab.domain.notification.entity.NotificationEvent.TUITION_UNPAID_NOTICE);
+        em.clear();
+
+        String body = preview(classScopeBody());
+        var blocked = objectMapper.readTree(body).path("data").path("blocked");
+
+        var optedOut = java.util.stream.StreamSupport
+                .stream(blocked.spliterator(), false)
+                .filter(b -> "OPTED_OUT".equals(b.path("reason").asString()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("수신거부 건이 없다: " + blocked));
+
+        assertThat(optedOut.path("receiverName").asString())
+                .as("★ 빠진 보호자 이름이 있어야 한다").isEqualTo("학부모있음모");
     }
 
     @Test
@@ -364,11 +400,16 @@ class ManualNotificationSendTest {
                 .containsExactly(com.dlab.domain.notification.entity.NotificationStatus.SKIPPED);
     }
 
+    /**
+     * ⚠️ <b>토큰이 같은 지점이어야 한다.</b> 전에는 타지점 관리자 토큰을 써서
+     * <b>「다른 지점 학생입니다」로 400</b> 이 났고, 그래도 {@code isBadRequest()} 만
+     * 단정해 <b>통과했다</b> — 보려던 것(보호자가 없어 대상이 0명)을 보지 못했다.
+     */
     @Test
     @DisplayName("대상이 아무도 없으면 미리보기 자체가 거부된다 — 0명에게 보내는 previewId 를 만들지 않는다")
     void emptyTargetIsRejected() throws Exception {
         mvc.perform(post("/api/v1/admin/notifications/manual/preview")
-                        .header("Authorization", token("MSOTHER"))
+                        .header("Authorization", token("MSBRANCH"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"templateId":%d,"scope":"SELECTED","enrollmentIds":[%d]}"""
@@ -390,7 +431,7 @@ class ManualNotificationSendTest {
     @DisplayName("★★ 0명일 때 제외 사유가 응답에 담긴다 — 없으면 무엇을 고쳐야 할지 모른다")
     void emptyTargetTellsWhy() throws Exception {
         mvc.perform(post("/api/v1/admin/notifications/manual/preview")
-                        .header("Authorization", token("MSOTHER"))
+                        .header("Authorization", token("MSBRANCH"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"templateId":%d,"scope":"SELECTED","enrollmentIds":[%d]}"""
@@ -398,6 +439,16 @@ class ManualNotificationSendTest {
                 .andExpect(status().isBadRequest())
                 // ★ 사유별 인원 — 화면이 「연락처 없음 1명」처럼 한 줄로 쓴다
                 .andExpect(jsonPath("$.error.data.summary").isMap())
+                // ★★ 보호자 수신인데 「앱 가입이 필요합니다」를 주면 담당자가 엉뚱한 일을
+                //    한다 — 보호자는 번호만 있어도 받으므로(#290) 할 일은 연락처 등록이다.
+                //    2026-10-29 운영에서 NO_ACCOUNT 가 나가던 것을 프런트가 발견했다.
+                // ★★ 보호자 수신인데 「앱 가입이 필요합니다」를 주면 담당자가 엉뚱한 일을
+                //    한다 — 보호자는 번호만 있어도 받으므로(#290) 할 일은 연락처 등록이다.
+                //    2026-10-29 운영에서 NO_ACCOUNT 가 나가던 것을 프런트가 발견했다.
+                .andExpect(jsonPath("$.error.data.summary.NO_GUARDIAN").exists())
+                .andExpect(jsonPath("$.error.data.summary.NO_ACCOUNT").doesNotExist())
+                .andExpect(jsonPath("$.error.message")
+                        .value(org.hamcrest.Matchers.containsString("연락처")))
                 .andExpect(jsonPath("$.error.data.blocked[0].reason").exists())
                 .andExpect(jsonPath("$.error.data.blocked[0].message").exists())
                 // ★ 메시지에 사유가 들어가 토스트만 봐도 방향이 잡힌다
@@ -409,7 +460,7 @@ class ManualNotificationSendTest {
     @DisplayName("★ 애초에 고른 학생이 없으면 조건을 보라고 말한다 — 수신 설정을 뒤지게 하지 않는다")
     void noCandidateSaysCheckFilters() throws Exception {
         mvc.perform(post("/api/v1/admin/notifications/manual/preview")
-                        .header("Authorization", token("MSOTHER"))
+                        .header("Authorization", token("MSBRANCH"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"templateId":%d,"scope":"SELECTED","enrollmentIds":[999999]}"""
