@@ -177,7 +177,10 @@ public class ManualNotificationService {
 
             List<Receiver> receivers = receiversOf(enrollment, template.getRecipientType());
             if (receivers.isEmpty()) {
-                blocked.add(block(enrollment, ManualBlockReason.NO_ACCOUNT));
+                // ★ 사유가 담당자가 할 일을 정한다. 보호자 수신인데 「앱 가입이 필요합니다」를
+                //   주면 ★ 엉뚱한 일을 하게 된다 — 보호자는 번호만 있어도 받으므로(#290)
+                //   할 일은 연락처 등록이다.
+                blocked.add(block(enrollment, noReceiverReason(template.getRecipientType())));
                 continue;
             }
             for (Receiver receiver : receivers) {
@@ -469,6 +472,19 @@ public class ManualNotificationService {
                 .orElseThrow();
         return "발송 대상이 없습니다. " + top.getKey().message()
                 + " (" + top.getValue() + "명)";
+    }
+
+    /**
+     * 수신자가 없을 때의 사유 — ★ <b>수신 유형에 따라 다르다.</b>
+     *
+     * <p>학생 수신은 자기 계정으로만 받으므로 <b>계정이 없다</b>가 맞고, 보호자 수신은
+     * <b>번호만 있어도 받으므로</b> 계정이 이유가 될 수 없다. {@code BOTH} 는 둘 다
+     * 비었다는 뜻이고, <b>보호자 쪽이 담당자가 먼저 할 일</b>이라 그쪽을 알린다.
+     */
+    private ManualBlockReason noReceiverReason(RecipientType type) {
+        return type == RecipientType.STUDENT
+                ? ManualBlockReason.NO_ACCOUNT
+                : ManualBlockReason.NO_GUARDIAN;
     }
 
     private BlockedView block(StudentEnrollment enrollment, ManualBlockReason reason) {
