@@ -137,7 +137,11 @@ services:
       #   켠 채로 두면 그 번호들만 받고 나머지는 SKIPPED 로만 남는다
       NOTIFICATION_ALLOWLIST: ${NOTIFICATION_ALLOWLIST:-}
       # ★ 감사 로그 조회 기간(년). 비우면 3 — 디랩 확정값이다
-      AUDIT_RETENTION_YEARS: ${AUDIT_RETENTION_YEARS:-}
+      # ★★ 기본값을 ★ 여기에도 둔다 — 숫자 변수라 빈 문자열이 들어가면 기동이 깨진다.
+      #    compose 의 ":-" 는 「없음」을 ★ 「있지만 빈 값」으로 바꾸므로,
+      #    application.yml 의 ${VAR:3} 기본값이 ★ 적용되지 않는다(빈 문자열이 「값」이다).
+      #    ⚠️ 위 문자열 변수들은 빈 값이 무해해서 ":-" 로 두지만 ★ 숫자는 다르다.
+      AUDIT_RETENTION_YEARS: ${AUDIT_RETENTION_YEARS:-3}
       # ★★ 대면 OT 전 「신청」 차단(I-24). **기본 꺼짐**이고 범위가 확정되면 켠다 —
       #   범위를 정해 켜 두었다가 기존 동작을 10곳에서 깨뜨린 적이 있다.
       OT_GATE_ENABLED: ${OT_GATE_ENABLED:-false}
