@@ -81,6 +81,11 @@ public final class TriggerCondition {
             case DAILY_ROUTINE -> Arrays.stream(RoutineResultStatus.values())
                     .map(s -> new Option(s.name(), routineLabel(s)))
                     .toList();
+            // ★ 사유 신청 승인 — 조건값이 AbsenceReasonType 이름이다
+            case APPROVAL -> Arrays.stream(
+                            com.dlab.domain.attendance.entity.AbsenceReasonType.values())
+                    .map(t -> new Option(t.name(), approvalLabel(t)))
+                    .toList();
             case REGULAR_SCHEDULE -> List.of(new Option(NOT_RECOGNIZED, "미인정"));
         };
     }
@@ -105,6 +110,17 @@ public final class TriggerCondition {
             case EXCUSED_OUTING -> "사유 외출";
             case EARLY_LEAVE -> "조퇴";
             case RETURN -> "복귀";
+        };
+    }
+
+    /** ★ 화면 드롭다운에 뜨는 말. 코드만 주면 담당자가 무엇인지 모른다. */
+    private static String approvalLabel(
+            com.dlab.domain.attendance.entity.AbsenceReasonType type) {
+        return switch (type) {
+            case ABSENCE -> "사유 결석(승인)";
+            case LATE -> "사유 지각(승인)";
+            case EARLY_LEAVE -> "사유 조퇴(승인)";
+            case OUTING -> "사유 외출(승인)";
         };
     }
 

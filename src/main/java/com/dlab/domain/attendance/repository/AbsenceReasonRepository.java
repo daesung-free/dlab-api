@@ -12,6 +12,14 @@ public interface AbsenceReasonRepository extends JpaRepository<AbsenceReason, Lo
 
     List<AbsenceReason> findByEnrollmentIdAndAttendanceDate(Long enrollmentId, LocalDate attendanceDate);
 
+    /**
+     * ★ 승인 요청에 딸린 사유 신청 — 승인 시 벌점을 걸 때 ★ 날짜와 유형을 여기서 얻는다.
+     *
+     * <p>⚠️ <b>목록이다.</b> 날짜 범위 신청이 여러 행으로 들어올 수 있어, 하나만 집으면
+     * 나머지에 벌점이 안 붙는다.
+     */
+    List<AbsenceReason> findByApprovalRequestId(Long approvalRequestId);
+
     List<AbsenceReason> findByAcademyIdAndAttendanceDate(Long academyId, LocalDate attendanceDate);
 
     /**
