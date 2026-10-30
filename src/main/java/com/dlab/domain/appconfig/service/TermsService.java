@@ -45,12 +45,36 @@ public class TermsService {
     private final Clock clock;
 
     /**
+     * ★★ 홍보·마케팅 동의 유효기간 — <b>2년</b>.
+     *
+     * <p>입학동의서 최종본(261029): *「보유 및 이용기간: 동의일부터 2년.
+     * <b>2년이 지나면 수신 동의 여부를 다시 확인합니다.</b>」*
+     *
+     * <p>⚠️ <b>코드에 박아 둔다.</b> 약관 본문에 적힌 기간이라, 바꾸려면 <b>약관 버전을
+     * 올려야</b> 한다 — 설정값으로 빼면 <b>문구와 동작이 따로 바뀔 수 있다.</b>
+     */
+    private static final java.time.Period MARKETING_VALID_FOR = java.time.Period.ofYears(2);
+
+    /** 유효기간이 있는 약관. ★ 코드로 가른다 — 기간이 약관 본문에 적혀 있다. */
+    private static final String MARKETING_CODE = "MARKETING";
+
+    /**
      * 약관 한 건과 그 계정의 현재 동의 여부.
      *
-     * @param agreed {@code null}이면 아직 응답한 적이 없다 — "동의 안 함"과 구분해야
-     *               가입 흐름에서 다시 물어볼지 판단할 수 있다
+     * @param agreed  {@code null}이면 아직 응답한 적이 없다 — "동의 안 함"과 구분해야
+     *                가입 흐름에서 다시 물어볼지 판단할 수 있다
+     * @param expired ★ <b>동의했지만 유효기간이 지났다.</b> 홍보·마케팅만 해당한다
+     *                (동의일부터 2년). {@code agreed} 는 {@code true} 로 남겨 둔다 —
+     *                <b>동의한 사실 자체는 바뀌지 않았다.</b>
+     *                <p>⚠️ 화면은 「다시 동의 필요」로 보여야 한다. {@code agreed=true} 만
+     *                보고 「동의함」으로 그리면 <b>담당자는 광고가 나가는 줄 안다.</b>
      */
-    public record TermsStatus(Terms terms, Boolean agreed, Instant agreedAt) {
+    public record TermsStatus(Terms terms, Boolean agreed, Instant agreedAt, boolean expired) {
+
+        /** ★ 실제로 유효한 동의인가 — 화면·발송이 이것을 본다. */
+        public boolean effective() {
+            return Boolean.TRUE.equals(agreed) && !expired;
+        }
     }
 
     /**
@@ -100,9 +124,45 @@ public class TermsService {
                     TermAgreement agreement = latest.get(terms.getId());
                     return new TermsStatus(terms,
                             agreement == null ? null : agreement.isAgreed(),
-                            agreement == null ? null : agreement.getAgreedAt());
+                            agreement == null ? null : agreement.getAgreedAt(),
+                            isExpired(terms, agreement));
                 })
                 .toList();
+    }
+
+    /**
+     * ★★ 동의했지만 유효기간이 지났는가.
+     *
+     * <p>지금은 <b>홍보·마케팅만</b> 해당한다(동의일부터 2년). 다른 약관은 기간이 없다 —
+     * 「목적 달성 시까지」·「재학기간 동안」처럼 <b>날짜로 셀 수 없는 기준</b>이다.
+     *
+     * <p>★ <b>철회한 동의는 만료가 아니다</b> — 이미 {@code agreed=false} 라 발송에서
+     * 빠진다. 여기서 또 세면 <b>「철회」와 「만료」가 섞여</b> 화면이 무엇을 안내할지
+     * 정하지 못한다(철회는 본인이 한 것이고, 만료는 다시 물어봐야 하는 것이다).
+     */
+    private boolean isExpired(Terms terms, TermAgreement agreement) {
+        if (agreement == null || !agreement.isAgreed()) {
+            return false;
+        }
+        if (!MARKETING_CODE.equals(terms.getCode())) {
+            return false;
+        }
+        java.time.LocalDate agreedOn = agreement.getAgreedAt()
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+        return java.time.LocalDate.now(clock).isAfter(agreedOn.plus(MARKETING_VALID_FOR));
+    }
+
+    /**
+     * ★ 광고성 발송 대상인가 — <b>동의했고 유효기간 안</b>이어야 한다.
+     *
+     * <p>⚠️ 발송 경로가 이것을 써야 한다. {@code needsAgreement} 의 반대로 판단하면
+     * <b>만료된 동의가 「동의함」으로 통과한다.</b>
+     */
+    @Transactional(readOnly = true)
+    public boolean marketingAllowed(Long accountId) {
+        return statusOf(accountId).stream()
+                .filter(status -> MARKETING_CODE.equals(status.terms().getCode()))
+                .anyMatch(TermsStatus::effective);
     }
 
     /**
@@ -216,8 +276,8 @@ public class TermsService {
                 .filter(status -> status.terms().getCode().equals(code))
                 .toList();
 
-        return !matched.isEmpty()
-                && matched.stream().noneMatch(status -> Boolean.TRUE.equals(status.agreed()));
+        // ★ 만료된 동의는 「다시 물어봐야 하는 것」이다 — effective() 가 그 둘을 함께 본다
+        return !matched.isEmpty() && matched.stream().noneMatch(TermsStatus::effective);
     }
 
     /** 전체 이력 — 감사·분쟁 대응용. */
