@@ -118,14 +118,20 @@ public class ApprovalService {
         if (item.getApproverType() == ApproverType.AUTO) {
             return ApproverType.AUTO;
         }
-        // ★★ 사유 신청은 담임(직원)이 승인한다 — 학생 선택을 보지 않는다 (10/29 확정).
-        //    시트 원문이 「직원이 사유 확인 후 승인 시」이고, 그 승인에 ★ 벌점이 붙는다.
-        //    ⚠️ 학생 선택을 그대로 따르면 「학부모」를 고른 학생의 사유 신청이 학부모에게
-        //    가고, 학부모가 승인한 건에 벌점이 붙는다 — 학원이 확인하지 않은 벌점이다.
-        //    ★ 학생 선택(approver_preference)은 ★ 방화벽 해제에만 쓴다.
-        if (item.getRequestType() == RequestType.ABSENCE_REASON) {
-            return ApproverType.TEACHER;
-        }
+        // ★★ 사유 신청도 학생 선택·지점 정책을 그대로 따른다 (2026-10-30 되돌림).
+        //
+        //    10/29 에 「사유 신청은 담임 고정」으로 바꿨다가 되돌렸다 — 디랩 ★ 입학동의서
+        //    최종본(261029) 9-4 가 *「정기 사유신청과 비정기 사유신청 ★ 모두 학부모님께
+        //    확인 절차를 거친 후 신청이 허용됩니다」* 다. ★ 디랩 문서가 정본이고(§정본
+        //    우선순위) 우리 PM 판단보다 위다.
+        //
+        //    ★ 그래서 「학부모가 승인한 건에 벌점이 붙는다」는 걱정이 없어진다 — 같은
+        //    동의서 9항이 *「학생의 부적절한 행동에 대하여 학원이 벌점부여 및 엄격한
+        //    징계 절차를 적용하는 것에 대하여 동의합니다」* 다. 학부모가 확인하고, 그
+        //    확인에 벌점이 붙는 것에 ★ 학부모가 이미 동의한 구조다.
+        //
+        //    ⚠️ 벌점이 승인에 붙는 것 자체는 그대로다(답변서 4-1) — 바뀐 것은 ★ 누가
+        //    승인하는가뿐이다.
         return preferenceRepository.findCurrent(enrollment.getId())
                 .map(ApproverPreference::getPreferred)
                 .orElse(item.getApproverType());
@@ -575,13 +581,10 @@ public class ApprovalService {
         variables.put("requestedAt", TIME_FORMAT.format(request.getRequestedAt()));
         variables.put("timeoutMinutes", String.valueOf(request.getTimeoutMinutes()));
 
-        // ★★ 사유 신청은 학부모에게 「승인 요청」을 보내지 않는다 (10/29 확정).
-        //    담임이 승인하므로 ★ 학부모는 승인자가 아니다 — 승인 버튼이 있는 알림이 가면
-        //    눌렀을 때 NOT_AN_APPROVER 가 나고, 학부모는 「왜 안 되지」를 묻는다.
-        //    ⚠️ 결과(승인·반려) 알림은 그대로 간다 — 자녀의 사유가 인정됐는지는 알아야 한다.
-        if (request.getApprovalItem().getRequestType() != RequestType.ABSENCE_REASON) {
-            notifyAll(NotificationEvent.APPROVAL_REQUEST_CREATED, request, variables);
-        }
+        // ★ 사유 신청도 학부모에게 보낸다 (2026-10-30 되돌림).
+        //   입학동의서 최종본 9-4 가 ★ 「학부모님께 확인 절차를 거친 후 신청이 허용」이라
+        //   학부모가 승인자다 — 알림을 보내지 않으면 ★ 신청이 그대로 멈춘다.
+        notifyAll(NotificationEvent.APPROVAL_REQUEST_CREATED, request, variables);
 
         if (escalationTarget != null) {
             accountRepository.findByTeacherId(escalationTarget.getId()).ifPresent(account ->

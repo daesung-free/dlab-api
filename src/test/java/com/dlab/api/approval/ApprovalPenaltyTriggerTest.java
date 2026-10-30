@@ -241,18 +241,26 @@ class ApprovalPenaltyTriggerTest {
     }
 
     /**
-     * ★★ 사유 신청은 담임이 승인한다 — 학생 선택도, 지점 정책(PARENT)도 보지 않는다.
+     * ★★ 사유 신청의 승인자는 <b>지점 정책·학생 선택</b>을 따른다 (2026-10-30 되돌림).
      *
-     * <p>⚠️ 학생 선택을 따르면 <b>「학부모」를 고른 학생의 사유 신청이 학부모에게 가고,
-     * 학부모가 승인한 건에 벌점이 붙는다</b> — 학원이 확인하지 않은 벌점이다.
+     * <p>10/29 에 「담임 고정」으로 바꿨다가 되돌렸다 — 디랩 <b>입학동의서 최종본(261029)</b>
+     * 9-4 가 *「정기 사유신청과 비정기 사유신청 <b>모두 학부모님께 확인 절차를 거친 후</b>
+     * 신청이 허용됩니다」* 다. <b>디랩 문서가 정본이고 우리 PM 판단보다 위다.</b>
+     *
+     * <p>★ 「학부모가 승인한 건에 벌점이 붙는다」는 걱정은 같은 동의서가 푼다 — 9항이
+     * *「학원이 <b>벌점부여</b> 및 엄격한 징계 절차를 적용하는 것에 대하여 <b>동의</b>합니다」* 다.
+     * 학부모가 확인하고, 그 확인에 벌점이 붙는 것에 <b>학부모가 이미 동의한 구조</b>다.
+     *
+     * <p>⚠️ <b>벌점이 승인에 붙는 것 자체는 그대로다</b>(답변서 4-1) — 바뀐 것은
+     * <b>누가 승인하는가</b>뿐이다.
      */
     @Test
-    @DisplayName("★★ 사유 신청의 우선 승인자는 담임이다 — 지점 정책이 PARENT 여도 그렇다")
-    void absenceReasonAlwaysGoesToTeacher() {
+    @DisplayName("★★ 사유 신청 승인자는 지점 정책을 따른다 — 동의서 9-4 가 「학부모 확인」이다")
+    void absenceReasonFollowsPolicy() {
         ApprovalRequest request = submit(AbsenceReasonType.ABSENCE);
 
         assertThat(request.getPrimaryApprover())
-                .as("★ 정책은 PARENT 인데 담임으로 가야 한다")
-                .isEqualTo(ApproverType.TEACHER);
+                .as("★ 지점 정책이 PARENT 이므로 학부모다")
+                .isEqualTo(ApproverType.PARENT);
     }
 }
