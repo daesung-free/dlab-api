@@ -56,6 +56,8 @@ public class ApprovalService {
     private final AccountRepository accountRepository;
     private final NotificationService notificationService;
     private final Clock clock;
+    private final com.dlab.domain.penalty.service.PenaltyRuleEngine penaltyRuleEngine;
+    private final com.dlab.domain.attendance.repository.AbsenceReasonRepository absenceReasonRepository;
 
     /**
      * 승인 요청 생성. 담당선생님은 반 배정에서 자동으로 도출된다
@@ -115,6 +117,14 @@ public class ApprovalService {
     private ApproverType resolvePrimaryApprover(StudentEnrollment enrollment, ApprovalItem item) {
         if (item.getApproverType() == ApproverType.AUTO) {
             return ApproverType.AUTO;
+        }
+        // ★★ 사유 신청은 담임(직원)이 승인한다 — 학생 선택을 보지 않는다 (10/29 확정).
+        //    시트 원문이 「직원이 사유 확인 후 승인 시」이고, 그 승인에 ★ 벌점이 붙는다.
+        //    ⚠️ 학생 선택을 그대로 따르면 「학부모」를 고른 학생의 사유 신청이 학부모에게
+        //    가고, 학부모가 승인한 건에 벌점이 붙는다 — 학원이 확인하지 않은 벌점이다.
+        //    ★ 학생 선택(approver_preference)은 ★ 방화벽 해제에만 쓴다.
+        if (item.getRequestType() == RequestType.ABSENCE_REASON) {
+            return ApproverType.TEACHER;
         }
         return preferenceRepository.findCurrent(enrollment.getId())
                 .map(ApproverPreference::getPreferred)
@@ -277,6 +287,66 @@ public class ApprovalService {
         return variables;
     }
 
+    // ── 사유 신청 승인 → 상벌점 (디랩 1029 답변서 4-1) ─────────────
+
+    /**
+     * ★★ 사유 신청이 <b>승인</b>되면 벌점을 건다.
+     *
+     * <h2>발생일은 「승인한 날」이 아니라 「신청 대상 날짜」다</h2>
+     * 3월 2일 결석을 3월 5일에 승인하면 <b>3월 2일에 붙어야 한다.</b> 승인일로 두면
+     * 멱등키가 달라져 <b>같은 결석에 두 번 붙을 수 있고</b>, 월별 집계도 어긋난다.
+     *
+     * <h2>⚠️ 규칙이 없으면 아무 일도 안 일어난다</h2>
+     * {@code penalty_rule} 에 {@code APPROVAL} 트리거 행이 있고 <b>켜져 있어야</b> 돈다
+     * ({@code active} 기본값이 꺼짐이다). 디랩 항목표를 넣기 전까지는 조용하다.
+     *
+     * <p>★ 엔진이 {@code REQUIRES_NEW} 라 <b>벌점 부여가 실패해도 승인은 남는다</b> —
+     * 승인이 롤백되면 학부모에게 간 알림과 실제 상태가 어긋난다.
+     */
+    private void applyPenalty(ApprovalRequest request) {
+        eachAbsenceReason(request, (reason) -> penaltyRuleEngine.apply(
+                request.getEnrollment(),
+                com.dlab.domain.penalty.entity.PenaltyTriggerType.APPROVAL,
+                reason.getReasonType().name(),
+                reason.getAttendanceDate()));
+    }
+
+    /**
+     * ★ 반려·취소되면 거둔다.
+     *
+     * <p>승인으로 붙은 벌점이라 <b>승인이 뒤집히면 근거가 사라진다.</b> 거두지 않으면
+     * 학생은 「반려됐는데 벌점은 남았다」를 보게 되고, 그걸 설명할 방법이 없다.
+     *
+     * <p>⚠️ <b>수기 부여분은 건드리지 않는다</b> — {@code revokeAuto} 가 멱등키로만 찾으므로
+     * 사람이 판단해 준 같은 항목은 걸리지 않는다.
+     */
+    private void revokePenalty(ApprovalRequest request) {
+        eachAbsenceReason(request, (reason) -> penaltyRuleEngine.revokeAuto(
+                request.getEnrollment(),
+                com.dlab.domain.penalty.entity.PenaltyTriggerType.APPROVAL,
+                reason.getReasonType().name(),
+                reason.getAttendanceDate()));
+    }
+
+    /**
+     * 이 승인 요청에 딸린 사유 신청을 훑는다.
+     *
+     * <p>★ <b>사유 신청이 아니면 아무 일도 안 한다</b> — 정기일정·방화벽은 벌점과 무관하다
+     * (답변서: *「정기일정은 건드리지 않습니다」*).
+     *
+     * <p>⚠️ 사유 신청 한 건에 요청이 하나지만 <b>목록으로 받는다</b> — 날짜 범위 신청이
+     * 여러 행으로 들어올 수 있고, 하나만 집으면 나머지에 벌점이 안 붙는다.
+     */
+    private void eachAbsenceReason(ApprovalRequest request,
+                                   java.util.function.Consumer<
+                                           com.dlab.domain.attendance.entity.AbsenceReason> action) {
+        if (request.getApprovalItem() == null
+                || request.getApprovalItem().getRequestType() != RequestType.ABSENCE_REASON) {
+            return;
+        }
+        absenceReasonRepository.findByApprovalRequestId(request.getId()).forEach(action);
+    }
+
     /**
      * 승인 처리.
      *
@@ -299,6 +369,7 @@ public class ApprovalService {
         }
 
         ApprovalRequest resolved = approvalRequestRepository.findById(requestId).orElseThrow();
+        applyPenalty(resolved);
         notifyApproved(resolved, resolutionCase);
         return resolved;
     }
@@ -317,6 +388,7 @@ public class ApprovalService {
         }
 
         ApprovalRequest resolved = approvalRequestRepository.findById(requestId).orElseThrow();
+        revokePenalty(resolved);
         notifyAll(NotificationEvent.APPROVAL_REJECTED, resolved, resolvedVariables(resolved));
         return resolved;
     }
@@ -341,6 +413,9 @@ public class ApprovalService {
         if (updated == 0) {
             throw new BusinessException(ErrorCode.APPROVAL_ALREADY_PROCESSED);
         }
+        // ★ 대기 중 취소라 벌점이 아직 없지만, 승인 직후 취소가 들어오는 경합이 있다 —
+        //   거두는 쪽은 없으면 아무 일도 안 하므로 불러 두는 편이 안전하다
+        approvalRequestRepository.findById(requestId).ifPresent(this::revokePenalty);
         log.info("승인 요청 신청자 취소: requestId={}", requestId);
     }
 
@@ -386,6 +461,9 @@ public class ApprovalService {
                     "승인된 요청만 철회할 수 있습니다.");
         }
 
+        // ★★ 승인으로 붙은 벌점을 거둔다. 이게 없으면 「승인이 철회됐는데 벌점은 남았다」가
+        //    되고, 학생에게 그걸 설명할 방법이 없다
+        approvalRequestRepository.findById(requestId).ifPresent(this::revokePenalty);
         log.info("승인 철회: requestId={}, 처리자={}, 사유={}", requestId, me.accountId(), reason);
     }
 
@@ -497,7 +575,13 @@ public class ApprovalService {
         variables.put("requestedAt", TIME_FORMAT.format(request.getRequestedAt()));
         variables.put("timeoutMinutes", String.valueOf(request.getTimeoutMinutes()));
 
-        notifyAll(NotificationEvent.APPROVAL_REQUEST_CREATED, request, variables);
+        // ★★ 사유 신청은 학부모에게 「승인 요청」을 보내지 않는다 (10/29 확정).
+        //    담임이 승인하므로 ★ 학부모는 승인자가 아니다 — 승인 버튼이 있는 알림이 가면
+        //    눌렀을 때 NOT_AN_APPROVER 가 나고, 학부모는 「왜 안 되지」를 묻는다.
+        //    ⚠️ 결과(승인·반려) 알림은 그대로 간다 — 자녀의 사유가 인정됐는지는 알아야 한다.
+        if (request.getApprovalItem().getRequestType() != RequestType.ABSENCE_REASON) {
+            notifyAll(NotificationEvent.APPROVAL_REQUEST_CREATED, request, variables);
+        }
 
         if (escalationTarget != null) {
             accountRepository.findByTeacherId(escalationTarget.getId()).ifPresent(account ->
