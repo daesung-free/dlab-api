@@ -53,10 +53,18 @@ public class AdminTuitionBillingController {
     @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','STAFF')")
     public ApiResponse<BillingView> issueMonthly(@CurrentAccount AuthPrincipal me,
                                                  @Valid @RequestBody IssueMonthly request) {
-        var billing = billingService.issueMonthly(
-                me, request.enrollmentId(), request.yearMonth(),
-                request.seatType(), request.discountRateOrZero(), request.remainingDays(),
-                request.dueDate(), request.discountSource(), request.serviceFrom());
+        // ★★ 정책 코드를 주면 ★ 서버가 할인율을 찾는다 (디랩 「적용」 요청).
+        //    ⚠️ 두 경로를 함께 두되 ★ 정책이 이긴다 — 둘 다 주면 어느 쪽인지 모호해지고,
+        //    사람이 넣은 값이 정책을 조용히 덮으면 「정책을 켰는데 안 붙는다」가 된다.
+        var billing = request.usesPolicy()
+                ? billingService.issueMonthlyByPolicy(
+                        me, request.enrollmentId(), request.yearMonth(),
+                        request.seatType(), request.discountCode(), request.remainingDays(),
+                        request.dueDate(), request.serviceFrom())
+                : billingService.issueMonthly(
+                        me, request.enrollmentId(), request.yearMonth(),
+                        request.seatType(), request.discountRateOrZero(), request.remainingDays(),
+                        request.dueDate(), request.discountSource(), request.serviceFrom());
         // ★ 발행 응답에도 계산 근거를 싣는다 — 데스크가 「왜 이 금액인가」에 답해야 한다
         return ApiResponse.success(BillingView.from(billing,
                 breakdownOf(me, request.enrollmentId(), request.yearMonth(),
@@ -174,9 +182,22 @@ public class AdminTuitionBillingController {
             @Min(1) @Max(31) Integer remainingDays,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDate,
             @Size(max = 100) String discountSource,
+            /**
+             * ★ 적용할 할인 정책 코드. <b>주면 서버가 할인율을 찾는다</b> —
+             * {@code discountRate} · {@code discountSource} 는 무시된다.
+             *
+             * <p>⚠️ <b>할인율 직접 입력을 없애지 않았다</b> — 정책에 없는 예외가 실제로
+             * 있고(지점 재량·일회성 조정), 막으면 데스크가 청구를 아예 못 낸다.
+             */
+            @Size(max = 40) String discountCode,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate serviceFrom) {
 
         /** 생략 가능 — 없으면 0. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
+        /** ★ 정책으로 발행하는가. 코드가 있으면 그쪽이다. */
+        public boolean usesPolicy() {
+            return discountCode != null && !discountCode.isBlank();
+        }
+
         public int discountRateOrZero() {
             return discountRate == null ? 0 : discountRate;
         }

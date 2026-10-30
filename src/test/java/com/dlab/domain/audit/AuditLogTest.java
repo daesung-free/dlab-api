@@ -162,7 +162,17 @@ class AuditLogTest {
     }
 
     @Test
-    @org.junit.jupiter.api.DisplayName("★★ 1년을 넘는 조회는 막는다 — from=2000-01-01 한 줄로 전 기간을 훑는다")
+    /**
+     * ★ 조회 기간은 <b>설정값</b>이다(기본 3년 — 디랩 확정, 2026-10-30).
+     *
+     * <p>전에는 코드에 1 이 박혀 있었고 이 테스트가 「1년」을 단정했다. ★ 그래서
+     * <b>설정을 바꿀 때 이 테스트가 걸렸다</b> — 제 역할을 한 것이다.
+     *
+     * <p>★ 이제 <b>숫자를 단정하지 않는다.</b> 지키려는 것은 「상한이 있다」이고,
+     * 그 값이 몇 년인지는 <b>설정이 정한다</b> — 숫자를 박으면 설정을 바꿀 때마다
+     * 테스트도 고쳐야 하고, 그러면 테스트가 <b>설정을 따라 적는 종이</b>가 된다.
+     */
+    @org.junit.jupiter.api.DisplayName("★★ 기간을 넘는 조회는 막는다 — from=2000-01-01 한 줄로 전 기간을 훑는다")
     void beyondRetentionWindowIsRejected() {
         var today = java.time.LocalDate.now();
 
@@ -172,7 +182,26 @@ class AuditLogTest {
                         null, null, null,
                         org.springframework.data.domain.PageRequest.of(0, 10)))
                 .isInstanceOf(com.dlab.common.exception.BusinessException.class)
-                .hasMessageContaining("1년");
+                .hasMessageContaining("까지 조회할 수 있습니다");
+    }
+
+    /**
+     * ★★ 설정 기간 안이면 조회된다 — <b>상한이 너무 좁으면 쓸 수 없다.</b>
+     *
+     * <p>1년으로 박혀 있던 동안 <b>1년 넘은 이력이 화면에서 안 보였다</b>(데이터는 남아
+     * 있었다). 3년으로 올렸으니 2년 전도 조회돼야 한다.
+     */
+    @Test
+    @org.junit.jupiter.api.DisplayName("★★ 2년 전은 조회된다 — 1년으로 박혀 있던 동안 안 보였다")
+    void withinRetentionWindowIsAllowed() {
+        var today = java.time.LocalDate.now();
+
+        org.assertj.core.api.Assertions.assertThatCode(() ->
+                auditLogController.search(admin, null,
+                        today.minusYears(2), today,
+                        null, null, null,
+                        org.springframework.data.domain.PageRequest.of(0, 10)))
+                .doesNotThrowAnyException();
     }
 
     @Test

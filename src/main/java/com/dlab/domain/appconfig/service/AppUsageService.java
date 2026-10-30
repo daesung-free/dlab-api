@@ -90,15 +90,28 @@ public class AppUsageService {
         List<Terms> current = termsRepository.findCurrent(Instant.now(clock), academyId);
         if (current.isEmpty() || appAccounts.isEmpty()) {
             return current.stream()
-                    .map(t -> TermsRate.of(t, appAccounts.size(), 0))
+                    .map(t -> TermsRate.of(t, appAccounts.size(), 0, 0))
                     .toList();
         }
-        Map<Long, Long> agreed = agreementRepository.findLatestOf(appAccounts,
-                        current.stream().map(Terms::getId).toList()).stream()
+        List<Object[]> rows = agreementRepository.findLatestOf(appAccounts,
+                current.stream().map(Terms::getId).toList()).stream()
                 .filter(r -> (Boolean) r[2])
+                .toList();
+
+        Map<Long, Long> agreed = rows.stream()
                 .collect(Collectors.groupingBy(r -> (Long) r[1], Collectors.counting()));
+
+        // ★★ 유효기간이 있는 약관은 ★ 동의했는지만으로 세면 안 된다 — 마케팅은 동의일부터
+        //    2년이고, 그것 없이 세면 ★ 2년 지난 동의자가 「동의자」로 잡힌다
+        //    (2026-10-30 프런트가 발견).
+        Map<Long, Long> effective = rows.stream()
+                .filter(r -> !expired(termsById(current, (Long) r[1]), (Instant) r[3]))
+                .collect(Collectors.groupingBy(r -> (Long) r[1], Collectors.counting()));
+
         return current.stream()
-                .map(t -> TermsRate.of(t, appAccounts.size(), agreed.getOrDefault(t.getId(), 0L)))
+                .map(t -> TermsRate.of(t, appAccounts.size(),
+                        agreed.getOrDefault(t.getId(), 0L),
+                        effective.getOrDefault(t.getId(), 0L)))
                 .toList();
     }
 
@@ -126,16 +139,51 @@ public class AppUsageService {
     /**
      * 현재 시행 중인 약관 하나의 동의율.
      *
-     * @param targetAccounts 분모 — 활성 앱 계정(학생 + 학부모)
-     * @param agreedAccounts 마지막 행이 동의인 계정. 이전 버전에만 동의했으면 세지 않는다
+     * @param targetAccounts    분모 — 활성 앱 계정(학생 + 학부모)
+     * @param agreedAccounts    마지막 행이 동의인 계정. 이전 버전에만 동의했으면 세지 않는다
+     * @param effectiveAccounts ★ 그중 <b>유효기간 안</b>인 계정. 마케팅은 동의일부터 2년이다.
+     *                          <p>★ 기간이 없는 약관은 {@code agreedAccounts} 와 같다.
+     *                          <p>⚠️ <b>{@code agreedAccounts} 를 유효 기준으로 바꾸지 않은
+     *                          이유</b>: 숫자가 조용히 줄면 담당자는 <b>「동의자가 사라졌다」</b>
+     *                          로 읽는다. 두 값을 나란히 두고 화면이
+     *                          <b>「동의 80% (유효 55%)」</b>처럼 쓰는 쪽이 맞다.
+     * @param rate              동의율 — {@code agreedAccounts} 기준
+     * @param effectiveRate     ★ 유효율 — {@code effectiveAccounts} 기준
      */
     public record TermsRate(Long termsId, String code, String version, String title,
                             boolean required, int targetAccounts, long agreedAccounts,
-                            Integer rate) {
+                            long effectiveAccounts, Integer rate, Integer effectiveRate) {
 
-        static TermsRate of(Terms t, int target, long agreed) {
+        static TermsRate of(Terms t, int target, long agreed, long effective) {
             return new TermsRate(t.getId(), t.getCode(), t.getVersion(), t.getTitle(),
-                    t.isRequired(), target, agreed, AppUsageService.rate(agreed, target));
+                    t.isRequired(), target, agreed, effective,
+                    AppUsageService.rate(agreed, target),
+                    AppUsageService.rate(effective, target));
         }
+    }
+
+    /** ★ 유효기간이 있는 약관 — {@code TermsService} 와 <b>같은 값</b>을 쓴다. */
+    private static final String MARKETING_CODE = "MARKETING";
+    private static final java.time.Period MARKETING_VALID_FOR = java.time.Period.ofYears(2);
+
+    private static Terms termsById(List<Terms> terms, Long id) {
+        return terms.stream().filter(t -> t.getId().equals(id)).findFirst().orElse(null);
+    }
+
+    /**
+     * ★ 동의했지만 유효기간이 지났는가.
+     *
+     * <p>⚠️ 판정이 {@code TermsService.isExpired} 와 <b>두 벌</b>이다. 하나로 모으려면
+     * 그쪽을 공개하거나 공통으로 빼야 하는데, <b>지금은 둘 다 「마케팅 2년」 한 줄</b>이라
+     * 그 비용이 더 크다. ★ 기간이 있는 약관이 하나 더 생기면 <b>그때 합친다</b> —
+     * 그 전에 갈리면 동의율과 발송 대상이 어긋난다.
+     */
+    private boolean expired(Terms terms, Instant agreedAt) {
+        if (terms == null || agreedAt == null || !MARKETING_CODE.equals(terms.getCode())) {
+            return false;
+        }
+        java.time.LocalDate agreedOn = agreedAt
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+        return java.time.LocalDate.now(clock).isAfter(agreedOn.plus(MARKETING_VALID_FOR));
     }
 }

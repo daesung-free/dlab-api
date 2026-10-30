@@ -166,6 +166,46 @@ public class TermsService {
     }
 
     /**
+     * ★★ 약관을 치운다 — <b>응답이 한 건도 없는 것만</b>.
+     *
+     * <h2>왜 필요한가</h2>
+     * 운영에 <b>테스트 약관({@code ZZ_TEST})이 「필수」로 올라가 있었다</b>(2026-10-30
+     * 프런트 발견). 등록 경로만 있고 <b>치우는 경로가 없어서</b> 그대로 남아 있었다 —
+     * 앱이 출시되면 사용자에게 <b>「zz_약관확인필수」가 뜬다.</b>
+     *
+     * <h2>★★ 응답이 있으면 치우지 않는다</h2>
+     * 동의는 <b>「그때 어떤 문구에 동의했는가」가 근거</b>다. 한 명이라도 응답했으면
+     * 그 근거가 이 행을 가리키므로, 치우면 <b>그 사람의 동의가 무엇에 대한 것인지
+     * 답할 수 없다.</b>
+     *
+     * <p>⚠️ <b>미동의도 응답이다</b> — 지우면 「물어봤는데 거부했다」와 「물어본 적 없다」가
+     * 구분되지 않는다.
+     *
+     * <p>★ 문구를 고치려면 <b>치우는 것이 아니라 버전을 올린다.</b> 이 경로는
+     * <b>잘못 올린 약관을 거두는 용도</b>다.
+     *
+     * <p>★ <b>soft delete</b> 다 — 행은 남는다. 「무엇이 있었다가 치워졌나」가 남아야
+     * 나중에 「왜 사라졌지」에 답할 수 있다.
+     */
+    @Transactional
+    public void remove(Long termsId) {
+        Terms terms = termsRepository.findById(termsId)
+                .filter(t -> !t.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "약관을 찾을 수 없습니다."));
+
+        if (agreementRepository.existsByTermsId(termsId)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "이미 응답한 사람이 있는 약관은 치울 수 없습니다. "
+                            + "문구를 바꾸려면 버전을 올려 새로 등록해 주세요.");
+        }
+
+        terms.markDeleted();
+        log.info("약관 치움: termsId={}, code={}, version={}",
+                termsId, terms.getCode(), terms.getVersion());
+    }
+
+    /**
      * 동의·철회 기록.
      *
      * <p><b>필수 약관은 철회할 수 없다</b> — 철회를 허용하면 서비스를 계속 쓰면서

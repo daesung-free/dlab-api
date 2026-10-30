@@ -235,4 +235,75 @@ class ReceiptStatusTest {
         String raw = new String(bytes, java.nio.charset.StandardCharsets.ISO_8859_1);
         assertThat(raw).doesNotContain("010-1234-5678");
     }
+
+    // ─────────────────────────────────────────── 학생 필터
+
+    /**
+     * ★★ 학생 한 명으로 거른다 — <b>학부모용 결제 내역 출력</b>에 쓴다.
+     *
+     * <h2>⚠️ 없는 동안 화면이 학번으로 두 겹 걸렀다</h2>
+     * 학생 필터가 없어 <b>{@code keyword} 로 학번을 검색하고 그 결과를 다시 학번으로
+     * 거르고</b> 있었다(2026-10-30 프런트). {@code keyword} 는 이름·학번·전표번호 통합
+     * 검색이라 <b>느슨하고</b>, 못 거르면 <b>학부모에게 다른 학생의 결제 내역이 찍힌
+     * 서류가 나간다.</b>
+     */
+    @Test
+    @DisplayName("★★ 학생 한 명으로 거른다 — 못 거르면 남의 결제 내역이 서류로 나간다")
+    void filtersBySingleStudent() {
+        Student otherPerson = new Student("RS-0002", "이수납", "010-2222-3333");
+        em.persist(otherPerson);
+        StudentEnrollment otherStudent = new StudentEnrollment(
+                otherPerson, academy, YEAR, "2094-0002", null, GradeType.N_SU);
+        em.persist(otherStudent);
+        em.persist(new Billing(otherStudent, "남의 청구", BillingType.TUITION, 500_000, 0, null));
+        billing(BillingType.TUITION, 660_000, null);
+        em.flush();
+
+        var rows = receiptStatusService.find(admin, academy.getId(), YEAR, null, null, null,
+                false, null, null, student.getId());
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).billing().getEnrollment().getId()).isEqualTo(student.getId());
+    }
+
+    @Test
+    @DisplayName("★ 학생을 비우면 전체다 — 기존 호출이 그대로 동작한다")
+    void nullStudentMeansAll() {
+        Student otherPerson = new Student("RS-0003", "박수납", "010-4444-5555");
+        em.persist(otherPerson);
+        StudentEnrollment otherStudent = new StudentEnrollment(
+                otherPerson, academy, YEAR, "2094-0003", null, GradeType.N_SU);
+        em.persist(otherStudent);
+        em.persist(new Billing(otherStudent, "남의 청구", BillingType.TUITION, 500_000, 0, null));
+        billing(BillingType.TUITION, 660_000, null);
+        em.flush();
+
+        var rows = receiptStatusService.find(admin, academy.getId(), YEAR, null, null, null,
+                false, null, null, null);
+
+        assertThat(rows).hasSize(2);
+    }
+
+    /**
+     * ★ 지점 범위가 먼저다 — <b>다른 지점 학생 id 를 넣어도 새지 않는다</b>.
+     *
+     * <p>⚠️ 학생 id 를 요청으로 받으므로 <b>클라이언트가 값을 바꿔 보낼 수 있다</b>(§7).
+     * 범위가 먼저 걸려야 그걸로 다른 지점을 들여다볼 수 없다.
+     */
+    @Test
+    @DisplayName("★ 다른 지점 학생 id 를 넣어도 새지 않는다 — 지점 범위가 먼저다")
+    void scopeBeatsStudentFilter() {
+        Student outsider = new Student("RS-0004", "최수납", "010-6666-7777");
+        em.persist(outsider);
+        StudentEnrollment outside = new StudentEnrollment(
+                outsider, other, YEAR, "2094-0004", null, GradeType.N_SU);
+        em.persist(outside);
+        em.persist(new Billing(outside, "다른지점 청구", BillingType.TUITION, 500_000, 0, null));
+        em.flush();
+
+        var rows = receiptStatusService.find(admin, academy.getId(), YEAR, null, null, null,
+                false, null, null, outside.getId());
+
+        assertThat(rows).isEmpty();
+    }
 }

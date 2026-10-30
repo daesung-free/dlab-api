@@ -154,7 +154,19 @@ public class AdminReceiptStatusController {
      *     <p>급식·특강처럼 나눌 것이 없는 청구는 <b>빈 목록</b>이고 그게 정상이다 —
      *     그때는 청구 금액이 곧 단일 항목이다.
      */
-    public record RowView(Long billingId, String studentNo, String studentName,
+    public record RowView(Long billingId,
+                          /**
+                           * ★ 학생(등록 건) id — <b>이 행을 학생으로 다시 조회할 때</b> 쓴다.
+                           *
+                           * <p>⚠️ 없는 동안 화면이 <b>{@code studentNo} 로 되짚어야 했다.</b>
+                           * 학번은 매년 초기화되고 재등록하면 등록 행이 또 생기므로,
+                           * 화면이 <b>어느 기수인지를 짐작하게</b> 된다.
+                           *
+                           * <p>★ {@code enrollmentId} 필터와 짝이다 — 행에서 꺼내 그대로
+                           * 넘기면 된다.
+                           */
+                          Long enrollmentId,
+                          String studentNo, String studentName,
                           String name, String billingType, String serviceMonth,
                           short year,
                           LocalDate serviceFrom, LocalDate serviceTo, boolean wholeMonth,
@@ -167,6 +179,7 @@ public class AdminReceiptStatusController {
         static RowView from(ReceiptStatusService.Row row) {
             Billing b = row.billing();
             return new RowView(b.getId(),
+                    b.getEnrollment().getId(),
                     b.getEnrollment().getStudentNo(),
                     b.getEnrollment().getStudent().getName(),
                     b.getName(), b.getBillingType().name(),

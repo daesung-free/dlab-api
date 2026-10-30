@@ -225,4 +225,164 @@ class TuitionBillingTest {
         assertThat(result.items().get(0).refund()).isEqualTo(-330_000);
         assertThat(result.requiresAdditionalPayment()).isTrue();
     }
+
+    // ── 할인 정책 적용 (디랩 「지점별·월별 입력·수정·적용」) ──────────
+
+    /**
+     * ★★ 정책 코드를 주면 <b>서버가 할인율을 찾는다</b> — 데스크가 고르지 않는다.
+     *
+     * <p>빠져 있던 것은 <b>「적용」 하나</b>였다. 정책 테이블과 산출 로직은 이미 있었는데
+     * <b>청구가 그것을 조회하지 않아</b>, 데스크가 <b>할인율을 눈으로 보고 넣고 있었다.</b>
+     */
+    @Test
+    @DisplayName("★★ 정책 코드로 발행하면 서버가 할인율을 찾는다 — 데스크가 고르지 않는다")
+    void issuesByPolicy() {
+        activePolicy("SIBLING", DiscountType.RATE, 30, null, null);
+
+        Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, "SIBLING", null, null, null);
+        em.flush();
+
+        // 교습비 660,000 의 30% = 198,000 · 독서실비 90,000 은 할인 없음
+        assertThat(billing.getDiscountAmount()).isEqualTo(198_000);
+        assertThat(billing.getSuppliedAmount()).isEqualTo(750_000);
+        assertThat(billing.getBilledAmount()).isEqualTo(552_000);
+    }
+
+    /**
+     * ★★ <b>독서실비는 분모가 아니다</b> — 규정상 할인이 없다(§2).
+     *
+     * <p>월 합계(750,000)로 율을 구하면 <b>교습비 할인이 덜 깎인다.</b> 교습비(660,000)로
+     * 구해야 30% 가 198,000 이 된다.
+     */
+    @Test
+    @DisplayName("★★ 독서실비는 할인 분모에서 빠진다 — 월 합계로 나누면 덜 깎인다")
+    void studyRoomFeeIsNotDiscounted() {
+        activePolicy("HALF", DiscountType.RATE, 50, null, null);
+
+        Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, "HALF", null, null, null);
+        em.flush();
+
+        assertThat(billing.getDiscountAmount())
+                .as("★ 교습비 660,000 의 50% 다 — 750,000 의 50%(375,000)가 아니다")
+                .isEqualTo(330_000);
+    }
+
+    /**
+     * ★★ 월 범위가 있는 정책은 <b>청구 대상 월</b>로 찾는다 — 발행한 달이 아니다.
+     *
+     * <p>⚠️ 발행한 달로 찾으면 <b>3월분을 2월에 미리 발행할 때 2월 할인이 붙는다.</b>
+     * 1021 의 「1월 30% · 2~3월 20%」가 그 모양이다.
+     */
+    @Test
+    @DisplayName("★★ 월 범위는 청구 대상 월로 찾는다 — 발행한 달이 아니다")
+    void monthRangeUsesServiceMonth() {
+        // 4월에만 20%
+        activePolicy("SPRING", DiscountType.RATE, 20, (short) 4, (short) 4);
+
+        Billing march = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, "SPRING", null, null, null);
+        Billing april = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 4), SeatType.GENERAL, "SPRING", null, null, null);
+        em.flush();
+
+        assertThat(march.getDiscountAmount()).as("★ 3월은 범위 밖이다").isZero();
+        assertThat(april.getDiscountAmount()).isEqualTo(132_000);
+    }
+
+    /**
+     * ★ 할인이 붙지 않았으면 <b>근거를 비운다</b>.
+     *
+     * <p>코드를 적어 두면 <b>「정책이 붙었는데 0원」</b>으로 읽혀, 담당자가 정책을
+     * 의심하게 된다.
+     */
+    @Test
+    @DisplayName("★ 할인 0이면 근거를 비운다 — 「정책이 붙었는데 0원」으로 읽힌다")
+    void sourceIsBlankWhenNoDiscount() {
+        Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, "없는코드", null, null, null);
+        em.flush();
+
+        assertThat(billing.getDiscountAmount()).isZero();
+        assertThat(billing.getDiscountSource()).isNull();
+    }
+
+    /**
+     * ★★ 꺼진 정책은 안 붙는다 — {@code active} 가 <b>기본 꺼짐</b>이다.
+     *
+     * <p>⚠️ 넣자마자 도는 구조면 <b>검증 전 정책이 실제 청구에 붙는다.</b>
+     */
+    @Test
+    @DisplayName("★★ 꺼진 정책은 안 붙는다 — 검증 전 정책이 청구에 붙으면 안 된다")
+    void inactivePolicyIsIgnored() {
+        DiscountPolicy policy = new DiscountPolicy(academy, YEAR, "OFF", "꺼진 할인",
+                DiscountType.RATE, 50, BillingItemType.TUITION, null, null, null);
+        em.persist(policy);   // ★ active 기본값 false
+        em.flush();
+
+        Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, "OFF", null, null, null);
+        em.flush();
+
+        assertThat(billing.getDiscountAmount()).isZero();
+    }
+
+    /**
+     * ★★ 장학생에게는 정책 할인을 걸 수 없다 — 중복 규칙이 정해지기 전까지다.
+     *
+     * <h2>⚠️ 장학은 이미 청구에 반영되고 있다 — 화면이 한다</h2>
+     * {@code domain/payment} 에 {@code Scholarship} 참조가 없어 <b>「안 겹친다」고
+     * 읽었는데 틀렸다</b>(프런트 지적). 관리자 웹 일괄 청구가 <b>장학 할인율을
+     * {@code discountRate} 로 보내고 {@code discountSource} 에 장학명을 박는다.</b>
+     *
+     * <p>★ 막지 않으면 장학 70% 학생에게 정책 10% 를 걸었을 때 <b>할인이 10% 로 바뀌고
+     * 근거가 장학명에서 정책 코드로 바뀐다</b> — <b>오류는 안 나고 금액과 근거만
+     * 달라진다.</b>
+     */
+    @Test
+    @DisplayName("★★ 장학생에게는 정책 할인을 못 건다 — 장학 근거가 조용히 지워진다")
+    void scholarshipHolderRejectsPolicy() {
+        activePolicy("RATE_10", DiscountType.RATE, 10, null, null);
+        em.persist(new com.dlab.domain.master.entity.Scholarship(
+                academy, enrollment, "KICE_50", new java.math.BigDecimal("50")));
+        em.flush();
+        em.clear();
+
+        assertThatThrownBy(() -> billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, "RATE_10", null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("중복 적용 규칙");
+    }
+
+    @Test
+    @DisplayName("★ 장학생도 할인율 직접 입력은 된다 — 화면이 장학율을 그 자리로 보낸다")
+    void scholarshipHolderStillUsesDirectRate() {
+        em.persist(new com.dlab.domain.master.entity.Scholarship(
+                academy, enrollment, "KICE_50", new java.math.BigDecimal("50")));
+        em.flush();
+
+        Billing billing = billingService.issueMonthly(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, 50, null, null, "평가원 50%", null);
+        em.flush();
+
+        assertThat(billing.getDiscountAmount()).isEqualTo(330_000);
+        assertThat(billing.getDiscountSource())
+                .as("★ 근거는 장학명이다 — 정책 코드가 아니다")
+                .isEqualTo("평가원 50%");
+    }
+
+    /** 켜진 정책을 만든다. ★ active 가 기본 꺼짐이라 따로 켠다. */
+    private void activePolicy(String code, DiscountType type, int value,
+                              Short fromMonth, Short toMonth) {
+        DiscountPolicy policy = new DiscountPolicy(academy, YEAR, code, code + " 할인",
+                type, value, BillingItemType.TUITION, fromMonth, toMonth, null);
+        em.persist(policy);
+        em.flush();
+        em.createNativeQuery("UPDATE discount_policy SET active = true WHERE id = :id")
+                .setParameter("id", policy.getId())
+                .executeUpdate();
+        em.flush();
+        em.clear();
+    }
 }
