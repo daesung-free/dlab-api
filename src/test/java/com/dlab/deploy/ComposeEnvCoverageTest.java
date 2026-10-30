@@ -78,6 +78,57 @@ class ComposeEnvCoverageTest {
     }
 
     /**
+     * ★★ <b>숫자 기본값을 가진 변수는 compose 에도 기본값이 있어야 한다.</b>
+     *
+     * <h2>⚠️ 이게 2026-10-30 배포를 실패시켰다</h2>
+     * {@code AUDIT_RETENTION_YEARS} 를 compose 에 <b>{@code ${VAR:-} } 로</b> 적었다 —
+     * 다른 변수들을 그대로 따른 것이다. 그런데 <b>compose 의 {@code :-} 는 「없음」을
+     * 「있지만 빈 값」으로 바꾼다.</b>
+     *
+     * <p>★ 그러면 {@code application.yml} 의 {@code ${VAR:3}} 기본값이
+     * <b>적용되지 않는다</b> — 빈 문자열이 이미 「값」이라서다. 그 빈 문자열을
+     * {@code int} 에 바인딩하다 <b>기동이 깨졌다.</b>
+     *
+     * <p>⚠️ <b>문자열 변수는 안 깨진다</b> — 빈 값이 그냥 빈 값이다. 그래서
+     * 다른 변수들을 따라 적는 것이 <b>숫자에서만 사고가 된다.</b>
+     *
+     * <h2>★ CI 가 못 잡는다 — 그래서 테스트가 필요하다</h2>
+     * 테스트와 CI 는 <b>그 환경변수를 아예 안 쓰므로</b> Spring 기본값으로 잘 뜬다.
+     * <b>운영 {@code .env} 에만 없을 때</b> 깨지는데, 그 상태를 재현하는 것이
+     * <b>compose 파일을 읽는 이 검사</b>다.
+     */
+    @Test
+    @DisplayName("★★ 숫자 기본값 변수는 compose 에도 기본값이 있다 — 빈 문자열이면 기동이 깨진다")
+    void numericDefaultsHaveComposeDefaults() throws IOException {
+        String compose = Files.readString(Path.of("deploy/docker-compose.yml"));
+        // application.yml 의 ${VAR:숫자} — 숫자 기본값을 가진 변수만 고른다
+        Pattern numeric = Pattern.compile("\\$\\{([A-Z_][A-Z0-9_]*):(\\d+)\\}");
+
+        Set<String> broken = new LinkedHashSet<>();
+        for (Path yml : configFiles()) {
+            Matcher m = numeric.matcher(Files.readString(yml));
+            while (m.find()) {
+                String name = m.group(1);
+                if (NOT_FROM_COMPOSE.contains(name)) {
+                    continue;
+                }
+                // compose 가 ${NAME:-} 로 넘기면 빈 문자열이 전달된다
+                if (Pattern.compile("^\\s*" + name + ":\\s*\\$\\{" + name + ":-\\}",
+                                Pattern.MULTILINE)
+                        .matcher(compose).find()) {
+                    broken.add(name + "  (" + yml.getFileName() + ")");
+                }
+            }
+        }
+
+        assertThat(broken)
+                .as("★ compose 에서 ${NAME:-} 를 ${NAME:-기본값} 으로 바꿀 것. "
+                        + "⚠️ 빈 문자열은 「값」이라 application.yml 의 기본값을 덮는다 — "
+                        + "숫자 바인딩이 깨져 ★ 기동이 실패한다(2026-10-30 실제 발생)")
+                .isEmpty();
+    }
+
+    /**
      * compose 에 <b>실제로 대입돼 있는가</b>.
      *
      * <p>⚠️ 단순히 이름이 들어 있는지만 보면 <b>주석에 적혀 있어도 통과한다</b> —
