@@ -199,4 +199,51 @@ class AdmissionReservationAdminTest {
         // 전 지점 권한자에게는 둘 다 보인다
         assertThat(service.search(admin, YEAR, null, null)).hasSize(2);
     }
+
+    /**
+     * ★★ 전 지점 권한자가 <b>한 지점만</b> 골라 본다.
+     *
+     * <h2>⚠️ 없는 동안 화면이 전량을 받아 걸렀다</h2>
+     * 본사·연구소 계정은 <b>11개 지점이 한 목록에 섞여 내려온다.</b> 거르지 않으면
+     * <b>분당 담당자가 대구 지원자에게 전화한다</b>(2026-10-30 프런트 지적).
+     */
+    @Test
+    @DisplayName("★★ 전 지점 권한자가 한 지점만 골라 본다 — 섞이면 남의 지원자에게 전화한다")
+    void allBranchViewerCanNarrow() {
+        Academy mokdong = new Academy("45", "목동", LocalTime.of(9, 0));
+        em.persist(mokdong);
+        em.persist(AdmissionReservation.builder()
+                .academy(mokdong).year(YEAR).rsvCd("RSV-2093-0010")
+                .studentName("목동신청").studentTel("010-7777-8888").parentTel("010-9999-0000")
+                .stdGrade("N").agreeAd(true).promoAd(false)
+                .build());
+        em.flush();
+
+        assertThat(service.search(admin, YEAR, null, null, null))
+                .as("★ 비우면 지금까지와 같다")
+                .hasSize(2);
+        assertThat(service.search(admin, YEAR, null, null, mokdong.getId()))
+                .extracting(AdmissionReservation::getStudentName)
+                .containsExactly("목동신청");
+    }
+
+    /**
+     * ★★ <b>좁히기만 된다 — 넓히기는 안 된다.</b>
+     *
+     * <p>⚠️ 지점 계정이 다른 지점 id 를 넣으면 <b>거부된다.</b> 통과시키면
+     * <b>값을 바꿔 보내는 것만으로 남의 지점이 열린다</b>(§7).
+     */
+    @Test
+    @DisplayName("★★ 지점 계정은 다른 지점을 지정해도 거부된다 — 좁히기만 된다")
+    void branchAccountCannotWiden() {
+        Academy mokdong = new Academy("45", "목동", LocalTime.of(9, 0));
+        em.persist(mokdong);
+        em.flush();
+
+        AuthPrincipal branchAdmin = new AuthPrincipal(2L, "branch", bundang.getId(),
+                Set.of(Role.BRANCH_ADMIN), false, false);
+
+        assertThatThrownBy(() -> service.search(branchAdmin, YEAR, null, null, mokdong.getId()))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class);
+    }
 }
