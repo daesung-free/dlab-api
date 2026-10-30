@@ -61,8 +61,23 @@ public class AdminAdmissionReservationController {
     public ApiResponse<List<ReservationView>> list(@CurrentAccount AuthPrincipal me,
                                                    @RequestParam short year,
                                                    @RequestParam(required = false) ConsultStatus status,
-                                                   @RequestParam(required = false) String keyword) {
-        return ApiResponse.success(adminService.search(me, year, status, keyword)
+                                                   @RequestParam(required = false) String keyword,
+                                                   /**
+                                                    * ★ 지점을 골라 본다. 비우면 권한이
+                                                    * 정하는 범위 전체다.
+                                                    *
+                                                    * <p>⚠️ 본사·연구소 계정은 <b>11개
+                                                    * 지점이 섞여 내려온다</b> — 거르지
+                                                    * 않으면 <b>분당 담당자가 대구
+                                                    * 지원자에게 전화한다.</b>
+                                                    *
+                                                    * <p>★ <b>좁히기만 된다</b> — 지점
+                                                    * 계정이 다른 지점 id 를 넣으면
+                                                    * 거부된다.
+                                                    */
+                                                   @RequestParam(required = false)
+                                                   Long academyId) {
+        return ApiResponse.success(adminService.search(me, year, status, keyword, academyId)
                 .stream().map(ReservationView::from).toList());
     }
 

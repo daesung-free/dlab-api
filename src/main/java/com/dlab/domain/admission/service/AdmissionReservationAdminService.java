@@ -78,7 +78,31 @@ public class AdmissionReservationAdminService {
     @Transactional(readOnly = true)
     public List<AdmissionReservation> search(AuthPrincipal me, short year,
                                              ConsultStatus status, String keyword) {
-        Long scope = readScope(me, null);
+        return search(me, year, status, keyword, null);
+    }
+
+    /**
+     * ★★ 지점을 골라 보는 목록 — <b>전 지점 권한자가 한 지점만 볼 때</b> 쓴다
+     * (2026-10-30 프런트 요청).
+     *
+     * <h2>⚠️ 없는 동안 화면이 전량을 받아 걸렀다</h2>
+     * 본사·연구소 계정은 <b>11개 지점이 한 목록에 섞여 내려온다.</b> 거르지 않으면
+     * <b>분당 담당자가 대구 지원자에게 전화한다</b>(프런트 지적).
+     *
+     * <h2>★ 넓히는 데는 쓸 수 없다 — {@code readScope} 가 그대로 판정한다</h2>
+     * 전 지점 권한자면 <b>지정한 지점으로 좁혀지고</b>, 지점 계정이 다른 지점 id 를
+     * 넣으면 <b>{@code requireAcademyScope} 가 거부한다.</b> ⚠️ 즉 <b>좁히기만 되고
+     * 넓히기는 안 된다</b> — 계정별 메뉴 지정과 같은 판단이다(§7).
+     *
+     * <p>★ 중복찾기({@code duplicates})가 이미 같은 방식이라 <b>새 규약이 아니다.</b>
+     *
+     * @param academyId 비우면 지금까지와 같다 — 권한이 정하는 범위 전체
+     */
+    @Transactional(readOnly = true)
+    public List<AdmissionReservation> search(AuthPrincipal me, short year,
+                                             ConsultStatus status, String keyword,
+                                             Long academyId) {
+        Long scope = readScope(me, academyId);
         // ★ null 을 넘기면 PostgreSQL 이 bytea 로 추론해 LIKE 가 깨진다. 패턴을 만들어 넘긴다
         String pattern = keyword == null || keyword.isBlank() ? "%" : "%" + keyword.trim() + "%";
         return reservationRepository.search(scope, year, status, pattern);
