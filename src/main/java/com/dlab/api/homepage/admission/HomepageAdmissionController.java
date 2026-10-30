@@ -99,6 +99,52 @@ public class HomepageAdmissionController {
         return DsaResponse.ok();
     }
 
+    /**
+     * 3.9(신규) — 첨부 목록 (2026-10-30 연구소 요청).
+     *
+     * <p>★ 지금까지 {@code setStdFile} 로 <b>넣기만 하고 꺼내는 경로가 없었다.</b>
+     *
+     * <p>⚠️ <b>목록에 주소를 싣지 않는다</b> — 아래 {@code getStdFileUrl} 로 열 때마다
+     * 받는다. 목록에 실으면 <b>안 열어 본 파일의 주소까지 한꺼번에 나가고</b>, 그 응답이
+     * 로그에 남으면 만료 전까지 누구나 열 수 있다(성적표에 성명·생년월일이 있다).
+     */
+    @PostMapping("/getStdFile")
+    public DsaResponse getStdFile(@RequestBody HomepageRequests.GetStdFile request) {
+        tokenService.verify(request.token());
+        return DsaResponse.ok(admissionService.files(request.rsvCd()).stream()
+                .map(FileRow::from).toList());
+    }
+
+    /**
+     * 3.10(신규) — 첨부 내려받기 주소. <b>5분 뒤 만료된다.</b>
+     *
+     * <p>★ <b>{@code rsv_cd} 를 함께 받는다</b> — 파일번호만으로 발급하면 <b>번호를 바꿔
+     * 넣어 남의 성적표를 열 수 있다.</b>
+     */
+    @PostMapping("/getStdFileUrl")
+    public DsaResponse getStdFileUrl(@RequestBody HomepageRequests.GetStdFileUrl request) {
+        tokenService.verify(request.token());
+        var reservation = admissionService.files(request.rsvCd());
+        // 목록을 먼저 받아 예약 존재를 확인한 뒤, 소유 검증은 서비스가 한다
+        Long reservationId = reservation.isEmpty() ? null
+                : reservation.get(0).getReservation().getId();
+        if (reservationId == null) {
+            return DsaResponse.ok(java.util.List.of());
+        }
+        return DsaResponse.ok(java.util.List.of(java.util.Map.of(
+                "file_url", admissionService.fileUrl(reservationId, request.fileNo()))));
+    }
+
+    /** 첨부 한 줄. ★ 본문은 주지 않는다 — 주소로만 내려간다. */
+    public record FileRow(Long file_no, String content_type, Long byte_size,
+                          String reg_dt) {
+
+        static FileRow from(com.dlab.domain.admission.entity.AdmissionFile f) {
+            return new FileRow(f.getId(), f.getContentType(), f.getByteSize(),
+                    f.getCreatedAt() == null ? null : f.getCreatedAt().toString());
+        }
+    }
+
     // ─────────────────────────────────────────────────────────
 
     /**

@@ -105,4 +105,15 @@ public final class HomepageRequests {
                               @JsonProperty("rsv_cd") String rsvCd,
                               @JsonProperty("file") String file) {
     }
+
+    /** 3.9(신규) — 첨부 목록. */
+    public record GetStdFile(@JsonProperty("token") String token,
+                             @JsonProperty("rsv_cd") String rsvCd) {
+    }
+
+    /** 3.10(신규) — 첨부 내려받기 주소. ★ rsv_cd 를 함께 받아 소유를 확인한다. */
+    public record GetStdFileUrl(@JsonProperty("token") String token,
+                                @JsonProperty("rsv_cd") String rsvCd,
+                                @JsonProperty("file_no") Long fileNo) {
+    }
 }

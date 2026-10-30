@@ -17,15 +17,25 @@ public interface AdmissionReservationRepository extends JpaRepository<AdmissionR
     boolean existsByRsvCd(String rsvCd);
 
     /**
-     * 조회(규격서 3.4) — 지점·전형·이름·생년월일·연락처.
+     * 조회(규격서 3.4) — 지점·이름·연락처 <b>(+ 전형이 오면 전형)</b>.
      *
      * <p>규격이 배열을 돌려주게 돼 있다. 같은 사람이 여러 번 신청할 수 있어서다.
+     *
+     * <h2>★★ 생년월일을 조건에서 뺐다 (2026-10-30 연구소 요청)</h2>
+     * 입학신청에서 <b>{@code birth} 가 삭제 항목</b>이 됐다. 그런데 이 조회가 생년월일
+     * 일치를 <b>반드시</b> 요구하고 있어서, 홈페이지가 생년월일을 안 보내면
+     * <b>결과가 항상 비어 나왔다</b> — 연구소가 말한 <b>「조회하면 null」</b>이 이것이다.
+     *
+     * <p>⚠️ <b>생년월일을 보내 와도 무시한다.</b> 홈페이지 쪽 수정 시점이 우리와 다를 수
+     * 있어, 받아서 거르면 그 기간에 다시 빈 결과가 된다.
+     *
+     * <p>★ <b>같은 이름·같은 번호가 다른 사람일 수는 없다</b> — 번호가 사실상 식별자다.
+     * 생년월일을 빼도 남의 신청이 섞이지 않는다.
      */
     @Query("""
             SELECT r FROM AdmissionReservation r
             WHERE r.academy.id = :academyId
               AND r.studentName = :studentName
-              AND r.birth = :birth
               AND r.studentTel = :studentTel
               AND (:preTest IS NULL OR r.preTest = :preTest)
               AND r.deleted = false
@@ -34,7 +44,6 @@ public interface AdmissionReservationRepository extends JpaRepository<AdmissionR
     List<AdmissionReservation> search(@Param("academyId") Long academyId,
                                       @Param("preTest") Integer preTest,
                                       @Param("studentName") String studentName,
-                                      @Param("birth") String birth,
                                       @Param("studentTel") String studentTel);
 
     /**
