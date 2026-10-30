@@ -58,6 +58,8 @@ public class StudentProfileService {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final FileAttachmentRepository fileRepository;
     private final FileAttachmentService fileAttachmentService;
+    private final com.dlab.domain.appconfig.service.TermsService termsService;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
     private final com.dlab.domain.user.repository.AcademyRepository academyRepository;
     private final ObjectMapper objectMapper;
     private final Clock clock;
@@ -82,6 +84,41 @@ public class StudentProfileService {
      * 두 장이면 상담 현황의 작성 여부가 어느 쪽을 보는지 정해지지 않고, 담임이 고친 내용이
      * 다른 행에 남아 화면에서 사라진다. 그래서 있으면 갱신한다.
      */
+    /**
+     * ★★ 이 학생이 민감정보 수집을 <b>거부했는가</b>.
+     *
+     * <p>입학동의서 최종본(261029)에서 민감정보는 <b>선택</b>이다 — 거부할 수 있고,
+     * 거부하면 <b>「관련 사유 및 증빙자료를 제출하지 않는 대체 신청 방법」</b>으로 간다.
+     *
+     * <h2>★★ 「거부한 경우」만 막는다 — 「동의 기록이 없는 경우」는 막지 않는다</h2>
+     * 처음에는 <b>동의가 확인되지 않으면 받지 않게</b> 만들었다가 되돌렸다. 이유가 둘이다.
+     *
+     * <ul>
+     *   <li>★ <b>운영에 학생 앱 계정이 거의 없다</b>(앱 출시 전). 동의는 계정 단위
+     *       ({@code term_agreement})라, 계정이 없으면 전부 「동의 없음」이 되어
+     *       <b>건강 칸이 통째로 버려진다</b> — 지금 유일한 입력 경로가 데스크다.</li>
+     *   <li>★ <b>종이로도 받는다.</b> 동의서에 서명을 받는 흐름이 있고, 그때 「서면 동의
+     *       받음」을 어디에 남기는지가 <b>아직 정해지지 않았다</b>(디랩 확인 중).
+     *       종이로 적법하게 받은 동의를 <b>앱 계정이 없다는 이유로 무시</b>하면,
+     *       받은 정보를 쓰지 못한다.</li>
+     * </ul>
+     *
+     * <p>⚠️ <b>그래서 지금은 「명시적 거부」만 신뢰한다.</b> 거부는 본인이 누른 것이라
+     * 뜻이 분명하다. 「기록이 없다」는 <b>거부가 아니라 모르는 상태</b>다.
+     *
+     * <p>★ <b>「서면 동의 받음」 기록이 생기면 이 판정을 조여야 한다</b> — 그때는
+     * 「동의가 확인된 경우만」으로 바꿀 수 있다.
+     */
+    private boolean sensitiveRefused(StudentEnrollment enrollment) {
+        return accountRepository.findByStudentId(enrollment.getStudent().getId())
+                .filter(account -> !account.isDeleted())
+                .map(account -> termsService.statusOf(account.getId()).stream()
+                        .filter(status -> "SENSITIVE".equals(status.terms().getCode()))
+                        // ★ Boolean.FALSE 만 본다 — null(응답 없음)은 거부가 아니다
+                        .anyMatch(status -> Boolean.FALSE.equals(status.agreed())))
+                .orElse(false);
+    }
+
     @Transactional
     public ProfileDetail save(AuthPrincipal me, Long enrollmentId, SaveCommand command) {
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
@@ -91,10 +128,24 @@ public class StudentProfileService {
                 .orElseGet(() -> profileRepository.save(
                         new StudentProfile(enrollment, form, Instant.now(clock))));
 
+        // ★★ 민감정보에 동의하지 않은 학생은 건강 칸을 받지 않는다 (입학동의서 최종본).
+        //    최종본: 「동의를 거부할 수 있으며, 이 경우 관련 사유 및 증빙자료를 제출하지
+        //    않는 ★ 대체 신청 방법을 안내합니다」
+        //
+        //    ⚠️ 거르는 것은 ★ 서버가 한다. 화면 조건으로만 두면 코드 한 줄 바뀔 때
+        //    조용히 샌다 — 민감정보가 새는 것은 되돌릴 수 없다.
+        //
+        //    ★ 나머지 칸(생활습관·설문 답)은 그대로 받는다. 민감정보가 아니고, 전부
+        //    막으면 신상기록부 자체를 못 쓴다.
+        boolean refused = sensitiveRefused(enrollment);
         profile.overwrite(form,
-                command.healthNote(), json(command.healthItems()),
+                refused ? null : command.healthNote(),
+                refused ? null : json(command.healthItems()),
                 command.lifeNote(), json(command.lifeItems()),
                 json(command.answers()));
+        if (refused && (command.healthNote() != null || command.healthItems() != null)) {
+            log.info("민감정보 거부로 건강 칸을 저장하지 않음: enrollment={}", enrollmentId);
+        }
         if (command.writtenAt() != null) {
             // 소급 입력 — 종이로 받아둔 날짜를 데스크가 넣는다
             profile.changeWrittenAt(command.writtenAt());

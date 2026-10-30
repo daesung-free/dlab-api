@@ -50,6 +50,7 @@ class StudentProfileTest {
 
     @Autowired StudentProfileService profileService;
     @Autowired StudentProfileRepository profileRepository;
+    @Autowired com.dlab.domain.appconfig.service.TermsService termsService;
     @Autowired EntityManager em;
 
     @MockitoBean com.dlab.domain.attendance.service.MissingAttendanceScheduler scheduler;
@@ -265,5 +266,84 @@ class StudentProfileTest {
 
         assertThat(saved.formId()).isNull();
         assertThat(saved.healthNote()).isNotBlank();
+    }
+
+    // ── 민감정보 거부 (입학동의서 최종본 261029) ────────────────────
+
+    /**
+     * ★★ 민감정보를 <b>거부한</b> 학생은 건강 칸을 저장하지 않는다.
+     *
+     * <p>최종본: 「동의를 거부할 수 있으며, 이 경우 관련 사유 및 증빙자료를 제출하지
+     * 않는 <b>대체 신청 방법을 안내합니다</b>」
+     *
+     * <p>★ <b>거르는 것은 서버가 한다.</b> 화면 조건으로만 두면 코드 한 줄 바뀔 때
+     * 조용히 샌다 — <b>민감정보가 새는 것은 되돌릴 수 없다.</b>
+     *
+     * <p>★ 나머지 칸(생활습관·설문 답)은 그대로 받는다 — 민감정보가 아니고, 전부 막으면
+     * 신상기록부 자체를 못 쓴다.
+     */
+    @Test
+    @DisplayName("★★ 민감정보를 거부하면 건강 칸이 저장되지 않는다 — 나머지는 그대로다")
+    void refusedSensitiveDropsHealth() {
+        Long accountId = studentAccount(minji, "sp-stu-refuse");
+        var terms = termsService.create(null, "SENSITIVE", "1.0",
+                "민감정보", "민감정보 문구", false, null);
+        termsService.record(accountId, terms.getId(), false);   // ★ 거부
+        em.flush();
+        em.clear();
+
+        var detail = profileService.save(branchAdmin, minji.getId(), basic(List.of()));
+        em.flush();
+
+        assertThat(detail.healthNote()).as("★ 건강 메모를 저장하지 않는다").isNull();
+        assertThat(detail.lifeNote()).as("★ 생활습관은 그대로다").isNotBlank();
+    }
+
+    /**
+     * ★★ 「응답이 없다」는 거부가 아니다.
+     *
+     * <p>운영에 학생 앱 계정이 거의 없고(앱 출시 전), <b>종이로도 동의를 받는다.</b>
+     * 「기록이 없으면 안 받는다」로 두면 <b>건강 칸이 통째로 버려진다</b> — 지금 유일한
+     * 입력 경로가 데스크다.
+     */
+    @Test
+    @DisplayName("★★ 동의 기록이 없으면 그대로 저장된다 — 종이로도 받고 계정이 거의 없다")
+    void noRecordStillSaves() {
+        Long accountId = studentAccount(minji, "sp-stu-silent");
+        termsService.create(null, "SENSITIVE", "1.0",
+                "민감정보", "민감정보 문구", false, null);
+        em.flush();   // ★ record 를 부르지 않는다 — 응답 없음
+        em.clear();
+
+        var detail = profileService.save(branchAdmin, minji.getId(), basic(List.of()));
+        em.flush();
+
+        assertThat(detail.healthNote()).as("★ 거부가 아니므로 저장된다").isNotBlank();
+    }
+
+    @Test
+    @DisplayName("★ 동의했으면 당연히 저장된다")
+    void agreedSaves() {
+        Long accountId = studentAccount(minji, "sp-stu-agree");
+        var terms = termsService.create(null, "SENSITIVE", "1.0",
+                "민감정보", "민감정보 문구", false, null);
+        termsService.record(accountId, terms.getId(), true);
+        em.flush();
+        em.clear();
+
+        var detail = profileService.save(branchAdmin, minji.getId(), basic(List.of()));
+        em.flush();
+
+        assertThat(detail.healthNote()).isNotBlank();
+    }
+
+    /** 그 학생의 앱 계정을 만든다 — 동의는 ★ 계정 단위다. */
+    private Long studentAccount(
+            com.dlab.domain.user.entity.StudentEnrollment enrollment, String loginId) {
+        var account = com.dlab.domain.user.entity.Account.forStudent(
+                enrollment.getStudent(), loginId, "x");
+        em.persist(account);
+        em.flush();
+        return account.getId();
     }
 }
