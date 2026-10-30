@@ -38,11 +38,23 @@ public class AdminAuditLogController {
     /**
      * 조회 가능 기간 (디랩 1021 피드백 4-3 — "적어도 당해(1년)").
      *
-     * <p>⚠️ <b>보관 기간이 아니다.</b> 1년이 지난 행도 지우지 않는다 — 감사 로그는
+     * <p>⚠️ <b>보관 기간이 아니다.</b> 기간이 지난 행도 지우지 않는다 — 감사 로그는
      * 분쟁의 근거이고 용량도 문제가 아니다(10/20 기준 483건). 삭제는 개인정보
      * 처리방침과 맞는지 확인이 필요한 항목이라(Q5) <b>만들지 않았다.</b>
      */
-    private static final int RETENTION_YEARS = 1;
+    /**
+     * ★ 조회 가능 기간 — <b>설정값</b>이다. 기본 <b>3년</b>.
+     *
+     * <h2>★★ 왜 코드에서 뺐나</h2>
+     * 1 이 코드에 박혀 있었는데 디랩이 <b>감사 로그는 3년</b>이라고 알려왔다
+     * (2026-10-30 보존기간 요청 5항). 그리고 보존기간은 <b>법 해석이 바뀌면 따라
+     * 바뀌는 값</b>이라, 바뀔 때마다 배포해야 하는 자리에 두면 안 된다.
+     *
+     * <p>⚠️ <b>1년으로 박혀 있던 동안 1년 넘은 이력이 화면에서 안 보였다</b> — 데이터는
+     * 남아 있었으므로, 이 값을 올리면 <b>그 기간이 다시 보인다.</b>
+     */
+    @org.springframework.beans.factory.annotation.Value("${audit.retention-years:3}")
+    private int retentionYears;
 
     private final AuditLogRepository auditLogRepository;
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
@@ -82,16 +94,16 @@ public class AdminAuditLogController {
         // ★ 조회 가능 기간을 1년으로 둔다 (디랩 1021 피드백 4-3:
         //   "적어도 당해(1년) 은 보관 및 조회가 가능해야 할 것 같습니다").
         //
-        //   ⚠️ 1년이 지난 행을 지우지는 않는다 — 감사 로그는 분쟁의 근거이고
+        //   ⚠️ 기간이 지난 행을 지우지는 않는다 — 감사 로그는 분쟁의 근거이고
         //   용량도 문제가 아니다(10/20 기준 483건). 조회 창만 정한다.
         //   그리고 삭제는 개인정보 처리방침과 맞는지 확인이 필요한 항목이다(Q5).
         //
         //   ★ 상한이 없으면 from=2000-01-01 한 줄로 전 기간을 훑는다 —
         //   화면이 그걸 보내지 않더라도 API 는 막아 둬야 한다.
-        if (start.isBefore(today.minusYears(RETENTION_YEARS))) {
+        if (start.isBefore(today.minusYears(retentionYears))) {
             throw new com.dlab.common.exception.BusinessException(
                     com.dlab.common.exception.ErrorCode.INVALID_REQUEST,
-                    "감사 로그는 최근 %d년까지 조회할 수 있습니다.".formatted(RETENTION_YEARS));
+                    "감사 로그는 최근 %d년까지 조회할 수 있습니다.".formatted(retentionYears));
         }
         if (end.isBefore(start)) {
             throw new com.dlab.common.exception.BusinessException(
