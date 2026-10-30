@@ -216,4 +216,62 @@ class TermsScopeTest {
                 .singleElement()
                 .satisfies(s -> assertThat(s.agreed()).isFalse());  // 미동의를 골랐음
     }
+
+    // ── 잘못 올린 약관 치우기 ─────────────────────────────────────
+
+    /**
+     * ★★ 운영에 테스트 약관이 「필수」로 올라가 있었다 (2026-10-30 프런트 발견).
+     *
+     * <p>등록 경로만 있고 <b>치우는 경로가 없어서</b> 그대로 남아 있었다 — 앱이 출시되면
+     * 사용자에게 <b>「zz_약관확인필수」가 뜬다.</b>
+     */
+    @Test
+    @DisplayName("★ 응답이 없는 약관은 치울 수 있다 — 잘못 올린 것을 거두는 경로다")
+    void unansweredTermsCanBeRemoved() {
+        Terms terms = common("ZZ_TEST", "1.0");
+        em.flush();
+
+        termsService.remove(terms.getId());
+        em.flush();
+        em.clear();
+
+        assertThat(termsService.statusOf(bundangStudentAccountId))
+                .as("★ 목록에서 사라진다")
+                .isEmpty();
+    }
+
+    /**
+     * ★★ 한 명이라도 응답했으면 치우지 않는다.
+     *
+     * <p>동의는 <b>「그때 어떤 문구에 동의했는가」가 근거</b>다. 치우면 <b>그 사람의
+     * 동의가 무엇에 대한 것인지 답할 수 없다.</b>
+     */
+    @Test
+    @DisplayName("★★ 동의한 사람이 있으면 치울 수 없다 — 동의의 근거가 사라진다")
+    void answeredTermsCannotBeRemoved() {
+        Terms terms = common("MARKETING", "1.0");
+        em.flush();
+        termsService.record(bundangStudentAccountId, terms.getId(), true);
+        em.flush();
+
+        assertThatThrownBy(() -> termsService.remove(terms.getId()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("버전을 올려");
+    }
+
+    /**
+     * ★★ <b>미동의도 응답이다</b> — 치우면 「물어봤는데 거부했다」와 「물어본 적 없다」가
+     * 구분되지 않는다.
+     */
+    @Test
+    @DisplayName("★★ 미동의도 응답이다 — 거부한 기록이 있으면 치울 수 없다")
+    void declinedTermsCannotBeRemoved() {
+        Terms terms = common("MARKETING", "1.0");
+        em.flush();
+        termsService.record(bundangStudentAccountId, terms.getId(), false);
+        em.flush();
+
+        assertThatThrownBy(() -> termsService.remove(terms.getId()))
+                .isInstanceOf(BusinessException.class);
+    }
 }

@@ -25,6 +25,14 @@ public interface TermAgreementRepository extends JpaRepository<TermAgreement, Lo
             """)
     List<TermAgreement> findLatestByAccount(@Param("accountId") Long accountId);
 
+    /**
+     * ★ 이 약관에 대한 응답이 한 건이라도 있나 — <b>치울 수 있는지 판정</b>에 쓴다.
+     *
+     * <p>⚠️ <b>동의/미동의를 가리지 않는다.</b> 미동의도 「그때 거부했다」는 기록이라,
+     * 지우면 <b>「물어봤는데 거부했다」와 「물어본 적 없다」가 구분되지 않는다.</b>
+     */
+    boolean existsByTermsId(Long termsId);
+
     /** 전체 이력 — 감사·분쟁 대응용. 최신순. */
     List<TermAgreement> findByAccountIdOrderByAgreedAtDesc(Long accountId);
 
@@ -33,10 +41,14 @@ public interface TermAgreementRepository extends JpaRepository<TermAgreement, Lo
      *
      * <p>동의는 이력이라(철회도 행으로 쌓인다) 계정·약관마다 마지막 행만 본다.
      *
-     * @return {@code [계정 id, 약관 id, 동의 여부]}
+     * <p>★ {@code agreedAt} 을 함께 준다 — <b>유효기간이 있는 약관</b>(마케팅: 동의일부터
+     * 2년)은 <b>동의했는지만으로는 유효한지 알 수 없다.</b> 이것 없이 세면 <b>2년 지난
+     * 동의자가 「동의자」로 잡힌다.</b>
+     *
+     * @return {@code [계정 id, 약관 id, 동의 여부, 동의 시각]}
      */
     @Query("""
-            SELECT a.account.id, a.terms.id, a.agreed FROM TermAgreement a
+            SELECT a.account.id, a.terms.id, a.agreed, a.agreedAt FROM TermAgreement a
             WHERE a.account.id IN :accountIds
               AND a.terms.id IN :termsIds
               AND a.id = (
