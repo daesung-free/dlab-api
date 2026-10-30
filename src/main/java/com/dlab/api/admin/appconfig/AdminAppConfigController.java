@@ -93,6 +93,20 @@ public class AdminAppConfigController {
     }
 
     /** 특정 계정의 동의 이력 — 분쟁 대응. */
+    /**
+     * ★ 잘못 올린 약관을 치운다 — <b>응답이 한 건도 없는 것만</b>.
+     *
+     * <p>⚠️ <b>문구 수정용이 아니다.</b> 문구를 바꾸려면 <b>버전을 올려 새로 등록</b>한다 —
+     * 덮어쓰면 이미 동의한 사람들의 근거가 사라진다.
+     *
+     * <p>★ 응답(동의·미동의)이 하나라도 있으면 <b>400</b> 이다.
+     */
+    @DeleteMapping("/terms/{termsId}")
+    public ApiResponse<Void> removeTerms(@PathVariable Long termsId) {
+        termsService.remove(termsId);
+        return ApiResponse.empty();
+    }
+
     @GetMapping("/terms/agreements/{accountId}")
     public ApiResponse<List<AgreementHistoryResponse>> agreements(@PathVariable Long accountId) {
         return ApiResponse.success(termsService.history(accountId).stream()

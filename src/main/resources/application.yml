@@ -188,3 +188,10 @@ fcm:
   credentials-path: ${FCM_CREDENTIALS_PATH:}
   # true 면 FCM 에 검증만 요청하고 단말로 보내지 않는다
   dry-run: ${FCM_DRY_RUN:false}
+
+audit:
+  # ★ 감사 로그를 조회할 수 있는 기간(년). 디랩 확정 3년 (2026-10-30 보존기간 요청 5항).
+  #   ⚠️ 보관 기간이 아니다 — 지난 행을 지우지 않는다. 조회 창만 정한다.
+  #   ★ 전에는 코드에 1 이 박혀 있어 1년 넘은 이력이 화면에서 안 보였다. 데이터는 남아
+  #     있으므로 이 값을 올리면 그 기간이 다시 보인다.
+  retention-years: ${AUDIT_RETENTION_YEARS:3}

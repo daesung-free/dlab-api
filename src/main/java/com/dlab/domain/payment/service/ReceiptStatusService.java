@@ -72,6 +72,31 @@ public class ReceiptStatusService {
                           LocalDate from, LocalDate to, List<BillingType> types,
                           boolean unpaidOnly, String keyword,
                           com.dlab.domain.payment.entity.PaymentMethod method) {
+        return find(me, academyId, year, from, to, types, unpaidOnly, keyword, method, null);
+    }
+
+    /**
+     * ★★ 학생 한 명으로 거른다 — <b>학부모용 결제 내역 출력</b>에 쓴다
+     * (2026-10-30 프런트 요청).
+     *
+     * <h2>⚠️ 없는 동안 화면이 학번으로 두 겹 걸렀다</h2>
+     * 학생 필터가 없어 <b>{@code keyword} 로 학번을 검색하고 그 결과를 다시 학번으로
+     * 거르고</b> 있었다. {@code keyword} 는 이름·학번·전표번호 통합 검색이라 <b>느슨하고</b>,
+     * 못 거르면 <b>학부모에게 다른 학생의 결제 내역이 찍힌 서류가 나간다.</b>
+     *
+     * <p>★ {@code enrollmentId} 는 <b>등록 건</b>이다 — 학번이 아니다. 학번은 매년
+     * 초기화되고 재등록하면 같은 사람에 등록 행이 또 생기므로, <b>어느 기수의 결제인지</b>가
+     * 정해져야 한다.
+     *
+     * @param enrollmentId 비우면 전체. ★ 지점 범위는 그대로 적용된다 —
+     *                     다른 지점 학생 id 를 넣어도 그 지점 청구가 없어 0건이다
+     */
+    @Transactional(readOnly = true)
+    public List<Row> find(AuthPrincipal me, Long academyId, short year,
+                          LocalDate from, LocalDate to, List<BillingType> types,
+                          boolean unpaidOnly, String keyword,
+                          com.dlab.domain.payment.entity.PaymentMethod method,
+                          Long enrollmentId) {
 
         Long scope = requireScope(me, academyId);
         // ★ null을 그대로 넘기지 않는다. PostgreSQL이 ":param IS NULL"만 보고는
@@ -101,6 +126,9 @@ public class ReceiptStatusService {
                             paymentsByBilling.getOrDefault(b.getId(), List.of()),
                             itemsByBilling.getOrDefault(b.getId(), List.of()));
                 })
+                // ★ 학생 필터를 ★ 먼저 건다 — 뒤에 두면 나머지 조건이 남의 행을 훑는다
+                .filter(row -> enrollmentId == null
+                        || enrollmentId.equals(row.billing().getEnrollment().getId()))
                 .filter(row -> types == null || types.isEmpty()
                         || types.contains(row.billing().getBillingType()))
                 .filter(row -> !unpaidOnly || row.unpaid() > 0)

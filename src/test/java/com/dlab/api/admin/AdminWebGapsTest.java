@@ -152,6 +152,47 @@ class AdminWebGapsTest {
         assertThat(rate.targetAccounts()).isEqualTo(2);
         assertThat(rate.agreedAccounts()).isEqualTo(1);
         assertThat(rate.rate()).isEqualTo(50);
+        // ★ 기간이 없는 약관이라 유효율이 동의율과 같다
+        assertThat(rate.effectiveAccounts()).isEqualTo(1);
+        assertThat(rate.effectiveRate()).isEqualTo(50);
+    }
+
+    /**
+     * ★★ 유효기간이 지난 마케팅 동의는 <b>동의자로는 세지만 유효자로는 세지 않는다</b>.
+     *
+     * <p>고치기 전에는 <b>2년 지난 동의자가 「동의자」로만 잡혀</b> 화면 숫자가 실제
+     * 발송 대상과 달랐다(2026-10-30 프런트가 발견).
+     *
+     * <p>★ {@code agreedAccounts} 를 줄이지 않은 이유 — 숫자가 조용히 줄면 담당자는
+     * <b>「동의자가 사라졌다」</b>로 읽는다. 두 값을 나란히 둔다.
+     */
+    @Test
+    @DisplayName("★★ 2년 지난 마케팅 동의는 유효자에서 빠진다 — 동의자로는 남는다")
+    void expiredMarketingIsNotEffective() {
+        Student s = new Student("UG-M-" + System.nanoTime(), "만료학생", "010-7777-0001");
+        em.persist(s);
+        var enrollment = new com.dlab.domain.user.entity.StudentEnrollment(
+                s, bundang, (short) 2026, "M-0001", null,
+                com.dlab.domain.user.entity.GradeType.HIGH3);
+        em.persist(enrollment);
+        Account account = Account.forStudent(s, "ug-m-" + System.nanoTime(), "x");
+        account.approve();   // ACTIVE 로 — 분모는 활성 계정이다
+        em.persist(account);
+
+        Terms marketing = new Terms("MARKETING", "1.0", "홍보·마케팅", "내용", false,
+                Instant.now(clock).minusSeconds(60));
+        em.persist(marketing);
+        // ★ 2년 하루 전에 동의했다
+        em.persist(new TermAgreement(account, marketing, true,
+                Instant.now(clock).minus(java.time.Duration.ofDays(731))));
+        em.flush();
+
+        var rate = appUsageService.usage(bundang.getId()).terms().stream()
+                .filter(t -> t.termsId().equals(marketing.getId()))
+                .findFirst().orElseThrow();
+
+        assertThat(rate.agreedAccounts()).as("★ 동의한 사실은 남는다").isEqualTo(1);
+        assertThat(rate.effectiveAccounts()).as("★★ 유효하지 않다").isZero();
     }
 
     @Test

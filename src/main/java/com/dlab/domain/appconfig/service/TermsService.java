@@ -45,12 +45,36 @@ public class TermsService {
     private final Clock clock;
 
     /**
+     * ★★ 홍보·마케팅 동의 유효기간 — <b>2년</b>.
+     *
+     * <p>입학동의서 최종본(261029): *「보유 및 이용기간: 동의일부터 2년.
+     * <b>2년이 지나면 수신 동의 여부를 다시 확인합니다.</b>」*
+     *
+     * <p>⚠️ <b>코드에 박아 둔다.</b> 약관 본문에 적힌 기간이라, 바꾸려면 <b>약관 버전을
+     * 올려야</b> 한다 — 설정값으로 빼면 <b>문구와 동작이 따로 바뀔 수 있다.</b>
+     */
+    private static final java.time.Period MARKETING_VALID_FOR = java.time.Period.ofYears(2);
+
+    /** 유효기간이 있는 약관. ★ 코드로 가른다 — 기간이 약관 본문에 적혀 있다. */
+    private static final String MARKETING_CODE = "MARKETING";
+
+    /**
      * 약관 한 건과 그 계정의 현재 동의 여부.
      *
-     * @param agreed {@code null}이면 아직 응답한 적이 없다 — "동의 안 함"과 구분해야
-     *               가입 흐름에서 다시 물어볼지 판단할 수 있다
+     * @param agreed  {@code null}이면 아직 응답한 적이 없다 — "동의 안 함"과 구분해야
+     *                가입 흐름에서 다시 물어볼지 판단할 수 있다
+     * @param expired ★ <b>동의했지만 유효기간이 지났다.</b> 홍보·마케팅만 해당한다
+     *                (동의일부터 2년). {@code agreed} 는 {@code true} 로 남겨 둔다 —
+     *                <b>동의한 사실 자체는 바뀌지 않았다.</b>
+     *                <p>⚠️ 화면은 「다시 동의 필요」로 보여야 한다. {@code agreed=true} 만
+     *                보고 「동의함」으로 그리면 <b>담당자는 광고가 나가는 줄 안다.</b>
      */
-    public record TermsStatus(Terms terms, Boolean agreed, Instant agreedAt) {
+    public record TermsStatus(Terms terms, Boolean agreed, Instant agreedAt, boolean expired) {
+
+        /** ★ 실제로 유효한 동의인가 — 화면·발송이 이것을 본다. */
+        public boolean effective() {
+            return Boolean.TRUE.equals(agreed) && !expired;
+        }
     }
 
     /**
@@ -100,9 +124,85 @@ public class TermsService {
                     TermAgreement agreement = latest.get(terms.getId());
                     return new TermsStatus(terms,
                             agreement == null ? null : agreement.isAgreed(),
-                            agreement == null ? null : agreement.getAgreedAt());
+                            agreement == null ? null : agreement.getAgreedAt(),
+                            isExpired(terms, agreement));
                 })
                 .toList();
+    }
+
+    /**
+     * ★★ 동의했지만 유효기간이 지났는가.
+     *
+     * <p>지금은 <b>홍보·마케팅만</b> 해당한다(동의일부터 2년). 다른 약관은 기간이 없다 —
+     * 「목적 달성 시까지」·「재학기간 동안」처럼 <b>날짜로 셀 수 없는 기준</b>이다.
+     *
+     * <p>★ <b>철회한 동의는 만료가 아니다</b> — 이미 {@code agreed=false} 라 발송에서
+     * 빠진다. 여기서 또 세면 <b>「철회」와 「만료」가 섞여</b> 화면이 무엇을 안내할지
+     * 정하지 못한다(철회는 본인이 한 것이고, 만료는 다시 물어봐야 하는 것이다).
+     */
+    private boolean isExpired(Terms terms, TermAgreement agreement) {
+        if (agreement == null || !agreement.isAgreed()) {
+            return false;
+        }
+        if (!MARKETING_CODE.equals(terms.getCode())) {
+            return false;
+        }
+        java.time.LocalDate agreedOn = agreement.getAgreedAt()
+                .atZone(java.time.ZoneId.systemDefault()).toLocalDate();
+        return java.time.LocalDate.now(clock).isAfter(agreedOn.plus(MARKETING_VALID_FOR));
+    }
+
+    /**
+     * ★ 광고성 발송 대상인가 — <b>동의했고 유효기간 안</b>이어야 한다.
+     *
+     * <p>⚠️ 발송 경로가 이것을 써야 한다. {@code needsAgreement} 의 반대로 판단하면
+     * <b>만료된 동의가 「동의함」으로 통과한다.</b>
+     */
+    @Transactional(readOnly = true)
+    public boolean marketingAllowed(Long accountId) {
+        return statusOf(accountId).stream()
+                .filter(status -> MARKETING_CODE.equals(status.terms().getCode()))
+                .anyMatch(TermsStatus::effective);
+    }
+
+    /**
+     * ★★ 약관을 치운다 — <b>응답이 한 건도 없는 것만</b>.
+     *
+     * <h2>왜 필요한가</h2>
+     * 운영에 <b>테스트 약관({@code ZZ_TEST})이 「필수」로 올라가 있었다</b>(2026-10-30
+     * 프런트 발견). 등록 경로만 있고 <b>치우는 경로가 없어서</b> 그대로 남아 있었다 —
+     * 앱이 출시되면 사용자에게 <b>「zz_약관확인필수」가 뜬다.</b>
+     *
+     * <h2>★★ 응답이 있으면 치우지 않는다</h2>
+     * 동의는 <b>「그때 어떤 문구에 동의했는가」가 근거</b>다. 한 명이라도 응답했으면
+     * 그 근거가 이 행을 가리키므로, 치우면 <b>그 사람의 동의가 무엇에 대한 것인지
+     * 답할 수 없다.</b>
+     *
+     * <p>⚠️ <b>미동의도 응답이다</b> — 지우면 「물어봤는데 거부했다」와 「물어본 적 없다」가
+     * 구분되지 않는다.
+     *
+     * <p>★ 문구를 고치려면 <b>치우는 것이 아니라 버전을 올린다.</b> 이 경로는
+     * <b>잘못 올린 약관을 거두는 용도</b>다.
+     *
+     * <p>★ <b>soft delete</b> 다 — 행은 남는다. 「무엇이 있었다가 치워졌나」가 남아야
+     * 나중에 「왜 사라졌지」에 답할 수 있다.
+     */
+    @Transactional
+    public void remove(Long termsId) {
+        Terms terms = termsRepository.findById(termsId)
+                .filter(t -> !t.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "약관을 찾을 수 없습니다."));
+
+        if (agreementRepository.existsByTermsId(termsId)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "이미 응답한 사람이 있는 약관은 치울 수 없습니다. "
+                            + "문구를 바꾸려면 버전을 올려 새로 등록해 주세요.");
+        }
+
+        terms.markDeleted();
+        log.info("약관 치움: termsId={}, code={}, version={}",
+                termsId, terms.getCode(), terms.getVersion());
     }
 
     /**
@@ -176,8 +276,8 @@ public class TermsService {
                 .filter(status -> status.terms().getCode().equals(code))
                 .toList();
 
-        return !matched.isEmpty()
-                && matched.stream().noneMatch(status -> Boolean.TRUE.equals(status.agreed()));
+        // ★ 만료된 동의는 「다시 물어봐야 하는 것」이다 — effective() 가 그 둘을 함께 본다
+        return !matched.isEmpty() && matched.stream().noneMatch(TermsStatus::effective);
     }
 
     /** 전체 이력 — 감사·분쟁 대응용. */
