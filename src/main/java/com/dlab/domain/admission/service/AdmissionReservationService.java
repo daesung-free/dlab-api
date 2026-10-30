@@ -38,6 +38,8 @@ public class AdmissionReservationService {
 
     /** 성적표 최대 크기. 규격이 Base64 문자열이라 본문 전체가 메모리에 올라온다. */
     private static final int MAX_FILE_BYTES = 10 * 1024 * 1024;
+    /** ★ 짧게 둔다 — 성명·생년월일이 담긴 성적표라, 주소가 새면 그동안 누구나 열 수 있다. */
+    private static final java.time.Duration FILE_URL_TTL = java.time.Duration.ofMinutes(5);
 
     private static final int RSV_CD_RETRY = 5;
 
@@ -143,12 +145,21 @@ public class AdmissionReservationService {
 
     // ── 3.4 원생 정보 조회 ────────────────────────────────────
 
+    /**
+     * ★ {@code birth} 는 <b>받기만 하고 쓰지 않는다</b> (2026-10-30 연구소 요청).
+     *
+     * <p>입학신청에서 생년월일이 삭제 항목이 됐다. 조건으로 두면 <b>안 보내는 순간 결과가
+     * 항상 빈다</b> — 연구소가 말한 「조회하면 null」이 그것이다.
+     *
+     * <p>⚠️ <b>파라미터를 지우지 않는다.</b> 홈페이지가 보내 오는 동안 <b>400 이 나면
+     * 조회 자체가 막힌다</b> — 그쪽 수정 시점이 우리와 다를 수 있다.
+     */
     @Transactional(readOnly = true)
     public List<AdmissionReservation> search(String acid, Integer preTest, String rsvNm,
                                              String birth, String stdTel) {
         Academy academy = requireAcademy(acid);
         return reservationRepository.search(
-                academy.getId(), preTest, rsvNm, birth, normalizeTel(stdTel));
+                academy.getId(), preTest, rsvNm, normalizeTel(stdTel));
     }
 
     // ── 3.5 · 3.6 코드 조회 ───────────────────────────────────
@@ -193,6 +204,45 @@ public class AdmissionReservationService {
     }
 
     // ── 3.8 성적표 파일 ───────────────────────────────────────
+
+    /**
+     * 첨부 목록 (2026-10-30 연구소 요청, 규격 신규).
+     *
+     * <h2>★ 지금까지 저장만 있었다 — 아무도 볼 수 없었다</h2>
+     * {@code setStdFile} 로 넣기만 하고 <b>꺼내는 경로가 홈페이지에도 관리자에도 없었다.</b>
+     * 성적표를 받아 두고 <b>직원도 못 보는 상태</b>였다.
+     *
+     * <h2>★★ 목록에 주소를 싣지 않는다</h2>
+     * 서명 주소는 <b>열 때마다 따로 발급</b>한다({@link #fileUrl}). 목록에 실으면
+     * <b>안 열어 본 파일의 주소까지 한꺼번에 나가고</b>, 그 응답이 로그·캐시에 남으면
+     * 만료 전까지 누구나 열 수 있다 — 성적표에 <b>성명·생년월일이 그대로</b> 있다.
+     * {@code /admin/files} 가 같은 방식이다.
+     */
+    @Transactional(readOnly = true)
+    public List<AdmissionFile> files(String rsvCd) {
+        return fileRepository.findByReservationIdAndDeletedFalse(requireReservation(rsvCd).getId());
+    }
+
+    /** 예약 id 로 찾는 쪽 — 관리자 화면은 {@code rsv_cd} 가 아니라 id 를 들고 있다. */
+    @Transactional(readOnly = true)
+    public List<AdmissionFile> filesOf(Long reservationId) {
+        return fileRepository.findByReservationIdAndDeletedFalse(reservationId);
+    }
+
+    /**
+     * 볼 수 있는 주소. <b>짧게 만료된다</b> — 비공개 저장소라 열 때마다 받아야 한다.
+     *
+     * <p>⚠️ <b>이 파일이 그 예약의 것인지 확인한다.</b> 파일번호만으로 발급하면
+     * <b>번호를 바꿔 넣어 남의 성적표를 열 수 있다.</b>
+     */
+    @Transactional(readOnly = true)
+    public String fileUrl(Long reservationId, Long fileId) {
+        AdmissionFile file = fileRepository.findById(fileId)
+                .filter(f -> !f.isDeleted())
+                .filter(f -> f.getReservation().getId().equals(reservationId))
+                .orElseThrow(() -> new DsaApiException(DsaCode.INVALID_PARAMETER));
+        return fileStorage.presignedGetUrl(file.getStorageKey(), FILE_URL_TTL);
+    }
 
     /**
      * 성적표 저장. 요청이 {@code data:image/png;base64,...} Data URL이다.

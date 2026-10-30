@@ -52,6 +52,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminAdmissionReservationController {
 
     private final AdmissionReservationAdminService adminService;
+    private final com.dlab.domain.admission.service.AdmissionReservationService reservationService;
     private final com.dlab.domain.share.service.PublicWaitlistShareService waitlistShareService;
 
     /** 목록. 상태·이름·연락처로 좁힌다. */
@@ -141,6 +142,51 @@ public class AdminAdmissionReservationController {
      * 링크가 죽는다. <b>기한도 처음 정한 날짜를 그대로 둔다</b> — 누를 때마다 7일이 다시
      * 붙으면 기한이 사실상 없어진다. 답변 1회 고정은 토큰이 아니라 <b>예약 건</b>에서 지킨다.
      */
+    /**
+     * 첨부 목록 (2026-10-30 연구소 요청).
+     *
+     * <p>★ 지금까지 저장만 있어 <b>직원도 첨부를 볼 수 없었다.</b>
+     *
+     * <h2>⚠️ 조회 전용(READONLY)에는 열지 않는다</h2>
+     * 성적표에 <b>성명·생년월일·수험번호</b>가 그대로 있고, <b>열람 범위가 아직 정해지지
+     * 않았다</b>(§4 — 담임만 / 행정 포함 / 학부모). 정해지기 전에 넓게 열면 <b>좁히는
+     * 쪽이 훨씬 어렵다</b> — 이미 보던 사람에게서 뺏는 일이 된다.
+     */
+    @GetMapping("/{reservationId}/files")
+    public ApiResponse<List<FileRow>> files(@CurrentAccount AuthPrincipal me,
+                                            @PathVariable Long reservationId) {
+        adminService.get(me, reservationId);   // ★ 지점 범위 검증을 거친다 — 남의 지점 첨부가 새지 않게
+        return ApiResponse.success(reservationService.filesOf(reservationId).stream()
+                .map(FileRow::from).toList());
+    }
+
+    /**
+     * 첨부 내려받기 주소. <b>5분 뒤 만료된다</b> — 비공개 저장소다.
+     *
+     * <p>★ <b>열 때마다 받는다.</b> 목록에 실으면 안 열어 본 파일의 주소까지 한꺼번에
+     * 나가고, 그 응답이 로그에 남으면 만료 전까지 누구나 열 수 있다.
+     */
+    @GetMapping("/{reservationId}/files/{fileId}/url")
+    public ApiResponse<FileUrl> fileUrl(@CurrentAccount AuthPrincipal me,
+                                        @PathVariable Long reservationId,
+                                        @PathVariable Long fileId) {
+        adminService.get(me, reservationId);   // ★ 범위 검증
+        return ApiResponse.success(
+                new FileUrl(reservationService.fileUrl(reservationId, fileId)));
+    }
+
+    /** 첨부 한 줄. ★ 본문은 주지 않는다 — 주소로만 내려간다. */
+    public record FileRow(Long id, String contentType, Long byteSize, Instant createdAt) {
+
+        static FileRow from(com.dlab.domain.admission.entity.AdmissionFile f) {
+            return new FileRow(f.getId(), f.getContentType(), f.getByteSize(), f.getCreatedAt());
+        }
+    }
+
+    @io.swagger.v3.oas.annotations.media.Schema(name = "AdmissionFileUrl")
+    public record FileUrl(String url) {
+    }
+
     @PostMapping("/{reservationId}/share")
     public ApiResponse<ShareResponse> share(@CurrentAccount AuthPrincipal me,
                                             @PathVariable Long reservationId) {

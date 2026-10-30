@@ -186,6 +186,88 @@ class HomepageAdmissionTest {
                 .andExpect(jsonPath("$.data[0].par_tel").value("01033334444"));
     }
 
+    /**
+     * ★★ 삭제 항목 12개를 <b>안 보내도 저장된다</b> (2026-10-30 연구소 요청).
+     *
+     * <p>{@code birth} · {@code adm_dt} · {@code geyul_gb} · {@code nasin_st} ·
+     * {@code find_gb} · {@code find_txt} · {@code sch_cd} · {@code zip} · {@code addr1} ·
+     * {@code addr2} · {@code sch_cd_hight} · {@code sch_nm_hight} 가 입학신청에서
+     * 빠진다. <b>필수 검증이 걸려 있으면 홈페이지가 그 수정을 하는 순간 신청이 전부 막힌다.</b>
+     *
+     * <p>⚠️ <b>DB 컬럼은 지우지 않는다</b> — 이미 받은 건과 DSA 이관 데이터가 있다.
+     */
+    @Test
+    @DisplayName("★★ 삭제 항목 12개를 안 보내도 신청이 저장된다 — 걸려 있으면 신청이 전부 막힌다")
+    void saveWithoutDeletedFields() throws Exception {
+        call("/dlab/setStdInfo", """
+                {"token":"%s","acid":"F","reg_yyyy":"2026","rsv_nm":"삭제항목없음",
+                 "std_tel":"01055556666","par_tel":"01055557777","gender_gb":"M",
+                 "pre_test":1007,"agree_ad":"Y","promo_ad":"Y","std_grade":"N"}"""
+                .formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0));
+        em.flush();
+        em.clear();
+
+        // ★ 저장됐는지 조회로 확인한다 — 200 만 보면 빈 건이 들어가도 통과한다
+        call("/dlab/getStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"삭제항목없음",
+                 "std_tel":"01055556666"}""".formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].rsv_nm").value("삭제항목없음"));
+    }
+
+    // ── 조회 조건 (2026-10-30 연구소 요청) ───────────────────────
+
+    /**
+     * ★★ 생년월일 없이도 조회된다 — 연구소가 말한 「조회하면 null」의 원인이었다.
+     *
+     * <p>입학신청에서 {@code birth} 가 <b>삭제 항목</b>이 됐는데, 조회가 생년월일 일치를
+     * <b>반드시</b> 요구하고 있었다. 홈페이지가 안 보내면 <b>결과가 항상 비어 나온다.</b>
+     */
+    @Test
+    @DisplayName("★★ 생년월일 없이 조회된다 — 「조회하면 null」의 원인이었다")
+    void searchWithoutBirth() throws Exception {
+        saveWithHighAlias();
+
+        call("/dlab/getStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"알리아스",
+                 "std_tel":"01011112222"}""".formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].rsv_nm").value("알리아스"));
+    }
+
+    /**
+     * ⚠️ 홈페이지 쪽 수정 시점이 우리와 다를 수 있다 — <b>보내 와도 무시</b>해야 한다.
+     * 거르면 그 기간에 다시 빈 결과가 된다.
+     */
+    @Test
+    @DisplayName("★ 틀린 생년월일을 보내 와도 무시한다 — 홈페이지 수정 시점이 다를 수 있다")
+    void searchIgnoresBirth() throws Exception {
+        saveWithHighAlias();
+
+        call("/dlab/getStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"알리아스",
+                 "birth":"19000101","std_tel":"01011112222"}""".formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].rsv_nm").value("알리아스"));
+    }
+
+    @Test
+    @DisplayName("★ 이름·번호가 다르면 여전히 안 나온다 — 생일을 뺐어도 남의 신청이 섞이지 않는다")
+    void searchStillRequiresNameAndTel() throws Exception {
+        saveWithHighAlias();
+
+        call("/dlab/getStdInfo", """
+                {"token":"%s","acid":"F","rsv_nm":"알리아스",
+                 "std_tel":"01099998888"}""".formatted(token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").isEmpty());
+    }
+
     // ── 인증 ──────────────────────────────────────────────────
 
     @Test
@@ -461,6 +543,48 @@ class HomepageAdmissionTest {
                 // ★ 공통 항목도 같이 내려온다 — 지점 전용만 보이면 조회가 반쪽이다
                 .andExpect(jsonPath("$.data[?(@.comm_cd == '1229')].comm_nm")
                         .value(org.hamcrest.Matchers.contains("재학생")));
+    }
+
+    /**
+     * ★★ 저장한 첨부를 <b>꺼낼 수 있어야 한다</b> (2026-10-30 연구소 요청).
+     *
+     * <p>지금까지 {@code setStdFile} 로 넣기만 하고 <b>꺼내는 경로가 없었다</b> —
+     * 성적표를 받아 두고 <b>직원도 못 보는 상태</b>였다.
+     */
+    @Test
+    @DisplayName("★★ 저장한 첨부를 목록으로 꺼낸다 — 넣기만 하고 꺼낼 수 없었다")
+    void fileListIsReturned() throws Exception {
+        String rsvCd = saveOne();
+        String png = Base64.getEncoder().encodeToString("fake-image-bytes".getBytes());
+        call("/dlab/setStdFile", """
+                {"token":"%s","rsv_cd":"%s","file":"data:image/png;base64,%s"}"""
+                .formatted(token, rsvCd, png))
+                .andExpect(jsonPath("$.code").value(0));
+        em.flush();
+        em.clear();
+
+        call("/dlab/getStdFile", """
+                {"token":"%s","rsv_cd":"%s"}""".formatted(token, rsvCd))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data[0].file_no").exists())
+                .andExpect(jsonPath("$.data[0].content_type").value("image/png"))
+                .andExpect(jsonPath("$.data[0].byte_size").value(16))
+                // ★★ 목록에 주소를 싣지 않는다 — 안 열어 본 파일의 주소까지 한꺼번에
+                //    나가고, 그 응답이 로그에 남으면 만료 전까지 누구나 열 수 있다
+                .andExpect(jsonPath("$.data[0].file_url").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("첨부가 없으면 빈 배열이다 — 오류가 아니다")
+    void fileListIsEmptyWhenNone() throws Exception {
+        String rsvCd = saveOne();
+
+        call("/dlab/getStdFile", """
+                {"token":"%s","rsv_cd":"%s"}""".formatted(token, rsvCd))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data").isEmpty());
     }
 
     @Test
