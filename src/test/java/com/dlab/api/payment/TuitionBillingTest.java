@@ -240,7 +240,7 @@ class TuitionBillingTest {
         activePolicy("SIBLING", DiscountType.RATE, 30, null, null);
 
         Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
-                YearMonth.of(YEAR, 3), SeatType.GENERAL, "SIBLING", null, null, null);
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, List.of("SIBLING"), null, null, null);
         em.flush();
 
         // 교습비 660,000 의 30% = 198,000 · 독서실비 90,000 은 할인 없음
@@ -261,7 +261,7 @@ class TuitionBillingTest {
         activePolicy("HALF", DiscountType.RATE, 50, null, null);
 
         Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
-                YearMonth.of(YEAR, 3), SeatType.GENERAL, "HALF", null, null, null);
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, List.of("HALF"), null, null, null);
         em.flush();
 
         assertThat(billing.getDiscountAmount())
@@ -282,9 +282,9 @@ class TuitionBillingTest {
         activePolicy("SPRING", DiscountType.RATE, 20, (short) 4, (short) 4);
 
         Billing march = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
-                YearMonth.of(YEAR, 3), SeatType.GENERAL, "SPRING", null, null, null);
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, List.of("SPRING"), null, null, null);
         Billing april = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
-                YearMonth.of(YEAR, 4), SeatType.GENERAL, "SPRING", null, null, null);
+                YearMonth.of(YEAR, 4), SeatType.GENERAL, List.of("SPRING"), null, null, null);
         em.flush();
 
         assertThat(march.getDiscountAmount()).as("★ 3월은 범위 밖이다").isZero();
@@ -301,7 +301,7 @@ class TuitionBillingTest {
     @DisplayName("★ 할인 0이면 근거를 비운다 — 「정책이 붙었는데 0원」으로 읽힌다")
     void sourceIsBlankWhenNoDiscount() {
         Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
-                YearMonth.of(YEAR, 3), SeatType.GENERAL, "없는코드", null, null, null);
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, List.of("없는코드"), null, null, null);
         em.flush();
 
         assertThat(billing.getDiscountAmount()).isZero();
@@ -322,54 +322,103 @@ class TuitionBillingTest {
         em.flush();
 
         Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
-                YearMonth.of(YEAR, 3), SeatType.GENERAL, "OFF", null, null, null);
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, List.of("OFF"), null, null, null);
         em.flush();
 
         assertThat(billing.getDiscountAmount()).isZero();
     }
 
     /**
-     * ★★ 장학생에게는 정책 할인을 걸 수 없다 — 중복 규칙이 정해지기 전까지다.
+     * ★★ 여러 정책은 <b>합연산</b>이다 (디랩 1021 회신).
      *
-     * <h2>⚠️ 장학은 이미 청구에 반영되고 있다 — 화면이 한다</h2>
-     * {@code domain/payment} 에 {@code Scholarship} 참조가 없어 <b>「안 겹친다」고
-     * 읽었는데 틀렸다</b>(프런트 지적). 관리자 웹 일괄 청구가 <b>장학 할인율을
-     * {@code discountRate} 로 보내고 {@code discountSource} 에 장학명을 박는다.</b>
+     * <p>회신 원문: <b>「다중 할인 혜택 적용의 경우 합연산으로 진행됩니다 … 장학 10% +
+     * 친구추천 10% + 경쟁사 이전 10% 가정했을 때 모든 혜택을 더한 비율(30%)을 교습비에
+     * 적용」</b>
      *
-     * <p>★ 막지 않으면 장학 70% 학생에게 정책 10% 를 걸었을 때 <b>할인이 10% 로 바뀌고
-     * 근거가 장학명에서 정책 코드로 바뀐다</b> — <b>오류는 안 나고 금액과 근거만
-     * 달라진다.</b>
+     * <h2>★ 곱연산이면 값이 어긋난다</h2>
+     * 차례로 곱하면 {@code 0.9 × 0.9 × 0.9 = 0.729} 로 <b>27.1%</b> 가 되어 30% 와
+     * 다르다. 그리고 <b>적용 순서에 따라 값이 달라진다</b> — 더하는 데는 순서가 없다.
      */
     @Test
-    @DisplayName("★★ 장학생에게는 정책 할인을 못 건다 — 장학 근거가 조용히 지워진다")
-    void scholarshipHolderRejectsPolicy() {
-        activePolicy("RATE_10", DiscountType.RATE, 10, null, null);
-        em.persist(new com.dlab.domain.master.entity.Scholarship(
-                academy, enrollment, "KICE_50", new java.math.BigDecimal("50")));
-        em.flush();
-        em.clear();
+    @DisplayName("★★ 여러 할인은 합연산이다 — 곱하면 27.1%가 되어 30%와 어긋난다")
+    void multipleDiscountsAreSummed() {
+        activePolicy("SCHOLAR", DiscountType.RATE, 10, null, null);
+        activePolicy("REFERRAL", DiscountType.RATE, 10, null, null);
+        activePolicy("SWITCH", DiscountType.RATE, 10, null, null);
 
-        assertThatThrownBy(() -> billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
-                YearMonth.of(YEAR, 3), SeatType.GENERAL, "RATE_10", null, null, null))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("중복 적용 규칙");
+        Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL,
+                List.of("SCHOLAR", "REFERRAL", "SWITCH"), null, null, null);
+        em.flush();
+
+        // 교습비 660,000 의 30% = 198,000 (★ 곱연산이면 178,860 이다)
+        assertThat(billing.getDiscountAmount()).isEqualTo(198_000);
+        assertThat(billing.getBilledAmount()).isEqualTo(552_000);
     }
 
+    /**
+     * ★★ 근거에 <b>내역</b>을 남긴다.
+     *
+     * <p>⚠️ 비율만 남기면 <b>어느 혜택이 얼마였는지 재현되지 않는다.</b> 1021 문서가
+     * <b>「장학 10% + 친구추천 10% + 경쟁사이전 10% = 30%」처럼 남긴다</b>고 적는다.
+     */
     @Test
-    @DisplayName("★ 장학생도 할인율 직접 입력은 된다 — 화면이 장학율을 그 자리로 보낸다")
-    void scholarshipHolderStillUsesDirectRate() {
-        em.persist(new com.dlab.domain.master.entity.Scholarship(
-                academy, enrollment, "KICE_50", new java.math.BigDecimal("50")));
+    @DisplayName("★★ 근거에 내역을 남긴다 — 비율만 남기면 어느 혜택이었는지 모른다")
+    void sourceCarriesBreakdown() {
+        activePolicy("SCHOLAR", DiscountType.RATE, 10, null, null);
+        activePolicy("REFERRAL", DiscountType.RATE, 20, null, null);
+
+        Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL,
+                List.of("SCHOLAR", "REFERRAL"), null, null, null);
         em.flush();
 
-        Billing billing = billingService.issueMonthly(admin, enrollment.getId(),
-                YearMonth.of(YEAR, 3), SeatType.GENERAL, 50, null, null, "평가원 50%", null);
-        em.flush();
-
-        assertThat(billing.getDiscountAmount()).isEqualTo(330_000);
         assertThat(billing.getDiscountSource())
-                .as("★ 근거는 장학명이다 — 정책 코드가 아니다")
-                .isEqualTo("평가원 50%");
+                .contains("10%").contains("20%").contains("= 30%");
+    }
+
+    /**
+     * ★★ 합이 100% 를 넘으면 <b>잘린다 — 음수 청구가 나오면 안 된다.</b>
+     *
+     * <p>⚠️ 조용히 자르면 <b>데스크가 할인을 과하게 걸었다는 것을 모른다</b> —
+     * {@code overCapped} 가 그 사실을 드러낸다.
+     */
+    @Test
+    @DisplayName("★★ 합이 100%를 넘으면 잘린다 — 음수 청구가 나오면 안 된다")
+    void sumIsCappedAtHundred() {
+        activePolicy("BIG1", DiscountType.RATE, 70, null, null);
+        activePolicy("BIG2", DiscountType.RATE, 50, null, null);
+
+        Billing billing = billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL,
+                List.of("BIG1", "BIG2"), null, null, null);
+        em.flush();
+
+        assertThat(billing.getDiscountAmount())
+                .as("★ 교습비 전액까지만 — 독서실비는 할인 대상이 아니다")
+                .isEqualTo(660_000);
+        assertThat(billing.getBilledAmount()).isEqualTo(90_000);
+    }
+
+    /**
+     * ★★ 금액 할인(정액) 정책은 <b>거부한다 — 조용히 사라지기 때문이다.</b>
+     *
+     * <h2>⚠️ 교습비는 율로만 계산된다</h2>
+     * 1일 단가·일할 계산이 전부 율 기반이라 <b>금액 할인을 실을 자리가 없다.</b>
+     * 통과시키면 <b>할인을 걸었는데 안 깎인다</b> — 데스크는 화면에서 알 방법이 없다.
+     *
+     * <p>★ 1021 문서도 금액 항목은 <b>「Q3 답에 있으면 규칙을 확인받을 것」</b>으로
+     * 남겼다 — 지금 디랩 할인은 전부 비율(10~70%)이다.
+     */
+    @Test
+    @DisplayName("★★ 금액 할인 정책은 거부한다 — 통과시키면 조용히 사라진다")
+    void amountPolicyIsRejected() {
+        activePolicy("CASH", DiscountType.AMOUNT, 50_000, null, null);
+
+        assertThatThrownBy(() -> billingService.issueMonthlyByPolicy(admin, enrollment.getId(),
+                YearMonth.of(YEAR, 3), SeatType.GENERAL, List.of("CASH"), null, null, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("비율로 계산");
     }
 
     /** 켜진 정책을 만든다. ★ active 가 기본 꺼짐이라 따로 켠다. */

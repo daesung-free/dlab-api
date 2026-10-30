@@ -59,7 +59,7 @@ public class AdminTuitionBillingController {
         var billing = request.usesPolicy()
                 ? billingService.issueMonthlyByPolicy(
                         me, request.enrollmentId(), request.yearMonth(),
-                        request.seatType(), request.discountCode(), request.remainingDays(),
+                        request.seatType(), request.discountCodes(), request.remainingDays(),
                         request.dueDate(), request.serviceFrom())
                 : billingService.issueMonthly(
                         me, request.enrollmentId(), request.yearMonth(),
@@ -183,19 +183,26 @@ public class AdminTuitionBillingController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDate,
             @Size(max = 100) String discountSource,
             /**
-             * ★ 적용할 할인 정책 코드. <b>주면 서버가 할인율을 찾는다</b> —
-             * {@code discountRate} · {@code discountSource} 는 무시된다.
+             * ★★ 적용할 할인 정책 코드 <b>여럿</b>. 주면 서버가 <b>합연산</b>으로
+             * 계산한다 — {@code discountRate} · {@code discountSource} 는 무시된다.
+             *
+             * <p>★ 디랩 1021 회신: <b>「다중 할인 혜택은 합연산」</b> —
+             * 장학 10% + 친구추천 10% + 경쟁사 이전 10% = <b>30%</b> 를 교습비에 적용한다.
+             * <b>곱연산이 아니므로 순서가 없다.</b>
+             *
+             * <p>★ <b>장학도 할인의 한 종류다</b> — 장학생을 막지 않는다.
              *
              * <p>⚠️ <b>할인율 직접 입력을 없애지 않았다</b> — 정책에 없는 예외가 실제로
              * 있고(지점 재량·일회성 조정), 막으면 데스크가 청구를 아예 못 낸다.
              */
-            @Size(max = 40) String discountCode,
+            List<@Size(max = 40) String> discountCodes,
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate serviceFrom) {
 
         /** 생략 가능 — 없으면 0. primitive 로 두면 생략만으로 역직렬화가 깨진다. */
         /** ★ 정책으로 발행하는가. 코드가 있으면 그쪽이다. */
         public boolean usesPolicy() {
-            return discountCode != null && !discountCode.isBlank();
+            return discountCodes != null && discountCodes.stream()
+                    .anyMatch(c -> c != null && !c.isBlank());
         }
 
         public int discountRateOrZero() {
