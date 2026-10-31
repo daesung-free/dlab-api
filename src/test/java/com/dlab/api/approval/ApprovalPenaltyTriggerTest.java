@@ -1,6 +1,7 @@
 package com.dlab.api.approval;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.approval.entity.ApprovalItem;
@@ -52,6 +53,7 @@ class ApprovalPenaltyTriggerTest {
     @Autowired AbsenceReasonService absenceReasonService;
     @Autowired ApprovalService approvalService;
     @Autowired PenaltyMasterService masterService;
+    @Autowired com.dlab.domain.penalty.repository.PenaltyRuleRepository ruleRepository;
     @Autowired com.dlab.domain.penalty.repository.PenaltyPointRepository pointRepository;
     @Autowired com.dlab.domain.approval.repository.ApprovalRequestRepository requestRepository;
     @Autowired EntityManager em;
@@ -262,5 +264,63 @@ class ApprovalPenaltyTriggerTest {
         assertThat(request.getPrimaryApprover())
                 .as("★ 지점 정책이 PARENT 이므로 학부모다")
                 .isEqualTo(ApproverType.PARENT);
+    }
+
+    // ── 후속 처리 배선 (증빙 확인 · 미진행 · 디랩 1029 4-3) ────────
+    //
+    // ★★ 이 클래스는 ★ 엔진이 목이다 — 결과(벌점 행)는 볼 수 없다.
+    //    실제 거두기는 ★ PenaltySupersedeTest 가 ★ 커밋된 규칙으로 검증한다.
+    //    ⚠️ 엔진이 REQUIRES_NEW 라 ★ 테스트 트랜잭션의 규칙을 못 본다.
+
+    /**
+     * ★★ 증빙 확인이 ★ {@code EVIDENCE_CONFIRMED} 로 엔진을 부른다 (1029 4-3 #36).
+     *
+     * <p>⚠️ 조건값이 어긋나면 <b>규칙이 영영 안 걸리고</b>, 화면에는
+     * <b>「체크했는데 벌점이 그대로」</b>로만 보인다.
+     */
+    @Test
+    @DisplayName("★★ 증빙 확인이 EVIDENCE_CONFIRMED 로 엔진을 부른다")
+    void evidenceConfirmCallsEngine() {
+        var request = submit(AbsenceReasonType.OUTING);
+        var reason = absenceReasonService.findByApproval(request.getId());
+
+        absenceReasonService.confirmEvidence(admin, reason.getId());
+        em.flush();
+
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(PenaltyTriggerType.APPROVAL),
+                org.mockito.ArgumentMatchers.eq("EVIDENCE_CONFIRMED"),
+                org.mockito.ArgumentMatchers.eq(today));
+    }
+
+    /** ★★ 미진행이 {@code NOT_EXECUTED} 로 엔진을 부른다 (1029 4-3 #10). */
+    @Test
+    @DisplayName("★★ 미진행이 NOT_EXECUTED 로 엔진을 부른다")
+    void notExecutedCallsEngine() {
+        var request = submit(AbsenceReasonType.OUTING);
+        var reason = absenceReasonService.findByApproval(request.getId());
+
+        absenceReasonService.markNotExecuted(admin, reason.getId());
+        em.flush();
+
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(PenaltyTriggerType.APPROVAL),
+                org.mockito.ArgumentMatchers.eq("NOT_EXECUTED"),
+                org.mockito.ArgumentMatchers.eq(today));
+    }
+
+    /** ★ 두 번 누르면 거부한다 — 「몇 번 확인했나」가 의미를 잃는다. */
+    @Test
+    @DisplayName("★ 증빙 확인은 두 번 누를 수 없다")
+    void evidenceConfirmIsOnce() {
+        var request = submit(AbsenceReasonType.OUTING);
+        var reason = absenceReasonService.findByApproval(request.getId());
+        absenceReasonService.confirmEvidence(admin, reason.getId());
+        em.flush();
+
+        assertThatThrownBy(() -> absenceReasonService.confirmEvidence(admin, reason.getId()))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class);
     }
 }

@@ -61,6 +61,36 @@ public class PenaltyRule extends BaseEntity {
     @Column(nullable = false)
     private boolean active;
 
+    /**
+     * ★★ 이 규칙이 부여할 때 <b>먼저 거둘 규칙</b> (디랩 1029 4-2).
+     *
+     * <h2>★ 자동 지각 ↔ 사유 지각 중복 방지</h2>
+     * 사유지각은 <b>원장이 {@code LATE}</b> 다. 그래서 「{@code A} → 자동 지각」 규칙을
+     * 켜면 <b>사유지각 학생에게도 -1 이 붙고</b>, 승인 트리거가 <b>-1 을 또 붙인다.</b>
+     *
+     * <h2>⚠️ 코드에 박지 말 것</h2>
+     * 「{@code LATE} 면 자동 지각을 지운다」를 코드에 쓰면 <b>디랩이 항목 이름을 바꿀 때
+     * 깨진다</b>(1029 4-2 지침). 그래서 <b>데이터로 둔다.</b>
+     *
+     * <p>★ <b>{@code null} 이면 거두지 않는다</b> — 대부분의 규칙이 그렇다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supersedes_rule_id")
+    private PenaltyRule supersedesRule;
+
+    /**
+     * 대체 대상을 지정한다.
+     *
+     * <p>⚠️ <b>자기 자신은 안 된다</b> — 부여하기 전에 자기 것을 거두는 모순이 된다
+     * (스키마 CHECK 가 같은 것을 막는다).
+     */
+    public void supersede(PenaltyRule target) {
+        if (target != null && target.getId() != null && target.getId().equals(this.id)) {
+            throw new IllegalArgumentException("규칙은 자기 자신을 대체할 수 없습니다.");
+        }
+        this.supersedesRule = target;
+    }
+
     public PenaltyRule(Academy academy, short year, PenaltyTriggerType triggerType,
                        String triggerCondition, PenaltyItem penaltyItem) {
         this.academy = academy;
