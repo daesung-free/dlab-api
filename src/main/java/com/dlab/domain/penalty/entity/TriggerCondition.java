@@ -3,6 +3,7 @@ package com.dlab.domain.penalty.entity;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.routine.entity.RoutineResultStatus;
 import java.util.Arrays;
+import java.util.stream.Stream;
 import java.util.List;
 import java.util.Locale;
 
@@ -82,13 +83,66 @@ public final class TriggerCondition {
                     .map(s -> new Option(s.name(), routineLabel(s)))
                     .toList();
             // ★ 사유 신청 승인 — 조건값이 AbsenceReasonType 이름이다
-            case APPROVAL -> Arrays.stream(
-                            com.dlab.domain.attendance.entity.AbsenceReasonType.values())
-                    .map(t -> new Option(t.name(), approvalLabel(t)))
+            // ★★ 사유 종류 + ★ 후속 처리 둘 (디랩 1029 4-3).
+            //
+            //    ★ 후속 처리를 ★ 같은 APPROVAL 트리거에 두는 이유 — ★ 같은 신청에
+            //    걸리는 일이고 멱등키(학생:일자:규칙)도 같은 구조다. 트리거를 새로
+            //    만들면 ★ 대체 관계(supersedes)가 ★ 트리거를 넘나들게 된다.
+            //
+            //    ⚠️ 이름이 사유 종류와 겹치면 ★ 승인 벌점 규칙이 후속 처리에도 걸린다 —
+            //    그래서 AbsenceReasonType 에 없는 이름을 쓴다.
+            case APPROVAL -> java.util.stream.Stream.concat(
+                            Arrays.stream(
+                                            com.dlab.domain.attendance.entity.AbsenceReasonType
+                                                    .values())
+                                    .map(t -> new Option(t.name(), approvalLabel(t))),
+                            Stream.of(
+                                    new Option(EVIDENCE_CONFIRMED,
+                                            "증빙 확인(병원영수증 등)"),
+                                    new Option(NOT_EXECUTED, "사유 제출 후 미진행"),
+                                    // ★★ 더프 조퇴 — ★ 전일/당일로 ★ 점수가 갈린다
+                                    //    (1029 4-4: 전일 -1 · 당일 -2)
+                                    new Option(DUF_PREV_DAY, "더프 조퇴 — 전일 신청"),
+                                    new Option(DUF_SAME_DAY, "더프 조퇴 — 당일 신청")))
                     .toList();
             case REGULAR_SCHEDULE -> List.of(new Option(NOT_RECOGNIZED, "미인정"));
+            // ★★ 순찰 — 지금은 ★ 졸음 하나다 (디랩 1029 4-6).
+            //
+            //    ⚠️ PatrolMark 전부를 열지 않는다. 「화장실」·「외출」 같은 표시는
+            //    ★ 벌점 사유가 아니다 — 디랩이 요청한 것은 ★ 취침뿐이다.
+            //    ★ 다른 표시에 벌점을 걸어야 하면 ★ 그때 한 줄 더한다.
+            case PATROL -> List.of(new Option(
+                    com.dlab.domain.patrol.entity.PatrolMark.SLEEP.name(), "취침(졸음)"));
         };
     }
+
+    /**
+     * ★★ 더프 조퇴를 <b>응시일 전날까지</b> 신청했다 (디랩 1029 4-4, 시트 #13).
+     *
+     * <p>★ 판정 기준은 <b>신청 생성 시각</b>이다 — 응시일 <b>전날 23:59 이전</b>.
+     * ⚠️ 승인 시각이 아니다. <b>직원이 늦게 승인했다고 학생이 당일 신청한 것으로
+     * 바뀌면 안 된다.</b>
+     */
+    public static final String DUF_PREV_DAY = "DUF_PREV_DAY";
+
+    /** ★★ 더프 조퇴를 <b>응시일 당일</b>에 신청했다 (시트 #14, 전일보다 무겁다). */
+    public static final String DUF_SAME_DAY = "DUF_SAME_DAY";
+
+    /**
+     * ★★ 직원이 <b>증빙을 확인</b>했을 때 (디랩 1029 4-3 #36).
+     *
+     * <p>★ 보통 <b>0점 기록 항목</b>에 걸고, <b>대체 대상에 그 사유 규칙을 지정</b>해
+     * 자동 벌점을 거둔다.
+     */
+    public static final String EVIDENCE_CONFIRMED = "EVIDENCE_CONFIRMED";
+
+    /**
+     * ★★ 승인됐는데 <b>실제로 하지 않은</b> 경우 (1029 4-3 #10).
+     *
+     * <p>⚠️ 「-1 을 취소할지 둘지」가 미확정이지만(9-7), ★ 그 차이는
+     * <b>대체 대상을 지정하는지</b>로 흡수된다 — <b>코드가 아니라 행이다.</b>
+     */
+    public static final String NOT_EXECUTED = "NOT_EXECUTED";
 
     /** 넣을 수 있는 값인가. 대소문자는 가리지 않는다 — 엔진 비교도 그렇다. */
     public static boolean isValid(PenaltyTriggerType triggerType, String condition) {
@@ -121,6 +175,10 @@ public final class TriggerCondition {
             case LATE -> "사유 지각(승인)";
             case EARLY_LEAVE -> "사유 조퇴(승인)";
             case OUTING -> "사유 외출(승인)";
+            // ★★ 더프 조퇴는 ★ 이 이름으로 걸지 않는다 — ★ 전일/당일로 점수가 갈려
+            //    조건값이 ★ DUF_PREV_DAY · DUF_SAME_DAY 다(1029 4-4).
+            //    ⚠️ 여기 두면 ★ 한 규칙이 둘 다 걸어 ★ 점수를 가를 수 없다.
+            case DUF_EARLY_LEAVE -> "더프 조퇴(승인) — ★ 전일/당일 조건값을 쓰세요";
         };
     }
 

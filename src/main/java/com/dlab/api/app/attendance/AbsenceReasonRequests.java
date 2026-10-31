@@ -30,6 +30,17 @@ public final class AbsenceReasonRequests {
                          @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime startTime,
                          @DateTimeFormat(iso = DateTimeFormat.ISO.TIME) LocalTime endTime,
                          /** 사유 카테고리(병결·가정사 등). 비워도 된다 — 등록된 게 없을 수 있다 */
-                         Long categoryId) {
+                         Long categoryId,
+                         /**
+                          * ★★ 어느 자녀의 신청인가 — <b>학부모가 낼 때만</b> 준다
+                          * (디랩 1031 ③).
+                          *
+                          * <p>★ <b>비우면 학생 본인</b>이다. 학생이 이 값을 보내면
+                          * 거절된다(학부모 계정이 아니다).
+                          *
+                          * <p>⚠️ 우선 승인자가 「부모」면 <b>제출 즉시 승인</b>된다 —
+                          * 앱이 <b>「제출하면 바로 승인됩니다」</b>를 미리 보여줘야 한다.
+                          */
+                         Long studentId) {
     }
 }

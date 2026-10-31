@@ -59,6 +59,24 @@ public class QnaOfflineReservation extends BaseEntity {
     @Column(name = "canceled_at")
     private Instant canceledAt;
 
+    /**
+     * ★ 직원이 <b>대리로 넣은</b> 경우 그 계정 (디랩 1029 8-1).
+     *
+     * <p>★ {@code null} 이면 <b>학생이 직접</b> 잡은 것이다.
+     *
+     * <p>⚠️ 이 값이 없으면 <b>상한을 왜 넘겼는지 설명할 수 없다</b> — 대리 예약은
+     * 상한을 건너뛰므로, 「학생이 직접 잡은 것」과 구분돼야 한다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reserved_by_account_id")
+    private com.dlab.domain.user.entity.Account reservedByAccount;
+
+    /** 대리 예약임을 기록한다. */
+    public QnaOfflineReservation byStaff(com.dlab.domain.user.entity.Account staff) {
+        this.reservedByAccount = staff;
+        return this;
+    }
+
     public QnaOfflineReservation(QnaOfflineSlot slot, StudentEnrollment enrollment,
                                  String question, Instant reservedAt) {
         this.academy = slot.getAcademy();

@@ -79,6 +79,29 @@ public class RefundService {
      */
     @Transactional
     public Refund execute(AuthPrincipal me, Long billingId, int usedDays) {
+        return execute(me, billingId, usedDays, false);
+    }
+
+    /**
+     * ★★ <b>재결제 후 전체취소</b>를 고를 수 있는 집행 (디랩 1029 7장).
+     *
+     * <p>디랩 원문: <b>「부분취소, 재결제 후 전체취소 모두 필요 … 지점이나 상황에 따라
+     * 골라서 사용할 수 있도록」</b>
+     *
+     * <h2>★★ 전체취소는 여기서 걸지 않는다</h2>
+     * ① 재결제 금액을 적고 <b>{@link RefundStatus#WAITING_REPAYMENT}</b> 로 둔다<br>
+     * ② 재결제가 확인되면 {@link #confirmRepaymentAndCancel} 이 전체취소를 건다
+     *
+     * <p>⚠️⚠️ <b>순서를 바꾸면 안 된다</b> — 학부모가 재결제를 안 하면
+     * <b>받을 돈이 사라진다.</b> ★ 카드 정보를 보관하지 않으므로(빌링키 없음)
+     * <b>서버가 혼자 재결제할 수 없다.</b>
+     *
+     * @param repayAndFullCancel ★ {@code true} 면 재결제 후 전체취소.
+     *                           ⚠️ 가상계좌로 받은 건에는 쓸 수 없다
+     */
+    @Transactional
+    public Refund execute(AuthPrincipal me, Long billingId, int usedDays,
+                          boolean repayAndFullCancel) {
         Billing billing = requireBilling(me, billingId);
 
         // ★ 급식은 업체 명의 TID 다 — 여기서 걸러야 남의 사업자 매출을 건드리지 않는다
@@ -109,12 +132,34 @@ public class RefundService {
             payout = RefundPayout.BANK_TRANSFER;
         }
 
+        // ★★ 재결제 후 전체취소를 고른 경우 (디랩 1029 7장).
+        //
+        //    ⚠️ 돌려줄 것이 있고 ★ 카드로 받은 건에만 쓸 수 있다 —
+        //    ★ 가상계좌 건은 계좌 이체 환불이고(10/12 회신), 추가 징수 건은
+        //    애초에 취소할 것이 없다.
+        if (repayAndFullCancel) {
+            if (payout != RefundPayout.CARD_CANCEL) {
+                throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                        "재결제 후 전체취소는 카드로 결제된 건에만 쓸 수 있습니다. "
+                                + "가상계좌·현금 건은 계좌 이체로 환불해 주세요.");
+            }
+            payout = RefundPayout.REPAY_AND_FULL_CANCEL;
+        }
+
         Refund refund = refundRepository.save(new Refund(
                 billing.getAcademy(), billing.getYear(), billing, result, payout,
-                payout == RefundPayout.CARD_CANCEL ? card.orElse(null) : null));
+                payout == RefundPayout.CARD_CANCEL
+                        || payout == RefundPayout.REPAY_AND_FULL_CANCEL
+                        ? card.orElse(null) : null));
 
         if (payout == RefundPayout.CARD_CANCEL) {
             cancelOnPg(refund, billing, card.get(), result.refundAmount());
+        } else if (payout == RefundPayout.REPAY_AND_FULL_CANCEL) {
+            // ★ 기결제 전액을 취소하고 ★ 다시 받을 금액 = 기결제 − 환불액
+            int repay = card.get().getAmount() - result.refundAmount();
+            refund.waitRepayment(repay, Instant.now(clock));
+            log.info("★ 재결제 대기로 둠: billingId={}, 기결제={}, 환불={}, 재결제={}",
+                    billingId, card.get().getAmount(), result.refundAmount(), repay);
         }
 
         log.info("환불 처리: billingId={}, 금액={}, 방식={}, 상태={}, 처리자={}",
@@ -159,6 +204,50 @@ public class RefundService {
     }
 
     // ───────────────────────────────────────────────
+
+    /**
+     * ★★ 재결제를 확인하고 <b>기결제를 전체취소</b>한다 (디랩 1029 7장 ②단계).
+     *
+     * <h2>⚠️ 재결제 확인이 먼저다</h2>
+     * <b>전체취소를 먼저 하면 학부모가 재결제를 안 할 때 받을 돈이 사라진다.</b>
+     * 그래서 이 경로는 <b>직원이 「재결제 들어왔다」를 누른 뒤</b>에만 돈다.
+     *
+     * <p>★ <b>취소가 성공해야 {@code DONE}</b> 이다 — 확인 시점에 상태를 바꾸면
+     * <b>취소가 실패해도 끝난 것으로 보인다.</b>
+     */
+    @Transactional
+    public Refund confirmRepaymentAndCancel(AuthPrincipal me, Long refundId) {
+        Refund refund = refundRepository.findById(refundId)
+                .filter(r -> !r.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
+                        "환불 건을 찾을 수 없습니다."));
+        me.requireAcademyScope(refund.getAcademy().getId());
+
+        if (refund.getMethod() != RefundPayout.REPAY_AND_FULL_CANCEL) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "재결제 후 전체취소로 처리된 건이 아닙니다.");
+        }
+        if (refund.getStatus() != RefundStatus.WAITING_REPAYMENT) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "재결제 대기 상태가 아닙니다. (상태: %s)".formatted(refund.getStatus()));
+        }
+
+        refund.confirmRepayment(Instant.now(clock));
+
+        Billing billing = refund.getBilling();
+        PaymentTransaction tx = refund.getTransaction();
+        if (tx == null) {
+            refund.markFailed("기결제 거래를 찾을 수 없어 전체취소를 걸 수 없습니다.",
+                    Instant.now(clock));
+            return refund;
+        }
+        // ★ 전액 취소다 — 부분취소가 아니다
+        cancelOnPg(refund, billing, tx, tx.getAmount());
+
+        log.info("★ 재결제 확인 후 전체취소: refundId={}, 취소액={}, 처리자={}",
+                refundId, tx.getAmount(), me.accountId());
+        return refund;
+    }
 
     private void cancelOnPg(Refund refund, Billing billing, PaymentTransaction tx, int amount) {
         if (tx.getPgTid() == null || tx.getPgTid().isBlank()) {

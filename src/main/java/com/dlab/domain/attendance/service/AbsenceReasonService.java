@@ -10,6 +10,8 @@ import com.dlab.domain.approval.entity.RequestType;
 import com.dlab.domain.approval.service.ApprovalService;
 import com.dlab.domain.attendance.entity.AbsenceReason;
 import com.dlab.domain.attendance.entity.AbsenceReasonType;
+import com.dlab.domain.penalty.entity.PenaltyTriggerType;
+import com.dlab.domain.attendance.entity.AbsenceSubmitterType;
 import com.dlab.domain.attendance.repository.AbsenceReasonRepository;
 import com.dlab.domain.user.entity.ClassAssignment;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -54,6 +56,9 @@ public class AbsenceReasonService {
     private final com.dlab.domain.attendance.repository.AbsenceReasonCategoryRepository categoryRepository;
     private final ApprovalService approvalService;
     private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
+    private final com.dlab.domain.penalty.service.PenaltyRuleEngine penaltyRuleEngine;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
+    private final com.dlab.domain.attendance.repository.DufExamDateRepository dufExamDateRepository;
     private final Clock clock;
 
     /**
@@ -72,6 +77,7 @@ public class AbsenceReasonService {
                                   LocalTime startTime, LocalTime endTime, Long categoryId) {
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
         validatePeriod(type, startTime, endTime);
+        requireDufExamDate(enrollment, date, type);
 
         AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
                 enrollment.getAcademy(), enrollment, date, type, reasonText, startTime, endTime));
@@ -104,17 +110,219 @@ public class AbsenceReasonService {
                 .filter(e -> !e.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
         validatePeriod(type, startTime, endTime);
+        requireDufExamDate(enrollment, date, type);
         rejectDuplicate(enrollmentId, date, type);
 
         AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
                 enrollment.getAcademy(), enrollment, date, type, reasonText, startTime, endTime));
         applyCategory(reason, categoryId, enrollment);
 
+        reason.recordSubmitter(AbsenceSubmitterType.STUDENT, null);
+
         ApprovalRequest approval = approvalService.create(enrollment, RequestType.ABSENCE_REASON);
         reason.linkApproval(approval);
 
         log.info("사유신청 제출(앱): enrollmentId={}, 유형={}, 일자={}", enrollmentId, type, date);
         return reason;
+    }
+
+    /**
+     * ★★ <b>학부모가</b> 앱에서 사유를 낸다 (디랩 1031 ③).
+     *
+     * <h2>★ 왜 열었는가 — 받은 사람이 할 수 없는 일을 안내하고 있었다</h2>
+     * 결석 안내 알림톡은 <b>보호자에게만</b> 가는데(UM_8236) 문구가
+     * <b>「사유가 있으시면 어플에서 사유 입력을 부탁드립니다」</b> 다. 그런데 지금까지
+     * <b>학생만 낼 수 있었다.</b>
+     *
+     * <h2>★★ 우선 승인자가 「부모」면 <b>제출 즉시 승인</b>이다</h2>
+     * <b>낸 것이 곧 학부모 확인</b>이다(디랩 1031 §2 표). 승인을 또 받게 하면
+     * <b>자기가 낸 것을 자기가 승인</b>하는 절차가 되어 한 단계가 형식만 남는다.
+     *
+     * <p>⚠️ <b>승인 요청 행을 「만들지 않는」 것이 아니다.</b> 만들고 <b>그 자리에서
+     * 승인</b>한다 — 그러지 않으면 승인 보드에 아무것도 남지 않아
+     * <b>「승인 요청이 왜 안 보이지」에 답할 수 없다</b>(프런트 지적).
+     * {@code resolver_account_id} 에 <b>그 학부모가 승인자로 박힌다.</b>
+     *
+     * <p>★ <b>「담임」이면 그대로 담임에게 간다</b> — 학생이 낸 것과 같다.
+     *
+     * <p>★ <b>벌점도 같은 경로를 탄다</b> — 승인될 때 붙는다(디랩 1029 4-1). 제출 즉시
+     * 승인이어도 예외가 아니다. 그 근거는 입학동의서 9항(<b>「벌점부여에 동의」</b>)이고,
+     * 9-4 가 <b>「모두 학부모님께 확인 절차를 거친 후」</b> 다 — <b>학부모가 확인하고,
+     * 그 확인에 벌점이 붙는 것에 학부모가 이미 동의한 구조다.</b>
+     *
+     * @param guardianAccount 낸 학부모 계정. ★ 승인자로도 기록된다
+     */
+    @Transactional
+    public AbsenceReason submitByGuardian(StudentEnrollment enrollment,
+                                          com.dlab.domain.user.entity.Account guardianAccount,
+                                          LocalDate date, AbsenceReasonType type,
+                                          String reasonText, LocalTime startTime,
+                                          LocalTime endTime, Long categoryId) {
+        validatePeriod(type, startTime, endTime);
+        requireDufExamDate(enrollment, date, type);
+        rejectDuplicate(enrollment.getId(), date, type);
+
+        AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
+                enrollment.getAcademy(), enrollment, date, type, reasonText,
+                startTime, endTime));
+        applyCategory(reason, categoryId, enrollment);
+        reason.recordSubmitter(AbsenceSubmitterType.GUARDIAN, guardianAccount);
+
+        ApprovalRequest approval = approvalService.create(
+                enrollment, RequestType.ABSENCE_REASON,
+                // ★ 즉시 승인될 건에는 ★ 「승인해주세요」 알림을 보내지 않는다 —
+                //   ⚠️ 자기가 낸 신청의 승인 요청을 자기가 받는 꼴이 된다
+                !approvalService.isParentPrimary(enrollment, RequestType.ABSENCE_REASON));
+        reason.linkApproval(approval);
+
+        if (approvalService.isParentPrimary(enrollment, RequestType.ABSENCE_REASON)) {
+            // ★ 낸 것이 곧 학부모 확인이다 — 그 학부모가 승인자로 박힌다
+            approvalService.approve(approval.getId(), guardianAccount.getId());
+            log.info("사유신청 제출 즉시 승인(학부모): enrollmentId={}, 유형={}, 일자={}",
+                    enrollment.getId(), type, date);
+        } else {
+            log.info("사유신청 제출(학부모, 담임 승인 대기): enrollmentId={}, 유형={}, 일자={}",
+                    enrollment.getId(), type, date);
+        }
+        return reason;
+    }
+
+    // ── 후속 처리 (디랩 1029 4-3) ────────────────────────────────
+
+    /**
+     * ★★ <b>증빙 확인</b> — 직원이 체크하면 <b>그 신청으로 붙은 자동 벌점을 거둔다</b>
+     * (1029 4-3 #36).
+     *
+     * <p>시트 원문: <b>「사유외출 및 조퇴 시 증빙영수증 제출할 경우 직원 확인 체크 시
+     * 기존 부여된 벌점 자동 삭제」</b>
+     *
+     * <h2>★ 0점 항목을 기록으로 남긴다</h2>
+     * 「디랩 인정사유 및 병원영수증 제출」은 <b>0점</b>이다 — 점수가 아니라
+     * <b>「이런 일이 있었다」는 기록</b>이다. ⚠️ 거두기만 하면 <b>왜 사라졌는지</b>가
+     * 남지 않는다.
+     *
+     * <h2>⚠️ 신청 종류로 막지 않는다</h2>
+     * 시트는 「사유외출 및 조퇴」만 적었지만, 사유 결석·지각에 열지는
+     * <b>{@code penalty_rule} 행으로 정한다</b>(1029 4-3 지침) — 화면에서 막으면
+     * 디랩이 범위를 넓힐 때 코드를 고쳐야 한다.
+     *
+     * <p>★ <b>두 번 누르면 거부한다</b> — 두 번째 호출이 0점 기록을 또 남기면
+     * 「몇 번 확인했나」가 의미를 잃는다(멱등키가 같아 벌점은 안 늘지만 혼란스럽다).
+     */
+    @Transactional
+    public AbsenceReason confirmEvidence(AuthPrincipal me, Long reasonId) {
+        AbsenceReason reason = requireScoped(me, reasonId);
+        if (reason.getEvidenceConfirmedAt() != null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "이미 증빙을 확인했습니다.");
+        }
+        reason.confirmEvidence(staff(me), Instant.now(clock));
+
+        // ★ 「증빙 확인」 트리거로 돈다. 거둘 대상과 기록 항목은 ★ 전부 규칙 데이터다
+        penaltyRuleEngine.apply(reason.getEnrollment(), PenaltyTriggerType.APPROVAL,
+                EVIDENCE_CONFIRMED, reason.getAttendanceDate());
+
+        log.info("사유신청 증빙 확인: reasonId={}, 학생={}", reasonId,
+                reason.getEnrollment().getId());
+        return reason;
+    }
+
+    /**
+     * ★★ <b>미진행</b> — 승인됐는데 실제로 하지 않은 경우 (1029 4-3 #10).
+     *
+     * <h2>⚠️ 10/21 결론이 뒤집힌 자리다</h2>
+     * 그때는 <b>「외출 신청 후 안 나가면 취소할 벌점이 없다 — 개발할 것 없음」</b> 으로
+     * 디랩에 회신했다. <b>승인 시 부여로 바뀌면서</b>(1029 4-1) 정리 경로가 필요해졌다.
+     *
+     * <h2>★★ 9-7 회신을 기다리지 않는다 — 데이터로 흡수된다</h2>
+     * 미확정은 <b>「-1 을 취소하고 0점 기록만」 vs 「-1 을 두고 0점 기록을 더함」</b>
+     * 인데, ★ 그 차이는 <b>{@code penalty_rule.supersedes_rule_id}</b> 하나다 —
+     * 「미진행」 규칙에 <b>대체 대상을 지정하면 전자, 비우면 후자</b>다.
+     * ★ 회신이 와도 <b>코드가 아니라 행을 고친다.</b>
+     *
+     * <p>★ <b>버튼 하나로 끝난다</b>(1029 4-3) — ⚠️ 항목을 손으로 찾아 넣게 하면
+     * <b>빠진다.</b>
+     */
+    @Transactional
+    public AbsenceReason markNotExecuted(AuthPrincipal me, Long reasonId) {
+        AbsenceReason reason = requireScoped(me, reasonId);
+        if (reason.getNotExecutedAt() != null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "이미 미진행으로 표시했습니다.");
+        }
+        reason.markNotExecuted(staff(me), Instant.now(clock));
+
+        penaltyRuleEngine.apply(reason.getEnrollment(), PenaltyTriggerType.APPROVAL,
+                NOT_EXECUTED, reason.getAttendanceDate());
+
+        log.info("사유신청 미진행 표시: reasonId={}, 학생={}", reasonId,
+                reason.getEnrollment().getId());
+        return reason;
+    }
+
+    /**
+     * ★ 후속 처리 트리거 조건값.
+     *
+     * <p>⚠️ {@code AbsenceReasonType} 값과 <b>같은 자리에 들어간다</b> — 사유 종류와
+     * 겹치지 않는 이름을 쓴다. 겹치면 <b>승인 벌점 규칙이 후속 처리에도 걸린다.</b>
+     */
+    public static final String EVIDENCE_CONFIRMED =
+            com.dlab.domain.penalty.entity.TriggerCondition.EVIDENCE_CONFIRMED;
+    public static final String NOT_EXECUTED =
+            com.dlab.domain.penalty.entity.TriggerCondition.NOT_EXECUTED;
+
+    /**
+     * ★ 신청을 ★ 권한 범위 안에서 찾는다.
+     *
+     * <p>⚠️ {@code reasonId} 를 요청으로 받으므로 <b>값을 바꿔 보낼 수 있다</b> —
+     * 지점 검사 없이는 <b>남의 지점 신청을 후속 처리할 수 있다.</b>
+     */
+    /**
+     * ★ 승인 요청으로 사유 신청을 찾는다 — <b>후속 처리 버튼이 승인 보드에서 눌린다.</b>
+     *
+     * <p>⚠️ 한 승인 요청에 사유가 여럿일 수 있어(정기 신청) <b>첫 건</b>을 돌려준다 —
+     * 화면이 보드에서 바로 누를 수 있어야 한다.
+     */
+    public AbsenceReason findByApproval(Long approvalRequestId) {
+        return absenceReasonRepository.findByApprovalRequestId(approvalRequestId).stream()
+                .filter(r -> !r.isDeleted())
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
+                        "사유 신청을 찾을 수 없습니다."));
+    }
+
+    private AbsenceReason requireScoped(AuthPrincipal me, Long reasonId) {
+        AbsenceReason reason = absenceReasonRepository.findById(reasonId)
+                .filter(r -> !r.isDeleted())
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND,
+                        "사유 신청을 찾을 수 없습니다."));
+        me.requireAcademyScope(reason.getAcademy().getId());
+        return reason;
+    }
+
+    private com.dlab.domain.user.entity.Account staff(AuthPrincipal me) {
+        return accountRepository.findById(me.accountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+    }
+
+    /**
+     * ★★ 더프 조퇴는 <b>응시일에만</b> 신청할 수 있다 (디랩 1029 4-4).
+     *
+     * <p>1029 지침: <b>「응시일이 아닌 날에 더프 조퇴를 신청하면 막습니다
+     * (일반 사유 조퇴로 안내)」</b>
+     *
+     * <p>⚠️ 막지 않으면 <b>아무 날에나 더프 조퇴를 걸어 벌점을 -1 로 낮출 수 있다</b> —
+     * 일반 사유 조퇴보다 가볍게 매겨질 수 있는 항목이다.
+     *
+     * <p>★ 응시일은 <b>지점 전용 + 전 지점 공통</b>을 함께 본다.
+     */
+    private void requireDufExamDate(StudentEnrollment enrollment, LocalDate date,
+                                    AbsenceReasonType type) {
+        if (type != AbsenceReasonType.DUF_EARLY_LEAVE) {
+            return;
+        }
+        if (!dufExamDateRepository.isExamDate(enrollment.getAcademy().getId(), date)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "그 날은 더프리미엄 응시일이 아닙니다. 일반 사유 조퇴로 신청해 주세요.");
+        }
     }
 
     /**

@@ -61,6 +61,11 @@ public class PenaltyRuleEngine {
             if (!rule.matches(condition)) {
                 continue;
             }
+            // ★★ 먼저 거둔다 — ★ 순서가 중요하다 (디랩 1029 4-2: 「거두기 → 부여」).
+            //
+            //    ⚠️ 거꾸로 하면 ★ 같은 날·같은 학생에 두 벌점이 함께 존재하는 순간이
+            //    생기고, 그 사이에 합계를 읽는 경로(제적 40점 판정)가 ★ 과하게 센다.
+            supersede(enrollment, rule, occurredOn);
             grant(enrollment, rule, triggerType, occurredOn).ifPresent(applied::add);
         }
         return applied;
@@ -108,6 +113,74 @@ public class PenaltyRuleEngine {
             }
         }
         return revoked;
+    }
+
+    /**
+     * ★★ 대체 대상의 <b>자동 부여분</b>을 거둔다 (디랩 1029 4-2).
+     *
+     * <h2>★ 거두는 대상은 자동 부여분만이다</h2>
+     * 멱등키가 있는 행만 본다 — <b>수기 부여분은 건드리지 않는다.</b> 직원이 손으로
+     * 넣은 벌점을 규칙이 지우면 <b>왜 사라졌는지 아무도 모른다.</b>
+     *
+     * <p>★ <b>같은 날</b>의 것만 거둔다. 멱등키가 {@code 학생:일자:규칙} 이라
+     * 다른 날 벌점은 애초에 키가 다르다.
+     *
+     * <p>⚠️ 대체 대상이 <b>꺼져 있어도 거둔다</b> — 규칙을 끈 뒤에도
+     * <b>이미 붙은 자동 벌점은 남아 있다.</b> 그것까지 두면 중복이 그대로다.
+     */
+    private void supersede(StudentEnrollment enrollment, PenaltyRule rule,
+                           LocalDate occurredOn) {
+        PenaltyRule target = rule.getSupersedesRule();
+        if (target == null) {
+            return;
+        }
+        String key = PenaltyPoint.attendanceKey(
+                enrollment.getId(), occurredOn, target.getId());
+        pointRepository.findByIdempotencyKeyAndDeletedFalse(key).ifPresent(point -> {
+            point.markDeleted();
+            log.info("★ 대체 규칙으로 자동 벌점 취소: key={}, 거둔항목={}, 부여규칙={}",
+                    key, target.getPenaltyItem().getItemName(), rule.getId());
+        });
+    }
+
+    /**
+     * ★★ <b>횟수를 세어</b> 임계값에 닿으면 부여한다 (디랩 1029 4-6).
+     *
+     * <h2>★ 왜 따로 두는가 — 건별 트리거와 방향이 다르다</h2>
+     * {@link #apply} 는 <b>한 번 일어난 것</b>에 붙는다. 이쪽은 <b>「3회째에」</b>라서
+     * <b>지금까지 몇 번인지를 호출자가 알려 줘야</b> 한다.
+     *
+     * <p>★ <b>세는 것은 호출자가 한다</b> — 도메인마다 세는 단위가 다르다(순찰은 회차,
+     * 루틴은 주간 회차). ⚠️ 엔진이 세면 <b>엔진이 모든 도메인을 알아야</b> 한다.
+     *
+     * <p>★ <b>임계값은 규칙 데이터</b>({@code threshold})다 — 코드에 3을 박지 않았다.
+     * ⚠️ {@code threshold} 가 없는 규칙은 <b>건너뛴다</b> — 세지 않는 규칙이다.
+     *
+     * @param occurrences 지금까지 일어난 횟수. ★ 임계값 <b>이상</b>이면 부여한다
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<PenaltyPoint> applyCounted(StudentEnrollment enrollment,
+                                           PenaltyTriggerType triggerType,
+                                           String condition,
+                                           LocalDate occurredOn,
+                                           int occurrences) {
+        List<PenaltyRule> rules = ruleRepository.findActive(
+                enrollment.getAcademy().getId(), enrollment.getYear(), triggerType);
+
+        List<PenaltyPoint> applied = new ArrayList<>();
+        for (PenaltyRule rule : rules) {
+            if (!rule.matches(condition) || !rule.counts()) {
+                continue;
+            }
+            if (occurrences < rule.getThreshold()) {
+                continue;
+            }
+            // ★ 멱등키가 「학생:일자:규칙」이라 ★ 하루 한 번만 붙는다 —
+            //   ⚠️ 4회·5회째에 또 붙지 않는다. 그게 맞다(「3회 체크하면 부여」).
+            supersede(enrollment, rule, occurredOn);
+            grant(enrollment, rule, triggerType, occurredOn).ifPresent(applied::add);
+        }
+        return applied;
     }
 
     private java.util.Optional<PenaltyPoint> grant(StudentEnrollment enrollment,

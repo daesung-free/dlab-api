@@ -143,6 +143,45 @@ public class AdminPenaltyMasterController {
     }
 
     /** 켜고 끄기. 지우지 않고 끄면 과거 부여 근거가 남는다. */
+    /**
+     * ★★ 대체 관계 지정 — 「이 규칙이 부여할 때 ★ 어느 자동 벌점을 먼저 거둘지」
+     * (디랩 1029 4-2).
+     *
+     * <p>★ 쓰임은 하나다 — <b>자동 지각 ↔ 사유 지각·사유 결석 중복 방지.</b>
+     * 사유지각은 원장이 {@code LATE} 라 「{@code A} → 자동 지각」 규칙과 ★ 같은 날
+     * 겹친다.
+     *
+     * <p>⚠️ <b>코드가 아니라 데이터</b>로 두는 이유: 디랩이 항목 이름을 바꿔도
+     * 안 깨진다.
+     *
+     * @param supersedesRuleId 거둘 규칙. ★ 비우면 <b>해제</b>한다
+     */
+    /**
+     * ★★ 임계값 — 「몇 번째에 부여하는가」 (디랩 1029 4-6).
+     *
+     * <p>★ 취침 3회가 그 예다. ⚠️ <b>코드에 3을 박지 않았다</b> — 지점·연도마다
+     * 다를 수 있다.
+     *
+     * @param threshold ★ 비우면 <b>세지 않는다</b>(건별로 걸린다)
+     */
+    @PatchMapping("/penalty-rules/{ruleId}/threshold")
+    public ApiResponse<PenaltyRuleRow> changeThreshold(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long ruleId,
+            @RequestParam(required = false) Short threshold) {
+        return ApiResponse.success(PenaltyRuleRow.from(
+                masterService.changeThreshold(me, ruleId, threshold)));
+    }
+
+    @PatchMapping("/penalty-rules/{ruleId}/supersedes")
+    public ApiResponse<PenaltyRuleRow> changeSupersedes(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long ruleId,
+            @RequestParam(required = false) Long supersedesRuleId) {
+        return ApiResponse.success(PenaltyRuleRow.from(
+                masterService.changeSupersedes(me, ruleId, supersedesRuleId)));
+    }
+
     @PatchMapping("/penalty-rules/{ruleId}/active")
     public ApiResponse<PenaltyRuleRow> toggleRule(@CurrentAccount AuthPrincipal me,
                                            @PathVariable Long ruleId,
@@ -226,12 +265,24 @@ public class AdminPenaltyMasterController {
     }
 
     public record PenaltyRuleRow(Long id, PenaltyTriggerType triggerType, String triggerCondition,
-                          Long penaltyItemId, String itemName, int point, boolean active) {
+                          Long penaltyItemId, String itemName, int point, boolean active,
+                          /**
+                           * ★ 이 규칙이 부여할 때 ★ 먼저 거둘 규칙 (1029 4-2).
+                           * {@code null} 이면 ★ 거두지 않는다.
+                           */
+                          Long supersedesRuleId,
+                          /**
+                           * ★ 몇 번째에 부여하는가 (취침 3회 등).
+                           * {@code null} 이면 ★ 세지 않는다.
+                           */
+                          Short threshold) {
 
         static PenaltyRuleRow from(PenaltyRule r) {
             return new PenaltyRuleRow(r.getId(), r.getTriggerType(), r.getTriggerCondition(),
                     r.getPenaltyItem().getId(), r.getPenaltyItem().getItemName(),
-                    r.getPenaltyItem().getPointValue(), r.isActive());
+                    r.getPenaltyItem().getPointValue(), r.isActive(),
+                    r.getSupersedesRule() == null ? null : r.getSupersedesRule().getId(),
+                    r.getThreshold());
         }
     }
 }

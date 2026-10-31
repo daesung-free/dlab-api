@@ -47,7 +47,6 @@ public class TuitionBillingService {
     private final StudentEnrollmentRepository enrollmentRepository;
     private final TuitionPricingService pricingService;
     private final DiscountPolicyService discountPolicyService;
-    private final com.dlab.domain.master.repository.ScholarshipRepository scholarshipRepository;
     private final org.springframework.context.ApplicationContext applicationContext;
 
     /**
@@ -113,86 +112,54 @@ public class TuitionBillingService {
      */
     @Transactional
     public Billing issueMonthlyByPolicy(AuthPrincipal me, Long enrollmentId, YearMonth month,
-                                        SeatType seatType, String discountCode,
+                                        SeatType seatType, List<String> discountCodes,
                                         Integer remainingDays, LocalDate dueDate,
                                         LocalDate serviceFrom) {
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
-        rejectIfScholarshipHolder(enrollment, discountCode);
-        int rate = policyRate(enrollment, month, discountCode, seatType);
-        return issue(enrollment, month, seatType, rate, remainingDays, dueDate,
-                // ★ 할인이 붙지 않았으면 근거를 비운다 — 코드를 적어 두면 「정책이 붙었는데
-                //   0원」으로 읽혀, 담당자가 정책을 의심하게 된다
-                rate > 0 ? discountCode : null,
+        var applied = applyPolicies(enrollment, month, discountCodes, seatType);
+        return issue(enrollment, month, seatType, applied.rate(), remainingDays, dueDate,
+                // ★ 근거에 ★ 내역을 남긴다 — 「장학 10% + 친구추천 10% = 20%」.
+                //   ⚠️ 비율만 남기면 ★ 어느 혜택이 얼마였는지 재현되지 않는다
+                applied.source(),
                 serviceFrom);
     }
 
     /**
-     * ★★ 장학을 받는 학생에게는 <b>정책 할인을 걸 수 없다</b> — 중복 규칙이 정해지기
-     * 전까지다.
+     * ★★ 정책들을 <b>합연산</b>으로 적용한다 (디랩 1021 회신).
      *
-     * <h2>⚠️ 장학은 이미 청구에 반영되고 있다 — 화면이 한다</h2>
-     * {@code domain/payment} 에 {@code Scholarship} 참조가 없어 <b>「안 겹친다」고
-     * 읽었는데 틀렸다</b>(2026-10-30 프런트가 지적). 관리자 웹의 일괄 청구가
-     * <b>학생별 장학 할인율을 읽어 {@code discountRate} 로 보내고</b>,
-     * {@code discountSource} 에 <b>장학명</b>을 박고 있다.
+     * <h2>★ 장학도 할인의 한 종류다 — 따로 막지 않는다</h2>
+     * 디랩 회신이 <b>「장학 10% + 친구추천 10% + 경쟁사 이전 10% = 30%」</b>를 예로 든다.
+     * 장학 동의서도 <b>「장학 대상자는 장학 기준 성적에 맞춰 교습비 할인」</b>이라고 적는다 —
+     * <b>장학은 별개 축이 아니라 할인의 한 {@code kind}</b> 다.
      *
-     * <h2>★★ 그래서 막지 않으면 조용히 어긋난다</h2>
-     * 장학 70% 학생에게 정책 10% 를 걸면 <b>할인이 10% 로 바뀌고</b>
-     * {@code discountSource} 가 <b>장학명에서 정책 코드로</b> 바뀐다 —
-     * <b>오류는 안 나고 금액과 근거만 달라진다.</b>
+     * <p>⚠️ <b>처음에 장학생을 거부하게 만들었던 것은 잘못이었다</b>(2026-10-30).
+     * 「중복 규칙이 미확정」이라고 보았는데 <b>1021 에 이미 답이 와 있었다.</b>
      *
-     * <h2>★ 디랩이 정해야 하는 셋</h2>
-     * <ul>
-     *   <li>둘 다 해당되면 <b>어느 것이 적용되나</b></li>
-     *   <li>둘을 <b>합산하나</b>(70% + 10%) 아니면 하나만 쓰나</li>
-     *   <li>{@code discountSource} 에 <b>무엇을 남기나</b> — 같은 칸에 둘이 못 들어간다</li>
-     * </ul>
-     *
-     * <p>★ 그때까지 <b>거부</b>한다. 되돌릴 수 없는 쪽(장학 근거가 지워지는 것)을 막는
-     * 선택이고, 규칙이 오면 <b>이 거부를 규칙으로 바꾸면</b> 된다.
+     * <h2>⚠️ 교습비만 분모다</h2>
+     * 독서실비는 규정상 할인이 없다 — 월 합계로 나누면 <b>교습비 할인이 덜 깎인다.</b>
      */
-    private void rejectIfScholarshipHolder(StudentEnrollment enrollment, String discountCode) {
-        if (discountCode == null || discountCode.isBlank()) {
-            return;
-        }
-        if (!scholarshipRepository.findByEnrollmentId(enrollment.getId()).isEmpty()) {
-            throw new BusinessException(ErrorCode.INVALID_REQUEST,
-                    "장학을 받는 학생에게는 할인 정책을 적용할 수 없습니다. "
-                            + "장학과 할인의 중복 적용 규칙이 정해지지 않았습니다 — "
-                            + "장학 할인율로 발행해 주세요.");
-        }
-    }
+    private DiscountPolicyService.Applied applyPolicies(
+            StudentEnrollment enrollment, YearMonth month,
+            List<String> discountCodes, SeatType seatType) {
 
-    /**
-     * ★ 정책이 정한 할인율.
-     *
-     * <h2>⚠️ 정책은 「금액」을 주는데 청구는 「율」을 받는다</h2>
-     * {@code DiscountPolicyService.discountAmount} 가 <b>금액</b>을 돌려주므로, 정가로
-     * 나눠 율로 바꾼다. ★ <b>정액 할인(5만원)도 그래서 받아들여진다</b> — 교습비 계산이
-     * 율 기반이라 금액을 그대로 넣을 자리가 없다.
-     *
-     * <p>⚠️ <b>절사가 생긴다.</b> 정가 660,000 에 50,000 할인이면 7.57% 인데 율은 정수라
-     * 7% 가 되어 <b>3,800원이 덜 깎인다.</b> 지금 디랩 할인은 전부 비율(10~70%)이라
-     * 문제가 없지만, ★ <b>정액 할인을 쓰기 시작하면 이 자리를 먼저 고쳐야 한다</b> —
-     * 청구가 금액 할인을 직접 받게 바꾸는 쪽이다.
-     */
-    private int policyRate(StudentEnrollment enrollment, YearMonth month, String discountCode,
-                           SeatType seatType) {
-        if (discountCode == null || discountCode.isBlank()) {
-            return 0;
-        }
-        // ★★ 교습비만 분모로 쓴다 — ⚠️ 독서실비는 규정상 할인이 없다(§2).
-        //    월 합계(교습비 + 독서실비)로 나누면 ★ 율이 작아져 교습비 할인이 덜 깎인다.
         int supplied = pricingService.priceOf(enrollment, seatType).getTuitionFee();
-        if (supplied <= 0) {
-            return 0;
-        }
-        int amount = discountPolicyService.discountAmount(
-                enrollment.getYear(), enrollment.getAcademy().getId(), discountCode,
+        var applied = discountPolicyService.applyAll(
+                enrollment.getYear(), enrollment.getAcademy().getId(), discountCodes,
                 com.dlab.domain.payment.entity.BillingItemType.TUITION,
                 // ★ 청구 대상 월이다 — 발행한 달이 아니다
                 month.getMonthValue(), supplied);
-        return (int) ((long) amount * 100 / supplied);
+
+        // ★★ 교습비 청구는 ★ 율로만 계산된다(1일 단가·일할이 율 기반이다).
+        //    그래서 ★ 금액 할인을 실을 자리가 없다 — 통과시키면 ★ 조용히 사라진다.
+        //    ⚠️ 1021 문서도 금액 항목은 「Q3 답에 있으면 규칙을 확인받을 것」으로 남겼다.
+        //    ★ 거부가 맞다 — 데스크가 「할인을 걸었는데 안 깎였다」를 알아야 한다.
+        if (applied.amount() > 0 && applied.rate() * supplied / 100 != applied.amount()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "금액 할인(정액) 정책은 교습비 청구에 적용할 수 없습니다. "
+                            + "교습비는 비율로 계산됩니다 — 비율 정책을 쓰거나 "
+                            + "할인율을 직접 입력해 주세요.");
+        }
+        return applied;
     }
 
     /**

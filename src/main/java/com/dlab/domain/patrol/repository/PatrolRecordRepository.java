@@ -42,4 +42,26 @@ public interface PatrolRecordRepository extends JpaRepository<PatrolRecord, Long
     Optional<PatrolRecord> findOne(@Param("date") LocalDate date,
                                    @Param("roundNo") short roundNo,
                                    @Param("enrollmentId") Long enrollmentId);
+
+    /**
+     * ★★ 그 학생이 <b>그 날 졸음으로 찍힌 회차 수</b> (디랩 1029 4-6).
+     *
+     * <h2>⚠️ 「교시별」이 아니라 「회차별」이다</h2>
+     * 순찰 기록에 <b>교시가 없다.</b> 있는 것은 <b>순찰 회차({@code round_no}, 1~5)</b>이고
+     * 스키마가 <b>{@code (날짜, 회차, 학생)} 유일</b>이라 <b>한 회차에 같은 학생이
+     * 두 행일 수 없다</b> — 즉 이 수가 곧 <b>졸음으로 찍힌 회차 수</b>다.
+     *
+     * <p>★ 디랩이 「교시별」로 <b>순찰 회차를 뜻한 것인지 확인해야 한다.</b>
+     */
+    @Query("""
+            select count(r)
+              from PatrolRecord r
+             where r.enrollment.id = :enrollmentId
+               and r.patrolDate = :date
+               and r.mark = :mark
+               and r.deleted = false
+            """)
+    long countByMark(@Param("enrollmentId") Long enrollmentId,
+                     @Param("date") java.time.LocalDate date,
+                     @Param("mark") com.dlab.domain.patrol.entity.PatrolMark mark);
 }

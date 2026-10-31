@@ -1,6 +1,7 @@
 package com.dlab.api.approval;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.approval.entity.ApprovalItem;
@@ -52,6 +53,7 @@ class ApprovalPenaltyTriggerTest {
     @Autowired AbsenceReasonService absenceReasonService;
     @Autowired ApprovalService approvalService;
     @Autowired PenaltyMasterService masterService;
+    @Autowired com.dlab.domain.penalty.repository.PenaltyRuleRepository ruleRepository;
     @Autowired com.dlab.domain.penalty.repository.PenaltyPointRepository pointRepository;
     @Autowired com.dlab.domain.approval.repository.ApprovalRequestRepository requestRepository;
     @Autowired EntityManager em;
@@ -262,5 +264,164 @@ class ApprovalPenaltyTriggerTest {
         assertThat(request.getPrimaryApprover())
                 .as("★ 지점 정책이 PARENT 이므로 학부모다")
                 .isEqualTo(ApproverType.PARENT);
+    }
+
+    // ── 후속 처리 배선 (증빙 확인 · 미진행 · 디랩 1029 4-3) ────────
+    //
+    // ★★ 이 클래스는 ★ 엔진이 목이다 — 결과(벌점 행)는 볼 수 없다.
+    //    실제 거두기는 ★ PenaltySupersedeTest 가 ★ 커밋된 규칙으로 검증한다.
+    //    ⚠️ 엔진이 REQUIRES_NEW 라 ★ 테스트 트랜잭션의 규칙을 못 본다.
+
+    /**
+     * ★★ 증빙 확인이 ★ {@code EVIDENCE_CONFIRMED} 로 엔진을 부른다 (1029 4-3 #36).
+     *
+     * <p>⚠️ 조건값이 어긋나면 <b>규칙이 영영 안 걸리고</b>, 화면에는
+     * <b>「체크했는데 벌점이 그대로」</b>로만 보인다.
+     */
+    @Test
+    @DisplayName("★★ 증빙 확인이 EVIDENCE_CONFIRMED 로 엔진을 부른다")
+    void evidenceConfirmCallsEngine() {
+        var request = submit(AbsenceReasonType.OUTING);
+        var reason = absenceReasonService.findByApproval(request.getId());
+
+        absenceReasonService.confirmEvidence(admin, reason.getId());
+        em.flush();
+
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(PenaltyTriggerType.APPROVAL),
+                org.mockito.ArgumentMatchers.eq("EVIDENCE_CONFIRMED"),
+                org.mockito.ArgumentMatchers.eq(today));
+    }
+
+    /** ★★ 미진행이 {@code NOT_EXECUTED} 로 엔진을 부른다 (1029 4-3 #10). */
+    @Test
+    @DisplayName("★★ 미진행이 NOT_EXECUTED 로 엔진을 부른다")
+    void notExecutedCallsEngine() {
+        var request = submit(AbsenceReasonType.OUTING);
+        var reason = absenceReasonService.findByApproval(request.getId());
+
+        absenceReasonService.markNotExecuted(admin, reason.getId());
+        em.flush();
+
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(PenaltyTriggerType.APPROVAL),
+                org.mockito.ArgumentMatchers.eq("NOT_EXECUTED"),
+                org.mockito.ArgumentMatchers.eq(today));
+    }
+
+    /** ★ 두 번 누르면 거부한다 — 「몇 번 확인했나」가 의미를 잃는다. */
+    @Test
+    @DisplayName("★ 증빙 확인은 두 번 누를 수 없다")
+    void evidenceConfirmIsOnce() {
+        var request = submit(AbsenceReasonType.OUTING);
+        var reason = absenceReasonService.findByApproval(request.getId());
+        absenceReasonService.confirmEvidence(admin, reason.getId());
+        em.flush();
+
+        assertThatThrownBy(() -> absenceReasonService.confirmEvidence(admin, reason.getId()))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class);
+    }
+
+    // ── 더프 조퇴 (디랩 1029 4-4) ─────────────────────────────────
+
+    /**
+     * ★★ 더프 조퇴는 <b>응시일에만</b> 신청할 수 있다.
+     *
+     * <p>⚠️ 막지 않으면 <b>아무 날에나 더프 조퇴를 걸어 벌점을 낮출 수 있다</b> —
+     * 일반 사유 조퇴보다 가볍게 매겨질 수 있는 항목이다.
+     */
+    @Test
+    @DisplayName("★★ 응시일이 아니면 더프 조퇴를 못 낸다 — 아무 날에나 걸어 벌점을 낮출 수 있다")
+    void dufNeedsExamDate() {
+        assertThatThrownBy(() -> absenceReasonService.register(admin, minji.getId(), today,
+                AbsenceReasonType.DUF_EARLY_LEAVE, "더프 응시",
+                null, null, null))
+                .isInstanceOf(com.dlab.common.exception.BusinessException.class)
+                .hasMessageContaining("응시일이 아닙니다");
+    }
+
+    /** ★ 응시일을 등록하면 신청된다. */
+    @Test
+    @DisplayName("★ 응시일을 등록하면 더프 조퇴가 신청된다")
+    void dufWorksOnExamDate() {
+        dufExamDate(today);
+
+        var reason = absenceReasonService.register(admin, minji.getId(), today,
+                AbsenceReasonType.DUF_EARLY_LEAVE, "더프 응시", null, null, null);
+
+        assertThat(reason.getReasonType()).isEqualTo(AbsenceReasonType.DUF_EARLY_LEAVE);
+    }
+
+    /**
+     * ★★ 전일 신청이면 <b>{@code DUF_PREV_DAY}</b> 로 걸린다 (시트 #13, -1).
+     *
+     * <p>★ 판정 기준은 <b>신청 생성 시각</b>이다 — ⚠️ <b>승인 시각이 아니다.</b>
+     * 직원이 늦게 승인했다고 <b>학생이 당일 신청한 것으로 바뀌면 안 된다.</b>
+     */
+    @Test
+    @DisplayName("★★ 전일 신청은 DUF_PREV_DAY 다 — 승인 시각이 아니라 신청 시각으로 가른다")
+    void dufPrevDayCondition() {
+        var examDay = today.plusDays(1);
+        dufExamDate(examDay);
+
+        var reason = absenceReasonService.register(admin, minji.getId(), examDay,
+                AbsenceReasonType.DUF_EARLY_LEAVE, "더프 응시", null, null, null);
+        em.flush();
+
+        approvalService.approve(reason.getApprovalRequest().getId(), teacherAccountId);
+        em.flush();
+
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(PenaltyTriggerType.APPROVAL),
+                org.mockito.ArgumentMatchers.eq("DUF_PREV_DAY"),
+                org.mockito.ArgumentMatchers.eq(examDay));
+    }
+
+    /** ★★ 당일 신청이면 {@code DUF_SAME_DAY} 다 (시트 #14, -2 — 전일보다 무겁다). */
+    @Test
+    @DisplayName("★★ 당일 신청은 DUF_SAME_DAY 다 — 전일보다 무겁다")
+    void dufSameDayCondition() {
+        dufExamDate(today);
+
+        var reason = absenceReasonService.register(admin, minji.getId(), today,
+                AbsenceReasonType.DUF_EARLY_LEAVE, "더프 응시", null, null, null);
+        em.flush();
+
+        approvalService.approve(reason.getApprovalRequest().getId(), teacherAccountId);
+        em.flush();
+
+        org.mockito.Mockito.verify(penaltyRuleEngine).apply(
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(PenaltyTriggerType.APPROVAL),
+                org.mockito.ArgumentMatchers.eq("DUF_SAME_DAY"),
+                org.mockito.ArgumentMatchers.eq(today));
+    }
+
+    /**
+     * ★ <b>전 지점 공통 응시일</b>도 걸린다.
+     *
+     * <p>⚠️ 공통을 안 보면 <b>전국 일정이 아무 지점에서도 안 걸린다.</b>
+     */
+    @Test
+    @DisplayName("★ 전 지점 공통 응시일도 걸린다 — 안 보면 전국 일정이 안 걸린다")
+    void commonExamDateApplies() {
+        em.persist(new com.dlab.domain.attendance.entity.DufExamDate(
+                null, year, today, "전국 더프"));
+        em.flush();
+
+        var reason = absenceReasonService.register(admin, minji.getId(), today,
+                AbsenceReasonType.DUF_EARLY_LEAVE, "더프 응시", null, null, null);
+
+        assertThat(reason).isNotNull();
+    }
+
+    /** 응시일을 그 지점에 등록한다. */
+    private void dufExamDate(java.time.LocalDate date) {
+        em.persist(new com.dlab.domain.attendance.entity.DufExamDate(
+                bundang, year, date, "더프"));
+        em.flush();
     }
 }

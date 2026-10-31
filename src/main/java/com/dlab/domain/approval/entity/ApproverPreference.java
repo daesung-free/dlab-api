@@ -3,6 +3,7 @@ package com.dlab.domain.approval.entity;
 import com.dlab.common.entity.BaseEntity;
 import com.dlab.domain.appconfig.entity.Terms;
 import com.dlab.domain.user.entity.Academy;
+import com.dlab.domain.user.entity.Account;
 import com.dlab.domain.user.entity.StudentEnrollment;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -66,13 +67,30 @@ public class ApproverPreference extends BaseEntity {
     @JoinColumn(name = "terms_id")
     private Terms terms;
 
+    /**
+     * ★★ 이 값을 고른 계정 — <b>학부모</b>다.
+     *
+     * <h2>★ 왜 남기는가 — 부·모 둘 다 고를 수 있다</h2>
+     * 현재값은 <b>가장 최근 행</b>이므로, 어머니가 고른 뒤 아버지가 바꾸면 값이
+     * 바뀐다. ★ 이 칸이 없으면 <b>다른 보호자에게 알릴 수도, 「내가 고른 값이 왜
+     * 바뀌었나」에 답할 수도 없다.</b>
+     *
+     * <p>⚠️ <b>{@code null} 은 「옛 학생 선택분」</b>이다. 지정 주체가 학부모로
+     * 바뀌기 전에는 학생이 골랐고, <b>그 계정을 역산할 수 없다</b> — 거짓 값을
+     * 채우는 것보다 비어 있는 것이 정직하다.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "chosen_by_account_id")
+    private Account chosenByAccount;
+
     public ApproverPreference(StudentEnrollment enrollment, ApproverType preferred,
-                              Instant agreedAt, Terms terms) {
+                              Instant agreedAt, Terms terms, Account chosenByAccount) {
         this.academy = enrollment.getAcademy();
         this.year = enrollment.getYear();
         this.enrollment = enrollment;
         this.preferred = preferred;
         this.agreedAt = agreedAt;
         this.terms = terms;
+        this.chosenByAccount = chosenByAccount;
     }
 }

@@ -6,6 +6,9 @@ import com.dlab.domain.approval.entity.ApproverPreference;
 import com.dlab.domain.approval.entity.ApproverType;
 import com.dlab.domain.approval.service.ApprovalQueryService;
 import com.dlab.domain.approval.service.ApprovalService;
+import com.dlab.common.exception.BusinessException;
+import com.dlab.common.exception.ErrorCode;
+import com.dlab.domain.user.service.ParentSignupService;
 import com.dlab.domain.user.service.AppScopeResolver;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +34,7 @@ public class AppApprovalController {
     private final ApprovalService approvalService;
     private final ApprovalQueryService approvalQueryService;
     private final AppScopeResolver scopeResolver;
+    private final ParentSignupService parentSignupService;
 
     /** 내가 승인해야 할 대기 목록. */
     @GetMapping
@@ -82,11 +86,75 @@ public class AppApprovalController {
             @CurrentAccount AuthPrincipal principal,
             @Valid @RequestBody ApprovalRequests.ChooseApprover request) {
 
-        var enrollment = scopeResolver.requireStudent(principal.accountId(), "승인자 선택");
+        // ★★ 학부모만 고른다 (디랩 1029·1031). 원래 학생만 고를 수 있었는데
+        //    ★ 반대가 맞다 — 승인권은 학부모의 것이므로 ★ 넘길지도 학부모가 정한다.
+        //    학생이 「담임」을 고르면 ★ 학부모 모르게 학부모가 승인에서 빠진다.
+        var enrollment = scopeResolver.requireGuardian(
+                principal.accountId(), request.studentId(), "승인자 지정");
         ApproverPreference saved = approvalService.choosePrimaryApprover(
-                enrollment, request.preferred(), null);
+                enrollment, request.preferred(), null,
+                scopeResolver.account(principal.accountId()));
 
         return ApiResponse.success(PrimaryApproverResponse.from(saved));
+    }
+
+    /**
+     * ★★ <b>승인자를 지정해야 하는 자녀 목록</b> — 학부모 앱이 <b>로그인 직후</b> 받는다
+     * (디랩 1031 ②).
+     *
+     * <h2>★ 앱이 화면을 띄울지 정한다 — 서버가 막지 않는다</h2>
+     * 디랩 결정은 <b>「고르지 않으면 넘어갈 수 없다」</b> 인데, 그 강제는 <b>앱이 한다.</b>
+     * ⚠️ 서버가 신청을 거부하게 만들면 <b>앱이 없는 학부모의 자녀가 아무것도 신청할 수
+     * 없게 된다</b> — 같은 문서가 그 경로는 <b>지점 정책값으로 가라</b>고 했다.
+     *
+     * <h2>★ 이미 다른 보호자가 고른 자녀는 「지정됨」으로 온다</h2>
+     * 부·모 중 <b>먼저 고른 값</b>이 현재값이므로, 나중에 들어온 보호자에게 화면을 또
+     * 띄우면 <b>이미 정해진 것을 다시 묻는다.</b> 바꾸려면 설정 화면에서 한다.
+     *
+     * <p>★ {@code chosenByMe} 로 <b>내가 고른 것인지</b>를 함께 준다 — 설정 화면이
+     * <b>「배우자가 정한 값입니다」</b>를 보여줄 수 있어야 하고, 그러지 않으면 바꾸는
+     * 순간 상대에게 알림이 가는 이유를 이해할 수 없다.
+     */
+    @GetMapping("/primary-approver/children")
+    public ApiResponse<List<ChildApproverView>> childrenNeedingApprover(
+            @CurrentAccount AuthPrincipal principal) {
+
+        var account = scopeResolver.account(principal.accountId());
+        if (account.getGuardian() == null) {
+            throw new BusinessException(ErrorCode.FORBIDDEN,
+                    "자녀 목록은 학부모만 조회할 수 있습니다.");
+        }
+        return ApiResponse.success(
+                parentSignupService.children(account.getGuardian().getId()).stream()
+                        .map(child -> {
+                            var chosen = approvalService
+                                    .findPrimaryApprover(child.enrollment().getId())
+                                    .orElse(null);
+                            return new ChildApproverView(
+                                    child.student().getId(),
+                                    child.student().getName(),
+                                    chosen != null,
+                                    chosen == null ? null : chosen.getPreferred(),
+                                    chosen != null && chosen.getChosenByAccount() != null
+                                            && chosen.getChosenByAccount().getId()
+                                                    .equals(account.getId()));
+                        })
+                        .toList());
+    }
+
+    /**
+     * @param needsChoice ★ {@code false} 면 <b>화면을 띄우지 않는다</b> — 이미 정해졌다
+     * @param chosenByMe  ★ 내가 고른 것인가. {@code false} 면 <b>배우자가 정한 값</b>이다
+     *                    (또는 지정 주체가 학부모로 바뀌기 전의 학생 선택분이다)
+     */
+    public record ChildApproverView(Long studentId, String studentName,
+                                    boolean chosen, ApproverType preferred,
+                                    boolean chosenByMe) {
+
+        /** 앱이 읽기 쉽게 — 지정 화면을 띄울지. */
+        public boolean needsChoice() {
+            return !chosen;
+        }
     }
 
     /**
@@ -99,9 +167,11 @@ public class AppApprovalController {
      */
     @GetMapping("/primary-approver")
     public ApiResponse<PrimaryApproverView> currentPrimaryApprover(
-            @CurrentAccount AuthPrincipal principal) {
+            @CurrentAccount AuthPrincipal principal,
+            @RequestParam(required = false) Long studentId) {
 
-        var enrollment = scopeResolver.requireStudent(principal.accountId(), "승인자 선택");
+        // ★ 조회는 학생·학부모 둘 다 한다. 학생은 ★ 표시만 한다(고르지는 못한다).
+        var enrollment = scopeResolver.resolve(principal.accountId(), studentId);
         var chosen = approvalService.findPrimaryApprover(enrollment.getId()).orElse(null);
 
         return ApiResponse.success(new PrimaryApproverView(

@@ -6,6 +6,7 @@ import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.menu.entity.Menu;
 import com.dlab.domain.menu.service.MenuAccessService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -29,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
 public class AdminMenuController {
 
     private final MenuAccessService menuAccessService;
+    private final com.dlab.domain.menu.service.RoleMenuMatrixService matrixService;
 
     /** 지정할 수 있는 메뉴 전체. 설정 화면이 이 목록으로 체크박스를 그린다. */
     @GetMapping("/menus")
@@ -82,6 +84,44 @@ public class AdminMenuController {
      * 체크박스 초기 상태를 그린다. 빈 상태로 그리면 저장을 누르는 순간 제한 해제가 되어
      * <b>감춰 뒀던 메뉴가 전부 다시 열린다.</b>
      */
+    /**
+     * ★★ <b>권한 매트릭스</b> — 메뉴마다 어느 역할에 보이는가 (디랩 1029 8-2).
+     *
+     * <p>★ 지금까지 화면이 <b>「설명용이며 수정할 수 없습니다」</b> 였고 값이
+     * <b>코드</b>에 있었다. 디랩이 <b>「화면에서의 수정이 가능할까요?」</b> 라고 물어
+     * 테이블로 옮겼다.
+     *
+     * <p>★ <b>{@code configured = false} 인 메뉴는 전 역할에 보인다</b> —
+     * ⚠️ 그 뜻을 화면이 적어야 한다. 빼고 내리면 <b>그 메뉴가 없는 줄 안다.</b>
+     *
+     * <p>⚠️ 화면에 적을 것 둘:
+     * <b>「계정별로 따로 지정한 계정에는 적용되지 않습니다」</b> ·
+     * <b>「메뉴 표시 설정이며, 기능 권한은 역할에 따라 정해집니다」</b>
+     */
+    @GetMapping("/menus/role-matrix")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
+    public ApiResponse<List<com.dlab.domain.menu.service.RoleMenuMatrixService.MatrixRow>>
+            roleMatrix() {
+        return ApiResponse.success(matrixService.matrix());
+    }
+
+    /**
+     * ★★ 한 칸을 켜거나 끈다 — <b>최고관리자만</b> (디랩 1029 8-2).
+     *
+     * <p>★ 칸은 <b>「보인다 / 안 보인다」 하나</b>다 — ⚠️ 조회/편집으로 나누지
+     * 않기로 했으므로(1029 1-2) 그 두 칸을 표에 남기지 말 것.
+     *
+     * <p>⚠️ <b>마지막 역할은 끌 수 없다</b> — 「설정이 없는 메뉴는 전 역할에 보인다」가
+     * 규칙이라, 마지막 행을 지우면 <b>끈 것과 반대로 모두에게 보인다.</b>
+     */
+    @PutMapping("/menus/role-matrix")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ApiResponse<Void> changeRoleMatrix(
+            @Valid @RequestBody ChangeRoleMatrix request) {
+        matrixService.change(request.menuId(), request.role(), request.isVisible());
+        return ApiResponse.success(null);
+    }
+
     @GetMapping("/staff/accounts/{accountId}/menus")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ApiResponse<AccountMenuView> ofAccount(@PathVariable Long accountId) {
@@ -153,6 +193,25 @@ public class AdminMenuController {
      *                   {@code null} 이면 400 — 빈 목록의 뜻을 추측하지 않는다
      * @param menuCodes  허용할 메뉴 코드. {@code restricted=false} 면 무시된다
      */
+    /**
+     * ★ 권한 매트릭스 한 칸 (디랩 1029 8-2).
+     *
+     * @param visible ★ 「보인다 / 안 보인다」 하나다 — ⚠️ 조회/편집으로 나누지 않는다
+     */
+    public record ChangeRoleMatrix(
+            @jakarta.validation.constraints.NotNull(message = "메뉴는 필수입니다.")
+            Long menuId,
+            @jakarta.validation.constraints.NotNull(message = "역할은 필수입니다.")
+            com.dlab.common.security.Role role,
+            @jakarta.validation.constraints.NotNull(message = "표시 여부는 필수입니다.")
+            Boolean visible) {
+
+        /** ★ null 은 검증이 막으므로 여기 오면 값이 있다. */
+        public boolean isVisible() {
+            return Boolean.TRUE.equals(visible);
+        }
+    }
+
     public record MenuCodes(Boolean restricted, List<String> menuCodes) {
     }
 

@@ -428,4 +428,71 @@ class PenaltyMasterTest {
         return new PenaltyPoint(bundang, minji, item, item.getPointValue(),
                 item.getItemName(), PenaltySource.KIOSK, key);
     }
+
+    // ── 대체 관계 (자동 지각 ↔ 사유 지각 중복 방지 · 디랩 1029 4-2) ──────
+
+    /**
+     * ★★ 대체 관계를 <b>데이터로</b> 지정한다.
+     *
+     * <p>⚠️ 코드에 「{@code LATE} 면 자동 지각을 지운다」를 박으면 <b>디랩이 항목 이름을
+     * 바꿀 때 깨진다</b>(1029 4-2 지침).
+     */
+    @Test
+    @DisplayName("★★ 대체 관계를 데이터로 지정한다 — 코드에 박으면 항목명 바뀔 때 깨진다")
+    void supersedesIsData() {
+        var autoLate = ruleFor(PenaltyTriggerType.ATTENDANCE, "A", "자동 지각", 1);
+        var excusedLate = ruleFor(PenaltyTriggerType.APPROVAL, "LATE", "사유 지각", 1);
+
+        masterService.changeSupersedes(admin, excusedLate.getId(), autoLate.getId());
+        em.flush();
+        em.clear();
+
+        assertThat(ruleRepository.findById(excusedLate.getId()).orElseThrow()
+                .getSupersedesRule().getId())
+                .isEqualTo(autoLate.getId());
+    }
+
+    /** ★ 비우면 해제된다. */
+    @Test
+    @DisplayName("★ null 을 주면 대체 지정이 해제된다")
+    void supersedesCanBeCleared() {
+        var autoLate = ruleFor(PenaltyTriggerType.ATTENDANCE, "A", "자동 지각2", 1);
+        var excusedLate = ruleFor(PenaltyTriggerType.APPROVAL, "LATE", "사유 지각2", 1);
+        masterService.changeSupersedes(admin, excusedLate.getId(), autoLate.getId());
+        em.flush();
+
+        masterService.changeSupersedes(admin, excusedLate.getId(), null);
+        em.flush();
+        em.clear();
+
+        assertThat(ruleRepository.findById(excusedLate.getId()).orElseThrow()
+                .getSupersedesRule())
+                .isNull();
+    }
+
+    /**
+     * ★★ <b>자기 자신은 대체할 수 없다.</b>
+     *
+     * <p>⚠️ 허용하면 <b>부여하기 전에 자기 것을 거두는</b> 모순이 된다 —
+     * 매번 거두고 다시 붙여 <b>이력이 두 배로 쌓인다.</b>
+     */
+    @Test
+    @DisplayName("★★ 자기 자신은 대체할 수 없다 — 부여 전에 자기 것을 거두는 모순이다")
+    void cannotSupersedeItself() {
+        var rule = ruleFor(PenaltyTriggerType.APPROVAL, "LATE", "사유 지각3", 1);
+
+        assertThatThrownBy(() ->
+                masterService.changeSupersedes(admin, rule.getId(), rule.getId()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /** 규칙을 만든다. ★ active 는 따로 켠다. */
+    private com.dlab.domain.penalty.entity.PenaltyRule ruleFor(
+            PenaltyTriggerType trigger, String condition, String itemName, int point) {
+        PenaltyItem item = masterService.createItem(admin, null, year, itemName, point,
+                PenaltyCategory.DEMERIT);
+        var rule = masterService.createRule(admin, null, year, trigger, condition, item.getId());
+        em.flush();
+        return rule;
+    }
 }

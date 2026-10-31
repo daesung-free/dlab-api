@@ -237,6 +237,51 @@ public class PenaltyMasterService {
         return rule;
     }
 
+    /**
+     * ★★ <b>대체 관계를 지정한다</b> — 「이 규칙이 부여할 때 어느 자동 벌점을 먼저
+     * 거둘지」 (디랩 1029 4-2).
+     *
+     * <h2>★ 자동 지각 ↔ 사유 지각 중복 방지</h2>
+     * 사유지각은 <b>원장이 {@code LATE}</b> 라, 「{@code A} → 자동 지각」 규칙을 켜면
+     * <b>사유지각 학생에게도 -1 이 붙고</b> 승인 트리거가 <b>또 붙인다.</b>
+     *
+     * <p>⚠️ 그래서 <b>코드가 아니라 데이터</b>다 — 디랩이 항목 이름을 바꿔도 안 깨진다.
+     *
+     * @param supersedesRuleId 거둘 규칙. ★ {@code null} 을 주면 <b>해제</b>한다
+     */
+    @Transactional
+    public PenaltyRule changeSupersedes(AuthPrincipal me, Long ruleId, Long supersedesRuleId) {
+        PenaltyRule rule = requireRule(me, ruleId);
+        if (supersedesRuleId == null) {
+            rule.supersede(null);
+            return rule;
+        }
+        // ★ 대상도 ★ 같은 권한 범위인지 본다 — 안 그러면 다른 지점 규칙을 가리킬 수 있다
+        PenaltyRule target = requireRule(me, supersedesRuleId);
+        if (!target.getAcademy().getId().equals(rule.getAcademy().getId())
+                || target.getYear() != rule.getYear()) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "같은 지점·연도의 규칙만 대체 대상으로 지정할 수 있습니다.");
+        }
+        rule.supersede(target);
+        return rule;
+    }
+
+    /**
+     * ★★ <b>임계값을 바꾼다</b> — 「몇 번째에 부여하는가」 (디랩 1029 4-6).
+     *
+     * <p>★ 취침 3회처럼 <b>횟수를 세는 규칙</b>이 쓴다. ⚠️ 1029 지침:
+     * <b>「코드에 3을 박지 말 것」</b>
+     *
+     * @param threshold ★ {@code null} 을 주면 <b>세지 않는다</b>(건별로 걸린다)
+     */
+    @Transactional
+    public PenaltyRule changeThreshold(AuthPrincipal me, Long ruleId, Short threshold) {
+        PenaltyRule rule = requireRule(me, ruleId);
+        rule.changeThreshold(threshold);
+        return rule;
+    }
+
     @Transactional
     public void deleteRule(AuthPrincipal me, Long ruleId) {
         requireRule(me, ruleId).markDeleted();

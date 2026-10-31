@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -74,6 +75,45 @@ public class AdminAbsenceRequestController {
      * <p><b>자동 승인이 아니다.</b> 승인 라우팅을 그대로 탄다 — 관리자가 넣었다고
      * 건너뛰면 학부모 승인이 필요한 유형에서 학부모가 모르는 사이에 처리된다.
      */
+    /**
+     * ★★ <b>증빙 확인</b> — 체크하면 <b>그 신청으로 붙은 자동 벌점을 거둔다</b>
+     * (디랩 1029 4-3 #36).
+     *
+     * <p>시트 원문: <b>「사유외출 및 조퇴 시 증빙영수증 제출할 경우 직원 확인 체크 시
+     * 기존 부여된 벌점 자동 삭제」</b>
+     *
+     * <p>★ <b>버튼 하나</b>로 끝난다 — ⚠️ 항목을 손으로 찾아 넣게 하면
+     * <b>빠진다</b>(1029 4-3).
+     *
+     * <p>⚠️ 무엇을 거두고 무엇을 기록할지는 <b>전부 {@code penalty_rule} 행</b>이다 —
+     * 신청 종류로 화면이 막지 않는다.
+     */
+    @PostMapping("/{reasonId}/evidence-confirm")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<Void> confirmEvidence(@CurrentAccount AuthPrincipal me,
+                                             @PathVariable Long reasonId) {
+        absenceReasonService.confirmEvidence(me, reasonId);
+        return ApiResponse.success(null);
+    }
+
+    /**
+     * ★★ <b>미진행</b> — 승인됐는데 실제로 하지 않은 경우 (1029 4-3 #10).
+     *
+     * <p>⚠️ 10/21 에 <b>「외출 신청 후 안 나가면 취소할 벌점이 없다 — 개발할 것 없음」</b>
+     * 으로 회신했는데, <b>승인 시 부여로 바뀌면서 그 결론이 뒤집혔다.</b>
+     *
+     * <p>★★ <b>9-7 회신을 기다리지 않는다</b> — 미확정인 「-1 을 취소할지 둘지」는
+     * <b>{@code penalty_rule.supersedes_rule_id}</b> 로 흡수된다. 「미진행」 규칙에
+     * <b>대체 대상을 지정하면 취소되고, 비우면 남는다.</b>
+     */
+    @PostMapping("/{reasonId}/not-executed")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN','TEACHER','STAFF')")
+    public ApiResponse<Void> markNotExecuted(@CurrentAccount AuthPrincipal me,
+                                             @PathVariable Long reasonId) {
+        absenceReasonService.markNotExecuted(me, reasonId);
+        return ApiResponse.success(null);
+    }
+
     @PostMapping
     public ApiResponse<Long> register(@CurrentAccount AuthPrincipal me,
                                       @Valid @RequestBody AbsenceRegisterRequest request) {

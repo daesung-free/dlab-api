@@ -40,6 +40,7 @@ public class MenuAccessService {
     private static final int FAVORITE_LIMIT = 8;
 
     private final MenuRepository menuRepository;
+    private final RoleMenuDefaults roleMenuDefaults;
     private final com.dlab.common.security.SessionCutoff sessionCutoff;
     private final AccountMenuRepository accountMenuRepository;
     private final com.dlab.domain.menu.repository.FavoriteMenuRepository favoriteMenuRepository;
@@ -98,7 +99,7 @@ public class MenuAccessService {
             return allowedScreens;
         }
         return withoutActionOnly(catalog().stream()
-                .filter(menu -> RoleMenuDefaults.visibleTo(menu.getCode(), me.roles()))
+                .filter(menu -> roleMenuDefaults.visibleTo(menu.getCode(), me.roles()))
                 .toList());
     }
 
@@ -139,7 +140,7 @@ public class MenuAccessService {
             return catalog();
         }
         return catalog().stream()
-                .filter(menu -> RoleMenuDefaults.visibleTo(menu.getCode(), roles))
+                .filter(menu -> roleMenuDefaults.visibleTo(menu.getCode(), roles))
                 .toList();
     }
 
@@ -186,7 +187,7 @@ public class MenuAccessService {
 
         List<String> checked = menuCodes == null ? List.of() : menuCodes;
         return catalog().stream().map(menu -> {
-            boolean byRole = noRoles || RoleMenuDefaults.visibleTo(menu.getCode(), roles);
+            boolean byRole = noRoles || roleMenuDefaults.visibleTo(menu.getCode(), roles);
             // ★ 동작 권한(action_only)은 restricted 와 무관하게 보낸 그대로다 — replace 와
             //   같은 규칙을 쓴다. 다르게 두면 미리보기와 저장 결과가 갈린다
             boolean visible = menu.isActionOnly()

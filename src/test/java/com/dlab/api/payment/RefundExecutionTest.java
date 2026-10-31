@@ -200,4 +200,98 @@ class RefundExecutionTest {
                 .getSingleResult();
         assertThat(count).isZero();
     }
+
+    // ── 재결제 후 전체취소 (디랩 1029 7장) ────────────────────────
+
+    /**
+     * ★★ <b>전체취소를 이 자리에서 걸지 않는다.</b>
+     *
+     * <p>⚠️⚠️ 먼저 취소하면 <b>학부모가 재결제를 안 할 때 받을 돈이 사라진다.</b>
+     * 그래서 <b>{@code WAITING_REPAYMENT}</b> 로 두고 화면에 「재결제 대기」로 보여 준다.
+     */
+    @Test
+    @DisplayName("★★ 재결제 후 전체취소는 기결제를 바로 취소하지 않는다 — 먼저 취소하면 돈이 사라진다")
+    void repayAndFullCancelWaitsFirst() {
+        Billing b = issue(0);
+        billingService.pay(admin, b.getId(), 750_000, PaymentMethod.CARD);
+        em.flush();
+
+        Refund refund = refundService.execute(admin, b.getId(), 10, true);
+        em.flush();
+
+        assertThat(refund.getMethod()).isEqualTo(RefundPayout.REPAY_AND_FULL_CANCEL);
+        assertThat(refund.getStatus())
+                .as("★ 아직 취소하지 않았다")
+                .isEqualTo(RefundStatus.WAITING_REPAYMENT);
+        assertThat(refund.getRepayAmount())
+                .as("★ 다시 받을 금액 = 기결제 − 환불액")
+                .isEqualTo(750_000 - refund.getRefundAmount());
+        assertThat(refund.getRepayConfirmedAt()).isNull();
+    }
+
+    /**
+     * ★★ 재결제가 확인되기 전에는 <b>전체취소를 걸 수 없다.</b>
+     */
+    @Test
+    @DisplayName("★★ 재결제 대기가 아닌 건에는 확인 버튼이 안 먹는다")
+    void confirmOnlyWorksOnWaiting() {
+        Billing b = issue(0);
+        billingService.pay(admin, b.getId(), 750_000, PaymentMethod.CARD);
+        em.flush();
+
+        Refund refund = refundService.execute(admin, b.getId(), 10);
+        em.flush();
+
+        assertThatThrownBy(() ->
+                refundService.confirmRepaymentAndCancel(admin, refund.getId()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("재결제 후 전체취소로 처리된 건이 아닙니다");
+    }
+
+    /**
+     * ★★ 카드가 아니면 <b>거부한다</b>.
+     *
+     * <p>⚠️ <b>가상계좌로 받은 건은 이 방식이 안 된다</b> — 계좌 이체 환불이다
+     * (10/12 회신).
+     */
+    @Test
+    @DisplayName("★★ 가상계좌·현금 건에는 재결제 후 전체취소를 쓸 수 없다")
+    void repayAndFullCancelNeedsCard() {
+        Billing b = issue(0);
+        billingService.pay(admin, b.getId(), 750_000, PaymentMethod.VBANK);
+        em.flush();
+
+        assertThatThrownBy(() -> refundService.execute(admin, b.getId(), 10, true))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("카드로 결제된 건");
+    }
+
+    /**
+     * ★ 재결제를 확인하면 <b>전체취소를 건다</b> — 부분취소가 아니다.
+     *
+     * <p>★ 이 픽스처는 PG 거래번호가 없어 <b>실패로 남는다</b> — 그게 맞다.
+     * ⚠️ 중요한 것은 <b>확인 시점에 {@code DONE} 으로 바꾸지 않는다</b>는 것이다:
+     * 그러면 <b>취소가 실패해도 끝난 것으로 보인다.</b>
+     */
+    @Test
+    @DisplayName("★ 확인해도 취소가 실패하면 DONE 이 아니다 — 끝난 것으로 보이면 안 된다")
+    void confirmDoesNotMaskCancelFailure() {
+        Billing b = issue(0);
+        billingService.pay(admin, b.getId(), 750_000, PaymentMethod.CARD);
+        em.flush();
+
+        Refund refund = refundService.execute(admin, b.getId(), 10, true);
+        em.flush();
+
+        refundService.confirmRepaymentAndCancel(admin, refund.getId());
+        em.flush();
+
+        assertThat(refund.getRepayConfirmedAt())
+                .as("★ 확인은 남는다")
+                .isNotNull();
+        assertThat(refund.getStatus())
+                .as("⚠️ PG 거래번호가 없어 취소가 실패했다 — DONE 이 아니다")
+                .isEqualTo(RefundStatus.FAILED);
+        assertThat(refund.getFailReason()).contains("PG 거래번호");
+    }
 }
