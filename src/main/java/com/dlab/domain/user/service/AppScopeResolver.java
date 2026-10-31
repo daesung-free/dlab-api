@@ -79,6 +79,35 @@ public class AppScopeResolver {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
     }
 
+    /**
+     * ★★ <b>학부모 본인</b>만 통과한다. 자녀인지 매번 확인한다.
+     *
+     * <h2>★ 왜 필요한가 — 승인권은 학부모의 것이다</h2>
+     * 우선 승인자 지정이 그렇다(디랩 1029·1031). 원래 <b>학생만</b> 고를 수 있었는데
+     * (dd09a27), 그러면 <b>학생이 「담임」을 골라 학부모 모르게 학부모가 승인에서
+     * 빠진다.</b> 그리고 이 선택은 <b>「10분 무응답 시 직원에게 승인권이 넘어가는 것에
+     * 동의」 기록</b>이라 <b>그 동의도 학부모가 해야 의미가 있다.</b>
+     *
+     * <p>⚠️ {@link #resolve} 와 다르다 — {@code resolve} 는 <b>학생 계정도 통과</b>시킨다.
+     * 그래서 조회에는 {@code resolve}, <b>학부모만 해야 하는 행위</b>에는 이것을 쓴다.
+     *
+     * @param what 거절 문구에 들어갈 행위 이름. "승인자 지정은 …" 처럼 쓰인다
+     */
+    @Transactional(readOnly = true)
+    public StudentEnrollment requireGuardian(Long accountId, Long studentId, String what) {
+        Account account = accountRepository.findById(accountId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+
+        if (account.getGuardian() == null) {
+            throw new BusinessException(ErrorCode.FORBIDDEN,
+                    "%s은(는) 학부모만 할 수 있습니다.".formatted(what));
+        }
+        if (studentId == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, "자녀를 지정해야 합니다.");
+        }
+        return parentSignupService.requireMyChild(account.getGuardian().getId(), studentId);
+    }
+
     /** 계정 자체가 필요할 때. 마이페이지가 학생/학부모를 갈라 보여준다. */
     @Transactional(readOnly = true)
     public Account account(Long accountId) {

@@ -50,6 +50,8 @@ class PrimaryApproverFlowTest {
     private static final short TIMEOUT = 10;
 
     @Autowired ApprovalService approvalService;
+    @Autowired com.dlab.domain.notification.repository.NotificationLogRepository
+            notificationLogRepository;
     @Autowired ApprovalRequestRepository requestRepository;
     @Autowired EntityManager em;
     @Autowired Clock clock;
@@ -219,7 +221,8 @@ class PrimaryApproverFlowTest {
     @Test
     @DisplayName("★ 학생이 고르면 출처가 STUDENT_CHOICE다 — 관리자 설정이 안 먹히는 이유가 여기다")
     void effectiveApproverShowsStudentChoice() {
-        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null);
+        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null,
+                guardianAccount);
         em.flush();
 
         var firewall = approvalService.effectiveApprovers(enrollment).stream()
@@ -244,7 +247,8 @@ class PrimaryApproverFlowTest {
     @Test
     @DisplayName("★ 학생이 고른 우선 승인자가 지점 정책을 이긴다")
     void studentChoiceBeatsBranchPolicy() {
-        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null);
+        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null,
+                guardianAccount);
         em.flush();
 
         // 지점 정책은 PARENT인데 학생이 TEACHER를 골랐다
@@ -260,8 +264,9 @@ class PrimaryApproverFlowTest {
     @Test
     @DisplayName("★ 선택을 바꾸면 덮어쓰지 않고 이력이 쌓인다 — 동의 기록이라 지우면 안 된다")
     void choiceIsAppendOnly() {
-        approvalService.choosePrimaryApprover(enrollment, ApproverType.PARENT, null);
-        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null);
+        approvalService.choosePrimaryApprover(enrollment, ApproverType.PARENT, null, guardianAccount);
+        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null,
+                guardianAccount);
         em.flush();
         em.clear();
 
@@ -279,7 +284,7 @@ class PrimaryApproverFlowTest {
     @DisplayName("★ AUTO는 고를 수 없다 — 학생이 자동 승인을 고르면 승인 절차가 무의미해진다")
     void autoCannotBeChosen() {
         assertThatThrownBy(() ->
-                approvalService.choosePrimaryApprover(enrollment, ApproverType.AUTO, null))
+                approvalService.choosePrimaryApprover(enrollment, ApproverType.AUTO, null, guardianAccount))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -310,7 +315,8 @@ class PrimaryApproverFlowTest {
     @Test
     @DisplayName("★ 직원 우선인 건에는 재요청이 안 나간다 — 기다리지도 않는 학부모를 독촉하게 된다")
     void noReminderWhenStaffIsPrimary() {
-        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null);
+        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null,
+                guardianAccount);
         ApprovalRequest r = request();
         rewind(r, TIMEOUT + 1);
 
@@ -375,7 +381,8 @@ class PrimaryApproverFlowTest {
     @Test
     @DisplayName("★ 직원 우선이면 STAFF_PRIMARY다 — '시간 남았는데 담임이 먼저'와 문구가 달라야 한다")
     void staffPrimaryIsItsOwnCase() {
-        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null);
+        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null,
+                guardianAccount);
         ApprovalRequest r = request();
 
         ApprovalRequest resolved = approvalService.approve(r.getId(), teacherAccount.getId());
@@ -410,7 +417,8 @@ class PrimaryApproverFlowTest {
         ApprovalRequest r = request();
         assertThat(r.getPrimaryApprover()).isEqualTo(ApproverType.PARENT);
 
-        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null);
+        approvalService.choosePrimaryApprover(enrollment, ApproverType.TEACHER, null,
+                guardianAccount);
         em.flush();
         em.clear();
 
@@ -497,5 +505,100 @@ class PrimaryApproverFlowTest {
         return com.dlab.common.security.AuthPrincipal.of(
                 teacherAccount.getId(), "TEACHER", academy.getId(),
                 java.util.List.of(com.dlab.common.security.Role.TEACHER), false);
+    }
+
+    // ── 지정 주체가 학부모로 옮겨졌다 (디랩 1029 · 1031) ──────────
+
+    /**
+     * ★★ <b>누가 골랐는지</b>가 남는다.
+     *
+     * <h2>★ 왜 필요한가 — 부·모 둘 다 고를 수 있다</h2>
+     * 현재값은 <b>가장 최근 행</b>이라, 어머니가 고른 뒤 아버지가 바꾸면 값이 바뀐다.
+     * ⚠️ 이 값이 없으면 <b>다른 보호자에게 알릴 수도, 「내가 고른 값이 왜 바뀌었나」에
+     * 답할 수도 없다.</b>
+     */
+    @Test
+    @DisplayName("★★ 누가 골랐는지 남는다 — 없으면 「내 설정이 왜 바뀌었나」에 답할 수 없다")
+    void recordsWhoChose() {
+        var saved = approvalService.choosePrimaryApprover(
+                enrollment, ApproverType.TEACHER, null, guardianAccount);
+        em.flush();
+
+        assertThat(saved.getChosenByAccount()).isNotNull();
+        assertThat(saved.getChosenByAccount().getId()).isEqualTo(guardianAccount.getId());
+    }
+
+    /**
+     * ★ <b>처음 고르는 것은 알리지 않는다.</b>
+     *
+     * <p>「바뀜」이 아니라 「정해짐」이고 <b>아직 아무도 기대하던 값이 없다.</b>
+     * ⚠️ 여기서 보내면 <b>가입 직후 모든 학부모가 「승인자가 변경되었습니다」를 받는다.</b>
+     */
+    @Test
+    @DisplayName("★ 처음 고를 때는 변경 알림이 없다 — 「바뀜」이 아니라 「정해짐」이다")
+    void firstChoiceSendsNoNotification() {
+        approvalService.choosePrimaryApprover(
+                enrollment, ApproverType.TEACHER, null, guardianAccount);
+        em.flush();
+
+        assertThat(notificationLogRepository.findAll())
+                .extracting(log -> log.getEventCode().name())
+                .doesNotContain("APPROVER_PREFERENCE_CHANGED");
+    }
+
+    /**
+     * ★ <b>같은 값을 다시 눌러도 알리지 않는다.</b>
+     *
+     * <p>설정 화면에서 같은 값을 다시 누르는 일이 실제로 있다. ⚠️ <b>바뀌지 않았는데
+     * 「바뀌었습니다」가 가면 그 알림을 믿지 않게 된다.</b>
+     */
+    @Test
+    @DisplayName("★ 같은 값을 다시 골라도 알림이 없다 — 안 바뀐 알림이 가면 알림을 안 믿는다")
+    void sameValueSendsNoNotification() {
+        approvalService.choosePrimaryApprover(
+                enrollment, ApproverType.TEACHER, null, guardianAccount);
+        em.flush();
+        approvalService.choosePrimaryApprover(
+                enrollment, ApproverType.TEACHER, null, guardianAccount);
+        em.flush();
+
+        assertThat(notificationLogRepository.findAll())
+                .extracting(log -> log.getEventCode().name())
+                .doesNotContain("APPROVER_PREFERENCE_CHANGED");
+    }
+
+    /**
+     * ★★ <b>다른 보호자가 바꾸면 알린다</b> (디랩 1029:
+     * <b>「모르는 사이에 승인자가 바뀌면 안 됩니다」</b>).
+     *
+     * <p>★ <b>고른 사람에게는 보내지 않는다</b> — 자기가 한 일이다.
+     */
+    @Test
+    @DisplayName("★★ 다른 보호자가 바꾸면 알린다 — 고친 사람에게는 보내지 않는다")
+    void notifiesOtherGuardianOnChange() {
+        ParentGuardian father = new ParentGuardian("아버지", "010-3000-0002", "M");
+        em.persist(father);
+        em.persist(new StudentGuardianLink(enrollment.getStudent(), father, (short) 2, false));
+        Account fatherAccount = Account.forGuardian(father, "PAPAR02", "x");
+        em.persist(fatherAccount);
+        em.flush();
+
+        // 어머니가 「부모」로 정한 뒤 아버지가 「담임」으로 바꾼다
+        approvalService.choosePrimaryApprover(
+                enrollment, ApproverType.PARENT, null, guardianAccount);
+        em.flush();
+        approvalService.choosePrimaryApprover(
+                enrollment, ApproverType.TEACHER, null, fatherAccount);
+        em.flush();
+
+        var changed = notificationLogRepository.findAll().stream()
+                .filter(log -> "APPROVER_PREFERENCE_CHANGED".equals(log.getEventCode().name()))
+                .toList();
+
+        assertThat(changed)
+                .as("★ 어머니에게만 간다 — 바꾼 아버지에게는 보내지 않는다")
+                .hasSize(1);
+        assertThat(changed.get(0).getRecipient().getId())
+                .isEqualTo(guardianAccount.getId());
     }
 }

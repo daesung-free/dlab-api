@@ -74,6 +74,26 @@ public class ApprovalService {
 
     @Transactional
     public ApprovalRequest create(StudentEnrollment enrollment, RequestType requestType) {
+        return create(enrollment, requestType, true);
+    }
+
+    /**
+     * ★★ 알림을 보낼지 고르는 생성 (2026-10-31).
+     *
+     * <h2>⚠️ 즉시 승인될 건에는 요청 알림을 보내지 않는다</h2>
+     * 학부모가 사유를 내고 <b>우선 승인자가 「부모」</b>면 그 자리에서 승인된다.
+     * 그런데 생성이 늘 알림을 보내면 <b>자기가 낸 신청의 「승인해주세요」를 자기가
+     * 받는다</b> — 열어 보면 이미 승인돼 있어 <b>무엇을 하라는 알림인지 알 수 없다.</b>
+     *
+     * <p>★ <b>승인 완료 알림은 그대로 나간다</b> — 그건 {@code approve} 가 보낸다.
+     * 즉 <b>안 보내는 것은 「요청」 하나뿐</b>이고, 다른 보호자는 <b>승인됐다는
+     * 사실을 받는다.</b>
+     *
+     * @param notifyRequest {@code false} 면 <b>요청 알림만</b> 건너뛴다
+     */
+    @Transactional
+    public ApprovalRequest create(StudentEnrollment enrollment, RequestType requestType,
+                                  boolean notifyRequest) {
         Academy academy = enrollment.getAcademy();
         short year = enrollment.getYear();
 
@@ -101,8 +121,29 @@ public class ApprovalService {
         ApprovalRequest request = approvalRequestRepository.save(new ApprovalRequest(
                 academy, item, enrollment, escalationTarget, primary, Instant.now(clock)));
 
-        notifyRequestCreated(request, escalationTarget);
+        if (notifyRequest) {
+            notifyRequestCreated(request, escalationTarget);
+        }
         return request;
+    }
+
+    /**
+     * ★★ 이 학생의 그 신청 유형에서 <b>우선 승인자가 학부모인가</b>.
+     *
+     * <p>★ <b>학부모 사유 신청의 「제출 즉시 승인」 판단</b>에 쓴다 — 학부모가 승인권자일
+     * 때만 즉시 승인이고, <b>「담임」이면 그대로 담임에게 간다.</b>
+     *
+     * <p>⚠️ {@link #resolvePrimaryApprover} 와 <b>같은 판정을 써야 한다</b> — 여기서
+     * 따로 계산하면 <b>즉시 승인했는데 승인자가 담임으로 박히는</b> 어긋남이 생긴다.
+     * 그래서 같은 메서드를 부른다.
+     */
+    @Transactional(readOnly = true)
+    public boolean isParentPrimary(StudentEnrollment enrollment, RequestType requestType) {
+        return approvalItemRepository
+                .findByAcademyIdAndYearAndRequestTypeAndDeletedFalse(
+                        enrollment.getAcademy().getId(), enrollment.getYear(), requestType)
+                .map(item -> resolvePrimaryApprover(enrollment, item) == ApproverType.PARENT)
+                .orElse(false);
     }
 
     /**
@@ -148,16 +189,85 @@ public class ApprovalService {
     @Transactional
     public ApproverPreference choosePrimaryApprover(StudentEnrollment enrollment,
                                                     ApproverType preferred,
-                                                    com.dlab.domain.appconfig.entity.Terms terms) {
+                                                    com.dlab.domain.appconfig.entity.Terms terms,
+                                                    Account chosenBy) {
         if (preferred != ApproverType.PARENT && preferred != ApproverType.TEACHER) {
             throw new BusinessException(ErrorCode.INVALID_REQUEST,
                     "우선 승인자는 학부모 또는 직원만 선택할 수 있습니다.");
         }
-        ApproverPreference saved = preferenceRepository.save(
-                new ApproverPreference(enrollment, preferred, Instant.now(clock), terms));
+        // ★ 바꾸기 전 값을 먼저 읽는다 — 알림을 보낼지 판단하는 근거다
+        ApproverPreference before = preferenceRepository.findCurrent(enrollment.getId())
+                .orElse(null);
 
-        log.info("우선 승인자 선택: enrollmentId={}, 선택={}", enrollment.getId(), preferred);
+        ApproverPreference saved = preferenceRepository.save(
+                new ApproverPreference(enrollment, preferred, Instant.now(clock),
+                        terms, chosenBy));
+
+        log.info("우선 승인자 선택: enrollmentId={}, 선택={}, 고른계정={}",
+                enrollment.getId(), preferred,
+                chosenBy == null ? "(미상)" : chosenBy.getId());
+
+        notifyApproverChanged(enrollment, before, saved, chosenBy);
         return saved;
+    }
+
+    /**
+     * ★★ <b>다른 보호자에게</b> 승인자가 바뀐 것을 알린다 (디랩 1029).
+     *
+     * <h2>★ 왜 필요한가 — 부·모 둘 다 고를 수 있다</h2>
+     * 현재값은 <b>가장 최근 행</b>이라, 어머니가 「부모」로 두었는데 아버지가 「담임」으로
+     * 바꾸면 <b>어머니는 승인 알림을 더 이상 받지 않는다.</b> 디랩 1029 원문:
+     * <b>「모르는 사이에 승인자가 바뀌면 안 됩니다」</b>
+     *
+     * <h2>★ 처음 고르는 것은 알리지 않는다</h2>
+     * 「바뀜」이 아니라 「정해짐」이고, 아직 아무도 기대하던 값이 없다. ★ 값이 그대로일
+     * 때도 알리지 않는다 — 설정 화면에서 같은 값을 다시 누르는 일이 실제로 있고,
+     * <b>바뀌지 않았는데 「바뀌었습니다」가 가면 그 알림을 믿지 않게 된다.</b>
+     *
+     * <h2>★ 채널은 FCM 이다 — 알림톡이 아니다</h2>
+     * ⚠️ <b>알림톡은 사전 심사를 받은 문안만 보낼 수 있고</b>, 등록본 14건에
+     * <b>「승인자 변경」이 없다.</b> 새로 올리면 심사 리드타임이 붙는데, 12월 스토어
+     * 심사를 앞두고 그럴 이유가 없다 — <b>미등원처럼 「놓치면 안 되는」 급이 아니다.</b>
+     *
+     * <p>⚠️ <b>지금은 실제로 가지 않는다</b> — 푸시 토큰이 0건이다(앱 빌드 전, E-7).
+     * 발송 경로가 {@code SKIPPED} 로 남으므로 <b>안 간 사실이 기록에 남는다.</b>
+     */
+    private void notifyApproverChanged(StudentEnrollment enrollment,
+                                       ApproverPreference before,
+                                       ApproverPreference after,
+                                       Account chosenBy) {
+        if (before == null || before.getPreferred() == after.getPreferred()) {
+            return;
+        }
+        Student student = enrollment.getStudent();
+        List<Account> others = accountRepository.findGuardianAccountsOfStudent(student.getId())
+                .stream()
+                // ★ 고른 사람에게는 보내지 않는다 — 자기가 한 일이다
+                .filter(a -> chosenBy == null || !a.getId().equals(chosenBy.getId()))
+                .toList();
+
+        for (Account other : others) {
+            notificationService.send(NotificationCommand.forStudent(
+                    NotificationEvent.APPROVER_PREFERENCE_CHANGED,
+                    other,
+                    student,
+                    enrollment.getAcademy(),
+                    enrollment.getYear(),
+                    Map.of("before", label(before.getPreferred()),
+                            "after", label(after.getPreferred())),
+                    // ★ 멱등키 — 배치나 재시도로 같은 변경이 두 번 나가지 않는다
+                    "approver-changed:%d:%d".formatted(after.getId(), other.getId())));
+        }
+    }
+
+    /** 승인자 유형을 사람 말로. 알림 문구에 들어간다. */
+    private static String label(ApproverType type) {
+        return switch (type) {
+            case PARENT -> "학부모";
+            case TEACHER -> "담당 선생님";
+            case AUTO -> "자동 승인";
+            case ADMIN -> "관리자";
+        };
     }
 
     /** 현재 우선 승인자 선택값. 없으면 아직 안 골랐다는 뜻이다. */

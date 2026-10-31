@@ -129,6 +129,22 @@ public class AppAttendanceController {
             @CurrentAccount AuthPrincipal me,
             @Valid @RequestBody AbsenceReasonRequests.AbsenceReasonSubmit request) {
 
+        // ★★ 학부모도 낸다 (디랩 1031 ③). ★ studentId 를 주면 학부모 경로다.
+        //
+        //    ⚠️ 결석 안내 알림톡은 ★ 보호자에게만 가는데 문구가 *「어플에서 사유 입력을
+        //    부탁드립니다」* 다. 학생만 낼 수 있던 동안은 ★ 받은 사람이 할 수 없는 일을
+        //    안내하고 있었다.
+        //
+        //    ★ 우선 승인자가 「부모」면 ★ 제출 즉시 승인된다 — 낸 것이 곧 학부모 확인이다.
+        if (request.studentId() != null) {
+            var enrollment = scopeResolver.requireGuardian(
+                    me.accountId(), request.studentId(), "사유 신청");
+            return ApiResponse.success(AttendanceResponse.AbsenceReasonRow.from(
+                    absenceReasonService.submitByGuardian(enrollment,
+                            scopeResolver.account(me.accountId()), request.date(),
+                            request.type(), request.reasonText(),
+                            request.startTime(), request.endTime(), request.categoryId())));
+        }
         Long enrollmentId = scopeResolver.requireStudent(me.accountId(), "사유 신청").getId();
         return ApiResponse.success(AttendanceResponse.AbsenceReasonRow.from(
                 absenceReasonService.submitByStudent(enrollmentId, request.date(),
