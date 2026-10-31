@@ -15,6 +15,30 @@ public interface QnaOfflineReservationRepository
     /** 슬롯의 유효 예약 수. 정원 비교의 기준이라 취소분은 세지 않는다. */
     long countBySlotIdAndCanceledAtIsNullAndDeletedFalse(Long slotId);
 
+    /**
+     * ★★ 그 학생이 <b>그 날짜</b>에 잡아 둔 유효 예약 수 (디랩 1029 8-1).
+     *
+     * <h2>★ 슬롯 날짜로 센다 — 신청 시각이 아니다</h2>
+     * ⚠️ 신청 시각으로 세면 <b>밤 11시에 내일·모레 것을 몰아 잡을 수 있다.</b>
+     *
+     * <p>★ <b>취소·삭제분은 빼고 센다</b> — 취소한 자리는 비어 있으므로 상한에
+     * 들어가면 <b>취소하고 다시 잡을 수 없다.</b>
+     *
+     * <p>★ <b>직원 대리분도 센다</b> — 세지 않는 것은 <b>상한 검사를 건너뛰는 쪽</b>이고
+     * (대리 예약 경로), 여기는 <b>학생이 잡을 때 지금 몇 건인지</b>를 묻는 자리다.
+     * ⚠️ 대리분을 빼면 직원이 두 건 넣어 둔 학생이 <b>또 두 건을 잡는다.</b>
+     */
+    @Query("""
+            select count(r)
+              from QnaOfflineReservation r
+             where r.enrollment.id = :enrollmentId
+               and r.slot.slotDate = :slotDate
+               and r.canceledAt is null
+               and r.deleted = false
+            """)
+    long countByEnrollmentAndDate(@Param("enrollmentId") Long enrollmentId,
+                                  @Param("slotDate") java.time.LocalDate slotDate);
+
     /** 중복 예약 검사. 취소분은 재예약이 가능해야 하므로 제외한다. */
     Optional<QnaOfflineReservation> findBySlotIdAndEnrollmentIdAndCanceledAtIsNullAndDeletedFalse(
             Long slotId, Long enrollmentId);

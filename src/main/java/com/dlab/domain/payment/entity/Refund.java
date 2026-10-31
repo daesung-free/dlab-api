@@ -105,6 +105,55 @@ public class Refund extends BaseEntity {
     }
 
     /** 집행 완료 — 카드 취소 성공, 또는 이체를 끝냈다는 표시. */
+    /**
+     * ★ 재결제로 다시 받아야 하는 금액 (디랩 1029 7장).
+     *
+     * <p>★ 이 금액이 들어와야 <b>기결제 전체취소</b>를 걸 수 있다.
+     */
+    @Column(name = "repay_amount")
+    private Integer repayAmount;
+
+    /** 재결제 요청을 보낸 시각. ⚠️ 없으면 「보냈나 안 보냈나」가 구분되지 않는다. */
+    @Column(name = "repay_requested_at")
+    private Instant repayRequestedAt;
+
+    /**
+     * ★★ 재결제가 <b>확인된</b> 시각.
+     *
+     * <p>⚠️ <b>이 값이 있어야 기결제 전체취소를 걸 수 있다</b> — 먼저 취소하면
+     * 학부모가 재결제를 안 할 때 <b>받을 돈이 사라진다.</b>
+     */
+    @Column(name = "repay_confirmed_at")
+    private Instant repayConfirmedAt;
+
+    /**
+     * ★★ 재결제 요청을 보냈다 — <b>기결제는 아직 그대로다.</b>
+     *
+     * <p>★ 상태가 {@link RefundStatus#WAITING_REPAYMENT} 가 되어 화면에
+     * <b>「재결제 대기」</b>로 뜬다.
+     */
+    public void waitRepayment(int amount, Instant at) {
+        this.method = RefundPayout.REPAY_AND_FULL_CANCEL;
+        this.repayAmount = amount;
+        this.repayRequestedAt = at;
+        this.status = RefundStatus.WAITING_REPAYMENT;
+    }
+
+    /**
+     * ★★ 재결제가 <b>들어온 것을 확인</b>했다 — 이제 전체취소를 걸 수 있다.
+     *
+     * <p>★ <b>상태는 아직 바꾸지 않는다</b> — 취소가 성공해야 {@link #markDone} 이다.
+     * ⚠️ 여기서 {@code DONE} 으로 바꾸면 <b>취소가 실패해도 끝난 것으로 보인다.</b>
+     */
+    public void confirmRepayment(Instant at) {
+        this.repayConfirmedAt = at;
+    }
+
+    /** ★ 전체취소를 걸어도 되는가 — 재결제가 확인됐을 때만. */
+    public boolean canFullCancel() {
+        return method == RefundPayout.REPAY_AND_FULL_CANCEL && repayConfirmedAt != null;
+    }
+
     public void markDone(String pgCanceledTid, Instant at) {
         this.status = RefundStatus.DONE;
         this.pgCanceledTid = pgCanceledTid;

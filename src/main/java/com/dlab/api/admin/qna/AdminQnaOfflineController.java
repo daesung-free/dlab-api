@@ -113,6 +113,32 @@ public class AdminQnaOfflineController {
     }
 
     /** 관리자 취소. */
+    /**
+     * ★★ <b>직원 대리 예약</b> (디랩 1029 8-1).
+     *
+     * <h2>★ 왜 필요한가 — 넣어 줄 경로가 없었다</h2>
+     * 지금까지 관리자 API 는 <b>개설·마감·수정·삭제</b>뿐이었다. ⚠️ 그래서
+     * <b>전화로 신청한 학생을 직원이 넣어 줄 수 없었다.</b>
+     *
+     * <h2>★ 하루 상한을 건너뛴다</h2>
+     * 상한({@code academy.qna_daily_limit}, 기본 2)은 <b>학생 셀프 신청을 고르게
+     * 나누기</b> 위한 것이고, 대리 예약은 <b>직원이 사정을 보고 넣는 것</b>이다.
+     *
+     * <p>⚠️ <b>막는 것은 그대로다</b> — 같은 슬롯 중복 · 정원 초과 · 마감 · 지난 슬롯 ·
+     * 다른 지점. <b>한 자리에 두 번 앉을 수는 없다.</b>
+     *
+     * <p>★ <b>누가 넣었는지 남는다</b> — 없으면 상한을 왜 넘겼는지 설명할 수 없다.
+     */
+    @PostMapping("/slots/{slotId}/reservations")
+    public ApiResponse<Long> reserveByStaff(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long slotId,
+            @Valid @RequestBody QnaRequests.StaffReserve request) {
+        return ApiResponse.success(qnaOfflineService
+                .reserveByStaff(me, slotId, request.enrollmentId(), request.question())
+                .getId());
+    }
+
     @DeleteMapping("/reservations/{reservationId}")
     public ApiResponse<Void> cancel(@PathVariable Long reservationId) {
         qnaOfflineService.cancel(reservationId, null);

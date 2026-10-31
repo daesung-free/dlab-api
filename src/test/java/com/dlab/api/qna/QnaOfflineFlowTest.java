@@ -369,4 +369,134 @@ class QnaOfflineFlowTest {
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].canceledAt").exists());
     }
+
+    // ── 하루 상한 · 직원 대리 예약 (디랩 1029 8-1) ─────────────────
+
+    /**
+     * ★★ 하루 상한을 넘으면 거절한다.
+     *
+     * <p>★ 상한은 <b>지점 설정</b>({@code academy.qna_daily_limit}, 기본 2)이고
+     * ⚠️ <b>코드에 2를 박지 않았다</b>(1029 지침).
+     */
+    @Test
+    @DisplayName("★★ 하루 상한(기본 2)을 넘으면 거절한다 — 지점 설정값이다")
+    void dailyLimitRejectsThird() throws Exception {
+        String body = openSlots("14:00", "16:00", 15, 1);
+        var slots = objectMapper.readTree(body).path("data");
+
+        reserve(studentA, slots.get(0).path("id").asLong());
+        reserve(studentA, slots.get(1).path("id").asLong());
+
+        // ★ 세 번째 — 같은 날짜라 거절된다
+        mvc.perform(post("/api/v1/app/qna/offline/slots/{id}/reservations",
+                        slots.get(2).path("id").asLong())
+                        .header("Authorization", appToken(studentA))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"question\":\"세 번째\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("QNA_DAILY_LIMIT_EXCEEDED"));
+    }
+
+    /**
+     * ★★ <b>취소한 자리는 상한에서 빠진다.</b>
+     *
+     * <p>⚠️ 취소분을 세면 <b>취소하고 다시 잡을 수 없다</b> — 자리는 비어 있는데
+     * 학생은 그날 더 못 잡는다.
+     */
+    @Test
+    @DisplayName("★★ 취소하면 상한에서 빠진다 — 세면 취소하고 다시 잡을 수 없다")
+    void canceledDoesNotCountToLimit() throws Exception {
+        String body = openSlots("14:00", "16:00", 15, 1);
+        var slots = objectMapper.readTree(body).path("data");
+
+        long first = reserve(studentA, slots.get(0).path("id").asLong());
+        reserve(studentA, slots.get(1).path("id").asLong());
+
+        mvc.perform(delete("/api/v1/app/qna/offline/reservations/{id}", first)
+                        .header("Authorization", appToken(studentA)))
+                .andExpect(status().isOk());
+        em.flush();
+
+        // ★ 한 자리가 비었으니 다시 잡힌다
+        reserve(studentA, slots.get(2).path("id").asLong());
+    }
+
+    /** ★ 다른 날짜는 상한과 무관하다 — 「하루」가 슬롯 날짜 기준이다. */
+    @Test
+    @DisplayName("★ 상한은 날짜별이다 — 다른 날은 다시 2건 잡힌다")
+    void limitIsPerDate() throws Exception {
+        var sameDay = objectMapper.readTree(openSlots("14:00", "15:00", 15, 1)).path("data");
+        reserve(studentA, sameDay.get(0).path("id").asLong());
+        reserve(studentA, sameDay.get(1).path("id").asLong());
+
+        // ★ 다음 날 슬롯
+        String other = mvc.perform(post("/api/v1/admin/qna/offline/slots")
+                        .header("Authorization", adminToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"academyId":%d,"year":%d,"date":"%s","from":"14:00","to":"15:00",
+                                 "intervalMinutes":15,"room":"상담실2","capacity":1}"""
+                                .formatted(academyId, YEAR, DAY.plusDays(1))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        em.flush();
+
+        reserve(studentA, objectMapper.readTree(other).path("data").get(0).path("id").asLong());
+    }
+
+    /**
+     * ★★ <b>직원 대리 예약은 상한을 건너뛴다.</b>
+     *
+     * <p>★ 상한은 <b>학생 셀프 신청을 고르게 나누기</b> 위한 것이고, 대리 예약은
+     * <b>직원이 사정을 보고 넣는 것</b>이다(1029 지침).
+     *
+     * <p>⚠️ 이 경로가 없던 동안은 <b>전화로 신청한 학생을 넣어 줄 수 없었다.</b>
+     */
+    @Test
+    @DisplayName("★★ 직원 대리 예약은 상한을 건너뛴다 — 전화 신청을 넣어 줄 경로다")
+    void staffReserveSkipsLimit() throws Exception {
+        var slots = objectMapper.readTree(openSlots("14:00", "16:00", 15, 1)).path("data");
+        reserve(studentA, slots.get(0).path("id").asLong());
+        reserve(studentA, slots.get(1).path("id").asLong());
+
+        long enrollmentId = ((Number) em.createNativeQuery("""
+                        select e.id from student_enrollment e
+                          join student s on s.id = e.student_id
+                         where s.unique_code = 'QNSTU001'
+                        """).getSingleResult()).longValue();
+
+        mvc.perform(post("/api/v1/admin/qna/offline/slots/{id}/reservations",
+                        slots.get(2).path("id").asLong())
+                        .header("Authorization", adminToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enrollmentId\":%d,\"question\":\"전화 신청\"}"
+                                .formatted(enrollmentId)))
+                .andExpect(status().isOk());
+    }
+
+    /**
+     * ★★ 대리 예약도 <b>같은 슬롯 중복은 막는다.</b>
+     *
+     * <p>⚠️ 상한만 건너뛴다 — <b>한 자리에 두 번 앉을 수는 없다.</b>
+     */
+    @Test
+    @DisplayName("★★ 대리 예약도 같은 슬롯 중복은 막는다 — 한 자리에 두 번 앉을 수 없다")
+    void staffReserveStillBlocksDuplicate() throws Exception {
+        var slots = objectMapper.readTree(openSlots("14:00", "15:00", 15, 2)).path("data");
+        long slotId = slots.get(0).path("id").asLong();
+        reserve(studentA, slotId);
+
+        long enrollmentId = ((Number) em.createNativeQuery("""
+                        select e.id from student_enrollment e
+                          join student s on s.id = e.student_id
+                         where s.unique_code = 'QNSTU001'
+                        """).getSingleResult()).longValue();
+
+        mvc.perform(post("/api/v1/admin/qna/offline/slots/{id}/reservations", slotId)
+                        .header("Authorization", adminToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"enrollmentId\":%d}".formatted(enrollmentId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("QNA_ALREADY_RESERVED"));
+    }
 }

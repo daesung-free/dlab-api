@@ -175,6 +175,14 @@ public enum ErrorCode {
     QNA_SLOT_FULL(HttpStatus.CONFLICT, "정원이 찼습니다."),
     QNA_SLOT_PAST(HttpStatus.BAD_REQUEST, "이미 지난 시간입니다."),
     QNA_ALREADY_RESERVED(HttpStatus.CONFLICT, "이미 예약한 시간입니다."),
+
+    /**
+     * ★ 하루 신청 상한을 넘었다 (디랩 1029 8-1).
+     *
+     * <p>★ 상한은 ★ 지점 설정({@code academy.qna_daily_limit}, 기본 2)이고
+     * <b>슬롯 날짜</b>로 센다 — 신청 시각이 아니다.
+     */
+    QNA_DAILY_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "오늘 신청할 수 있는 건수를 넘었습니다."),
     QNA_ALREADY_CANCELED(HttpStatus.CONFLICT, "이미 취소된 예약입니다."),
     // 상담 예약 (F-4.11-4, 0803 답변서)
     CONSULT_SLOT_NOT_FOUND(HttpStatus.NOT_FOUND, "상담 일정을 찾을 수 없습니다."),

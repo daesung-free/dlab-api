@@ -47,6 +47,7 @@ public class QnaOfflineService {
     private final TeacherRepository teacherRepository;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final com.dlab.domain.user.repository.ClassAssignmentRepository classAssignmentRepository;
+    private final com.dlab.domain.user.repository.AccountRepository accountRepository;
     private final Clock clock;
     private final com.dlab.domain.file.service.FileAttachmentService fileAttachmentService;
 
@@ -277,8 +278,76 @@ public class QnaOfflineService {
             throw new BusinessException(ErrorCode.QNA_SLOT_FULL);
         }
 
+        // ★★ 하루 상한 (디랩 1029 8-1). ★ 슬롯 날짜로 센다 — 신청 시각이 아니다.
+        //
+        //    ⚠️ 신청 시각으로 세면 ★ 밤 11시에 내일·모레 것을 몰아 잡을 수 있고,
+        //    반대로 ★ 같은 날 상담 두 개를 잡아도 어제 신청했으면 통과한다.
+        short limit = slot.getAcademy().getQnaDailyLimit();
+        long sameDay = reservationRepository
+                .countByEnrollmentAndDate(enrollmentId, slot.getSlotDate());
+        if (sameDay >= limit) {
+            throw new BusinessException(ErrorCode.QNA_DAILY_LIMIT_EXCEEDED,
+                    "오늘은 이미 %d건 신청했습니다.".formatted(sameDay));
+        }
+
         return reservationRepository.save(new QnaOfflineReservation(
                 slot, enrollment, question, Instant.now(clock)));
+    }
+
+    /**
+     * ★★ <b>직원 대리 예약</b> (디랩 1029 8-1).
+     *
+     * <h2>★ 왜 필요한가 — 넣어 줄 경로가 없었다</h2>
+     * 관리자 API 는 <b>개설·마감·수정·삭제</b>뿐이었다. ⚠️ 그래서
+     * <b>전화로 신청한 학생을 직원이 넣어 줄 수 없었다.</b>
+     *
+     * <h2>★ 하루 상한을 건너뛴다</h2>
+     * 상한은 <b>학생 셀프 신청을 고르게 나누기</b> 위한 것이고, 대리 예약은
+     * <b>직원이 사정을 보고 넣는 것</b>이다(1029 지침).
+     *
+     * <p>⚠️ <b>같은 슬롯 중복은 여전히 막는다</b> — 한 자리에 두 번 앉을 수는 없다.
+     * ★ <b>정원도 그대로 막는다</b> — 넘기면 그 시간에 올 학생이 자리가 없다.
+     *
+     * <p>★ <b>누가 넣었는지 남긴다</b> — ⚠️ 없으면 상한을 왜 넘겼는지 설명할 수 없다.
+     */
+    @Transactional
+    public QnaOfflineReservation reserveByStaff(AuthPrincipal me, Long slotId,
+                                                Long enrollmentId, String question) {
+        QnaOfflineSlot slot = slotRepository.findByIdForUpdate(slotId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.QNA_SLOT_NOT_FOUND));
+        me.requireAcademyScope(slot.getAcademy().getId());
+
+        if (slot.isPast(LocalDate.now(clock), LocalTime.now(clock))) {
+            throw new BusinessException(ErrorCode.QNA_SLOT_PAST);
+        }
+        // ★ 마감된 슬롯에는 직원도 넣지 않는다 — 마감은 ★ 그 시간을 닫은 것이다
+        if (slot.isClosed()) {
+            throw new BusinessException(ErrorCode.QNA_SLOT_CLOSED);
+        }
+        reservationRepository
+                .findBySlotIdAndEnrollmentIdAndCanceledAtIsNullAndDeletedFalse(slotId, enrollmentId)
+                .ifPresent(r -> {
+                    throw new BusinessException(ErrorCode.QNA_ALREADY_RESERVED);
+                });
+
+        StudentEnrollment enrollment = enrollmentRepository.findById(enrollmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
+        if (!enrollment.getAcademy().getId().equals(slot.getAcademy().getId())) {
+            throw new BusinessException(ErrorCode.OTHER_BRANCH_ACCESS_DENIED);
+        }
+        if (reservationRepository.countBySlotIdAndCanceledAtIsNullAndDeletedFalse(slotId)
+                >= slot.getCapacity()) {
+            throw new BusinessException(ErrorCode.QNA_SLOT_FULL);
+        }
+
+        var saved = reservationRepository.save(new QnaOfflineReservation(
+                slot, enrollment, question, Instant.now(clock)));
+        saved.byStaff(accountRepository.findById(me.accountId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED)));
+
+        log.info("★ 질의응답 대리 예약: slot={}, enrollment={}, 직원={}",
+                slotId, enrollmentId, me.accountId());
+        return saved;
     }
 
     /**
