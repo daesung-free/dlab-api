@@ -147,6 +147,48 @@ public class AbsenceReason extends BaseEntity {
         this.submittedByAccount = account;
     }
 
+    /**
+     * ★ 직원이 <b>증빙을 확인한</b> 시각 (디랩 1029 4-3 #36).
+     *
+     * <p>시트 원문: <b>「사유외출 및 조퇴 시 증빙영수증 제출할 경우 직원 확인 체크 시
+     * 기존 부여된 벌점 자동 삭제」</b>
+     */
+    @AuditLabel("증빙 확인")
+    @Column(name = "evidence_confirmed_at")
+    private Instant evidenceConfirmedAt;
+
+    @AuditLabel("증빙 확인자")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "evidence_confirmed_by")
+    private com.dlab.domain.user.entity.Account evidenceConfirmedBy;
+
+    /**
+     * ★ 승인됐는데 <b>실제로 하지 않은</b> 것을 직원이 표시한 시각 (1029 4-3 #10).
+     *
+     * <p>⚠️ 벌점을 거둘지는 <b>{@code penalty_rule.supersedes_rule_id}</b> 로 정한다 —
+     * 9-7 회신(「-1 을 취소할지 둘지」)과 <b>무관하게 데이터로 흡수된다.</b>
+     */
+    @AuditLabel("미진행 표시")
+    @Column(name = "not_executed_at")
+    private Instant notExecutedAt;
+
+    @AuditLabel("미진행 표시자")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "not_executed_by")
+    private com.dlab.domain.user.entity.Account notExecutedBy;
+
+    /** ★ 증빙 확인. ⚠️ 두 번 누르면 거부한다 — 호출자가 판단한다. */
+    public void confirmEvidence(com.dlab.domain.user.entity.Account staff, Instant at) {
+        this.evidenceConfirmedAt = at;
+        this.evidenceConfirmedBy = staff;
+    }
+
+    /** ★ 미진행 표시. */
+    public void markNotExecuted(com.dlab.domain.user.entity.Account staff, Instant at) {
+        this.notExecutedAt = at;
+        this.notExecutedBy = staff;
+    }
+
     public void linkApproval(ApprovalRequest approvalRequest) {
         this.approvalRequest = approvalRequest;
     }

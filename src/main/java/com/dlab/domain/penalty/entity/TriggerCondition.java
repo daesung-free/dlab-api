@@ -3,6 +3,7 @@ package com.dlab.domain.penalty.entity;
 import com.dlab.domain.attendance.entity.AttendanceEventType;
 import com.dlab.domain.routine.entity.RoutineResultStatus;
 import java.util.Arrays;
+import java.util.stream.Stream;
 import java.util.List;
 import java.util.Locale;
 
@@ -82,13 +83,43 @@ public final class TriggerCondition {
                     .map(s -> new Option(s.name(), routineLabel(s)))
                     .toList();
             // ★ 사유 신청 승인 — 조건값이 AbsenceReasonType 이름이다
-            case APPROVAL -> Arrays.stream(
-                            com.dlab.domain.attendance.entity.AbsenceReasonType.values())
-                    .map(t -> new Option(t.name(), approvalLabel(t)))
+            // ★★ 사유 종류 + ★ 후속 처리 둘 (디랩 1029 4-3).
+            //
+            //    ★ 후속 처리를 ★ 같은 APPROVAL 트리거에 두는 이유 — ★ 같은 신청에
+            //    걸리는 일이고 멱등키(학생:일자:규칙)도 같은 구조다. 트리거를 새로
+            //    만들면 ★ 대체 관계(supersedes)가 ★ 트리거를 넘나들게 된다.
+            //
+            //    ⚠️ 이름이 사유 종류와 겹치면 ★ 승인 벌점 규칙이 후속 처리에도 걸린다 —
+            //    그래서 AbsenceReasonType 에 없는 이름을 쓴다.
+            case APPROVAL -> java.util.stream.Stream.concat(
+                            Arrays.stream(
+                                            com.dlab.domain.attendance.entity.AbsenceReasonType
+                                                    .values())
+                                    .map(t -> new Option(t.name(), approvalLabel(t))),
+                            Stream.of(
+                                    new Option(EVIDENCE_CONFIRMED,
+                                            "증빙 확인(병원영수증 등)"),
+                                    new Option(NOT_EXECUTED, "사유 제출 후 미진행")))
                     .toList();
             case REGULAR_SCHEDULE -> List.of(new Option(NOT_RECOGNIZED, "미인정"));
         };
     }
+
+    /**
+     * ★★ 직원이 <b>증빙을 확인</b>했을 때 (디랩 1029 4-3 #36).
+     *
+     * <p>★ 보통 <b>0점 기록 항목</b>에 걸고, <b>대체 대상에 그 사유 규칙을 지정</b>해
+     * 자동 벌점을 거둔다.
+     */
+    public static final String EVIDENCE_CONFIRMED = "EVIDENCE_CONFIRMED";
+
+    /**
+     * ★★ 승인됐는데 <b>실제로 하지 않은</b> 경우 (1029 4-3 #10).
+     *
+     * <p>⚠️ 「-1 을 취소할지 둘지」가 미확정이지만(9-7), ★ 그 차이는
+     * <b>대체 대상을 지정하는지</b>로 흡수된다 — <b>코드가 아니라 행이다.</b>
+     */
+    public static final String NOT_EXECUTED = "NOT_EXECUTED";
 
     /** 넣을 수 있는 값인가. 대소문자는 가리지 않는다 — 엔진 비교도 그렇다. */
     public static boolean isValid(PenaltyTriggerType triggerType, String condition) {
