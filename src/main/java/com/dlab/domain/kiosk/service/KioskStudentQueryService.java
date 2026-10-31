@@ -208,6 +208,12 @@ public class KioskStudentQueryService {
             case LATE -> "5";           // 사유지각
             case EARLY_LEAVE -> "6";    // 사유조퇴
             case OUTING -> "7";         // 사유외출
+            // ★★ 더프 조퇴도 ★ 사유조퇴(6)로 내린다 — ★ 키오스크는 더프를 모른다.
+            //
+            //    ⚠️ 새 값을 만들면 ★ DSA 계약(reg_gn 7값)이 흔들린다 — 키오스크가
+            //    모르는 값을 받으면 ★ 화면에 무엇으로 뜰지 알 수 없다.
+            //    ★ 전일/당일 구분은 ★ 우리 벌점 축이고 ★ 키오스크와 무관하다.
+            case DUF_EARLY_LEAVE -> "6";
         };
     }
 
