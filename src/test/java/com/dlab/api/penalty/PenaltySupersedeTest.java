@@ -214,4 +214,83 @@ class PenaltySupersedeTest {
                 .filter(p -> p.getEnrollment().getId().equals(enrollment.getId()))
                 .toList();
     }
+
+    // ── 취침 3회 — 임계값 (디랩 1029 4-6) ─────────────────────────
+
+    /**
+     * ★★ 임계값에 <b>닿기 전에는 붙지 않는다</b>.
+     *
+     * <p>★ 시트: <b>「교시별로 학생 취침을 3회 체크하면 자동 벌점 부여」</b>
+     * ★ <b>3은 규칙 데이터</b>다 — 코드에 박지 않았다.
+     */
+    @Test
+    @DisplayName("★★ 임계값에 닿기 전에는 안 붙는다 — 3은 규칙 데이터다")
+    void belowThresholdDoesNothing() {
+        Long ruleId = countingRule(3);
+
+        engine.applyCounted(enrollment, PenaltyTriggerType.PATROL, "SLEEP", today, 2);
+
+        assertThat(livePoints()).isEmpty();
+        assertThat(ruleId).isNotNull();
+    }
+
+    /** ★★ 임계값에 닿으면 붙는다. */
+    @Test
+    @DisplayName("★★ 임계값에 닿으면 붙는다")
+    void atThresholdGrants() {
+        countingRule(3);
+
+        engine.applyCounted(enrollment, PenaltyTriggerType.PATROL, "SLEEP", today, 3);
+
+        assertThat(livePoints()).hasSize(1);
+    }
+
+    /**
+     * ★★ <b>넘어도 한 번만</b> 붙는다.
+     *
+     * <p>★ 멱등키가 {@code 학생:일자:규칙} 이라 <b>4회·5회째에 또 붙지 않는다.</b>
+     * ⚠️ 그게 맞다 — 시트가 <b>「3회 체크하면 부여」</b> 다.
+     */
+    @Test
+    @DisplayName("★★ 임계값을 넘어도 하루 한 번만 붙는다")
+    void onlyOncePerDay() {
+        countingRule(3);
+
+        engine.applyCounted(enrollment, PenaltyTriggerType.PATROL, "SLEEP", today, 3);
+        engine.applyCounted(enrollment, PenaltyTriggerType.PATROL, "SLEEP", today, 4);
+        engine.applyCounted(enrollment, PenaltyTriggerType.PATROL, "SLEEP", today, 5);
+
+        assertThat(livePoints()).hasSize(1);
+    }
+
+    /**
+     * ★★ <b>임계값이 없는 규칙은 건너뛴다</b> — 세지 않는 규칙이다.
+     *
+     * <p>⚠️ 건너뛰지 않으면 <b>건별 트리거가 횟수 경로에서도 걸려</b> 두 번 붙는다.
+     */
+    @Test
+    @DisplayName("★★ 임계값이 없는 규칙은 횟수 경로에서 건너뛴다 — 안 그러면 두 번 붙는다")
+    void ruleWithoutThresholdIsSkipped() {
+        // ★ 임계값을 주지 않는다
+        countingRule(null);
+
+        engine.applyCounted(enrollment, PenaltyTriggerType.PATROL, "SLEEP", today, 99);
+
+        assertThat(livePoints()).isEmpty();
+    }
+
+    /** 횟수를 세는 규칙을 만든다. ★ 임계값이 {@code null} 이면 세지 않는다. */
+    private Long countingRule(Integer threshold) {
+        return tx.execute(status -> {
+            var item = masterService.createItem(admin, academy.getId(), year,
+                    "취침(" + tag + ")", 1, PenaltyCategory.DEMERIT);
+            var rule = masterService.createRule(admin, academy.getId(), year,
+                    PenaltyTriggerType.PATROL, "SLEEP", item.getId());
+            masterService.toggleRule(admin, rule.getId(), true);
+            if (threshold != null) {
+                masterService.changeThreshold(admin, rule.getId(), threshold.shortValue());
+            }
+            return rule.getId();
+        });
+    }
 }

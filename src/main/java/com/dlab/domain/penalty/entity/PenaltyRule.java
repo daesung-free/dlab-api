@@ -62,6 +62,35 @@ public class PenaltyRule extends BaseEntity {
     private boolean active;
 
     /**
+     * ★★ <b>몇 번째에 부여하는가</b> (디랩 1029 4-6).
+     *
+     * <p>★ 취침 3회처럼 <b>횟수를 세는 규칙</b>이 쓴다. ⚠️ 1029 지침:
+     * <b>「코드에 3을 박지 말 것」</b>
+     *
+     * <p>★ 조건값({@code SLEEP_3})에 넣지 않은 이유 — <b>3을 2로 바꾸려면 규칙을 새로
+     * 만들어야</b> 하고, 그러면 <b>그 전에 부여된 벌점의 근거(규칙 id)가 다른 규칙을
+     * 가리킨다.</b> ★ 칸으로 두면 <b>행만 고친다.</b>
+     *
+     * <p>★ <b>{@code null} 은 세지 않는다는 뜻</b>이다 — 지금 트리거 대부분이 그렇다
+     * (건별로 걸린다).
+     */
+    @Column(name = "threshold")
+    private Short threshold;
+
+    /** 임계값을 바꾼다. {@code null} 이면 세지 않는다. */
+    public void changeThreshold(Short threshold) {
+        if (threshold != null && threshold < 1) {
+            throw new IllegalArgumentException("임계값은 1 이상이어야 합니다.");
+        }
+        this.threshold = threshold;
+    }
+
+    /** ★ 횟수를 세는 규칙인가. */
+    public boolean counts() {
+        return threshold != null;
+    }
+
+    /**
      * ★★ 이 규칙이 부여할 때 <b>먼저 거둘 규칙</b> (디랩 1029 4-2).
      *
      * <h2>★ 자동 지각 ↔ 사유 지각 중복 방지</h2>

@@ -143,6 +143,46 @@ public class PenaltyRuleEngine {
         });
     }
 
+    /**
+     * ★★ <b>횟수를 세어</b> 임계값에 닿으면 부여한다 (디랩 1029 4-6).
+     *
+     * <h2>★ 왜 따로 두는가 — 건별 트리거와 방향이 다르다</h2>
+     * {@link #apply} 는 <b>한 번 일어난 것</b>에 붙는다. 이쪽은 <b>「3회째에」</b>라서
+     * <b>지금까지 몇 번인지를 호출자가 알려 줘야</b> 한다.
+     *
+     * <p>★ <b>세는 것은 호출자가 한다</b> — 도메인마다 세는 단위가 다르다(순찰은 회차,
+     * 루틴은 주간 회차). ⚠️ 엔진이 세면 <b>엔진이 모든 도메인을 알아야</b> 한다.
+     *
+     * <p>★ <b>임계값은 규칙 데이터</b>({@code threshold})다 — 코드에 3을 박지 않았다.
+     * ⚠️ {@code threshold} 가 없는 규칙은 <b>건너뛴다</b> — 세지 않는 규칙이다.
+     *
+     * @param occurrences 지금까지 일어난 횟수. ★ 임계값 <b>이상</b>이면 부여한다
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<PenaltyPoint> applyCounted(StudentEnrollment enrollment,
+                                           PenaltyTriggerType triggerType,
+                                           String condition,
+                                           LocalDate occurredOn,
+                                           int occurrences) {
+        List<PenaltyRule> rules = ruleRepository.findActive(
+                enrollment.getAcademy().getId(), enrollment.getYear(), triggerType);
+
+        List<PenaltyPoint> applied = new ArrayList<>();
+        for (PenaltyRule rule : rules) {
+            if (!rule.matches(condition) || !rule.counts()) {
+                continue;
+            }
+            if (occurrences < rule.getThreshold()) {
+                continue;
+            }
+            // ★ 멱등키가 「학생:일자:규칙」이라 ★ 하루 한 번만 붙는다 —
+            //   ⚠️ 4회·5회째에 또 붙지 않는다. 그게 맞다(「3회 체크하면 부여」).
+            supersede(enrollment, rule, occurredOn);
+            grant(enrollment, rule, triggerType, occurredOn).ifPresent(applied::add);
+        }
+        return applied;
+    }
+
     private java.util.Optional<PenaltyPoint> grant(StudentEnrollment enrollment,
                                                    PenaltyRule rule,
                                                    PenaltyTriggerType triggerType,

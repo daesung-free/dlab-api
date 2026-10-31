@@ -102,6 +102,13 @@ public final class TriggerCondition {
                                     new Option(NOT_EXECUTED, "사유 제출 후 미진행")))
                     .toList();
             case REGULAR_SCHEDULE -> List.of(new Option(NOT_RECOGNIZED, "미인정"));
+            // ★★ 순찰 — 지금은 ★ 졸음 하나다 (디랩 1029 4-6).
+            //
+            //    ⚠️ PatrolMark 전부를 열지 않는다. 「화장실」·「외출」 같은 표시는
+            //    ★ 벌점 사유가 아니다 — 디랩이 요청한 것은 ★ 취침뿐이다.
+            //    ★ 다른 표시에 벌점을 걸어야 하면 ★ 그때 한 줄 더한다.
+            case PATROL -> List.of(new Option(
+                    com.dlab.domain.patrol.entity.PatrolMark.SLEEP.name(), "취침(졸음)"));
         };
     }
 
