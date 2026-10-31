@@ -59,8 +59,42 @@ public class AdminRefundController {
     @PostMapping
     public ApiResponse<RefundView> execute(@CurrentAccount AuthPrincipal me,
                                            @RequestParam Long billingId,
-                                           @RequestParam int usedDays) {
-        return ApiResponse.success(RefundView.from(refundService.execute(me, billingId, usedDays)));
+                                           @RequestParam int usedDays,
+                                           /**
+                                            * ★★ 재결제 후 ★ 전체취소로 처리한다
+                                            * (디랩 1029 7장).
+                                            *
+                                            * <p>★ 기결제를 ★ 이 자리에서 취소하지
+                                            * 않는다 — 상태가 ★ {@code WAITING_REPAYMENT}
+                                            * 가 되고, ★ 재결제가 확인된 뒤
+                                            * {@code /{id}/repayment-confirmed} 가
+                                            * 전체취소를 건다.
+                                            *
+                                            * <p>⚠️ <b>카드로 결제된 건에만</b> 쓸 수
+                                            * 있다 — 가상계좌·현금 건은 계좌 이체다.
+                                            */
+                                           @RequestParam(defaultValue = "false")
+                                           boolean repayAndFullCancel) {
+        return ApiResponse.success(RefundView.from(
+                refundService.execute(me, billingId, usedDays, repayAndFullCancel)));
+    }
+
+    /**
+     * ★★ <b>재결제가 들어온 것을 확인</b>하고 기결제를 전체취소한다 (1029 7장 ②단계).
+     *
+     * <p>⚠️⚠️ <b>이 버튼을 누르기 전에는 기결제가 그대로 살아 있다</b> —
+     * 그게 맞다. <b>전체취소를 먼저 하면 학부모가 재결제를 안 할 때
+     * 받을 돈이 사라진다.</b>
+     *
+     * <p>★ <b>취소가 성공해야 {@code DONE}</b> 이다. 실패하면 {@code FAILED} 이고
+     * {@code failReason} 에 이유가 남는다 — ★ 「확인은 했는데 취소가 안 됐다」를
+     * 화면이 드러내야 한다.
+     */
+    @PostMapping("/{refundId}/repayment-confirmed")
+    public ApiResponse<RefundView> confirmRepayment(@CurrentAccount AuthPrincipal me,
+                                                    @PathVariable Long refundId) {
+        return ApiResponse.success(RefundView.from(
+                refundService.confirmRepaymentAndCancel(me, refundId)));
     }
 
     /**
@@ -130,7 +164,14 @@ public class AdminRefundController {
     public record RefundView(Long id, Long billingId, String studentNo, String studentName,
                              int teachingDays, int usedDays, int refundAmount,
                              String method, String status, String failReason,
-                             String detail, Instant processedAt) {
+                             String detail, Instant processedAt,
+                             /**
+                              * ★ 재결제로 다시 받아야 하는 금액.
+                              * {@code null} 이면 ★ 재결제 방식이 아니다.
+                              */
+                             Integer repayAmount,
+                             /** ★ 재결제가 확인된 시각. 있어야 전체취소가 걸린다. */
+                             Instant repayConfirmedAt) {
 
         static RefundView from(Refund r) {
             var enrollment = r.getBilling().getEnrollment();
@@ -138,7 +179,8 @@ public class AdminRefundController {
                     enrollment.getStudentNo(), enrollment.getStudent().getName(),
                     r.getTeachingDays(), r.getUsedDays(), r.getRefundAmount(),
                     r.getMethod().name(), r.getStatus().name(), r.getFailReason(),
-                    r.getDetail(), r.getProcessedAt());
+                    r.getDetail(), r.getProcessedAt(),
+                    r.getRepayAmount(), r.getRepayConfirmedAt());
         }
     }
 }

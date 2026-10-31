@@ -41,4 +41,16 @@ public final class QnaRequests {
     /** @param subject 과목(자유 입력, 선택). 사진은 예약 후 {@code .../photos}로 따로 올린다 */
     public record QnaReserve(@Size(max = 500) String question, @Size(max = 30) String subject) {
     }
+
+    /**
+     * ★ 직원 대리 예약 (디랩 1029 8-1).
+     *
+     * @param question 질문. ★ 비워도 된다 — 전화로 받은 것을 직원이 옮겨 적는 자리이고,
+     *                 ⚠️ 필수로 두면 <b>「일단 자리만 잡아 주세요」</b>를 못 받는다
+     */
+    public record StaffReserve(
+            @jakarta.validation.constraints.NotNull(message = "학생은 필수입니다.")
+            Long enrollmentId,
+            @jakarta.validation.constraints.Size(max = 1000) String question) {
+    }
 }

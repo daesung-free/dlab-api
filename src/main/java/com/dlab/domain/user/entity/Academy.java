@@ -64,6 +64,22 @@ public class Academy extends BaseEntity {
     private LocalTime attendanceDeadline;
 
     /**
+     * ★★ 학생이 <b>하루에 신청할 수 있는 질의응답 건수</b> (디랩 1029 8-1).
+     *
+     * <h2>★ 「하루」는 슬롯 날짜다 — 신청 시각이 아니다</h2>
+     * ⚠️ 신청 시각으로 세면 <b>밤 11시에 내일·모레 것을 몰아 잡을 수 있고</b>,
+     * 반대로 <b>같은 날 상담 두 개를 잡아도 어제 신청했으면 통과한다.</b>
+     *
+     * <p>★ <b>지점 설정이다</b> — 지점마다 상담 인력이 달라 같은 값일 이유가 없다.
+     * ⚠️ 코드에 2를 박지 말 것(1029 지침).
+     *
+     * <p>★ <b>직원 대리 예약은 이 상한을 건너뛴다</b> — 상한은 학생 셀프 신청을
+     * 고르게 나누기 위한 것이다.
+     */
+    @Column(name = "qna_daily_limit", nullable = false)
+    private short qnaDailyLimit = 2;
+
+    /**
      * 지각 판정 기준시각 — <b>이 시각 이후 첫 태깅이 지각이다</b> (디랩 1019).
      *
      * <p>★ {@link #attendanceDeadline} 과 <b>다른 축</b>이다. 한 칸으로 두면 기준시각이
