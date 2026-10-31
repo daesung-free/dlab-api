@@ -267,6 +267,21 @@ public class PenaltyMasterService {
         return rule;
     }
 
+    /**
+     * ★★ <b>임계값을 바꾼다</b> — 「몇 번째에 부여하는가」 (디랩 1029 4-6).
+     *
+     * <p>★ 취침 3회처럼 <b>횟수를 세는 규칙</b>이 쓴다. ⚠️ 1029 지침:
+     * <b>「코드에 3을 박지 말 것」</b>
+     *
+     * @param threshold ★ {@code null} 을 주면 <b>세지 않는다</b>(건별로 걸린다)
+     */
+    @Transactional
+    public PenaltyRule changeThreshold(AuthPrincipal me, Long ruleId, Short threshold) {
+        PenaltyRule rule = requireRule(me, ruleId);
+        rule.changeThreshold(threshold);
+        return rule;
+    }
+
     @Transactional
     public void deleteRule(AuthPrincipal me, Long ruleId) {
         requireRule(me, ruleId).markDeleted();

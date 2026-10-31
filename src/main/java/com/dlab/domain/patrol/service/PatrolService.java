@@ -4,6 +4,7 @@ import com.dlab.common.exception.BusinessException;
 import com.dlab.common.exception.ErrorCode;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.domain.patrol.entity.PatrolMark;
+import com.dlab.domain.penalty.entity.PenaltyTriggerType;
 import com.dlab.domain.patrol.entity.PatrolRecord;
 import com.dlab.domain.patrol.repository.PatrolRecordRepository;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -28,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class PatrolService {
 
     private final PatrolRecordRepository recordRepository;
+    private final com.dlab.domain.penalty.service.PenaltyRuleEngine penaltyRuleEngine;
     private final StudentEnrollmentRepository enrollmentRepository;
     private final com.dlab.domain.facility.repository.SeatMasterRepository seatMasterRepository;
     private final Clock clock;
@@ -113,6 +115,24 @@ public class PatrolService {
                     .orElseGet(() -> recordRepository.save(new PatrolRecord(
                             enrollment, target, roundNo, mark.seatCd(), mark.mark()))));
         }
+        // ★★ 졸음이 임계값만큼 쌓였으면 ★ 벌점 (디랩 1029 4-6).
+        //
+        //    ★ 세는 것은 ★ 여기서 한다 — 세는 단위가 도메인마다 다르다.
+        //    ⚠️ 엔진이 세면 ★ 엔진이 모든 도메인을 알아야 한다.
+        //
+        //    ★ 규칙이 없거나 임계값이 없으면 ★ 아무 일도 안 일어난다 —
+        //    디랩 항목표가 들어오기 전까지는 조용하다.
+        for (PatrolRecord record : saved) {
+            if (record.getMark() != PatrolMark.SLEEP) {
+                continue;
+            }
+            long sleeps = recordRepository.countByMark(
+                    record.getEnrollment().getId(), target, PatrolMark.SLEEP);
+            penaltyRuleEngine.applyCounted(record.getEnrollment(),
+                    PenaltyTriggerType.PATROL, PatrolMark.SLEEP.name(),
+                    target, (int) sleeps);
+        }
+
         log.info("순찰 기록: academy={}, date={}, round={}, 건수={}, 처리자={}",
                 scope, target, roundNo, saved.size(), me.accountId());
         return saved;

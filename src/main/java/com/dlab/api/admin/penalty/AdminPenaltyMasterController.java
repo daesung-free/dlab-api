@@ -156,6 +156,23 @@ public class AdminPenaltyMasterController {
      *
      * @param supersedesRuleId 거둘 규칙. ★ 비우면 <b>해제</b>한다
      */
+    /**
+     * ★★ 임계값 — 「몇 번째에 부여하는가」 (디랩 1029 4-6).
+     *
+     * <p>★ 취침 3회가 그 예다. ⚠️ <b>코드에 3을 박지 않았다</b> — 지점·연도마다
+     * 다를 수 있다.
+     *
+     * @param threshold ★ 비우면 <b>세지 않는다</b>(건별로 걸린다)
+     */
+    @PatchMapping("/penalty-rules/{ruleId}/threshold")
+    public ApiResponse<PenaltyRuleRow> changeThreshold(
+            @CurrentAccount AuthPrincipal me,
+            @PathVariable Long ruleId,
+            @RequestParam(required = false) Short threshold) {
+        return ApiResponse.success(PenaltyRuleRow.from(
+                masterService.changeThreshold(me, ruleId, threshold)));
+    }
+
     @PatchMapping("/penalty-rules/{ruleId}/supersedes")
     public ApiResponse<PenaltyRuleRow> changeSupersedes(
             @CurrentAccount AuthPrincipal me,
@@ -253,13 +270,19 @@ public class AdminPenaltyMasterController {
                            * ★ 이 규칙이 부여할 때 ★ 먼저 거둘 규칙 (1029 4-2).
                            * {@code null} 이면 ★ 거두지 않는다.
                            */
-                          Long supersedesRuleId) {
+                          Long supersedesRuleId,
+                          /**
+                           * ★ 몇 번째에 부여하는가 (취침 3회 등).
+                           * {@code null} 이면 ★ 세지 않는다.
+                           */
+                          Short threshold) {
 
         static PenaltyRuleRow from(PenaltyRule r) {
             return new PenaltyRuleRow(r.getId(), r.getTriggerType(), r.getTriggerCondition(),
                     r.getPenaltyItem().getId(), r.getPenaltyItem().getItemName(),
                     r.getPenaltyItem().getPointValue(), r.isActive(),
-                    r.getSupersedesRule() == null ? null : r.getSupersedesRule().getId());
+                    r.getSupersedesRule() == null ? null : r.getSupersedesRule().getId(),
+                    r.getThreshold());
         }
     }
 }
