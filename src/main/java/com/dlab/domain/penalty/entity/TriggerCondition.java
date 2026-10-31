@@ -99,7 +99,11 @@ public final class TriggerCondition {
                             Stream.of(
                                     new Option(EVIDENCE_CONFIRMED,
                                             "증빙 확인(병원영수증 등)"),
-                                    new Option(NOT_EXECUTED, "사유 제출 후 미진행")))
+                                    new Option(NOT_EXECUTED, "사유 제출 후 미진행"),
+                                    // ★★ 더프 조퇴 — ★ 전일/당일로 ★ 점수가 갈린다
+                                    //    (1029 4-4: 전일 -1 · 당일 -2)
+                                    new Option(DUF_PREV_DAY, "더프 조퇴 — 전일 신청"),
+                                    new Option(DUF_SAME_DAY, "더프 조퇴 — 당일 신청")))
                     .toList();
             case REGULAR_SCHEDULE -> List.of(new Option(NOT_RECOGNIZED, "미인정"));
             // ★★ 순찰 — 지금은 ★ 졸음 하나다 (디랩 1029 4-6).
@@ -111,6 +115,18 @@ public final class TriggerCondition {
                     com.dlab.domain.patrol.entity.PatrolMark.SLEEP.name(), "취침(졸음)"));
         };
     }
+
+    /**
+     * ★★ 더프 조퇴를 <b>응시일 전날까지</b> 신청했다 (디랩 1029 4-4, 시트 #13).
+     *
+     * <p>★ 판정 기준은 <b>신청 생성 시각</b>이다 — 응시일 <b>전날 23:59 이전</b>.
+     * ⚠️ 승인 시각이 아니다. <b>직원이 늦게 승인했다고 학생이 당일 신청한 것으로
+     * 바뀌면 안 된다.</b>
+     */
+    public static final String DUF_PREV_DAY = "DUF_PREV_DAY";
+
+    /** ★★ 더프 조퇴를 <b>응시일 당일</b>에 신청했다 (시트 #14, 전일보다 무겁다). */
+    public static final String DUF_SAME_DAY = "DUF_SAME_DAY";
 
     /**
      * ★★ 직원이 <b>증빙을 확인</b>했을 때 (디랩 1029 4-3 #36).
@@ -159,6 +175,10 @@ public final class TriggerCondition {
             case LATE -> "사유 지각(승인)";
             case EARLY_LEAVE -> "사유 조퇴(승인)";
             case OUTING -> "사유 외출(승인)";
+            // ★★ 더프 조퇴는 ★ 이 이름으로 걸지 않는다 — ★ 전일/당일로 점수가 갈려
+            //    조건값이 ★ DUF_PREV_DAY · DUF_SAME_DAY 다(1029 4-4).
+            //    ⚠️ 여기 두면 ★ 한 규칙이 둘 다 걸어 ★ 점수를 가를 수 없다.
+            case DUF_EARLY_LEAVE -> "더프 조퇴(승인) — ★ 전일/당일 조건값을 쓰세요";
         };
     }
 

@@ -58,6 +58,7 @@ public class AbsenceReasonService {
     private final com.dlab.domain.user.service.HomeroomScopeService homeroomScopeService;
     private final com.dlab.domain.penalty.service.PenaltyRuleEngine penaltyRuleEngine;
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
+    private final com.dlab.domain.attendance.repository.DufExamDateRepository dufExamDateRepository;
     private final Clock clock;
 
     /**
@@ -76,6 +77,7 @@ public class AbsenceReasonService {
                                   LocalTime startTime, LocalTime endTime, Long categoryId) {
         StudentEnrollment enrollment = requireEnrollment(me, enrollmentId);
         validatePeriod(type, startTime, endTime);
+        requireDufExamDate(enrollment, date, type);
 
         AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
                 enrollment.getAcademy(), enrollment, date, type, reasonText, startTime, endTime));
@@ -108,6 +110,7 @@ public class AbsenceReasonService {
                 .filter(e -> !e.isDeleted())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
         validatePeriod(type, startTime, endTime);
+        requireDufExamDate(enrollment, date, type);
         rejectDuplicate(enrollmentId, date, type);
 
         AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
@@ -156,6 +159,7 @@ public class AbsenceReasonService {
                                           String reasonText, LocalTime startTime,
                                           LocalTime endTime, Long categoryId) {
         validatePeriod(type, startTime, endTime);
+        requireDufExamDate(enrollment, date, type);
         rejectDuplicate(enrollment.getId(), date, type);
 
         AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
@@ -297,6 +301,28 @@ public class AbsenceReasonService {
     private com.dlab.domain.user.entity.Account staff(AuthPrincipal me) {
         return accountRepository.findById(me.accountId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+    }
+
+    /**
+     * ★★ 더프 조퇴는 <b>응시일에만</b> 신청할 수 있다 (디랩 1029 4-4).
+     *
+     * <p>1029 지침: <b>「응시일이 아닌 날에 더프 조퇴를 신청하면 막습니다
+     * (일반 사유 조퇴로 안내)」</b>
+     *
+     * <p>⚠️ 막지 않으면 <b>아무 날에나 더프 조퇴를 걸어 벌점을 -1 로 낮출 수 있다</b> —
+     * 일반 사유 조퇴보다 가볍게 매겨질 수 있는 항목이다.
+     *
+     * <p>★ 응시일은 <b>지점 전용 + 전 지점 공통</b>을 함께 본다.
+     */
+    private void requireDufExamDate(StudentEnrollment enrollment, LocalDate date,
+                                    AbsenceReasonType type) {
+        if (type != AbsenceReasonType.DUF_EARLY_LEAVE) {
+            return;
+        }
+        if (!dufExamDateRepository.isExamDate(enrollment.getAcademy().getId(), date)) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST,
+                    "그 날은 더프리미엄 응시일이 아닙니다. 일반 사유 조퇴로 신청해 주세요.");
+        }
     }
 
     /**

@@ -419,11 +419,37 @@ public class ApprovalService {
      * <p>★ 엔진이 {@code REQUIRES_NEW} 라 <b>벌점 부여가 실패해도 승인은 남는다</b> —
      * 승인이 롤백되면 학부모에게 간 알림과 실제 상태가 어긋난다.
      */
+    /**
+     * ★★ 더프 조퇴는 <b>전일/당일로 조건값이 갈린다</b> (디랩 1029 4-4).
+     *
+     * <p>★ 판정 기준은 <b>신청 생성 시각</b>이다 — 응시일 <b>전날까지</b>면
+     * 전일(-1), 당일이면 당일(-2).
+     *
+     * <p>⚠️ <b>승인 시각이 아니다</b> — 직원이 늦게 승인했다고 <b>학생이 당일 신청한
+     * 것으로 바뀌면 안 된다.</b>
+     *
+     * <p>★ 다른 종류는 <b>enum 이름을 그대로</b> 쓴다.
+     *
+     * <p>★ <b>거둘 때도 같은 함수를 쓴다</b> — ⚠️ 붙일 때와 거둘 때 조건값이 달라지면
+     * <b>거둬지지 않는다</b>(멱등키가 규칙 id 를 쓰고, 규칙은 조건값으로 고른다).
+     */
+    private String penaltyCondition(com.dlab.domain.attendance.entity.AbsenceReason reason) {
+        if (reason.getReasonType()
+                != com.dlab.domain.attendance.entity.AbsenceReasonType.DUF_EARLY_LEAVE) {
+            return reason.getReasonType().name();
+        }
+        java.time.LocalDate submittedOn = reason.getSubmittedAt()
+                .atZone(clock.getZone()).toLocalDate();
+        return submittedOn.isBefore(reason.getAttendanceDate())
+                ? com.dlab.domain.penalty.entity.TriggerCondition.DUF_PREV_DAY
+                : com.dlab.domain.penalty.entity.TriggerCondition.DUF_SAME_DAY;
+    }
+
     private void applyPenalty(ApprovalRequest request) {
         eachAbsenceReason(request, (reason) -> penaltyRuleEngine.apply(
                 request.getEnrollment(),
                 com.dlab.domain.penalty.entity.PenaltyTriggerType.APPROVAL,
-                reason.getReasonType().name(),
+                penaltyCondition(reason),
                 reason.getAttendanceDate()));
     }
 
@@ -440,7 +466,7 @@ public class ApprovalService {
         eachAbsenceReason(request, (reason) -> penaltyRuleEngine.revokeAuto(
                 request.getEnrollment(),
                 com.dlab.domain.penalty.entity.PenaltyTriggerType.APPROVAL,
-                reason.getReasonType().name(),
+                penaltyCondition(reason),
                 reason.getAttendanceDate()));
     }
 
