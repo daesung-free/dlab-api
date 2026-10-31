@@ -30,7 +30,12 @@ import java.util.Set;
  * </ul>
  * 매트릭스가 확정되면 이 표를 그쪽에 맞추고, 값은 데이터로 옮긴다.
  */
-public final class RoleMenuDefaults {
+@org.springframework.stereotype.Component
+@lombok.RequiredArgsConstructor
+public class RoleMenuDefaults {
+
+    private final com.dlab.domain.menu.repository.RoleMenuDefaultRepository repository;
+
 
     private static final Set<Role> ALL = EnumSet.allOf(Role.class);
     private static final Set<Role> MANAGERS = EnumSet.of(Role.SUPER_ADMIN, Role.BRANCH_ADMIN);
@@ -113,15 +118,50 @@ public final class RoleMenuDefaults {
             Map.entry("pg-site", HEAD_OFFICE)
     );
 
-    private RoleMenuDefaults() {
-    }
-
-    /** 이 역할들에 기본으로 보이는 메뉴인가. 표에 없는 메뉴는 보인다. */
-    public static boolean visibleTo(String menuCode, Set<Role> roles) {
-        Set<Role> allowed = BY_MENU.get(menuCode);
-        if (allowed == null) {
+    /**
+     * ★★ 이 역할들에 <b>기본으로 보이는 메뉴</b>인가 — <b>테이블을 읽는다</b>
+     * (디랩 1029 8-2).
+     *
+     * <h2>★ 표에 없는 메뉴는 보인다</h2>
+     * ⚠️ 새 메뉴가 <b>조용히 사라지면 기능이 없는 줄 안다.</b> 그래서
+     * <b>설정이 하나도 없는 메뉴</b>는 전 역할에 보인다.
+     *
+     * <p>⚠️ <b>「행이 없다」와 「그 역할엔 안 보인다」는 다른 뜻</b>이다 —
+     * 그 메뉴에 <b>다른 역할의 행이 있으면</b> 설정된 것이고, 이 역할엔 안 보인다.
+     *
+     * <p>★ {@link #BY_MENU} 는 <b>초기 데이터의 출처</b>로만 남는다 — 마이그레이션이
+     * 그 값을 테이블에 넣었다. ⚠️ <b>판정은 더 이상 그것을 보지 않는다.</b>
+     */
+    public boolean visibleTo(String menuCode, Set<Role> roles) {
+        if (!configuredCodes().contains(menuCode)) {
             return true;
         }
+        Set<Role> allowed = allowedRoles().getOrDefault(menuCode, Set.of());
         return roles.stream().anyMatch(allowed::contains);
+    }
+
+    /** ★ 설정이 하나라도 있는 메뉴 코드. 캐시하지 않는다 — 편집이 바로 보여야 한다. */
+    private Set<String> configuredCodes() {
+        return new java.util.HashSet<>(repository.findConfiguredMenuCodes());
+    }
+
+    /** ★ 메뉴 코드 → 보이는 역할. */
+    private Map<String, Set<Role>> allowedRoles() {
+        Map<String, Set<Role>> out = new java.util.HashMap<>();
+        for (var row : repository.findAllByDeletedFalse()) {
+            out.computeIfAbsent(row.getMenu().getCode(), k -> new java.util.HashSet<>())
+                    .add(row.getRole());
+        }
+        return out;
+    }
+
+    /**
+     * ★ 초기 데이터가 무엇이었는지 — <b>마이그레이션과 대조</b>할 때 쓴다.
+     *
+     * <p>⚠️ 판정에는 쓰이지 않는다. 지우지 않는 이유는 <b>테이블이 비었을 때
+     * 「원래 무엇이었나」에 답할 자리</b>가 필요해서다.
+     */
+    public static Map<String, Set<Role>> initialMatrix() {
+        return BY_MENU;
     }
 }
