@@ -10,6 +10,7 @@ import com.dlab.domain.approval.entity.RequestType;
 import com.dlab.domain.approval.service.ApprovalService;
 import com.dlab.domain.attendance.entity.AbsenceReason;
 import com.dlab.domain.attendance.entity.AbsenceReasonType;
+import com.dlab.domain.attendance.entity.AbsenceSubmitterType;
 import com.dlab.domain.attendance.repository.AbsenceReasonRepository;
 import com.dlab.domain.user.entity.ClassAssignment;
 import com.dlab.domain.user.entity.StudentEnrollment;
@@ -110,10 +111,72 @@ public class AbsenceReasonService {
                 enrollment.getAcademy(), enrollment, date, type, reasonText, startTime, endTime));
         applyCategory(reason, categoryId, enrollment);
 
+        reason.recordSubmitter(AbsenceSubmitterType.STUDENT, null);
+
         ApprovalRequest approval = approvalService.create(enrollment, RequestType.ABSENCE_REASON);
         reason.linkApproval(approval);
 
         log.info("사유신청 제출(앱): enrollmentId={}, 유형={}, 일자={}", enrollmentId, type, date);
+        return reason;
+    }
+
+    /**
+     * ★★ <b>학부모가</b> 앱에서 사유를 낸다 (디랩 1031 ③).
+     *
+     * <h2>★ 왜 열었는가 — 받은 사람이 할 수 없는 일을 안내하고 있었다</h2>
+     * 결석 안내 알림톡은 <b>보호자에게만</b> 가는데(UM_8236) 문구가
+     * <b>「사유가 있으시면 어플에서 사유 입력을 부탁드립니다」</b> 다. 그런데 지금까지
+     * <b>학생만 낼 수 있었다.</b>
+     *
+     * <h2>★★ 우선 승인자가 「부모」면 <b>제출 즉시 승인</b>이다</h2>
+     * <b>낸 것이 곧 학부모 확인</b>이다(디랩 1031 §2 표). 승인을 또 받게 하면
+     * <b>자기가 낸 것을 자기가 승인</b>하는 절차가 되어 한 단계가 형식만 남는다.
+     *
+     * <p>⚠️ <b>승인 요청 행을 「만들지 않는」 것이 아니다.</b> 만들고 <b>그 자리에서
+     * 승인</b>한다 — 그러지 않으면 승인 보드에 아무것도 남지 않아
+     * <b>「승인 요청이 왜 안 보이지」에 답할 수 없다</b>(프런트 지적).
+     * {@code resolver_account_id} 에 <b>그 학부모가 승인자로 박힌다.</b>
+     *
+     * <p>★ <b>「담임」이면 그대로 담임에게 간다</b> — 학생이 낸 것과 같다.
+     *
+     * <p>★ <b>벌점도 같은 경로를 탄다</b> — 승인될 때 붙는다(디랩 1029 4-1). 제출 즉시
+     * 승인이어도 예외가 아니다. 그 근거는 입학동의서 9항(<b>「벌점부여에 동의」</b>)이고,
+     * 9-4 가 <b>「모두 학부모님께 확인 절차를 거친 후」</b> 다 — <b>학부모가 확인하고,
+     * 그 확인에 벌점이 붙는 것에 학부모가 이미 동의한 구조다.</b>
+     *
+     * @param guardianAccount 낸 학부모 계정. ★ 승인자로도 기록된다
+     */
+    @Transactional
+    public AbsenceReason submitByGuardian(StudentEnrollment enrollment,
+                                          com.dlab.domain.user.entity.Account guardianAccount,
+                                          LocalDate date, AbsenceReasonType type,
+                                          String reasonText, LocalTime startTime,
+                                          LocalTime endTime, Long categoryId) {
+        validatePeriod(type, startTime, endTime);
+        rejectDuplicate(enrollment.getId(), date, type);
+
+        AbsenceReason reason = absenceReasonRepository.save(new AbsenceReason(
+                enrollment.getAcademy(), enrollment, date, type, reasonText,
+                startTime, endTime));
+        applyCategory(reason, categoryId, enrollment);
+        reason.recordSubmitter(AbsenceSubmitterType.GUARDIAN, guardianAccount);
+
+        ApprovalRequest approval = approvalService.create(
+                enrollment, RequestType.ABSENCE_REASON,
+                // ★ 즉시 승인될 건에는 ★ 「승인해주세요」 알림을 보내지 않는다 —
+                //   ⚠️ 자기가 낸 신청의 승인 요청을 자기가 받는 꼴이 된다
+                !approvalService.isParentPrimary(enrollment, RequestType.ABSENCE_REASON));
+        reason.linkApproval(approval);
+
+        if (approvalService.isParentPrimary(enrollment, RequestType.ABSENCE_REASON)) {
+            // ★ 낸 것이 곧 학부모 확인이다 — 그 학부모가 승인자로 박힌다
+            approvalService.approve(approval.getId(), guardianAccount.getId());
+            log.info("사유신청 제출 즉시 승인(학부모): enrollmentId={}, 유형={}, 일자={}",
+                    enrollment.getId(), type, date);
+        } else {
+            log.info("사유신청 제출(학부모, 담임 승인 대기): enrollmentId={}, 유형={}, 일자={}",
+                    enrollment.getId(), type, date);
+        }
         return reason;
     }
 

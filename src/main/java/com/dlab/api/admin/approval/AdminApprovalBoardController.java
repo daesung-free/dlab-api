@@ -1,6 +1,8 @@
 package com.dlab.api.admin.approval;
 
 import com.dlab.common.response.ApiResponse;
+import com.dlab.domain.attendance.entity.AbsenceSubmitterType;
+import com.dlab.domain.attendance.repository.AbsenceReasonRepository;
 import com.dlab.common.security.AuthPrincipal;
 import com.dlab.common.security.CurrentAccount;
 import com.dlab.domain.approval.entity.ApprovalRequest;
@@ -40,6 +42,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminApprovalBoardController {
 
     private final ApprovalQueryService approvalQueryService;
+    private final AbsenceReasonRepository absenceReasonRepository;
     private final Clock clock;
 
     /**
@@ -67,8 +70,10 @@ public class AdminApprovalBoardController {
                 me, academyId, status, requestType, start, end, clock.getZone());
 
         Instant now = Instant.now(clock);
+        // ★ 신청자 구분을 ★ 한 번에 읽는다 — 행마다 조회하면 쿼리가 행 수만큼 나간다
+        Map<Long, AbsenceSubmitterType> submitters = submitterTypes(rows);
         return ApiResponse.success(new BoardResponse(
-                rows.stream().map(r -> Row.of(r, now)).toList(),
+                rows.stream().map(r -> Row.of(r, now, submitters.get(r.getId()))).toList(),
                 summarize(rows, now)));
     }
 
@@ -85,6 +90,26 @@ public class AdminApprovalBoardController {
                 "approved", rows.stream().filter(r -> r.getStatus() == ApprovalStatus.APPROVED).count(),
                 "rejected", rows.stream().filter(r -> r.getStatus() == ApprovalStatus.REJECTED).count(),
                 "overdue", rows.stream().filter(r -> isOverdue(r, now)).count());
+    }
+
+    /**
+     * ★ 승인 요청 → 신청자 구분. <b>사유 신청이 아닌 건은 빠진다</b>(방화벽·정기일정).
+     *
+     * <p>⚠️ 비어 있으면 <b>쿼리를 보내지 않는다</b> — {@code in ()} 은 DB 에 따라
+     * 문법 오류다.
+     */
+    private Map<Long, AbsenceSubmitterType> submitterTypes(List<ApprovalRequest> rows) {
+        List<Long> ids = rows.stream().map(ApprovalRequest::getId).toList();
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, AbsenceSubmitterType> out = new java.util.HashMap<>();
+        for (Object[] row : absenceReasonRepository.findSubmitterTypes(ids)) {
+            if (row[1] != null) {
+                out.put((Long) row[0], (AbsenceSubmitterType) row[1]);
+            }
+        }
+        return out;
     }
 
     private static boolean isOverdue(ApprovalRequest r, Instant now) {
@@ -107,9 +132,21 @@ public class AdminApprovalBoardController {
                       Instant requestedAt, Instant escalationAt, short timeoutMinutes,
                       ApproverType primaryApprover, ApproverType currentApprover,
                       Instant reminderSentAt, Instant handedOverAt,
-                      Instant resolvedAt, String rejectReason, boolean overdue) {
+                      Instant resolvedAt, String rejectReason, boolean overdue,
+                      /**
+                       * ★★ 누가 낸 신청인가 — <b>사유 신청에만</b> 있다
+                       * (디랩 1031 ③, 프런트 요청).
+                       *
+                       * <p>★ 학부모도 낼 수 있게 되면서 <b>「학부모 신청」을 구분해
+                       * 보여줘야 한다.</b> ⚠️ 이 값이 없으면 담당자는 즉시 승인된 건을
+                       * 보고도 <b>누가 확인한 것인지 알 수 없다.</b>
+                       *
+                       * <p>★ {@code null} 인 경우 둘 — <b>사유 신청이 아니거나</b>
+                       * (방화벽·정기일정), 이 값이 생기기 전의 신청이다.
+                       */
+                      AbsenceSubmitterType submitterType) {
 
-        static Row of(ApprovalRequest r, Instant now) {
+        static Row of(ApprovalRequest r, Instant now, AbsenceSubmitterType submitterType) {
             return new Row(r.getId(),
                     r.getApprovalItem().getRequestType(),
                     r.getStatus(),
@@ -125,7 +162,8 @@ public class AdminApprovalBoardController {
                     r.getHandedOverAt(),
                     r.getResolvedAt(),
                     r.getRejectReason(),
-                    isOverdue(r, now));
+                    isOverdue(r, now),
+                    submitterType);
         }
     }
 }

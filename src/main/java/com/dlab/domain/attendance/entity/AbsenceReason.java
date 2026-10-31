@@ -123,6 +123,30 @@ public class AbsenceReason extends BaseEntity {
         return endTime == null ? startTime + " 이후" : startTime + " ~ " + endTime;
     }
 
+    /**
+     * ★ 누가 냈는가. {@code null} 은 이 값이 생기기 전의 신청이다.
+     *
+     * <p>⚠️ 기존 행을 {@code STUDENT} 로 채우지 않았다 — <b>데스크 등록분이 섞여</b>
+     * 있어서다. 그것까지 「학생이 냈다」로 바뀌면 <b>화면이 거짓을 말한다.</b>
+     */
+    @AuditLabel("신청자 구분")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "submitter_type", length = 10)
+    private AbsenceSubmitterType submitterType;
+
+    /** 낸 계정. 관리자 등록 경로에서는 비어 있을 수 있다. */
+    @AuditLabel("신청 계정")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "submitted_by_account_id")
+    private com.dlab.domain.user.entity.Account submittedByAccount;
+
+    /** 신청자를 남긴다. ★ 저장 직후 한 번만 부른다. */
+    public void recordSubmitter(AbsenceSubmitterType type,
+                                com.dlab.domain.user.entity.Account account) {
+        this.submitterType = type;
+        this.submittedByAccount = account;
+    }
+
     public void linkApproval(ApprovalRequest approvalRequest) {
         this.approvalRequest = approvalRequest;
     }
