@@ -24,6 +24,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class AdminNotificationTemplateController {
 
     private final NotificationTemplateService templateService;
+    private final com.dlab.domain.notification.service.AlimtalkTemplateRegistrar registrar;
     private final com.dlab.domain.user.repository.AccountRepository accountRepository;
 
     /**
@@ -119,7 +120,12 @@ public class AdminNotificationTemplateController {
                 templateService.changeActive(id, request.active())));
     }
 
-    /** 카카오 심사 제출. 알림톡 템플릿만 대상이다. */
+    /**
+     * 카카오 심사 제출 — <b>알리고 콘솔에서 받은 코드를 손으로 넣는 경로</b>다.
+     *
+     * <p>⚠️ <b>보통은 {@code /aligo/register} 를 쓴다</b> — 그쪽은 등록·검수요청·코드
+     * 기록을 한 번에 한다. 이 경로는 <b>콘솔에서 이미 만들어 둔 템플릿</b>을 잇는 용도다.
+     */
     @PostMapping("/{id}/review/submit")
     public ApiResponse<NotificationTemplateResponse> submitReview(
             @PathVariable Long id,
@@ -128,13 +134,64 @@ public class AdminNotificationTemplateController {
                 templateService.submitForReview(id, request.kakaoTemplateCode())));
     }
 
-    /** 심사 결과 입력. 카카오와 자동 연동 창구가 없어 사람이 보고 넣는다(E-5). */
+    /**
+     * 심사 결과 입력 — <b>사람이 보고 넣는 경로</b>다.
+     *
+     * <p>⚠️ <b>「카카오와 자동 연동 창구가 없다」는 전제가 틀렸다</b>(2026-10-31 확인) —
+     * 알리고에 <b>목록 조회 API 가 있어</b> {@code /aligo/sync} 로 되읽을 수 있다.
+     * 이 경로는 <b>동기화가 못 읽는 상태</b>를 사람이 넣는 용도로 남긴다.
+     */
     @PostMapping("/{id}/review/result")
     public ApiResponse<NotificationTemplateResponse> applyReviewResult(
             @PathVariable Long id,
             @Valid @RequestBody NotificationTemplateRequests.ReviewResult request) {
         return ApiResponse.success(view(
                 templateService.applyReviewResult(id, request.approved(), request.note())));
+    }
+
+    /**
+     * ★★ <b>알리고에 등록하고 검수를 요청한다</b> — 한 번에 (디랩 1031 2번).
+     *
+     * <h2>★ 손으로 옮기지 않는다</h2>
+     * ⚠️ 알림톡은 <b>한 글자라도 다르면 발송이 실패한다.</b> 콘솔에 옮겨 적으면
+     * <b>틀릴 자리</b>가 생기는데, 이 경로는 <b>DB 에 있는 문구를 그대로</b> 보낸다.
+     * 받은 코드도 <b>그대로 박힌다</b> — 사람이 받아 적는 단계가 사라진다.
+     *
+     * <h2>⚠️ 문구가 확정되지 않으면 거부한다</h2>
+     * 검수에 올린 뒤에는 <b>문구를 고치려면 처음부터</b>이고 <b>4~5일이 또 걸린다.</b>
+     * ★ 지금 <b>등록비 안내가 그 상태</b>다(디랩 문구 회신 대기).
+     *
+     * <h2>⚠️ 테스트 모드와 무관하다</h2>
+     * 등록은 발송이 아니라 형상 관리라 <b>테스트 모드를 켜 둬도 실제로 등록된다.</b>
+     */
+    @PostMapping("/{id}/aligo/register")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
+    public ApiResponse<RegisterResult> registerToAligo(@PathVariable Long id) {
+        String code = registrar.registerAndRequestReview(id);
+        return ApiResponse.success(new RegisterResult(code, code != null));
+    }
+
+    /**
+     * ★★ 알리고 목록을 읽어 <b>심사 상태를 되읽는다</b>.
+     *
+     * <p>★ 지금까지 <b>사람이 콘솔을 보고 넣어야</b> 했다 — 목록 API 가 있으므로
+     * 그 단계가 필요 없다.
+     *
+     * <p>⚠️ <b>모르는 상태값은 건드리지 않는다</b> — 반려로 읽으면
+     * <b>멀쩡한 템플릿이 반려로 뒤집힌다.</b>
+     */
+    @PostMapping("/aligo/sync")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN','BRANCH_ADMIN')")
+    public ApiResponse<Integer> syncFromAligo() {
+        return ApiResponse.success(registrar.syncReviewStatus());
+    }
+
+    /**
+     * @param templateCode 알리고가 부여한 코드
+     * @param linked       ★ {@code false} 면 <b>등록은 됐으나 코드를 못 받았다</b> —
+     *                     {@code /aligo/sync} 로 확인해야 한다
+     */
+    public record RegisterResult(String templateCode, boolean linked) {
     }
 
     /** 수정자 이름을 붙인다. 템플릿은 수십 건이라 건마다 찾아도 된다. */

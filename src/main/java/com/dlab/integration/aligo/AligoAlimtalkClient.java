@@ -1,6 +1,7 @@
 package com.dlab.integration.aligo;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -158,6 +159,116 @@ public class AligoAlimtalkClient {
     }
 
     @SuppressWarnings("unchecked")
+    // ── 템플릿 등록 · 검수 요청 (디랩 1031 2번) ────────────────────
+    //
+    // ★★ 왜 API 로 하는가 — ⚠️ 검수가 ★ 4~5일 걸린다(알리고 문서).
+    //
+    //    앱 스토어 심사 제출이 ★ 11/30 이라 ★ 리드타임이 곧 마감이다. 콘솔에서
+    //    사람이 올리는 것보다 ★ 서버가 올리는 쪽이 ★ 빠지는 일이 없다 — 문구가
+    //    ★ DB 에 있는 그대로 나가므로 ★ 옮겨 적다 틀릴 자리가 없다.
+    //
+    // ⚠️ 알림톡은 ★ 한 글자라도 다르면 발송이 실패한다. 손으로 옮기면 그 위험이 생긴다.
+
+    /**
+     * ★★ 새 템플릿을 <b>등록</b>한다 (검수 요청은 별도다).
+     *
+     * <p>⚠️ <b>등록만으로는 발송할 수 없다</b> — 카카오 검수를 통과해야 한다.
+     * 그래서 {@link #requestTemplateReview}를 이어서 부른다.
+     *
+     * <p>★ <b>테스트 모드와 무관하다</b> — 등록은 발송이 아니라 <b>형상 관리</b>라
+     * {@code testmode_yn} 이 없다. ⚠️ 즉 <b>테스트 모드를 켜 둬도 실제로 등록된다.</b>
+     *
+     * @param name    템플릿 이름. ★ 알리고 콘솔에서 사람이 찾는 이름이다
+     * @param content 본문. ★ DB 에 있는 문구를 그대로 넘긴다
+     * @return 알리고가 부여한 <b>템플릿 코드</b>. 검수 요청·발송에 이것을 쓴다
+     */
+    public String addTemplate(String name, String content) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("apikey", properties.apiKey());
+        form.add("userid", properties.userId());
+        form.add("senderkey", properties.senderKey());
+        form.add("tpl_name", name);
+        form.add("tpl_content", content);
+
+        Map<String, Object> body = post("/akv10/template/add/", form);
+        String code = templateCodeOf(body);
+        log.info("★ 알림톡 템플릿 등록: 이름={}, 받은코드={}", name, code);
+        return code;
+    }
+
+    /**
+     * ★★ 등록된 템플릿의 <b>검수를 요청</b>한다.
+     *
+     * <p>⚠️ 알리고 문서: <b>「검수기간은 4-5일 정도가 소요」</b> 되고
+     * <b>반려되면 다시 써야 한다.</b>
+     *
+     * <p>★ <b>다 쓴 뒤에 요청한다</b> — 요청 후 문구를 고치려면 처음부터다.
+     */
+    public void requestTemplateReview(String templateCode) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("apikey", properties.apiKey());
+        form.add("userid", properties.userId());
+        form.add("senderkey", properties.senderKey());
+        form.add("tpl_code", templateCode);
+
+        post("/akv10/template/request/", form);
+        log.info("★ 알림톡 템플릿 검수 요청: tpl={} — ⚠️ 4~5일 소요", templateCode);
+    }
+
+    /**
+     * ★ 등록된 템플릿 목록 — <b>검수 상태를 확인</b>한다.
+     *
+     * <p>★ 등록·요청 뒤에 <b>결과를 되읽는 유일한 경로</b>다. 콘솔을 열지 않고
+     * 「승인됐나」에 답할 수 있어야 한다.
+     */
+    public List<Map<String, Object>> listTemplates() {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("apikey", properties.apiKey());
+        form.add("userid", properties.userId());
+        form.add("senderkey", properties.senderKey());
+
+        Map<String, Object> body = post("/akv10/template/list/", form);
+        Object list = body.get("list");
+        if (list instanceof List<?> rows) {
+            return rows.stream()
+                    .filter(Map.class::isInstance)
+                    .map(r -> {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> row = (Map<String, Object>) r;
+                        return row;
+                    })
+                    .toList();
+        }
+        return List.of();
+    }
+
+    /**
+     * ★ 응답에서 템플릿 코드를 꺼낸다.
+     *
+     * <p>⚠️ 알리고가 코드를 <b>어느 키로 주는지 문서에 명시되지 않았다.</b> 그래서
+     * <b>알려진 후보를 차례로 본다</b> — 못 찾으면 {@code null} 을 돌려주고
+     * <b>호출자가 목록 조회로 확인</b>한다. ★ 추측한 키 하나만 보고
+     * <b>「등록이 실패했다」로 단정하면 실제로는 등록된 템플릿이 유령으로 남는다.</b>
+     */
+    private String templateCodeOf(Map<String, Object> body) {
+        for (String key : List.of("tpl_code", "templtCode", "code")) {
+            Object v = body.get(key);
+            if (v instanceof String str && !str.isBlank()) {
+                return str;
+            }
+        }
+        Object info = body.get("info");
+        if (info instanceof Map<?, ?> map) {
+            Object v = map.get("tpl_code");
+            if (v instanceof String str && !str.isBlank()) {
+                return str;
+            }
+        }
+        log.warn("⚠️ 템플릿 등록 응답에서 코드를 찾지 못했다 — 목록 조회로 확인할 것. 응답키={}",
+                body.keySet());
+        return null;
+    }
+
     private Map<String, Object> post(String path, MultiValueMap<String, String> form) {
         Map<String, Object> body;
         try {
